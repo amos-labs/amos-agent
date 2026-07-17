@@ -1,0 +1,32 @@
+{
+  "name": "@amos-labs/amos-agent",
+  "version": "0.1.0",
+  "description": "Local AMOS Agent: a Kimi K3-powered MCP operator for the AMOS company brain.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "amos-agent": "./bin/amos-agent.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "files": [
+    ".env.example",
+    "bin",
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "amos",
+    "mcp",
+    "agent",
+    "kimi",
+    "moonshot",
+    "local-agent"
+  ]
+}
