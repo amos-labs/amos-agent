@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { truncateText } from "../util/pathSafety.js";
 import { fetchCompat } from "../util/fetchCompat.js";
 
@@ -17,24 +19,20 @@ export function createWebTools() {
         additionalProperties: false
       },
       async handler(args, context) {
-        const url = new URL(args.url);
-        if (!["http:", "https:"].includes(url.protocol)) {
-          throw new Error("Only http and https URLs are allowed");
-        }
-
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 20_000);
         try {
-          const response = await fetchCompat(url, { signal: controller.signal });
+          const maxBytes = boundedNumber(args.max_bytes, context.config.safety.maxOutputBytes, 1, context.config.safety.maxOutputBytes);
+          const { response, finalUrl } = await fetchPublicUrl(args.url, { signal: controller.signal });
           const contentType = response.headers.get("content-type") || "";
-          const raw = await response.text();
+          const raw = await readBoundedText(response, maxBytes);
           const text = contentType.includes("html") ? htmlToText(raw) : raw;
           return {
             ok: response.ok,
             status: response.status,
-            url: response.url,
+            url: finalUrl,
             content_type: contentType,
-            content: truncateText(text, Number(args.max_bytes || context.config.safety.maxOutputBytes))
+            content: truncateText(text, maxBytes)
           };
         } finally {
           clearTimeout(timeout);
@@ -88,6 +86,82 @@ export function createWebTools() {
       }
     }
   ];
+}
+
+export async function fetchPublicUrl(value, { signal, maxRedirects = 5, fetchImpl = fetchCompat } = {}) {
+  let url = new URL(value);
+  for (let redirect = 0; redirect <= maxRedirects; redirect += 1) {
+    await assertPublicUrl(url);
+    const response = await fetchImpl(url, { signal, redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) {
+      return { response, finalUrl: url.toString() };
+    }
+    const location = response.headers.get("location");
+    if (!location) throw new Error("Redirect response did not include a location");
+    if (redirect === maxRedirects) throw new Error("Too many redirects");
+    url = new URL(location, url);
+  }
+  throw new Error("Too many redirects");
+}
+
+export async function assertPublicUrl(url) {
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only http and https URLs are allowed");
+  if (url.username || url.password) throw new Error("URLs containing credentials are not allowed");
+  const hostname = url.hostname.toLowerCase();
+  if (["localhost", "localhost.localdomain"].includes(hostname) || hostname.endsWith(".local")) {
+    throw new Error("Private or local network URLs are not allowed");
+  }
+  const addresses = isIP(hostname) ? [{ address: hostname }] : await lookup(hostname, { all: true, verbatim: true });
+  if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
+    throw new Error("Private or local network URLs are not allowed");
+  }
+}
+
+export function isPrivateAddress(address) {
+  const lower = address.toLowerCase();
+  if (lower === "::" || lower === "::1" || lower.startsWith("fe8") || lower.startsWith("fe9") || lower.startsWith("fea") || lower.startsWith("feb") || lower.startsWith("fc") || lower.startsWith("fd")) {
+    return true;
+  }
+  const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
+  const ipv4 = mapped || (isIP(lower) === 4 ? lower : null);
+  if (!ipv4) return false;
+  const [a, b] = ipv4.split(".").map(Number);
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    a >= 224
+  );
+}
+
+async function readBoundedText(response, maxBytes) {
+  if (!response.body?.getReader) return truncateText(await response.text(), maxBytes);
+  const reader = response.body.getReader();
+  const chunks = [];
+  let bytes = 0;
+  while (bytes < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const remaining = maxBytes - bytes;
+    const chunk = Buffer.from(value).subarray(0, remaining);
+    chunks.push(chunk);
+    bytes += chunk.length;
+    if (chunk.length < value.length) {
+      await reader.cancel();
+      break;
+    }
+  }
+  return Buffer.concat(chunks, bytes).toString("utf8");
+}
+
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(Math.max(Math.floor(number), min), max);
 }
 
 function htmlToText(html) {

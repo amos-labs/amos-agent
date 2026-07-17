@@ -38,8 +38,25 @@ export class AgentLoop {
         try {
           args = JSON.parse(rawArgs);
         } catch (error) {
-          args = {};
-          onEvent({ type: "tool_error", name, error: `Invalid JSON arguments: ${error.message}` });
+          const message = `Invalid JSON arguments: ${error.message}`;
+          onEvent({ type: "tool_error", name, error: message });
+          this.messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ ok: false, error: message })
+          });
+          continue;
+        }
+
+        if (!args || Array.isArray(args) || typeof args !== "object") {
+          const message = "Tool arguments must be a JSON object";
+          onEvent({ type: "tool_error", name, error: message });
+          this.messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ ok: false, error: message })
+          });
+          continue;
         }
 
         onEvent({ type: "tool_start", name, args });

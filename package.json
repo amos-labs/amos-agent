@@ -4,6 +4,12 @@
   "description": "Local AMOS Agent: a Kimi K3-powered MCP operator for the AMOS company brain.",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amos-labs/amos-agent.git"
+  },
+  "homepage": "https://github.com/amos-labs/amos-agent#readme",
+  "bugs": "https://github.com/amos-labs/amos-agent/issues",
   "bin": {
     "amos-agent": "./bin/amos-agent.js"
   },
@@ -11,7 +17,7 @@
     "test": "node --test"
   },
   "engines": {
-    "node": ">=18.18"
+    "node": ">=22"
   },
   "files": [
     ".env.example",

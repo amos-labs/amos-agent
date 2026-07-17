@@ -21,14 +21,25 @@ export class KimiClient {
       body.tools = tools;
     }
 
-    const response = await this.fetch(`${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.config.requestTimeoutMs || 120_000);
+    let response;
+    try {
+      response = await this.fetch(`${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.config.apiKey}`,
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal,
+        body: JSON.stringify(body)
+      });
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("Kimi request timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
 
     const text = await response.text();
     let payload;

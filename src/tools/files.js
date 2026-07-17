@@ -1,8 +1,13 @@
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
-import { resolveWorkspacePath, truncateText } from "../util/pathSafety.js";
+import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 
-const DEFAULT_IGNORES = new Set([".git", "node_modules", "dist", "coverage", ".amos-agent"]);
+const DEFAULT_IGNORES = new Set([".git", "node_modules", "dist", "coverage", ".amos-agent", ".ssh", ".aws", ".gnupg"]);
+
+function ignoredName(name) {
+  const lower = name.toLowerCase();
+  return DEFAULT_IGNORES.has(name) || lower === ".env" || lower.startsWith(".env.");
+}
 
 export function createFileTools() {
   return [
@@ -46,12 +51,13 @@ export function createFileTools() {
           args.path,
           context.config.safety.allowOutsideWorkspace
         );
-        const maxBytes = Number(args.max_bytes || context.config.safety.maxOutputBytes);
-        const text = await readFile(file, "utf8");
+        assertSafeAgentPath(file, context.config.safety.workspaceRoot);
+        const maxBytes = boundedNumber(args.max_bytes, context.config.safety.maxOutputBytes, 1, context.config.safety.maxOutputBytes);
+        const { text, totalBytes } = await readTextFileBounded(file, maxBytes);
         return {
           path: args.path,
-          bytes: Buffer.byteLength(text),
-          content: truncateText(text, maxBytes)
+          bytes: totalBytes,
+          content: text
         };
       }
     },
@@ -75,6 +81,7 @@ export function createFileTools() {
           args.path,
           context.config.safety.allowOutsideWorkspace
         );
+        assertSafeAgentPath(file, context.config.safety.workspaceRoot);
 
         if (!context.config.safety.autoApproveWrites) {
           const approved = await context.approvals.confirm(
@@ -103,12 +110,28 @@ export function createFileTools() {
   ];
 }
 
+async function readTextFileBounded(file, maxBytes) {
+  const handle = await open(file, "r");
+  try {
+    const info = await handle.stat();
+    const buffer = Buffer.alloc(Math.min(maxBytes, info.size));
+    const { bytesRead } = buffer.length > 0 ? await handle.read(buffer, 0, buffer.length, 0) : { bytesRead: 0 };
+    const value = buffer.subarray(0, bytesRead).toString("utf8");
+    return {
+      totalBytes: info.size,
+      text: info.size > bytesRead ? `${value}\n...[truncated ${info.size - bytesRead} bytes]` : value
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
 async function walk(dir, root, files, maxResults) {
   if (files.length >= maxResults) return;
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     if (files.length >= maxResults) return;
-    if (DEFAULT_IGNORES.has(entry.name)) continue;
+    if (ignoredName(entry.name)) continue;
     const full = `${dir}/${entry.name}`;
     if (entry.isDirectory()) {
       await walk(full, root, files, maxResults);
@@ -120,4 +143,10 @@ async function walk(dir, root, files, maxResults) {
       });
     }
   }
+}
+
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(Math.max(Math.floor(number), min), max);
 }

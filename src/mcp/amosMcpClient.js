@@ -29,37 +29,39 @@ export function extractMcpText(result) {
 }
 
 export class AmosMcpClient {
-  constructor({ url, apiKey }, fetchImpl = fetchCompat) {
-    this.url = url;
+  constructor({ url, mcpUrl, apiKey, getAccessToken, requestTimeoutMs = 30_000 }, fetchImpl = fetchCompat) {
+    this.url = url || mcpUrl;
     this.apiKey = apiKey;
+    this.getAccessToken = getAccessToken;
+    this.requestTimeoutMs = requestTimeoutMs;
     this.fetch = fetchImpl;
     this.nextId = 1;
   }
 
   async request(method, params = {}) {
-    if (!this.apiKey) {
-      throw new Error("AMOS_API_KEY is not configured");
+    if (!this.url) {
+      throw new Error("AMOS_MCP_URL is not configured");
     }
 
     const id = this.nextId++;
-    const response = await this.fetch(this.url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        Accept: "application/json, text/event-stream",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        method,
-        params
-      })
-    });
+    let token = this.apiKey || (await this.getAccessToken?.());
+    if (!token) throw new Error("AMOS is not connected. Run `amos-agent login` first.");
+
+    let response = await this.send({ id, method, params, token });
+    if (response.status === 401 && !this.apiKey && this.getAccessToken) {
+      token = await this.getAccessToken({ forceRefresh: true });
+      response = await this.send({ id, method, params, token });
+    }
 
     const text = await response.text();
     const contentType = response.headers?.get?.("content-type") || "";
-    const payload = parseMcpHttpBody(text, contentType);
+    let payload = {};
+    try {
+      payload = parseMcpHttpBody(text, contentType);
+    } catch {
+      if (!response.ok) throw new Error(text || `MCP request failed with ${response.status}`);
+      throw new Error("AMOS MCP returned an invalid response");
+    }
 
     if (!response.ok) {
       throw new Error(payload?.error?.message || text || `MCP request failed with ${response.status}`);
@@ -70,6 +72,33 @@ export class AmosMcpClient {
     }
 
     return payload.result;
+  }
+
+  async send({ id, method, params, token }) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    try {
+      return await this.fetch(this.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json, text/event-stream",
+        "Content-Type": "application/json"
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id,
+        method,
+        params
+      })
+      });
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("AMOS MCP request timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   listTools() {

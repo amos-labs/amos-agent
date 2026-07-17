@@ -8,6 +8,7 @@ User machine
     Kimi K3 model loop
     local bash/files/web tools
     AMOS MCP client
+    OAuth 2.1 + PKCE session
         |
         v
 AMOS Managed Platform
@@ -29,6 +30,7 @@ The local agent owns:
 - public web fetch/search
 - transient session transcript
 - AMOS MCP client
+- localhost OAuth callback and automatic token refresh
 
 The managed platform owns:
 
@@ -65,6 +67,14 @@ demand:
 
 The generic `amos_call_engine_tool` remains available for compatibility.
 
+## Authentication
+
+Interactive users run `amos-agent login`. The CLI follows the AMOS protected
+resource metadata to its advertised authorization server, dynamically registers
+a public client, and completes authorization code + PKCE through a loopback
+callback. Access tokens refresh automatically. API keys are reserved for CI and
+unattended agent identities.
+
 ## Bash
 
 Bash is first-class because local extensibility matters. It is also approval
@@ -73,7 +83,7 @@ gated by default because it can mutate the user's machine.
 The default execution path is:
 
 ```text
-model asks run_bash -> user approves -> /bin/bash -lc -> bounded output capture
+model asks run_bash -> user approves -> scrubbed environment -> /bin/bash -lc -> bounded output capture
 ```
 
 ## Non-goals

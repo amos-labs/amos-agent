@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { resolveWorkspacePath, truncateText } from "../util/pathSafety.js";
+import { resolveWorkspacePath } from "../util/pathSafety.js";
 
 export function createBashTool() {
   return {
@@ -70,50 +70,109 @@ export function createBashTool() {
 
 export function runBash(command, { cwd, bashPath, timeoutMs, maxOutputBytes }) {
   return new Promise((resolve) => {
+    const boundedTimeoutMs = boundedNumber(timeoutMs, 60_000, 100, 600_000);
+    const boundedOutputBytes = boundedNumber(maxOutputBytes, 24_000, 1_024, 1_048_576);
     const child = spawn(bashPath, ["-lc", command], {
       cwd,
-      env: process.env,
+      env: safeChildEnvironment(process.env),
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"]
     });
 
-    let stdout = "";
-    let stderr = "";
+    const stdout = boundedCollector(boundedOutputBytes);
+    const stderr = boundedCollector(boundedOutputBytes);
     let timedOut = false;
+    let settled = false;
+    let killTimer;
 
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGTERM");
-    }, timeoutMs);
+      killProcessTree(child, "SIGTERM");
+      killTimer = setTimeout(() => killProcessTree(child, "SIGKILL"), 500);
+      killTimer.unref?.();
+    }, boundedTimeoutMs);
+    timer.unref?.();
 
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
+      stdout.add(chunk);
     });
 
     child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
+      stderr.add(chunk);
     });
 
     child.on("error", (error) => {
-      clearTimeout(timer);
-      resolve({
+      finish({
         ok: false,
         error: error.message,
-        stdout: truncateText(stdout, maxOutputBytes),
-        stderr: truncateText(stderr, maxOutputBytes)
+        stdout: stdout.text(),
+        stderr: stderr.text()
       });
     });
 
     child.on("close", (code, signal) => {
-      clearTimeout(timer);
-      resolve({
+      finish({
         ok: code === 0 && !timedOut,
         exit_code: code,
         signal,
         timed_out: timedOut,
         cwd,
-        stdout: truncateText(stdout, maxOutputBytes),
-        stderr: truncateText(stderr, maxOutputBytes)
+        stdout: stdout.text(),
+        stderr: stderr.text()
       });
     });
+
+    function finish(result) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(killTimer);
+      resolve(result);
+    }
   });
+}
+
+export function safeChildEnvironment(env) {
+  const safeNames = new Set(["PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TMP", "TEMP", "LANG", "TERM", "COLORTERM", "NO_COLOR"]);
+  return Object.fromEntries(
+    Object.entries(env).filter(([name]) => safeNames.has(name) || name.startsWith("LC_"))
+  );
+}
+
+function killProcessTree(child, signal) {
+  if (!child.pid) return;
+  try {
+    if (process.platform === "win32") child.kill(signal);
+    else process.kill(-child.pid, signal);
+  } catch {
+    // The process may already have exited.
+  }
+}
+
+function boundedCollector(maxBytes) {
+  const chunks = [];
+  let kept = 0;
+  let total = 0;
+  return {
+    add(chunk) {
+      const buffer = Buffer.from(chunk);
+      total += buffer.length;
+      const remaining = maxBytes - kept;
+      if (remaining > 0) {
+        const slice = buffer.subarray(0, remaining);
+        chunks.push(slice);
+        kept += slice.length;
+      }
+    },
+    text() {
+      const value = Buffer.concat(chunks, kept).toString("utf8");
+      return total > kept ? `${value}\n...[truncated ${total - kept} bytes]` : value;
+    }
+  };
+}
+
+function boundedNumber(value, fallback, min, max) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(Math.max(Math.floor(number), min), max);
 }
