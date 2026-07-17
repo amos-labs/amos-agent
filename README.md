@@ -70,7 +70,9 @@ amos-agent status
 
 OAuth uses authorization code + PKCE and stores the refreshable session in an
 owner-only local file. No AMOS key is copied into the CLI. `AMOS_API_KEY` remains
-available as an explicit override for CI and unattended agent identities.
+available for CI and unattended agent identities when no OAuth session exists.
+Set `AMOS_AGENT_AUTH_MODE=api-key` to force that identity on a machine that also
+has a human OAuth session.
 
 Optional native search:
 

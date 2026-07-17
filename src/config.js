@@ -32,7 +32,8 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
     },
     auth: {
       credentialsPath:
-        env.AMOS_AGENT_CREDENTIALS_FILE || join(env.AMOS_AGENT_CONFIG_DIR || join(homedir(), ".config", "amos-agent"), "oauth.json")
+        env.AMOS_AGENT_CREDENTIALS_FILE || join(env.AMOS_AGENT_CONFIG_DIR || join(homedir(), ".config", "amos-agent"), "oauth.json"),
+      mode: ["auto", "oauth", "api-key"].includes(env.AMOS_AGENT_AUTH_MODE) ? env.AMOS_AGENT_AUTH_MODE : "auto"
     },
     safety: {
       workspaceRoot,

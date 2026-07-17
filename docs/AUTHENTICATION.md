@@ -36,8 +36,10 @@ Non-interactive systems can provide a scoped AMOS agent key:
 export AMOS_API_KEY="amos_..."
 ```
 
-An explicit API key takes precedence over a local OAuth session. Do not use a
-human OAuth refresh token as a CI secret.
+The local OAuth session takes precedence when one exists. CI normally has no
+local session and uses its API key automatically. Set
+`AMOS_AGENT_AUTH_MODE=api-key` to force the key on a machine with both. Do not
+use a human OAuth refresh token as a CI secret.
 
 ## Provider authentication
 

@@ -111,20 +111,26 @@ async function main() {
     return;
   }
   if (args.command === "status") {
-    if (config.amos.apiKey) {
+    const credentials = await oauth.status();
+    const useOAuth = shouldUseOAuth(config, credentials);
+    if (useOAuth) {
+      await oauth.getAccessToken();
+      const current = await oauth.status();
+      console.log(`Connected to ${config.amos.mcpUrl} with OAuth.`);
+      console.log(`Access expires ${new Date(current.expires_at).toLocaleString()}.`);
+      return;
+    }
+    if (config.amos.apiKey && config.auth.mode !== "oauth") {
       console.log(`Connected to ${config.amos.mcpUrl} with AMOS_API_KEY.`);
       return;
     }
-    const credentials = await oauth.status();
     if (!credentials) {
       console.log("Not connected. Run `amos-agent login`.");
       process.exitCode = 1;
       return;
     }
-    await oauth.getAccessToken();
-    const current = await oauth.status();
-    console.log(`Connected to ${config.amos.mcpUrl} with OAuth.`);
-    console.log(`Access expires ${new Date(current.expires_at).toLocaleString()}.`);
+    console.log("OAuth is required by AMOS_AGENT_AUTH_MODE. Run `amos-agent login`.");
+    process.exitCode = 1;
     return;
   }
 
@@ -135,7 +141,9 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  if (!config.amos.apiKey && !(await oauth.status())) {
+  const oauthCredentials = await oauth.status();
+  const useOAuth = shouldUseOAuth(config, oauthCredentials);
+  if (!useOAuth && (!config.amos.apiKey || config.auth.mode === "oauth")) {
     console.error("AMOS is not connected. Run `amos-agent login` first.");
     process.exitCode = 1;
     return;
@@ -143,7 +151,7 @@ async function main() {
 
   if (args.once) {
     const approvals = new ConsoleApprovals({ enabled: true });
-    const { loop } = createRuntime(config, approvals, oauth);
+    const { loop } = createRuntime(config, approvals, oauth, useOAuth);
     const answer = await loop.run(args.once, { onEvent: printEvent });
     console.log(`\n${answer}`);
     approvals.close();
@@ -155,7 +163,7 @@ async function main() {
 
   const rl = readline.createInterface({ input, output });
   const approvals = new ConsoleApprovals({ enabled: true, question: (prompt) => question(rl, prompt) });
-  const { registry, loop } = createRuntime(config, approvals, oauth);
+  const { registry, loop } = createRuntime(config, approvals, oauth, useOAuth);
   try {
     while (true) {
       const prompt = await question(rl, "\namos> ");
@@ -185,7 +193,7 @@ async function main() {
   }
 }
 
-function createRuntime(config, approvals, oauth) {
+function createRuntime(config, approvals, oauth, useOAuth) {
   const registry = createRegistry();
   const loop = new AgentLoop({
     config,
@@ -194,12 +202,16 @@ function createRuntime(config, approvals, oauth) {
     kimiClient: new KimiClient(config.kimi),
     amosClient: new AmosMcpClient({
       url: config.amos.mcpUrl,
-      apiKey: config.amos.apiKey,
-      getAccessToken: config.amos.apiKey ? null : (options) => oauth.getAccessToken(options),
+      apiKey: useOAuth ? "" : config.amos.apiKey,
+      getAccessToken: useOAuth ? (options) => oauth.getAccessToken(options) : null,
       requestTimeoutMs: config.amos.requestTimeoutMs
     })
   });
   return { registry, loop };
+}
+
+function shouldUseOAuth(config, credentials) {
+  return config.auth.mode !== "api-key" && Boolean(credentials?.access_token);
 }
 
 main().catch((error) => {
