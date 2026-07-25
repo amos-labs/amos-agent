@@ -1,0 +1,29 @@
+const { contextBridge, ipcRenderer } = require("electron");
+
+const eventChannels = new Set([
+  "agent:event",
+  "agent:status",
+  "approval:requested",
+  "activity:changed",
+  "auth:browser"
+]);
+
+contextBridge.exposeInMainWorld("amosDesktop", {
+  state: () => ipcRenderer.invoke("desktop:state"),
+  saveSettings: (settings) => ipcRenderer.invoke("desktop:save-settings", settings),
+  login: () => ipcRenderer.invoke("desktop:login"),
+  logout: () => ipcRenderer.invoke("desktop:logout"),
+  testModel: () => ipcRenderer.invoke("desktop:test-model"),
+  run: (text) => ipcRenderer.invoke("desktop:run", text),
+  clear: () => ipcRenderer.invoke("desktop:clear"),
+  chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
+  openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),
+  resolveApproval: (id, approved) =>
+    ipcRenderer.invoke("desktop:resolve-approval", { id, approved }),
+  on(channel, callback) {
+    if (!eventChannels.has(channel)) throw new Error(`Unsupported AMOS Desktop event: ${channel}`);
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  }
+});

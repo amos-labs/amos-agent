@@ -1,0 +1,70 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { DesktopSettingsStore, sanitizeSettings } from "../src/desktop/settingsStore.js";
+
+test("desktop settings encrypt provider credentials at rest", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-settings-"));
+  const path = join(directory, "settings.json");
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => Buffer.from(`protected:${value}`).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString().replace(/^protected:/, "")
+  });
+
+  await store.write({
+    provider: "bedrock",
+    model: "openai.gpt-oss-120b",
+    baseUrl: "https://bedrock-mantle.us-east-1.api.aws/v1",
+    reasoningEffort: "high",
+    workspace: "/tmp/work",
+    amosMcpUrl: "https://app.amoslabs.com/mcp",
+    apiKey: "secret-bedrock-key"
+  });
+
+  const raw = await readFile(path, "utf8");
+  assert.equal(raw.includes("secret-bedrock-key"), false);
+  assert.equal((await store.read()).apiKey, "secret-bedrock-key");
+});
+
+test("desktop settings reject non-local cleartext endpoints", () => {
+  assert.throws(
+    () =>
+      sanitizeSettings({
+        provider: "openai-compatible",
+        baseUrl: "http://inference.example.com/v1",
+        amosMcpUrl: "https://app.amoslabs.com/mcp"
+      }),
+    /HTTPS/
+  );
+});
+
+test("desktop settings allow local HTTP inference but require HTTPS for AMOS", () => {
+  const settings = sanitizeSettings({
+    provider: "ollama",
+    baseUrl: "http://127.0.0.1:11434/v1",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(settings.baseUrl, "http://127.0.0.1:11434/v1");
+
+  const ipv6 = sanitizeSettings({
+    provider: "llama-cpp",
+    baseUrl: "http://[::1]:8080/v1",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(ipv6.baseUrl, "http://[::1]:8080/v1");
+});
+
+test("desktop settings accept only known intelligence providers", () => {
+  assert.throws(
+    () =>
+      sanitizeSettings({
+        provider: "untrusted-runtime",
+        baseUrl: "https://models.example.com/v1",
+        amosMcpUrl: "https://app.amoslabs.com/mcp"
+      }),
+    /Unsupported intelligence provider/
+  );
+});

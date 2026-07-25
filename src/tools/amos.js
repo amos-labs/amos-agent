@@ -6,6 +6,18 @@ export function createAmosTools() {
     mcpTool("amos_get_started", "Call AMOS get_started for operating instructions and available paths.", "get_started"),
     mcpTool("amos_whoami", "Call AMOS whoami for tenant, role, and scope context.", "whoami"),
     mcpTool(
+      "amos_resume_company",
+      "Restore the durable company brief, recent decisions, open work, goals, and recommended next actions for this session.",
+      "resume_company",
+      {
+        type: "object",
+        properties: {
+          since: { type: "string", description: "Optional resume cursor from a prior session." }
+        },
+        additionalProperties: false
+      }
+    ),
+    mcpTool(
       "amos_company_overview",
       "Call AMOS company_overview for deterministic company-brain session context.",
       "company_overview",

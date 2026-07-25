@@ -1,9 +1,9 @@
 import { SYSTEM_PROMPT } from "./prompts.js";
 
 export class AgentLoop {
-  constructor({ config, kimiClient, registry, approvals, amosClient }) {
+  constructor({ config, modelClient, kimiClient, registry, approvals, amosClient }) {
     this.config = config;
-    this.kimiClient = kimiClient;
+    this.modelClient = modelClient || kimiClient;
     this.registry = registry;
     this.approvals = approvals;
     this.amosClient = amosClient;
@@ -18,7 +18,7 @@ export class AgentLoop {
     this.messages.push({ role: "user", content: userText });
 
     for (let turn = 0; turn < this.config.agent.maxToolTurns; turn += 1) {
-      const response = await this.kimiClient.chat({
+      const response = await this.modelClient.chat({
         messages: this.messages,
         tools: this.registry.openAiTools()
       });

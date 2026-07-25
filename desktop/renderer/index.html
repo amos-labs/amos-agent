@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    >
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AMOS Desktop</title>
+    <link rel="stylesheet" href="./app.css">
+  </head>
+  <body>
+    <div id="loading" class="loading-screen">
+      <img src="../assets/amos-mark.png" alt="" class="loading-mark">
+      <p>Starting the company brain…</p>
+    </div>
+
+    <div id="app" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark"><img src="../assets/amos-mark.png" alt=""></span>
+          <span><strong>AMOS</strong><small>DESKTOP</small></span>
+        </div>
+
+        <nav class="nav" aria-label="AMOS Desktop">
+          <button class="nav-item active" data-view="operator">
+            <span class="nav-icon">⌁</span><span>Operator</span>
+          </button>
+          <button class="nav-item" data-view="activity">
+            <span class="nav-icon">✓</span><span>Activity &amp; proof</span>
+          </button>
+          <button class="nav-item" data-view="settings">
+            <span class="nav-icon">⚙</span><span>Intelligence</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="connection-card">
+            <span id="connectionDot" class="status-dot"></span>
+            <span><strong id="connectionLabel">Checking AMOS</strong><small id="connectionDetail"></small></span>
+          </div>
+          <button id="workspaceButton" class="workspace-button">
+            <span>LOCAL WORKSPACE</span>
+            <strong id="workspaceLabel">Choose a folder</strong>
+          </button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <span class="eyebrow">THE GOVERNED COMPANY BRAIN</span>
+          </div>
+          <div class="topbar-actions">
+            <span id="runtimeBadge" class="runtime-badge">Intelligence not configured</span>
+            <button id="approvalsButton" class="button ghost">Open approvals</button>
+          </div>
+        </header>
+
+        <section id="onboardingView" class="view onboarding hidden">
+          <div class="onboarding-copy">
+            <span class="eyebrow accent">WELCOME TO AMOS DESKTOP</span>
+            <h1>Private intelligence.<br>One company to operate.</h1>
+            <p>
+              Choose where intelligence runs, connect the AMOS company brain, and define
+              what this computer is allowed to touch.
+            </p>
+            <div class="principles">
+              <span>Model independent</span>
+              <span>Human governed</span>
+              <span>Every action proven</span>
+            </div>
+          </div>
+
+          <div class="setup-panel">
+            <div class="setup-step">
+              <div class="step-number">01</div>
+              <div class="step-content">
+                <h2>Connect your company</h2>
+                <p>AMOS supplies durable company memory, connections, policy, approvals, and receipts.</p>
+                <button id="connectButton" class="button primary">Connect AMOS</button>
+              </div>
+              <span id="connectCheck" class="step-check">—</span>
+            </div>
+            <div class="setup-step">
+              <div class="step-number">02</div>
+              <div class="step-content">
+                <h2>Choose intelligence</h2>
+                <p id="onboardingProviderText">Kimi API now; AMOS-hosted, Bedrock, or local when you choose.</p>
+                <button class="button secondary" data-open-settings>Configure intelligence</button>
+              </div>
+              <span id="providerCheck" class="step-check">—</span>
+            </div>
+            <div class="setup-step">
+              <div class="step-number">03</div>
+              <div class="step-content">
+                <h2>Grant a local workspace</h2>
+                <p>AMOS only sees files inside the folder you explicitly select.</p>
+                <button id="onboardingWorkspaceButton" class="button secondary">Choose workspace</button>
+              </div>
+              <span id="workspaceCheck" class="step-check">—</span>
+            </div>
+            <button id="enterButton" class="button primary wide" disabled>Enter AMOS Desktop</button>
+          </div>
+        </section>
+
+        <section id="operatorView" class="view operator">
+          <div class="operator-grid">
+            <div class="conversation">
+              <div class="conversation-heading">
+                <div>
+                  <span class="eyebrow">OPERATE THE COMPANY</span>
+                  <h1>What should move forward?</h1>
+                </div>
+                <button id="clearButton" class="text-button">Clear session</button>
+              </div>
+
+              <div id="messages" class="messages">
+                <div class="welcome-message">
+                  <div class="agent-avatar">A</div>
+                  <div>
+                    <strong>AMOS is ready.</strong>
+                    <p>
+                      Ask about the company, create something new, or make a change.
+                      Consequential actions still wait for the right approval.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <form id="promptForm" class="composer">
+                <textarea
+                  id="promptInput"
+                  rows="3"
+                  placeholder="Ask about the company or describe work to move forward…"
+                  aria-label="Task for AMOS"
+                ></textarea>
+                <div class="composer-bottom">
+                  <div class="scope-note"><span class="status-dot green"></span> AMOS policy and proof are active</div>
+                  <button id="runButton" class="button primary" type="submit">Run with AMOS <span>→</span></button>
+                </div>
+              </form>
+            </div>
+
+            <aside class="work-panel">
+              <div class="work-panel-header">
+                <span class="eyebrow">LIVE WORK</span>
+                <span id="runningIndicator" class="running-indicator">Idle</span>
+              </div>
+              <div id="liveEvents" class="live-events">
+                <div class="empty-state">
+                  <span>⌁</span>
+                  <strong>Nothing running</strong>
+                  <p>Tool calls, approvals, and receipts will appear here as AMOS works.</p>
+                </div>
+              </div>
+              <div class="boundary-card">
+                <span class="boundary-icon">◈</span>
+                <div>
+                  <strong>Where intelligence runs</strong>
+                  <p id="deploymentSummary">Configure a model to see its deployment boundary.</p>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="activityView" class="view activity-view hidden">
+          <div class="section-heading">
+            <span class="eyebrow">ACTIVITY &amp; PROOF</span>
+            <h1>See what happened—and why.</h1>
+            <p>Local activity is shown here. Consequential company actions also produce durable AMOS receipts.</p>
+          </div>
+          <div id="activityList" class="activity-list"></div>
+        </section>
+
+        <section id="settingsView" class="view settings-view hidden">
+          <div class="section-heading settings-heading">
+            <div>
+              <span class="eyebrow">INTELLIGENCE &amp; INFRASTRUCTURE</span>
+              <h1>Choose where the model runs.</h1>
+              <p>The company, permissions, and proof remain in AMOS when intelligence changes.</p>
+            </div>
+            <div id="systemCard" class="system-card"></div>
+          </div>
+
+          <form id="settingsForm" class="settings-layout">
+            <div class="provider-column">
+              <h2>Deployment profile</h2>
+              <div id="providerCards" class="provider-cards"></div>
+            </div>
+
+            <div class="configuration-card">
+              <div class="field">
+                <label for="modelInput">Model</label>
+                <input id="modelInput" name="model" autocomplete="off" placeholder="kimi-k3">
+              </div>
+              <div class="field">
+                <label for="baseUrlInput">Inference endpoint</label>
+                <input id="baseUrlInput" name="baseUrl" autocomplete="off" placeholder="https://…/v1">
+                <small>HTTPS required except for localhost runtimes.</small>
+              </div>
+              <div class="field">
+                <label for="apiKeyInput">Provider credential</label>
+                <input id="apiKeyInput" name="apiKey" type="password" autocomplete="new-password" placeholder="Stored with macOS Keychain">
+                <small id="apiKeyHelp">Leave blank to keep the currently stored credential.</small>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="reasoningInput">Reasoning</label>
+                  <select id="reasoningInput" name="reasoningEffort">
+                    <option value="max">Maximum</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                    <option value="none">None</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>AMOS MCP</label>
+                  <input id="mcpInput" name="amosMcpUrl" value="https://app.amoslabs.com/mcp">
+                </div>
+              </div>
+              <div id="settingsError" class="inline-error hidden"></div>
+              <div class="configuration-actions">
+                <button id="disconnectButton" class="button secondary hidden" type="button">Disconnect AMOS</button>
+                <button id="testButton" class="button secondary" type="button">Test intelligence</button>
+                <button class="button primary" type="submit">Save profile</button>
+              </div>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <div id="approvalModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+      <div class="approval-modal">
+        <span class="eyebrow warning">LOCAL APPROVAL NEEDED</span>
+        <h2>AMOS wants to act on this computer.</h2>
+        <p id="approvalMessage"></p>
+        <div class="approval-note">Company-side policy and approvals remain independently enforced by AMOS.</div>
+        <div class="approval-actions">
+          <button id="denyButton" class="button secondary">Deny</button>
+          <button id="approveButton" class="button primary">Approve once</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
