@@ -40,16 +40,35 @@ npm run desktop:build
 `desktop:dir` creates an unpacked application for local testing.
 `desktop:build` creates macOS DMG and ZIP artifacts for Apple Silicon and Intel.
 
-Public release artifacts must be:
+Pushing a version tag such as `v0.2.0` runs
+`.github/workflows/release-desktop.yml`. The workflow verifies the package
+version, signs and notarizes both architectures, and publishes stable release
+assets:
 
-1. Signed with the AMOS Labs Developer ID Application certificate.
-2. Built with hardened runtime.
-3. Submitted to Apple's notarization service.
-4. Stapled and validated before publication.
+- `AMOS-Desktop-macOS-arm64.dmg` — Apple Silicon
+- `AMOS-Desktop-macOS-x64.dmg` — Intel
+- matching ZIP archives for update infrastructure
 
-The repository includes the hardened-runtime entitlement file and
-electron-builder packaging configuration. Signing identities and notary
-credentials belong in CI secrets, never the repository.
+The permanent dashboard download URLs are:
+
+```text
+https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg
+https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg
+```
+
+The release job fails closed unless the following GitHub Actions secrets exist:
+
+- `MAC_CSC_LINK`
+- `MAC_CSC_KEY_PASSWORD`
+- `APPLE_ID`
+- `APPLE_APP_SPECIFIC_PASSWORD`
+- `APPLE_TEAM_ID`
+
+These supply the AMOS Labs Developer ID Application certificate and Apple
+notarization credentials. The repository includes hardened-runtime entitlements
+and a release-only electron-builder configuration; secrets never belong in the
+repository. Keep local development builds unsigned with `desktop:dir` or
+`desktop:build`.
 
 ## Next production slices
 
