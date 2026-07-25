@@ -40,10 +40,11 @@ npm run desktop:build
 `desktop:dir` creates an unpacked application for local testing.
 `desktop:build` creates macOS DMG and ZIP artifacts for Apple Silicon and Intel.
 
-Pushing a version tag such as `v0.2.0` runs
+Pushing a version tag such as `v0.2.1` runs
 `.github/workflows/release-desktop.yml`. The workflow verifies the package
-version, signs and notarizes both architectures, and publishes stable release
-assets:
+version, signs and notarizes both architectures, verifies that every required
+installer exists, and then publishes all release assets in one explicit GitHub
+release:
 
 - `AMOS-Desktop-macOS-arm64.dmg` — Apple Silicon
 - `AMOS-Desktop-macOS-x64.dmg` — Intel
@@ -56,7 +57,8 @@ https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-ma
 https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg
 ```
 
-The release job fails closed unless the following GitHub Actions secrets exist:
+The release job targets the `MAC_CSC_LINK` GitHub environment and fails closed
+unless the following environment secrets exist:
 
 - `MAC_CSC_LINK`
 - `MAC_CSC_KEY_PASSWORD`

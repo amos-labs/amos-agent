@@ -38,6 +38,7 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          # shellcheck disable=SC2016
           node -e 'const p=require("./package.json"); const tag=process.env.GITHUB_REF_NAME; if (tag !== `v${p.version}`) { console.error(`Tag ${tag} must match package version v${p.version}`); process.exit(1); }'
           test -n "$CSC_LINK" || { echo "::error::MAC_CSC_LINK is not configured"; exit 1; }
           test -n "$CSC_KEY_PASSWORD" || { echo "::error::MAC_CSC_KEY_PASSWORD is not configured"; exit 1; }
@@ -45,12 +46,39 @@ jobs:
           test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::APPLE_APP_SPECIFIC_PASSWORD is not configured"; exit 1; }
           test -n "$APPLE_TEAM_ID" || { echo "::error::APPLE_TEAM_ID is not configured"; exit 1; }
 
-      - name: Build and publish signed installers
+      - name: Build signed installers
         run: npm run desktop:release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Verify release assets
+        run: |
+          required=(
+            dist/AMOS-Desktop-macOS-arm64.dmg
+            dist/AMOS-Desktop-macOS-x64.dmg
+            dist/AMOS-Desktop-macOS-arm64.zip
+            dist/AMOS-Desktop-macOS-x64.zip
+          )
+          for asset in "${required[@]}"; do
+            test -s "$asset" || { echo "::error::Missing release asset: $asset"; exit 1; }
+          done
+          shasum -a 256 "${required[@]}" > dist/SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/AMOS-Desktop-macOS-arm64.dmg \
+            dist/AMOS-Desktop-macOS-x64.dmg \
+            dist/AMOS-Desktop-macOS-arm64.zip \
+            dist/AMOS-Desktop-macOS-x64.zip \
+            dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "AMOS Desktop ${GITHUB_REF_NAME#v}" \
+            --generate-notes \
+            --verify-tag

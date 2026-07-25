@@ -1,6 +1,6 @@
 {
   "name": "@amos-labs/amos-agent",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "AMOS Desktop and local agent: model-independent operators for the governed AMOS company brain.",
   "type": "module",
   "main": "desktop/main.js",
@@ -20,7 +20,7 @@
     "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js",
     "desktop": "electron desktop/main.js",
     "desktop:build": "electron-builder --mac dmg zip",
-    "desktop:release": "electron-builder --config desktop/electron-builder.release.yml --mac --publish always",
+    "desktop:release": "electron-builder --config desktop/electron-builder.release.yml --mac --publish never",
     "desktop:dir": "electron-builder --mac dir"
   },
   "devDependencies": {
