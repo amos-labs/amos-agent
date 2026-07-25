@@ -1,6 +1,6 @@
 {
   "name": "@amos-labs/amos-agent",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "AMOS Desktop and local agent: model-independent operators for the governed AMOS company brain.",
   "type": "module",
   "main": "desktop/main.js",
@@ -17,7 +17,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js",
+    "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js && node --check src/desktop/remoteState.js",
     "desktop": "electron desktop/main.js",
     "desktop:build": "electron-builder --mac dmg zip",
     "desktop:release": "electron-builder --config desktop/electron-builder.release.yml --mac --publish never",

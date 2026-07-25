@@ -27,6 +27,9 @@
           <button class="nav-item active" data-view="operator">
             <span class="nav-icon">⌁</span><span>Operator</span>
           </button>
+          <button class="nav-item" data-view="decisions">
+            <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
+          </button>
           <button class="nav-item" data-view="activity">
             <span class="nav-icon">✓</span><span>Activity &amp; proof</span>
           </button>
@@ -38,7 +41,11 @@
         <div class="sidebar-bottom">
           <div class="connection-card">
             <span id="connectionDot" class="status-dot"></span>
-            <span><strong id="connectionLabel">Checking AMOS</strong><small id="connectionDetail"></small></span>
+            <span>
+              <strong id="connectionLabel">Checking AMOS</strong>
+              <small id="connectionDetail"></small>
+              <small id="identityDetail" class="identity-detail"></small>
+            </span>
           </div>
           <button id="workspaceButton" class="workspace-button">
             <span>LOCAL WORKSPACE</span>
@@ -53,6 +60,7 @@
             <span class="eyebrow">THE GOVERNED COMPANY BRAIN</span>
           </div>
           <div class="topbar-actions">
+            <span id="identityBadge" class="identity-badge hidden"></span>
             <span id="runtimeBadge" class="runtime-badge">Intelligence not configured</span>
             <button id="approvalsButton" class="button ghost">Open approvals</button>
           </div>
@@ -164,6 +172,31 @@
               </div>
             </aside>
           </div>
+        </section>
+
+        <section id="decisionsView" class="view decisions-view hidden">
+          <div class="section-heading decisions-heading">
+            <div>
+              <span class="eyebrow">HUMAN AUTHORITY</span>
+              <h1>Decisions waiting for you.</h1>
+              <p>
+                Review work AMOS has prepared, then decide from your signed-in browser.
+                The model can present a decision; it cannot approve its own work.
+              </p>
+            </div>
+            <div class="decision-actions">
+              <span id="decisionSyncStatus" class="sync-status">Not synced</span>
+              <button id="refreshDecisionsButton" class="button secondary">Refresh</button>
+              <button id="allApprovalsButton" class="button primary">Open full approval center</button>
+            </div>
+          </div>
+          <div id="decisionNotice" class="decision-notice hidden"></div>
+          <div id="pendingDecisions" class="decision-list"></div>
+          <div class="recent-heading">
+            <span class="eyebrow">RECENT OUTCOMES</span>
+            <p>Approved, denied, expired, and failed work remains visible for accountability.</p>
+          </div>
+          <div id="recentDecisions" class="decision-list compact"></div>
         </section>
 
         <section id="activityView" class="view activity-view hidden">

@@ -5,6 +5,7 @@ const eventChannels = new Set([
   "agent:status",
   "approval:requested",
   "activity:changed",
+  "remote:changed",
   "auth:browser"
 ]);
 
@@ -13,6 +14,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   saveSettings: (settings) => ipcRenderer.invoke("desktop:save-settings", settings),
   login: () => ipcRenderer.invoke("desktop:login"),
   logout: () => ipcRenderer.invoke("desktop:logout"),
+  refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
+  openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
   run: (text) => ipcRenderer.invoke("desktop:run", text),
   clear: () => ipcRenderer.invoke("desktop:clear"),

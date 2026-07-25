@@ -17,7 +17,8 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   baseUrl: "https://api.moonshot.ai/v1",
   reasoningEffort: "max",
   workspace: "",
-  amosMcpUrl: "https://app.amoslabs.com/mcp"
+  amosMcpUrl: "https://app.amoslabs.com/mcp",
+  notifiedApprovalIds: []
 });
 
 export class DesktopSettingsStore {
@@ -101,6 +102,12 @@ export function sanitizeSettings(input = {}) {
     amosMcpUrl: validateEndpoint(input.amosMcpUrl || DEFAULT_DESKTOP_SETTINGS.amosMcpUrl, {
       requireHttps: true
     }),
+    notifiedApprovalIds: Array.isArray(input.notifiedApprovalIds)
+      ? input.notifiedApprovalIds
+          .map((value) => clean(value, 64))
+          .filter(Boolean)
+          .slice(-200)
+      : [],
     apiKey: clean(input.apiKey, 16_384)
   };
 }

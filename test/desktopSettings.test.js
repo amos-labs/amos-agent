@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { DesktopSettingsStore, sanitizeSettings } from "../src/desktop/settingsStore.js";
+import {
+  DEFAULT_DESKTOP_SETTINGS,
+  DesktopSettingsStore,
+  sanitizeSettings
+} from "../src/desktop/settingsStore.js";
 
 test("desktop settings encrypt provider credentials at rest", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-desktop-settings-"));
@@ -67,4 +71,18 @@ test("desktop settings accept only known intelligence providers", () => {
       }),
     /Unsupported intelligence provider/
   );
+});
+
+test("desktop settings retain only a bounded approval-notification history", () => {
+  const notifiedApprovalIds = Array.from({ length: 205 }, (_, index) =>
+    `${index}`.padStart(36, "0")
+  );
+  const sanitized = sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    notifiedApprovalIds
+  });
+
+  assert.equal(sanitized.notifiedApprovalIds.length, 200);
+  assert.equal(sanitized.notifiedApprovalIds[0], notifiedApprovalIds[5]);
+  assert.equal(sanitized.notifiedApprovalIds.at(-1), notifiedApprovalIds.at(-1));
 });
