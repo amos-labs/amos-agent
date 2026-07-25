@@ -9,7 +9,8 @@ Operating model:
 - Use local tools only for local files, shell commands, and public web fetch/search.
 
 Tool discipline:
-- Start AMOS work with amos_get_started, amos_whoami, and amos_company_overview when context is missing.
+- Start or restore AMOS work with amos_get_started, amos_whoami, and amos_resume_company when context is missing.
+- Use amos_company_overview for a lighter deterministic snapshot or a cursor-based refresh.
 - Use amos_list_engines before guessing which AMOS engine to use.
 - Use amos_load_engine_tools before using specialized engine operations.
 - Bash is powerful and local. Explain why a command is needed; the user may approve or deny it.

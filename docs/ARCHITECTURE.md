@@ -4,8 +4,13 @@ AMOS Agent is a local MCP operator, not a cloud-hosted harness.
 
 ```text
 User machine
-  AMOS Agent
-    Kimi K3 model loop
+  AMOS Desktop or CLI
+    provider-neutral model loop
+      AMOS-hosted Kimi K3 in AWS
+      Kimi API
+      Amazon Bedrock
+      customer OpenAI-compatible endpoint
+      appropriately sized local model
     local bash/files/web tools
     AMOS MCP client
     OAuth 2.1 + PKCE session
@@ -43,17 +48,32 @@ The managed platform owns:
 - tenant isolation
 - managed runtime
 
-## Kimi K3 loop
+## Model loop
 
-Kimi K3 is called through Moonshot's OpenAI-compatible Chat Completions API:
+Model providers use an OpenAI-compatible Chat Completions boundary:
 
-- `model: kimi-k3`
-- `reasoning_effort: max`
+- the provider supplies the base URL, credential, model name, and capabilities
+- Kimi remains the default CLI profile for backwards compatibility
+- AMOS-hosted and Bedrock profiles move inference into AWS without changing the
+  agent or AMOS tool surface
+- Ollama and llama.cpp profiles support models sized for customer hardware
 - complete assistant messages are preserved across tool turns
 - tool results are appended with matching `tool_call_id`
 
-This matters because Kimi K3 can return separate reasoning content and tool
-calls. The loop stores the whole assistant message, not only `content`.
+The loop stores the whole assistant message, not only `content`, because
+reasoning models can return additional message fields alongside tool calls.
+
+## Desktop boundary
+
+The Electron renderer is sandboxed, has no Node.js integration, and receives
+only a small, context-isolated IPC API. The main process owns provider
+credentials, OAuth, the model loop, local tools, and approval continuations.
+Provider secrets are encrypted with the operating-system-backed Electron
+`safeStorage` service before being written to disk.
+
+Local shell and file writes remain separately approval-gated. AMOS server-side
+policy remains authoritative for company actions regardless of the local model,
+provider, or desktop decision.
 
 ## Tool loading
 

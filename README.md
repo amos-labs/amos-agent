@@ -1,14 +1,37 @@
 # AMOS Agent
 
-Local AMOS Agent is a lightweight, open-source operator for the AMOS managed
-platform. It runs on the user's machine, uses Kimi K3 for reasoning, and talks
-to the AMOS company brain through MCP.
+AMOS Agent is the open-source local operator for the AMOS managed platform.
+It can use AMOS-hosted intelligence, Kimi's API, Amazon Bedrock, a customer
+OpenAI-compatible endpoint, or an appropriately sized model on the user's
+computer. Every deployment talks to the same governed AMOS company brain
+through MCP.
 
 It is not a hosted agent service and it is not the old AMOS harness. The managed
 platform owns business state, governance, receipts, approvals, and engines. This
 agent owns local reasoning, bash, local files, and the MCP bridge.
 
-## Local runtime
+## AMOS Desktop
+
+AMOS Desktop packages this agent into a downloadable operator console for
+macOS. It provides guided setup, AMOS OAuth, infrastructure selection, local
+workspace grants, human approval prompts, live work visibility, and activity
+history.
+
+```bash
+npm install
+npm run desktop
+```
+
+Create a local macOS bundle:
+
+```bash
+npm run desktop:dir
+```
+
+Release builds require an Apple Developer ID, hardened runtime, signing, and
+notarization. See [docs/DESKTOP.md](docs/DESKTOP.md).
+
+## CLI runtime
 
 AMOS Agent is a standalone Node.js CLI. The executable entry point is
 [`bin/amos-agent.js`](bin/amos-agent.js), exposed as the `amos-agent` command by
@@ -33,8 +56,8 @@ node ./bin/amos-agent.js --help
 
 ## Configure
 
-Create a gitignored `.env.local` file with owner-only permissions for the Kimi
-API key:
+Create a gitignored `.env.local` file with owner-only permissions for the
+selected model provider:
 
 ```bash
 touch .env.local
@@ -42,9 +65,29 @@ chmod 600 .env.local
 ```
 
 ```dotenv
+AMOS_MODEL_PROVIDER=kimi
 MOONSHOT_API_KEY=sk-your-key
-KIMI_MODEL=kimi-k3
-KIMI_REASONING_EFFORT=max
+AMOS_MODEL=kimi-k3
+AMOS_MODEL_REASONING_EFFORT=max
+```
+
+Other examples:
+
+```dotenv
+# AMOS-hosted Kimi K3 in AWS
+AMOS_MODEL_PROVIDER=amos-hosted
+AMOS_MODEL_BASE_URL=https://your-amos-inference-endpoint/v1
+AMOS_MODEL=kimi-k3
+
+# Amazon Bedrock OpenAI-compatible endpoint
+AMOS_MODEL_PROVIDER=bedrock
+AWS_REGION=us-east-1
+AWS_BEARER_TOKEN_BEDROCK=...
+AMOS_MODEL=openai.gpt-oss-120b
+
+# Smaller model on the user's computer
+AMOS_MODEL_PROVIDER=ollama
+AMOS_MODEL=gpt-oss:20b
 ```
 
 Run directly with the environment file:
@@ -110,6 +153,7 @@ amos-agent logout
 - `web_search` — Brave Search when `BRAVE_SEARCH_API_KEY` is configured.
 - `amos_get_started`
 - `amos_whoami`
+- `amos_resume_company`
 - `amos_company_overview`
 - `amos_list_engines`
 - `amos_load_engine_tools`
@@ -145,3 +189,6 @@ receipts, approvals, and tenant boundaries.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Authentication details are in [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md).
+
+Inference and infrastructure profiles are in
+[docs/INTELLIGENCE_PROVIDERS.md](docs/INTELLIGENCE_PROVIDERS.md).

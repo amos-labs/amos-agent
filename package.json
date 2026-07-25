@@ -1,8 +1,10 @@
 {
   "name": "@amos-labs/amos-agent",
-  "version": "0.1.0",
-  "description": "Local AMOS Agent: a Kimi K3-powered MCP operator for the AMOS company brain.",
+  "version": "0.2.0",
+  "description": "AMOS Desktop and local agent: model-independent operators for the governed AMOS company brain.",
   "type": "module",
+  "main": "desktop/main.js",
+  "author": "AMOS Labs",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -14,7 +16,16 @@
     "amos-agent": "./bin/amos-agent.js"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js",
+    "desktop": "electron desktop/main.js",
+    "desktop:build": "electron-builder --mac dmg zip",
+    "desktop:release": "electron-builder --config desktop/electron-builder.release.yml --mac --publish always",
+    "desktop:dir": "electron-builder --mac dir"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "26.15.3"
   },
   "engines": {
     "node": ">=22"
@@ -27,6 +38,45 @@
     "README.md",
     "LICENSE"
   ],
+  "build": {
+    "appId": "com.amoslabs.desktop",
+    "productName": "AMOS Desktop",
+    "asar": true,
+    "files": [
+      "desktop/**/*",
+      "src/**/*",
+      "package.json",
+      "LICENSE"
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "desktop/entitlements.mac.plist",
+      "entitlementsInherit": "desktop/entitlements.mac.plist",
+      "icon": "desktop/assets/amos-mark-1024.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "AMOS Desktop",
+      "artifactName": "AMOS-Desktop-${version}-${arch}.${ext}"
+    }
+  },
   "keywords": [
     "amos",
     "mcp",

@@ -20,7 +20,10 @@ function pkceChallenge(verifier) {
 
 function originFor(value) {
   const url = new URL(value);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1", "::1"].includes(url.hostname))) {
+  if (
+    url.protocol !== "https:" &&
+    !(url.protocol === "http:" && ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname))
+  ) {
     throw new Error("AMOS OAuth requires HTTPS except for localhost development");
   }
   return url.origin;
