@@ -66,7 +66,15 @@ jobs:
           for asset in "${required[@]}"; do
             test -s "$asset" || { echo "::error::Missing release asset: $asset"; exit 1; }
           done
-          shasum -a 256 "${required[@]}" > dist/SHA256SUMS.txt
+          (
+            cd dist
+            shasum -a 256 \
+              AMOS-Desktop-macOS-arm64.dmg \
+              AMOS-Desktop-macOS-x64.dmg \
+              AMOS-Desktop-macOS-arm64.zip \
+              AMOS-Desktop-macOS-x64.zip \
+              > SHA256SUMS.txt
+          )
 
       - name: Publish GitHub release
         env:
