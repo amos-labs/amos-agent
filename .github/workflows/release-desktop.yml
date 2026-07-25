@@ -11,6 +11,7 @@ permissions:
 jobs:
   macos:
     name: Sign, notarize, and publish macOS
+    environment: MAC_CSC_LINK
     runs-on: macos-15
     timeout-minutes: 45
     steps:
