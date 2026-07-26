@@ -16,6 +16,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   model: "kimi-k3",
   baseUrl: "https://api.moonshot.ai/v1",
   reasoningEffort: "max",
+  operatingMode: "online",
   workspace: "",
   amosMcpUrl: "https://app.amoslabs.com/mcp",
   notifiedApprovalIds: []
@@ -91,6 +92,10 @@ export class DesktopSettingsStore {
 export function sanitizeSettings(input = {}) {
   const provider = clean(input.provider, 64) || DEFAULT_DESKTOP_SETTINGS.provider;
   if (!PROVIDER_IDS.has(provider)) throw new Error(`Unsupported intelligence provider: ${provider}`);
+  const operatingMode = input.operatingMode === "offline" ? "offline" : "online";
+  if (operatingMode === "offline" && !["ollama", "llama-cpp"].includes(provider)) {
+    throw new Error("Local-only mode requires an Ollama or llama.cpp intelligence profile");
+  }
   return {
     provider,
     model: clean(input.model, 256),
@@ -98,6 +103,7 @@ export function sanitizeSettings(input = {}) {
     reasoningEffort: ["none", "low", "medium", "high", "max"].includes(input.reasoningEffort)
       ? input.reasoningEffort
       : "max",
+    operatingMode,
     workspace: clean(input.workspace, 4096),
     amosMcpUrl: validateEndpoint(input.amosMcpUrl || DEFAULT_DESKTOP_SETTINGS.amosMcpUrl, {
       requireHttps: true

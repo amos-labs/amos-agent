@@ -22,7 +22,7 @@ test("desktop saves, reuses, promotes, and forgets encrypted private memory", as
   let companyPayload;
   const controller = new DesktopController({
     userDataPath: root,
-    settingsStore: {},
+    settingsStore: { read: async () => ({ operatingMode: "online" }) },
     privateMemoryStore: store,
     openBrowser() {},
     emit() {}

@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
 import { DesktopSettingsStore } from "../src/desktop/settingsStore.js";
 import { DesktopController } from "../src/desktop/controller.js";
+import { OllamaModelManager } from "../src/desktop/offlineIntelligence.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
 
@@ -206,6 +207,16 @@ function registerIpc() {
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
   ipcMain.handle("desktop:open-approval", (_event, id) => controller.openApproval(id));
   ipcMain.handle("desktop:test-model", () => controller.testModel());
+  ipcMain.handle("desktop:refresh-offline", () => controller.refreshOffline());
+  ipcMain.handle("desktop:install-offline-model", (_event, id) =>
+    controller.installOfflineModel(id)
+  );
+  ipcMain.handle("desktop:remove-offline-model", (_event, id) =>
+    controller.removeOfflineModel(id)
+  );
+  ipcMain.handle("desktop:activate-offline-model", (_event, id) =>
+    controller.activateOfflineModel(id)
+  );
   ipcMain.handle("desktop:run", (_event, input) => controller.run(input));
   ipcMain.handle("desktop:clear", () => controller.clear());
   ipcMain.handle("desktop:remove-canvas", (_event, id) => controller.removeCanvas(id));
@@ -276,10 +287,14 @@ app.whenReady().then(() => {
     encrypt,
     decrypt
   });
+  const offlineManager = new OllamaModelManager({
+    emit: (payload) => send("offline:changed", payload)
+  });
   controller = new DesktopController({
     userDataPath: app.getPath("userData"),
     settingsStore,
     privateMemoryStore,
+    offlineManager,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,
     notify: notifyApproval
@@ -296,6 +311,7 @@ app.whenReady().then(() => {
   });
   updateState = updateManager.state();
   updateManager.start();
+  controller.refreshOffline().catch(() => {});
   controller.refreshRemote().catch(() => {});
   remoteSyncTimer = setInterval(() => controller.refreshRemote().catch(() => {}), 30_000);
   remoteSyncTimer.unref?.();

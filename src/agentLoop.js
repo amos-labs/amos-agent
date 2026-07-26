@@ -1,17 +1,18 @@
 import { SYSTEM_PROMPT } from "./prompts.js";
 
 export class AgentLoop {
-  constructor({ config, modelClient, kimiClient, registry, approvals, amosClient }) {
+  constructor({ config, modelClient, kimiClient, registry, approvals, amosClient, systemPrompt = SYSTEM_PROMPT }) {
     this.config = config;
     this.modelClient = modelClient || kimiClient;
     this.registry = registry;
     this.approvals = approvals;
     this.amosClient = amosClient;
-    this.messages = [{ role: "system", content: SYSTEM_PROMPT }];
+    this.systemPrompt = systemPrompt;
+    this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
   clear() {
-    this.messages = [{ role: "system", content: SYSTEM_PROMPT }];
+    this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
   async run(userContent, { onEvent = () => {} } = {}) {

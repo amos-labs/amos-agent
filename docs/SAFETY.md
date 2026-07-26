@@ -112,6 +112,12 @@ Offline company work must fail safe:
 - nothing queued offline executes silently; and
 - memory exports never include credentials.
 
+AMOS Desktop 0.7 enforces an explicit local-only tool surface. AMOS MCP and
+public-web tools are not registered in that runtime, company-memory promotion
+is blocked, and approval synchronization is paused. The UI continuously labels
+the mode and the local model in use. This is stronger than relying on a prompt
+to tell a model that the network is unavailable.
+
 ## Advanced environment controls
 
 ```bash

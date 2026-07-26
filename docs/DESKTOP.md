@@ -187,6 +187,21 @@ No signing or notarization secret belongs in the repository.
 - Use a managed or customer-cloud profile for work beyond the device's
   capabilities.
 
+### Set up curated offline intelligence
+
+1. Open **Intelligence**.
+2. Install and launch Ollama if the local runtime is not ready.
+3. Review the hardware-aware recommendation and download a curated model.
+4. Select **Use offline** on an installed model.
+5. Confirm the top bar reads **LOCAL-ONLY** before working without live company
+   access.
+
+Downloads are resumable through Ollama, installed models can be removed from
+the same screen, and the catalog is part of the signed AMOS Desktop release.
+Local-only mode exposes local workspace, private-memory attachment, and typed
+canvas tools. AMOS MCP, public web, company-memory promotion, live approvals,
+and proof are unavailable until the user explicitly returns online.
+
 ### No update appears
 
 - Update checks run only in a packaged signed build.
@@ -209,7 +224,7 @@ The next product layers build on the signed distribution foundation:
 2. signed device identity and policy-controlled environment grants;
 3. richer typed canvas blocks and managed AMOS result adapters;
 4. richer private-memory retrieval, sharing proposals, and capsule export;
-5. curated offline intelligence with hardware-aware installation;
+5. deeper offline retrieval against a server-authorized company cache;
 6. portable encrypted memory capsules and reconnect reconciliation; and
 7. Windows installers and enterprise/MDM packaging.
 
