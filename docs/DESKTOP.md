@@ -24,6 +24,8 @@ revival of the deprecated hosted harness.
 - tenant-scoped decision inbox with 30-second background refresh
 - native approval notifications and a persistent menu-bar/system-tray surface
 - one-click, session-authenticated approval review (the AI remains unable to approve itself)
+- signed update checks on launch and every six hours
+- native update-available notifications with explicit download and restart/install controls
 - local session activity
 - provider secrets encrypted with operating-system-backed `safeStorage`
 
@@ -58,6 +60,12 @@ release:
 - `AMOS-Desktop-macOS-arm64.dmg` — Apple Silicon
 - `AMOS-Desktop-macOS-x64.dmg` — Intel
 - matching ZIP archives for update infrastructure
+- `latest-mac.yml` and blockmaps used by the signed in-app updater
+
+The app never installs an update in the middle of a task. It announces a signed
+release, waits for the user to download it, and exposes **Restart and install**
+only after the download completes. Development builds do not contact the
+production update feed.
 
 The permanent dashboard download URLs are:
 
@@ -91,5 +99,4 @@ repository. Keep local development builds unsigned with `desktop:dir` or
 5. Add local project memory with explicit promotion, refresh, and forgetting rules.
 6. Add AWS profile/SigV4 support for Bedrock.
 7. Add a curated local model installer for supported Mac hardware.
-8. Add automatic signed updates.
-9. Ship signed Windows installers and MDM-friendly enterprise packages.
+8. Ship signed Windows installers and MDM-friendly enterprise packages.

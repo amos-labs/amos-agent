@@ -12,16 +12,28 @@ import {
 } from "electron";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import electronUpdater from "electron-updater";
 import { DesktopSettingsStore } from "../src/desktop/settingsStore.js";
 import { DesktopController } from "../src/desktop/controller.js";
+import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const { autoUpdater } = electronUpdater;
 let window;
 let controller;
+let updateManager;
 let tray;
 let remoteSyncTimer;
 let quitting = false;
 let pendingApprovalCount = 0;
+let agentRunning = false;
+let updateState = {
+  status: "unavailable",
+  currentVersion: app.getVersion(),
+  availableVersion: null,
+  progress: null,
+  message: "Automatic updates are available in signed AMOS Desktop builds."
+};
 
 function createWindow() {
   window = new BrowserWindow({
@@ -51,10 +63,18 @@ function createWindow() {
 }
 
 function send(channel, payload) {
+  if (channel === "agent:status") {
+    agentRunning = Boolean(payload?.running);
+    updateTray();
+  }
   if (channel === "remote:changed") {
     pendingApprovalCount = Array.isArray(payload?.approvals)
       ? payload.approvals.filter((approval) => approval.status === "pending").length
       : 0;
+    updateTray();
+  }
+  if (channel === "update:changed") {
+    updateState = payload;
     updateTray();
   }
   if (window && !window.isDestroyed()) window.webContents.send(channel, payload);
@@ -82,6 +102,7 @@ function updateTray() {
     pendingApprovalCount === 0
       ? "No approvals waiting"
       : `${pendingApprovalCount} approval${pendingApprovalCount === 1 ? "" : "s"} waiting`;
+  const updateItem = trayUpdateItem();
   tray.setToolTip(`AMOS Desktop · ${approvalsLabel}`);
   tray.setContextMenu(
     Menu.buildFromTemplate([
@@ -89,6 +110,8 @@ function updateTray() {
       { type: "separator" },
       { label: approvalsLabel, enabled: pendingApprovalCount > 0, click: () => controller.openApprovals() },
       { label: "Review approvals…", click: () => controller.openApprovals() },
+      { type: "separator" },
+      updateItem,
       { type: "separator" },
       {
         label: "Quit AMOS Desktop",
@@ -99,6 +122,35 @@ function updateTray() {
       }
     ])
   );
+}
+
+function trayUpdateItem() {
+  const version = updateState.availableVersion ? ` ${updateState.availableVersion}` : "";
+  if (updateState.status === "available") {
+    return {
+      label: `Download AMOS Desktop${version}`,
+      click: () => updateManager?.download().catch(() => showWindow())
+    };
+  }
+  if (updateState.status === "downloading") {
+    const progress = Number.isFinite(updateState.progress) ? ` ${updateState.progress}%` : "";
+    return { label: `Downloading update…${progress}`, enabled: false };
+  }
+  if (updateState.status === "downloaded") {
+    return {
+      label: `Restart and install AMOS Desktop${version}`,
+      enabled: !agentRunning,
+      click: () => installUpdate()
+    };
+  }
+  if (updateState.status === "checking") {
+    return { label: "Checking for updates…", enabled: false };
+  }
+  return {
+    label: "Check for updates…",
+    enabled: Boolean(updateManager),
+    click: () => updateManager?.check().catch(() => showWindow())
+  };
 }
 
 function notifyApproval({ title, body, reviewUrl }) {
@@ -114,6 +166,23 @@ function notifyApproval({ title, body, reviewUrl }) {
   });
   notification.show();
   return true;
+}
+
+function notifyUpdate({ title, body }) {
+  if (!Notification.isSupported()) return false;
+  const notification = new Notification({ title, body, silent: false });
+  notification.on("click", showWindow);
+  notification.show();
+  return true;
+}
+
+function installUpdate() {
+  if (agentRunning) {
+    showWindow();
+    throw new Error("Wait for the current AMOS task to finish before restarting to update");
+  }
+  quitting = true;
+  updateManager?.install();
 }
 
 function encrypt(value) {
@@ -175,6 +244,10 @@ function registerIpc() {
     return controller.chooseWorkspace(result.filePaths[0]);
   });
   ipcMain.handle("desktop:open-approvals", () => controller.openApprovals());
+  ipcMain.handle("desktop:update-state", () => updateManager?.state() || updateState);
+  ipcMain.handle("desktop:check-for-updates", () => updateManager?.check());
+  ipcMain.handle("desktop:download-update", () => updateManager?.download());
+  ipcMain.handle("desktop:install-update", () => installUpdate());
 }
 
 app.whenReady().then(() => {
@@ -193,6 +266,15 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   createTray();
+  updateManager = new DesktopUpdateManager({
+    updater: autoUpdater,
+    currentVersion: app.getVersion(),
+    enabled: app.isPackaged,
+    emit: (payload) => send("update:changed", payload),
+    notify: notifyUpdate
+  });
+  updateState = updateManager.state();
+  updateManager.start();
   controller.refreshRemote().catch(() => {});
   remoteSyncTimer = setInterval(() => controller.refreshRemote().catch(() => {}), 30_000);
   remoteSyncTimer.unref?.();
@@ -210,5 +292,6 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   quitting = true;
   clearInterval(remoteSyncTimer);
+  updateManager?.stop();
   controller?.resetRuntime();
 });

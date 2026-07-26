@@ -42,6 +42,7 @@ let pendingApproval = null;
 let running = false;
 let attachments = [];
 let dragDepth = 0;
+let updateState = null;
 
 const elements = Object.fromEntries(
   [
@@ -58,7 +59,7 @@ const elements = Object.fromEntries(
     "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "pendingDecisions",
-    "recentDecisions"
+    "recentDecisions", "updateButton"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -67,7 +68,7 @@ initialize().catch(showFatal);
 async function initialize() {
   bindActions();
   bindEvents();
-  state = await api.state();
+  [state, updateState] = await Promise.all([api.state(), api.updateState()]);
   updateAttachments(state.attachments || []);
   selectedProvider = state.settings.provider;
   render();
@@ -126,6 +127,7 @@ function bindActions() {
   elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
   elements.denyButton.addEventListener("click", () => resolveApproval(false));
+  elements.updateButton.addEventListener("click", handleUpdate);
 }
 
 function bindEvents() {
@@ -140,6 +142,10 @@ function bindEvents() {
     Object.assign(state, remote);
     renderIdentity();
     renderDecisions();
+  });
+  api.on("update:changed", (nextUpdateState) => {
+    updateState = nextUpdateState;
+    renderUpdate();
   });
   api.on("approval:requested", (approval) => {
     pendingApproval = approval;
@@ -174,6 +180,7 @@ function render() {
   renderStep(elements.workspaceCheck, Boolean(state.settings.workspace));
   elements.enterButton.disabled = !(state.connected && state.configured && state.settings.workspace);
   elements.disconnectButton.classList.toggle("hidden", !state.connected);
+  renderUpdate();
 
   const boundary = {
     amos: "AMOS-managed inference in AWS. Company policy and proof remain in AMOS.",
@@ -729,6 +736,43 @@ function setRunning(value) {
   elements.runningIndicator.textContent = value ? "Working" : "Idle";
   elements.runningIndicator.classList.toggle("active", value);
   renderAttachments();
+  renderUpdate();
+}
+
+function renderUpdate() {
+  const status = updateState?.status;
+  const visible = ["available", "downloading", "downloaded"].includes(status);
+  elements.updateButton.classList.toggle("hidden", !visible);
+  elements.updateButton.classList.toggle("ready", status === "downloaded");
+  elements.updateButton.disabled = status === "downloading" || (status === "downloaded" && running);
+  if (status === "available") {
+    elements.updateButton.textContent = updateState.availableVersion
+      ? `Download v${updateState.availableVersion}`
+      : "Download update";
+  } else if (status === "downloading") {
+    elements.updateButton.textContent = Number.isFinite(updateState.progress)
+      ? `Downloading… ${updateState.progress}%`
+      : "Downloading update…";
+  } else if (status === "downloaded") {
+    elements.updateButton.textContent = running ? "Update ready after task" : "Restart and install";
+  }
+  elements.updateButton.title = updateState?.message || "";
+}
+
+async function handleUpdate() {
+  try {
+    if (updateState?.status === "available") {
+      await api.downloadUpdate();
+    } else if (updateState?.status === "downloaded") {
+      if (running) {
+        toast("Wait for the current AMOS task to finish before restarting.", true);
+        return;
+      }
+      await api.installUpdate();
+    }
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 async function resolveApproval(approved) {

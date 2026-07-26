@@ -187,6 +187,22 @@ button { color: inherit; }
 .button.secondary, .button.ghost { border-color: var(--line); background: rgba(255,255,255,.025); color: var(--ink); }
 .button.secondary:hover, .button.ghost:hover { border-color: rgba(109,147,255,.42); background: rgba(109,147,255,.08); }
 .button.ghost { padding: 9px 13px; color: var(--muted); font-size: 11px; }
+.button.update-button {
+  max-width: 250px;
+  overflow: hidden;
+  padding: 9px 13px;
+  border-color: rgba(59,213,143,.34);
+  background: rgba(59,213,143,.1);
+  color: var(--green);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.button.update-button.ready {
+  border-color: rgba(109,147,255,.48);
+  background: var(--blue);
+  color: #071021;
+}
 .button.wide { width: 100%; margin-top: 6px; }
 .text-button { border: 0; background: none; color: var(--muted-2); cursor: pointer; }
 .text-button:hover { color: var(--ink); }
