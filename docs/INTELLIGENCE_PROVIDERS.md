@@ -1,80 +1,154 @@
-# Intelligence providers
+# Intelligence and infrastructure profiles
 
-AMOS Agent separates intelligence from the company being operated. The same
-agent loop, AMOS tools, company context, policies, approvals, and receipts work
-with every supported infrastructure profile.
+AMOS separates the intelligence from the company being operated. The same
+company context, connected applications, policy, approvals, and receipts can be
+used from different models and deployment boundaries.
 
-## Profiles
+Provider choice changes where inference happens. It does not change AMOS
+identity or authority.
 
-### AMOS Intelligence
+## Profile summary
 
-AMOS-hosted open-weight inference in AWS. This is the managed option for
-customers that want open-weight intelligence without operating model
-infrastructure. The initial target is Kimi K3 after its weights, license,
-supported serving stack, and hardware profile are verified.
+| Profile | Inference location | Credential | Best fit |
+| --- | --- | --- | --- |
+| AMOS Intelligence | AMOS-managed AWS | AMOS-backed identity | Managed open-weight/private inference |
+| Amazon Bedrock | Customer or AMOS AWS | Bedrock credential adapter | AWS-standardized and sovereign deployments |
+| Compatible endpoint | Customer-selected HTTPS service | Endpoint credential | Existing model gateways or private serving |
+| Provider API | Provider cloud | Provider API key | Frontier capability without infrastructure |
+| Ollama | User computer | Usually none | Supported local development/offline work |
+| llama.cpp | User computer | Usually none | Direct GGUF/local serving |
 
-Required:
+## AMOS Intelligence
 
-- `AMOS_MODEL_PROVIDER=amos-hosted`
-- `AMOS_MODEL_BASE_URL`
-- `AMOS_MODEL`
+AMOS-managed inference in AWS is for customers who want a managed model
+deployment without reconnecting company systems or operating serving
+infrastructure.
 
-The provider reuses the AMOS OAuth or scoped agent identity. Customers do not
-manage a second AMOS inference credential. This keeps inference authorization,
-usage metering, and bill-back attached to the same tenant identity.
+```dotenv
+AMOS_MODEL_PROVIDER=amos-hosted
+AMOS_MODEL_BASE_URL=https://inference.example.com/v1
+AMOS_MODEL=your-model
+```
 
-### Kimi API
+The profile obtains short-lived inference authorization from the connected AMOS
+identity. Usage metering and tenant attribution stay attached to the AMOS
+account instead of requiring a second long-lived desktop key.
 
-Moonshot-hosted Kimi. This is the reference provider while AMOS-hosted K3
-infrastructure is brought online.
+The exact model and hardware profile may evolve independently from AMOS Desktop.
 
-Required:
+## Amazon Bedrock
 
-- `AMOS_MODEL_PROVIDER=kimi`
-- `MOONSHOT_API_KEY` or `AMOS_MODEL_API_KEY`
+Bedrock supports customer-controlled or AMOS-controlled AWS inference through
+its compatible endpoint.
 
-### Amazon Bedrock
+```dotenv
+AMOS_MODEL_PROVIDER=bedrock
+AWS_REGION=us-east-1
+AWS_BEARER_TOKEN_BEDROCK=...
+AMOS_MODEL=your-bedrock-model
+```
 
-Customer-controlled or AMOS-controlled AWS inference. AMOS uses Bedrock's
-OpenAI-compatible endpoint and bearer API-key authentication in this slice.
-The base URL defaults to:
+The default compatible endpoint is:
 
 ```text
 https://bedrock-mantle.${AWS_REGION}.api.aws/v1
 ```
 
-Required:
+Bearer authentication is supported now. AWS profile and SigV4 support belongs
+in a dedicated credential adapter so the model-provider boundary stays
+unchanged.
 
-- `AMOS_MODEL_PROVIDER=bedrock`
-- `AWS_BEARER_TOKEN_BEDROCK` or `AMOS_MODEL_API_KEY`
-- `AMOS_MODEL`
+## Provider APIs
 
-AWS profile and SigV4 authentication can be added as a separate credential
-adapter without changing the model-provider interface.
+Moonshot/Kimi is the first named provider API profile:
 
-### Ollama
+```dotenv
+AMOS_MODEL_PROVIDER=kimi
+MOONSHOT_API_KEY=...
+AMOS_MODEL=kimi-k3
+```
 
-A model running on the customer's computer. The default endpoint is
-`http://127.0.0.1:11434/v1`. Hardware-aware onboarding warns users when managed
-inference is better suited to their machine.
+Provider keys remain local and encrypted in Desktop. They are removed from
+child-process environments and never become AMOS connector credentials.
 
-### llama.cpp
+Additional providers should use either a named adapter when behavior differs or
+the compatible-endpoint profile when the standard boundary is sufficient.
 
-A GGUF model running through `llama-server`. The default endpoint is
-`http://127.0.0.1:8080/v1`.
+## Compatible endpoint
 
-### Compatible endpoint
+Use any customer-controlled OpenAI-compatible endpoint:
 
-Any customer-controlled OpenAI-compatible endpoint. Non-local endpoints must
-use HTTPS.
+```dotenv
+AMOS_MODEL_PROVIDER=openai-compatible
+AMOS_MODEL_BASE_URL=https://models.example.com/v1
+AMOS_MODEL=your-model
+AMOS_MODEL_API_KEY=...
+```
 
-## Invariants
+Non-local endpoints must use HTTPS. Capability declarations should accurately
+identify tool use, vision, reasoning controls, and context limits.
 
-- Provider credentials never enter model-visible messages or child shell
-  environments.
-- Changing the model does not change AMOS tenant, role, scope, policy, or proof.
-- Local model selection never weakens server-side AMOS authorization.
-- A model without reliable tool use is observe/chat only until a compatible
-  structured-output adapter is available.
-- Frontier-sized open weights may be self-hosted in AWS or customer
-  infrastructure without being suitable for a laptop.
+## Ollama
+
+Ollama defaults to:
+
+```text
+http://127.0.0.1:11434/v1
+```
+
+```dotenv
+AMOS_MODEL_PROVIDER=ollama
+AMOS_MODEL=your-local-model
+```
+
+## llama.cpp
+
+`llama-server` defaults to:
+
+```text
+http://127.0.0.1:8080/v1
+```
+
+```dotenv
+AMOS_MODEL_PROVIDER=llama-cpp
+AMOS_MODEL=your-local-model
+```
+
+Local HTTP is allowed only for loopback endpoints.
+
+## Capability and hardware rules
+
+- A laptop-sized model is not equivalent to a frontier or server-scale model.
+- Tool-calling reliability matters more than benchmark rank for autonomous work.
+- A text-only model must not receive pasted image bytes.
+- A model without dependable structured tool use should remain
+  observe-and-draft only.
+- Hardware-aware onboarding should consider available RAM, architecture, model
+  size, quantization, context window, and disk space.
+- Model downloads should be checksum-verified, resumable, removable, and stored
+  outside the application bundle.
+
+## Security invariants
+
+- Provider credentials never enter model-visible messages or tool results.
+- Child shell commands receive a scrubbed environment.
+- Changing models never changes tenant, role, scope, budgets, or policy.
+- Local inference never weakens AMOS server-side authorization.
+- Company application credentials remain in AMOS managed connectors.
+- Offline work may draft company actions, but those actions must be
+  reauthorized after reconnecting.
+
+## Adding a provider
+
+A provider adapter should define:
+
+1. deployment boundary (`amos`, `customer-cloud`, `cloud`, or `local`);
+2. base URL validation;
+3. credential source and secure-storage behavior;
+4. default model only when it is stable and honest;
+5. text, vision, tool-use, and reasoning capabilities;
+6. request normalization;
+7. response/tool-call normalization; and
+8. tests proving credentials do not leak into prompts or child commands.
+
+Avoid provider-specific behavior inside the core agent loop.

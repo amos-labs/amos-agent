@@ -1,121 +1,196 @@
 # Architecture
 
-AMOS Agent is a local MCP operator, not a cloud-hosted harness.
+AMOS Desktop is an open-source native operator for the AMOS managed platform.
+It combines local execution and a model of the user's choice with the durable,
+tenant-scoped company brain in AMOS.
+
+It is deliberately split across two trust domains:
 
 ```text
-User machine
-  AMOS Desktop or CLI
-    provider-neutral model loop
-      AMOS-hosted Kimi K3 in AWS
-      Kimi API
-      Amazon Bedrock
-      customer OpenAI-compatible endpoint
-      appropriately sized local model
-    local bash/files/web tools
-    AMOS MCP client
-    OAuth 2.1 + PKCE session
-        |
-        v
-AMOS Managed Platform
-  company brain
-  engines
-  tenant data
-  governance
-  approvals
-  proof receipts
+User device
+  AMOS Desktop
+    sandboxed renderer
+    provider-neutral agent loop
+    local workspace + task attachments
+    local tools + approval bridge
+    OAuth client + compact AMOS MCP client
+                         │
+                         │ tenant-scoped identity and tools
+                         ▼
+AMOS managed platform
+    durable company memory
+    connected applications and credentials
+    engines, automations, goals, and receipts
+    RBAC, policy, human approvals, and tenant isolation
 ```
 
-## Boundaries
+## Responsibilities
 
-The local agent owns:
+### Desktop and local agent
 
-- model loop
-- local workspace access
-- bash execution
-- public web fetch/search
-- transient session transcript
-- AMOS MCP client
-- localhost OAuth callback and automatic token refresh
+- selected intelligence runtime and model loop;
+- explicitly granted local workspace access;
+- local files, repository inspection, patches, and shell execution;
+- task-local documents, screenshots, and extracted content;
+- transient session transcript and local activity;
+- OAuth 2.1 + PKCE client and automatic token refresh;
+- compact MCP bootstrap and on-demand AMOS engine loading; and
+- native approval and update notifications.
 
-The managed platform owns:
+### AMOS managed platform
 
-- durable company data
-- engine tools
-- credentials and integrations
-- operation policy
-- human approvals
-- proof receipts
-- tenant isolation
-- managed runtime
+- durable company and organizational memory;
+- tenant-scoped records and connected source systems;
+- managed integration credentials;
+- roles, scopes, operation policy, and budgets;
+- human approval decisions;
+- immutable proof receipts and organizational learning;
+- automations, governed goals, and managed runtimes; and
+- authoritative sharing and access-control decisions.
 
-## Model loop
+The boundary is intentional. Installing the desktop does not create a second
+business database or move shared integration secrets onto the user's device.
 
-Model providers use an OpenAI-compatible Chat Completions boundary:
+## Intelligence boundary
 
-- the provider supplies the base URL, credential, model name, and capabilities
-- Kimi remains the default CLI profile for backwards compatibility
-- AMOS-hosted and Bedrock profiles move inference into AWS without changing the
-  agent or AMOS tool surface
-- Ollama and llama.cpp profiles support models sized for customer hardware
-- complete assistant messages are preserved across tool turns
-- tool results are appended with matching `tool_call_id`
+The runtime uses an OpenAI-compatible Chat Completions boundary. A provider
+profile supplies:
 
-The loop stores the whole assistant message, not only `content`, because
-reasoning models can return additional message fields alongside tool calls.
+- base URL;
+- model identifier;
+- credential strategy;
+- deployment boundary;
+- text, vision, tool-use, and reasoning capabilities; and
+- optional AMOS-backed short-lived identity.
 
-## Desktop boundary
+The same agent and AMOS tool surface can use managed AWS inference, Amazon
+Bedrock, a model-provider API, a customer-controlled compatible endpoint, or a
+model running locally.
 
-The Electron renderer is sandboxed, has no Node.js integration, and receives
-only a small, context-isolated IPC API. The main process owns provider
-credentials, OAuth, the model loop, local tools, and approval continuations.
-Provider secrets are encrypted with the operating-system-backed Electron
-`safeStorage` service before being written to disk.
+Changing the model does not change AMOS tenant, role, policy, or proof. A model
+that cannot reliably emit structured tool calls should remain in
+observe-and-draft mode.
 
-Local shell and file writes remain separately approval-gated. AMOS server-side
-policy remains authoritative for company actions regardless of the local model,
-provider, or desktop decision.
+Complete assistant messages are preserved between tool turns because reasoning
+models may return structured fields in addition to visible content.
 
-## Tool loading
+## Desktop process boundary
 
-The agent starts with a compact tool set. AMOS engine tools are discovered on
-demand:
+The Electron renderer:
 
-1. `amos_list_engines`
-2. `amos_load_engine_tools`
-3. local wrappers are registered as `amos_<engine>_<tool>`
-4. wrappers call `call_engine_tool` through AMOS MCP
+- runs with `sandbox: true`;
+- has no Node.js integration;
+- uses context isolation; and
+- receives only an allowlisted IPC surface from the preload bridge.
 
-The generic `amos_call_engine_tool` remains available for compatibility.
+The main process owns credentials, OAuth, model clients, local tools, attachment
+extraction, update checks, and approval continuations. Provider secrets are
+encrypted through Electron `safeStorage` before being written to disk.
+
+The model never receives raw OAuth refresh tokens, integration credentials, or
+the unrestricted child-process environment.
+
+## Universal input
+
+Documents and screenshots enter through the desktop main process:
+
+1. validate type and bounded size;
+2. extract PDF, DOCX, text, or source content locally;
+3. send images only to a vision-capable model;
+4. keep the material task-local by default; and
+5. call an AMOS document tool only after explicit **Add to company memory**
+   selection.
+
+Company-memory persistence remains subject to the signed-in user's AMOS scope
+and the managed platform's document access rules.
+
+## Local execution
+
+Local tools are constrained to the selected workspace. Canonical-path and
+symlink checks prevent path escapes. Credential-like files are blocked.
+
+Mutation follows the approval bridge:
+
+```text
+model proposes local action
+  -> desktop presents exact action
+  -> user approves once or denies
+  -> action runs with scrubbed environment
+  -> bounded result returns to the model
+  -> local activity records the outcome
+```
+
+AMOS company actions use a separate authority path:
+
+```text
+model calls AMOS tool
+  -> platform resolves tenant + identity + policy
+  -> auto-execute or park for authorized human
+  -> execute only after valid decision
+  -> emit durable receipt
+```
+
+The local approval bridge cannot approve a parked AMOS company decision on the
+model's behalf.
+
+## AMOS tool loading
+
+The agent begins with a compact bootstrap:
+
+1. `get_started`
+2. `whoami`
+3. `resume_company` or `company_overview`
+4. `list_engines`
+5. `load_engine_tools`
+6. `call_engine_tool`
+
+Local aliases expose the bootstrap as `amos_*` tools. Engine verbs are loaded
+only when the task needs them, preventing a growing company platform from
+consuming the entire model context on every turn.
 
 ## Authentication
 
-Interactive users run `amos-agent login`. The CLI follows the AMOS protected
-resource metadata to its advertised authorization server, dynamically registers
-a public client, and completes authorization code + PKCE through a loopback
-callback. Access tokens refresh automatically. API keys are reserved for CI and
-unattended agent identities.
+Desktop and interactive CLI users use OAuth authorization code + PKCE. The
+client discovers AMOS authorization metadata, dynamically registers a public
+client, opens browser login, and accepts the callback only on loopback.
 
-## Bash
+API keys are reserved for CI and unattended agent identities. AMOS always
+derives effective tenant and scope from the authenticated connection; a
+model-supplied record or tenant identifier is never sufficient authority.
 
-Bash is first-class because local extensibility matters. It is also approval
-gated by default because it can mutate the user's machine.
+## Signed distribution
 
-The default execution path is:
+Release tags build macOS DMG and ZIP artifacts for Intel and Apple Silicon.
+GitHub Actions signs and notarizes the application, generates architecture-aware
+update metadata and blockmaps, and publishes checksums.
 
-```text
-model asks run_bash -> user approves -> scrubbed environment -> /bin/bash -lc -> bounded output capture
-```
+Packaged applications check the signed feed after launch and periodically.
+Downloads and restart/install remain explicit, and the app will not restart
+during an active task.
+
+## Planned local state
+
+Private local memory, offline intelligence, and portable memory capsules are
+planned extensions. They must preserve these rules:
+
+- shared AMOS data remains server-authoritative;
+- private memory is not silently promoted;
+- cached company data carries scope, provenance, and expiry;
+- offline company actions remain proposals until reauthorized online; and
+- imports, exports, and forks never include credentials.
+
+See [CANVAS-OFFLINE-MEMORY-SPIKE.md](CANVAS-OFFLINE-MEMORY-SPIKE.md).
 
 ## Non-goals
 
-This project should not grow into the old harness again. It should not contain:
+This repository should not become a second hosted harness or managed platform.
+It should not own:
 
-- local CRM/runtime database
-- credential vault
-- hosted agent sessions
-- Solana/relay/token logic
-- local business memory
-- package marketplace
-- broad chat-platform integrations
+- a local CRM or authoritative company database;
+- the integration credential vault;
+- hosted multi-user agent sessions;
+- AMOS protocol, relay, token, or marketplace infrastructure; or
+- a duplicate policy or receipt system.
 
-Those belong in AMOS managed platform or separate projects.
+Those capabilities remain in AMOS managed services or their dedicated
+open-source projects.

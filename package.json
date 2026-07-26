@@ -81,9 +81,10 @@
     "amos",
     "mcp",
     "agent",
-    "kimi",
-    "moonshot",
-    "local-agent"
+    "desktop",
+    "governed-ai",
+    "local-ai",
+    "company-brain"
   ],
   "dependencies": {
     "electron-updater": "6.8.9",
