@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { homedir, totalmem, freemem, arch, platform, release } from "node:os";
 import { join } from "node:path";
 import { loadConfig, validateConfig } from "../config.js";
@@ -8,6 +9,10 @@ import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
 import { DesktopCanvasManager } from "./canvas.js";
+import {
+  readPrivateMemoryCapsule,
+  writePrivateMemoryCapsule
+} from "./memoryCapsule.js";
 import { MEMORY_CLASSES } from "./memoryContract.js";
 import { assessHardware } from "./offlineIntelligence.js";
 import { approvalReviewUrl, DesktopRemoteStateClient } from "./remoteState.js";
@@ -43,6 +48,7 @@ export class DesktopController {
     this.attachments = new AttachmentManager();
     this.canvases = new DesktopCanvasManager();
     this.privateMemoryStore = privateMemoryStore;
+    this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
@@ -206,6 +212,96 @@ export class DesktopController {
       return { privateMemory: await store.list(), promoted };
     } finally {
       this.attachments.remove(attachment.id);
+    }
+  }
+
+  async exportPrivateMemoryCapsule({ filePath, passphrase, ids = null }) {
+    const store = this.requirePrivateMemory();
+    const memories = await store.exportRecords(ids);
+    const summary = await writePrivateMemoryCapsule({
+      filePath,
+      passphrase,
+      subjectId: privateMemorySubject(this.identity),
+      tenantId: privateMemoryTenant(this.identity),
+      memories,
+      journal: await store.journal(),
+      parentCapsuleId: commonParentCapsule(memories)
+    });
+    this.record(
+      "memory",
+      `Exported ${summary.itemCount} private ${summary.itemCount === 1 ? "memory" : "memories"} to an encrypted capsule`,
+      {
+        capsule_id: summary.capsuleId,
+        parent_capsule_id: summary.parentCapsuleId,
+        item_count: summary.itemCount
+      }
+    );
+    return publicCapsuleSummary(summary);
+  }
+
+  async previewPrivateMemoryCapsule({ filePath, passphrase }) {
+    this.pruneCapsulePreviews();
+    const capsule = await readPrivateMemoryCapsule({ filePath, passphrase });
+    const previewId = randomUUID();
+    const currentSubject = privateMemorySubject(this.identity);
+    this.capsulePreviews.set(previewId, {
+      capsule,
+      expiresAt: Date.now() + 10 * 60_000
+    });
+    this.pruneCapsulePreviews();
+    this.record("memory", `Unlocked encrypted capsule ${capsule.summary.capsuleId} for import review`);
+    return {
+      previewId,
+      ...publicCapsuleSummary(capsule.summary),
+      subjectMismatch:
+        capsule.summary.subjectId !== "local-owner" &&
+        currentSubject !== "local-owner" &&
+        capsule.summary.subjectId !== currentSubject,
+      expiresInSeconds: 600
+    };
+  }
+
+  async importPrivateMemoryCapsule(previewId) {
+    this.pruneCapsulePreviews();
+    const staged = this.capsulePreviews.get(previewId);
+    if (!staged) {
+      throw new Error("That capsule preview expired. Unlock the file again before importing.");
+    }
+    this.capsulePreviews.delete(previewId);
+    const store = this.requirePrivateMemory();
+    const result = await store.importCapsuleRecords(staged.capsule.records, {
+      capsuleId: staged.capsule.manifest.capsule_id,
+      parentCapsuleId: staged.capsule.manifest.parent_capsule_id
+    });
+    this.record(
+      "memory",
+      `Imported ${result.imported.length} private ${result.imported.length === 1 ? "memory" : "memories"} from capsule`,
+      {
+        capsule_id: staged.capsule.manifest.capsule_id,
+        imported: result.imported.length,
+        duplicates: result.duplicates.length
+      }
+    );
+    return {
+      privateMemory: await store.list(),
+      capsuleId: staged.capsule.manifest.capsule_id,
+      importedCount: result.imported.length,
+      duplicateCount: result.duplicates.length
+    };
+  }
+
+  cancelPrivateMemoryCapsulePreview(previewId) {
+    this.capsulePreviews.delete(previewId);
+    return { canceled: true };
+  }
+
+  pruneCapsulePreviews() {
+    const now = Date.now();
+    for (const [id, preview] of this.capsulePreviews) {
+      if (preview.expiresAt <= now) this.capsulePreviews.delete(id);
+    }
+    while (this.capsulePreviews.size > 5) {
+      this.capsulePreviews.delete(this.capsulePreviews.keys().next().value);
     }
   }
 
@@ -626,6 +722,45 @@ export class DesktopController {
       remoteStatus: { ...this.remoteStatus }
     });
   }
+}
+
+function commonParentCapsule(memories) {
+  const lineage = memories.map((memory) => memory.lineage?.capsuleId || null);
+  if (lineage.some((capsuleId) => !capsuleId)) return null;
+  return new Set(lineage).size === 1 ? lineage[0] : null;
+}
+
+function privateMemorySubject(identity) {
+  return String(
+    identity?.user?.id ||
+    identity?.user?.email ||
+    identity?.subject_id ||
+    "local-owner"
+  ).slice(0, 256);
+}
+
+function privateMemoryTenant(identity) {
+  const value =
+    identity?.tenant_id ||
+    identity?.tenantId ||
+    identity?.tenant_slug ||
+    null;
+  return value ? String(value).slice(0, 256) : null;
+}
+
+function publicCapsuleSummary(summary) {
+  return {
+    capsuleId: summary.capsuleId,
+    parentCapsuleId: summary.parentCapsuleId,
+    subjectId: summary.subjectId,
+    tenantId: summary.tenantId,
+    createdAt: summary.createdAt,
+    itemCount: summary.itemCount,
+    totalBytes: summary.totalBytes,
+    encryptedBytes: summary.encryptedBytes,
+    filePath: summary.filePath,
+    items: summary.items.map((item) => ({ ...item }))
+  };
 }
 
 function redactSettings(settings) {

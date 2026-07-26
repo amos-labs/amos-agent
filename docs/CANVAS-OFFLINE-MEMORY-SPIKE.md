@@ -244,7 +244,8 @@ architecture.
   forget controls.
 
 The Phase 1 contract and first private-memory slice landed in AMOS Desktop
-0.5.0. Capsule archive transfer and reconnect reconciliation remain Phase 4.
+0.5.0. Portable private archive transfer and fork lineage land in 0.8.0;
+governed company-cache reconciliation remains later Phase 4 work.
 
 ### Phase 2 — canvas
 
@@ -274,10 +275,15 @@ It intentionally does not create an offline copy of company data yet.
 
 ### Phase 4 — portable and forkable work
 
-- Export/import encrypted capsules.
-- Device-to-device private memory transfer.
-- Project/agent fork lineage.
+- [x] Export/import passphrase-encrypted private-memory capsules.
+- [x] Device-to-device private memory transfer with preview and deduplication.
+- [x] Project/agent fork lineage for portable private memory.
 - Reconnect reconciliation with explicit conflict and queued-action review.
+
+The first Phase 4 slice lands in AMOS Desktop 0.8.0. It deliberately exports
+only user-authoritative private memory. Shared, company, and receipt material
+still requires a live AMOS policy decision and server signature; Desktop does
+not infer that authority from a prior local session.
 
 ## Success criteria
 

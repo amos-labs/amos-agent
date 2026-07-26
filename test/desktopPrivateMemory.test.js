@@ -67,3 +67,58 @@ test("desktop saves, reuses, promotes, and forgets encrypted private memory", as
   const forgotten = await controller.forgetPrivateMemory(memory.id);
   assert.deepEqual(forgotten.privateMemory, []);
 });
+
+test("desktop previews encrypted capsules before importing private memory", async () => {
+  const sourceRoot = await mkdtemp(join(tmpdir(), "amos-desktop-capsule-source-"));
+  const destinationRoot = await mkdtemp(join(tmpdir(), "amos-desktop-capsule-destination-"));
+  const sourceStore = privateStore(sourceRoot);
+  await sourceStore.add({
+    name: "portable-context.md",
+    mime: "text/markdown",
+    kind: "document",
+    size: 19,
+    sha256: "9".repeat(64),
+    text: "Portable context"
+  });
+  const sourceController = new DesktopController({
+    userDataPath: sourceRoot,
+    settingsStore: { read: async () => ({ operatingMode: "online" }) },
+    privateMemoryStore: sourceStore,
+    openBrowser() {},
+    emit() {}
+  });
+  sourceController.identity = {
+    user: { id: "user-1", email: "owner@example.com" },
+    tenant_id: "tenant-1"
+  };
+  const filePath = join(sourceRoot, "portable.amos-memory");
+  const exported = await sourceController.exportPrivateMemoryCapsule({
+    filePath,
+    passphrase: "portable private passphrase",
+    ids: null
+  });
+  assert.equal(exported.itemCount, 1);
+
+  const destinationStore = privateStore(destinationRoot);
+  const destinationController = new DesktopController({
+    userDataPath: destinationRoot,
+    settingsStore: { read: async () => ({ operatingMode: "online" }) },
+    privateMemoryStore: destinationStore,
+    openBrowser() {},
+    emit() {}
+  });
+  const preview = await destinationController.previewPrivateMemoryCapsule({
+    filePath,
+    passphrase: "portable private passphrase"
+  });
+  assert.equal(preview.itemCount, 1);
+  assert.deepEqual(await destinationStore.list(), []);
+
+  const imported = await destinationController.importPrivateMemoryCapsule(preview.previewId);
+  assert.equal(imported.importedCount, 1);
+  assert.equal(imported.privateMemory[0].lineage.capsuleId, preview.capsuleId);
+  await assert.rejects(
+    destinationController.importPrivateMemoryCapsule(preview.previewId),
+    /preview expired/
+  );
+});

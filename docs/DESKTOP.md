@@ -230,9 +230,9 @@ The next product layers build on the signed distribution foundation:
 1. streaming output, cancellation, and durable resumable tasks;
 2. signed device identity and policy-controlled environment grants;
 3. richer typed canvas blocks and managed AMOS result adapters;
-4. richer private-memory retrieval, sharing proposals, and capsule export;
+4. richer private-memory retrieval and sharing proposals;
 5. deeper offline retrieval against a server-authorized company cache;
-6. portable encrypted memory capsules and reconnect reconciliation; and
+6. governed company-cache retrieval and reconnect reconciliation; and
 7. Windows installers and enterprise/MDM packaging.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

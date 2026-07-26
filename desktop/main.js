@@ -230,6 +230,42 @@ function registerIpc() {
   ipcMain.handle("desktop:use-private-memory", (_event, id) => controller.usePrivateMemory(id));
   ipcMain.handle("desktop:promote-private-memory", (_event, id) => controller.promotePrivateMemory(id));
   ipcMain.handle("desktop:forget-private-memory", (_event, id) => controller.forgetPrivateMemory(id));
+  ipcMain.handle("desktop:export-private-memory-capsule", async (_event, input) => {
+    const result = await dialog.showSaveDialog(window, {
+      title: "Export encrypted AMOS private memory",
+      defaultPath: "AMOS-private-memory.amos-memory",
+      filters: [{ name: "AMOS encrypted memory", extensions: ["amos-memory"] }]
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    const filePath = result.filePath.endsWith(".amos-memory")
+      ? result.filePath
+      : `${result.filePath}.amos-memory`;
+    const summary = await controller.exportPrivateMemoryCapsule({
+      filePath,
+      passphrase: input?.passphrase,
+      ids: Array.isArray(input?.ids) ? input.ids : null
+    });
+    return { canceled: false, summary };
+  });
+  ipcMain.handle("desktop:preview-private-memory-capsule", async (_event, input) => {
+    const result = await dialog.showOpenDialog(window, {
+      title: "Import encrypted AMOS private memory",
+      properties: ["openFile"],
+      filters: [{ name: "AMOS encrypted memory", extensions: ["amos-memory"] }]
+    });
+    if (result.canceled || !result.filePaths[0]) return { canceled: true };
+    const preview = await controller.previewPrivateMemoryCapsule({
+      filePath: result.filePaths[0],
+      passphrase: input?.passphrase
+    });
+    return { canceled: false, preview };
+  });
+  ipcMain.handle("desktop:import-private-memory-capsule", (_event, previewId) =>
+    controller.importPrivateMemoryCapsule(previewId)
+  );
+  ipcMain.handle("desktop:cancel-private-memory-capsule", (_event, previewId) =>
+    controller.cancelPrivateMemoryCapsulePreview(previewId)
+  );
   ipcMain.handle("desktop:choose-attachments", async () => {
     const result = await dialog.showOpenDialog(window, {
       title: "Attach files to AMOS",

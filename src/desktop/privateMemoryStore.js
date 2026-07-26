@@ -44,6 +44,18 @@ export class PrivateMemoryStore {
     return this.decryptEnvelope(envelope);
   }
 
+  async exportRecords(ids = null) {
+    const store = await this.readStore();
+    const selected = Array.isArray(ids) && ids.length > 0 ? new Set(ids) : null;
+    const records = store.items
+      .filter((envelope) => !selected || selected.has(envelope.id))
+      .map((envelope) => this.decryptEnvelope(envelope));
+    if (selected && records.length !== selected.size) {
+      throw new Error("One or more selected private memories are no longer available");
+    }
+    return records.map((record) => ({ ...record, companyResult: null }));
+  }
+
   async add(input) {
     memoryClassSpec("private");
     const store = await this.readStore();
@@ -82,6 +94,69 @@ export class PrivateMemoryStore {
     }));
     await this.writeStore(store);
     return { item: publicMemory(item), status: "saved" };
+  }
+
+  async importCapsuleRecords(records, {
+    capsuleId,
+    parentCapsuleId = null,
+    importedAt = this.now().toISOString()
+  }) {
+    if (!Array.isArray(records) || records.length === 0) {
+      throw new Error("That AMOS memory capsule contains no private memory");
+    }
+    const store = await this.readStore();
+    const existingHashes = new Set(
+      store.items.map((envelope) => this.decryptMetadata(envelope).sha256)
+    );
+    const result = { imported: [], duplicates: [] };
+    let encryptedSize = store.items.reduce(
+      (total, value) => total + encryptedEnvelopeSize(value),
+      0
+    );
+    for (const record of records) {
+      if (existingHashes.has(record.sha256)) {
+        result.duplicates.push({ sourceMemoryId: record.id, name: record.name });
+        continue;
+      }
+      if (store.items.length >= MAX_ITEMS) {
+        throw new Error(`AMOS Desktop keeps up to ${MAX_ITEMS} private memories; forget one before importing more`);
+      }
+      const item = normalizePrivateMemory({
+        ...record,
+        id: this.createId(),
+        source: "amos-memory-capsule",
+        memoryClass: "private",
+        authority: "user",
+        visibility: "private",
+        updatedAt: importedAt,
+        promotedAt: null,
+        companyResult: null,
+        lineage: {
+          capsuleId,
+          parentCapsuleId,
+          sourceMemoryId: record.id,
+          sourceCreatedAt: record.createdAt,
+          importedAt
+        }
+      });
+      const envelope = this.encryptItem(item);
+      encryptedSize += encryptedEnvelopeSize(envelope);
+      if (encryptedSize > MAX_TOTAL_ENCRYPTED_CHARS) {
+        throw new Error("Private memory has reached its 512 MB encrypted storage limit");
+      }
+      store.items.push(envelope);
+      existingHashes.add(item.sha256);
+      store.journal.push(createSyncJournalEntry({
+        operation: "add",
+        memoryId: item.id,
+        memoryClass: "private",
+        at: importedAt,
+        id: this.createId()
+      }));
+      result.imported.push(publicMemory(item));
+    }
+    if (result.imported.length > 0) await this.writeStore(store);
+    return result;
   }
 
   async markPromoted(id, companyResult) {
@@ -246,7 +321,8 @@ function normalizePrivateMetadata(input) {
     createdAt: timestamp(input.createdAt),
     updatedAt: timestamp(input.updatedAt),
     promotedAt: input.promotedAt ? timestamp(input.promotedAt) : null,
-    companyResult: boundedJsonValue(input.companyResult)
+    companyResult: boundedJsonValue(input.companyResult),
+    lineage: normalizeLineage(input.lineage)
   };
 }
 
@@ -269,8 +345,24 @@ function publicMemory(item) {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     promotedAt: item.promotedAt,
-    companyResult: item.companyResult
+    companyResult: item.companyResult,
+    lineage: item.lineage
   };
+}
+
+function normalizeLineage(value) {
+  if (!value) return null;
+  const lineage = {
+    capsuleId: clean(value.capsuleId, 128),
+    parentCapsuleId: value.parentCapsuleId ? clean(value.parentCapsuleId, 128) : null,
+    sourceMemoryId: clean(value.sourceMemoryId, 128),
+    sourceCreatedAt: timestamp(value.sourceCreatedAt),
+    importedAt: timestamp(value.importedAt)
+  };
+  if (!lineage.capsuleId || !lineage.sourceMemoryId) {
+    throw new Error("Imported private memory requires capsule lineage");
+  }
+  return lineage;
 }
 
 function boundedJsonValue(value) {
