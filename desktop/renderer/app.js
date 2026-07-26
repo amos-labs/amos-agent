@@ -1,4 +1,5 @@
 import { shouldSubmitPrompt } from "../../src/desktop/input.js";
+import { parseMarkdown } from "../../src/desktop/markdown.js";
 
 const api = window.amosDesktop;
 
@@ -670,12 +671,139 @@ async function clearSession() {
 function addMessage(role, content) {
   const message = document.createElement("div");
   message.className = `message ${role}`;
-  const paragraph = document.createElement("p");
-  paragraph.textContent = content;
-  message.append(paragraph);
+  if (role === "assistant") {
+    const markdown = document.createElement("div");
+    markdown.className = "markdown-content";
+    renderMarkdown(markdown, content);
+    message.append(markdown);
+  } else {
+    const paragraph = document.createElement("p");
+    paragraph.textContent = content;
+    message.append(paragraph);
+  }
   elements.messages.append(message);
   elements.messages.scrollTop = elements.messages.scrollHeight;
   return message;
+}
+
+function renderMarkdown(container, source) {
+  for (const block of parseMarkdown(source)) {
+    if (block.type === "heading") {
+      const heading = document.createElement(`h${block.level}`);
+      appendInline(heading, block.children);
+      container.append(heading);
+    } else if (block.type === "paragraph") {
+      const paragraph = document.createElement("p");
+      appendInline(paragraph, block.children);
+      container.append(paragraph);
+    } else if (block.type === "list") {
+      const list = document.createElement(block.ordered ? "ol" : "ul");
+      if (block.ordered && block.start !== 1) list.start = block.start;
+      for (const item of block.items) {
+        const listItem = document.createElement("li");
+        appendInline(listItem, item);
+        list.append(listItem);
+      }
+      container.append(list);
+    } else if (block.type === "code") {
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      if (block.language) code.dataset.language = block.language;
+      code.textContent = block.text;
+      pre.append(code);
+      container.append(pre);
+    } else if (block.type === "quote") {
+      const quote = document.createElement("blockquote");
+      renderMarkdownBlocks(quote, block.children);
+      container.append(quote);
+    } else if (block.type === "rule") {
+      container.append(document.createElement("hr"));
+    } else if (block.type === "table") {
+      container.append(renderMarkdownTable(block));
+    }
+  }
+}
+
+function renderMarkdownBlocks(container, blocks) {
+  for (const block of blocks) {
+    if (block.type === "paragraph") {
+      const paragraph = document.createElement("p");
+      appendInline(paragraph, block.children);
+      container.append(paragraph);
+    } else if (block.type === "list") {
+      const list = document.createElement(block.ordered ? "ol" : "ul");
+      for (const item of block.items) {
+        const listItem = document.createElement("li");
+        appendInline(listItem, item);
+        list.append(listItem);
+      }
+      container.append(list);
+    } else if (block.type === "heading") {
+      const strong = document.createElement("strong");
+      appendInline(strong, block.children);
+      container.append(strong);
+    } else if (block.type === "code") {
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = block.text;
+      pre.append(code);
+      container.append(pre);
+    }
+  }
+}
+
+function renderMarkdownTable(block) {
+  const scroll = document.createElement("div");
+  scroll.className = "markdown-table-scroll";
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headingRow = document.createElement("tr");
+  for (const cell of block.headers) {
+    const header = document.createElement("th");
+    appendInline(header, cell);
+    headingRow.append(header);
+  }
+  head.append(headingRow);
+  const body = document.createElement("tbody");
+  for (const row of block.rows) {
+    const tableRow = document.createElement("tr");
+    for (const cell of row) {
+      const data = document.createElement("td");
+      appendInline(data, cell);
+      tableRow.append(data);
+    }
+    body.append(tableRow);
+  }
+  table.append(head, body);
+  scroll.append(table);
+  return scroll;
+}
+
+function appendInline(container, nodes) {
+  for (const node of nodes) {
+    if (node.type === "text") {
+      container.append(document.createTextNode(node.value));
+    } else if (node.type === "code") {
+      const code = document.createElement("code");
+      code.textContent = node.value;
+      container.append(code);
+    } else if (node.type === "link") {
+      const link = document.createElement("a");
+      link.href = node.href;
+      link.rel = "noreferrer";
+      appendInline(link, node.children);
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        api.openExternal(node.href).catch((error) => toast(error.message, true));
+      });
+      container.append(link);
+    } else {
+      const tag = node.type === "strong" ? "strong" : node.type === "delete" ? "del" : "em";
+      const element = document.createElement(tag);
+      appendInline(element, node.children);
+      container.append(element);
+    }
+  }
 }
 
 function renderLiveEvent(event) {
