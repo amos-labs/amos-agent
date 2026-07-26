@@ -53,6 +53,7 @@ AMOS managed platform
 - Local PDF, DOCX, text, and source extraction
 - Explicit **Use for this task**, **Keep in private memory**, or **Add to company memory** handling
 - Keychain-protected private memory with reuse, promotion, and permanent forget controls
+- Passphrase-encrypted `.amos-memory` export/import with preview, tamper detection, deduplication, and fork lineage
 - Typed company canvases for metrics, tables, trends, briefs, evidence, approvals, and receipts
 - Local workspace grants, search, reads, Git status/diff, and atomic patches
 - Approval-gated shell commands and file changes
@@ -212,7 +213,7 @@ The near-term product path is:
 3. richer typed canvases and managed result adapters for company data and active work;
 4. encrypted private local memory with explicit promotion into shared AMOS memory;
 5. curated small-model offline operation with an explicit local-only boundary; and
-6. encrypted, portable memory capsules with safe reconnect reconciliation.
+6. governed company-cache retrieval and safe reconnect reconciliation for portable memory.
 
 The governing principle is constant: **local intelligence may observe, reason,
 draft, and execute within explicit grants; AMOS remains authoritative for

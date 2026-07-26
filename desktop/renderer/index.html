@@ -237,6 +237,20 @@
               </div>
             </div>
           </div>
+          <div class="memory-transfer">
+            <div>
+              <span class="eyebrow accent">PORTABLE · ENCRYPTED · FORKABLE</span>
+              <strong>Move private working memory without moving credentials.</strong>
+              <p>
+                Export an owner-controlled capsule for another device or compatible client.
+                Imports are previewed before anything is added, and fork lineage stays attached.
+              </p>
+            </div>
+            <div class="memory-transfer-actions">
+              <button id="memoryImportButton" class="button secondary" type="button">Import capsule</button>
+              <button id="memoryExportButton" class="button primary" type="button">Export all private memory</button>
+            </div>
+          </div>
           <div id="privateMemoryList" class="private-memory-list"></div>
           <div id="privateMemoryEmpty" class="memory-empty">
             <span>◎</span>
@@ -393,6 +407,40 @@
         <div class="approval-actions">
           <button id="denyButton" class="button secondary">Deny</button>
           <button id="approveButton" class="button primary">Approve once</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="capsuleModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="capsuleModalTitle">
+      <div class="capsule-modal">
+        <form id="capsulePassphraseForm">
+          <span class="eyebrow accent">PORTABLE PRIVATE MEMORY</span>
+          <h2 id="capsuleModalTitle">Encrypt a memory capsule.</h2>
+          <p id="capsuleModalMessage"></p>
+          <label class="capsule-field">
+            <span>Capsule passphrase</span>
+            <input id="capsulePassphraseInput" type="password" minlength="12" maxlength="1024" autocomplete="new-password" required />
+          </label>
+          <label id="capsuleConfirmField" class="capsule-field">
+            <span>Confirm passphrase</span>
+            <input id="capsuleConfirmInput" type="password" minlength="12" maxlength="1024" autocomplete="new-password" />
+          </label>
+          <div id="capsuleError" class="capsule-error hidden"></div>
+          <div class="capsule-actions">
+            <button id="capsuleCancelButton" class="button secondary" type="button">Cancel</button>
+            <button id="capsuleContinueButton" class="button primary" type="submit">Choose save location</button>
+          </div>
+        </form>
+        <div id="capsulePreview" class="hidden">
+          <span class="eyebrow accent">REVIEW BEFORE IMPORT</span>
+          <h2>Private memory ready to import.</h2>
+          <div id="capsulePreviewSummary" class="capsule-preview-summary"></div>
+          <div id="capsulePreviewItems" class="capsule-preview-items"></div>
+          <div id="capsulePreviewWarning" class="capsule-warning hidden"></div>
+          <div class="capsule-actions">
+            <button id="capsulePreviewCancelButton" class="button secondary" type="button">Cancel</button>
+            <button id="capsuleImportConfirmButton" class="button primary" type="button">Import private memory</button>
+          </div>
         </div>
       </div>
     </div>

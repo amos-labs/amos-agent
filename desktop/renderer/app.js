@@ -45,6 +45,7 @@ let attachments = [];
 let dragDepth = 0;
 let updateState = null;
 let activeCanvasId = null;
+let capsuleFlow = null;
 
 const elements = Object.fromEntries(
   [
@@ -63,7 +64,12 @@ const elements = Object.fromEntries(
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "pendingDecisions",
     "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
-    "memoryClassGrid", "canvasTitle", "canvasSubtitle", "canvasRefreshButton",
+    "memoryClassGrid", "memoryImportButton", "memoryExportButton",
+    "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
+    "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
+    "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
+    "capsulePreviewItems", "capsulePreviewWarning", "capsulePreviewCancelButton",
+    "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton",
     "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasBlocks",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest"
@@ -147,6 +153,12 @@ function bindActions() {
   elements.offlineInstallRuntimeButton.addEventListener("click", () =>
     api.openExternal("https://ollama.com/download")
   );
+  elements.memoryExportButton.addEventListener("click", () => openCapsuleFlow("export"));
+  elements.memoryImportButton.addEventListener("click", () => openCapsuleFlow("import"));
+  elements.capsulePassphraseForm.addEventListener("submit", handleCapsulePassphrase);
+  elements.capsuleCancelButton.addEventListener("click", closeCapsuleModal);
+  elements.capsulePreviewCancelButton.addEventListener("click", closeCapsuleModal);
+  elements.capsuleImportConfirmButton.addEventListener("click", confirmCapsuleImport);
 }
 
 function bindEvents() {
@@ -611,6 +623,7 @@ function renderPrivateMemory() {
   elements.privateMemoryBadge.textContent = String(memories.length);
   elements.privateMemoryBadge.classList.toggle("hidden", memories.length === 0);
   elements.privateMemoryEmpty.classList.toggle("hidden", memories.length > 0);
+  elements.memoryExportButton.disabled = memories.length === 0;
   elements.privateMemoryList.replaceChildren();
 
   for (const memory of memories) {
@@ -638,6 +651,12 @@ function renderPrivateMemory() {
       promoted.className = "memory-promoted";
       promoted.textContent = `Also in company memory · ${relativeTime(memory.promotedAt)}`;
       content.append(promoted);
+    }
+    if (memory.lineage?.capsuleId) {
+      const lineage = document.createElement("span");
+      lineage.className = "memory-lineage";
+      lineage.textContent = `Portable lineage · ${shortId(memory.lineage.capsuleId)}`;
+      content.append(lineage);
     }
 
     const actions = document.createElement("div");
@@ -673,6 +692,8 @@ function renderPrivateMemory() {
         setButtonBusy(promote, false, memory.promotedAt ? "Promote again" : "Promote to company");
       }
     });
+    const exportCapsule = actionButton("Export", "secondary");
+    exportCapsule.addEventListener("click", () => openCapsuleFlow("export", [memory.id]));
     const forget = actionButton("Forget", "danger");
     forget.addEventListener("click", async () => {
       if (!window.confirm(`Permanently forget “${memory.name}” on this Mac?`)) return;
@@ -688,7 +709,7 @@ function renderPrivateMemory() {
         setButtonBusy(forget, false, "Forget");
       }
     });
-    actions.append(use, promote, forget);
+    actions.append(use, promote, exportCapsule, forget);
     card.append(icon, content, actions);
     elements.privateMemoryList.append(card);
   }
@@ -706,6 +727,155 @@ function renderPrivateMemory() {
     card.append(label, authority, description);
     elements.memoryClassGrid.append(card);
   }
+}
+
+function openCapsuleFlow(mode, ids = null) {
+  capsuleFlow = { mode, ids, previewId: null };
+  elements.capsulePassphraseForm.classList.remove("hidden");
+  elements.capsulePreview.classList.add("hidden");
+  elements.capsuleError.classList.add("hidden");
+  elements.capsuleError.textContent = "";
+  elements.capsulePassphraseInput.value = "";
+  elements.capsuleConfirmInput.value = "";
+  const exporting = mode === "export";
+  elements.capsuleModalTitle.textContent = exporting
+    ? ids?.length === 1
+      ? "Encrypt this private memory."
+      : "Encrypt your private memory."
+    : "Unlock a private-memory capsule.";
+  elements.capsuleModalMessage.textContent = exporting
+    ? "Create a passphrase with at least 12 characters. AMOS cannot recover it, and the capsule never includes your AMOS login, provider keys, or other application credentials."
+    : "Enter the capsule passphrase, then choose the .amos-memory file. AMOS validates and previews every item before anything is added to this Mac.";
+  elements.capsuleConfirmField.classList.toggle("hidden", !exporting);
+  elements.capsuleConfirmInput.required = exporting;
+  elements.capsuleContinueButton.textContent = exporting
+    ? "Choose save location"
+    : "Choose and unlock capsule";
+  elements.capsuleModal.classList.remove("hidden");
+  elements.capsulePassphraseInput.focus();
+}
+
+async function handleCapsulePassphrase(event) {
+  event.preventDefault();
+  if (!capsuleFlow) return;
+  const passphrase = elements.capsulePassphraseInput.value;
+  elements.capsuleError.classList.add("hidden");
+  if (passphrase.length < 12) {
+    showCapsuleError("Use at least 12 characters for the capsule passphrase.");
+    return;
+  }
+  if (capsuleFlow.mode === "export" && passphrase !== elements.capsuleConfirmInput.value) {
+    showCapsuleError("The capsule passphrases do not match.");
+    return;
+  }
+  setButtonBusy(
+    elements.capsuleContinueButton,
+    true,
+    capsuleFlow.mode === "export" ? "Encrypting…" : "Unlocking…"
+  );
+  try {
+    if (capsuleFlow.mode === "export") {
+      const result = await api.exportPrivateMemoryCapsule({
+        passphrase,
+        ids: capsuleFlow.ids
+      });
+      clearCapsuleSecrets();
+      if (result.canceled) return;
+      const summary = result.summary;
+      await closeCapsuleModal();
+      const lineage = summary.parentCapsuleId ? " with fork lineage preserved" : "";
+      toast(`Encrypted ${summary.itemCount} private ${summary.itemCount === 1 ? "memory" : "memories"}${lineage}.`);
+      return;
+    }
+    const result = await api.previewPrivateMemoryCapsule({ passphrase });
+    clearCapsuleSecrets();
+    if (result.canceled) return;
+    capsuleFlow.previewId = result.preview.previewId;
+    renderCapsulePreview(result.preview);
+  } catch (error) {
+    clearCapsuleSecrets();
+    showCapsuleError(error.message);
+  } finally {
+    setButtonBusy(
+      elements.capsuleContinueButton,
+      false,
+      capsuleFlow?.mode === "export" ? "Choose save location" : "Choose and unlock capsule"
+    );
+  }
+}
+
+function renderCapsulePreview(preview) {
+  elements.capsulePassphraseForm.classList.add("hidden");
+  elements.capsulePreview.classList.remove("hidden");
+  elements.capsulePreviewSummary.textContent = [
+    `${preview.itemCount} private ${preview.itemCount === 1 ? "memory" : "memories"}`,
+    formatBytes(preview.totalBytes),
+    preview.parentCapsuleId
+      ? `forked from ${shortId(preview.parentCapsuleId)}`
+      : `capsule ${shortId(preview.capsuleId)}`
+  ].join(" · ");
+  elements.capsulePreviewItems.replaceChildren();
+  for (const item of preview.items) {
+    const row = document.createElement("div");
+    row.className = "capsule-preview-item";
+    const name = document.createElement("strong");
+    name.textContent = item.name;
+    const detail = document.createElement("span");
+    detail.textContent = `${item.kind === "image" ? "Image" : "Document"} · ${formatBytes(item.size)}`;
+    row.append(name, detail);
+    elements.capsulePreviewItems.append(row);
+  }
+  elements.capsulePreviewWarning.classList.toggle("hidden", !preview.subjectMismatch);
+  elements.capsulePreviewWarning.textContent = preview.subjectMismatch
+    ? "This capsule was exported under a different user identity. Its contents remain private on this Mac unless you explicitly promote them to governed company memory."
+    : "";
+}
+
+async function confirmCapsuleImport() {
+  if (!capsuleFlow?.previewId) return;
+  setButtonBusy(elements.capsuleImportConfirmButton, true, "Importing…");
+  try {
+    const previewId = capsuleFlow.previewId;
+    const result = await api.importPrivateMemoryCapsule(previewId);
+    capsuleFlow.previewId = null;
+    state.privateMemory = result.privateMemory;
+    renderPrivateMemory();
+    await closeCapsuleModal();
+    const duplicates = result.duplicateCount
+      ? ` ${result.duplicateCount} existing ${result.duplicateCount === 1 ? "item was" : "items were"} skipped.`
+      : "";
+    toast(`Imported ${result.importedCount} private ${result.importedCount === 1 ? "memory" : "memories"}.${duplicates}`);
+  } catch (error) {
+    elements.capsulePreviewWarning.textContent = error.message;
+    elements.capsulePreviewWarning.classList.remove("hidden");
+  } finally {
+    setButtonBusy(elements.capsuleImportConfirmButton, false, "Import private memory");
+  }
+}
+
+async function closeCapsuleModal() {
+  const previewId = capsuleFlow?.previewId;
+  capsuleFlow = null;
+  clearCapsuleSecrets();
+  elements.capsuleModal.classList.add("hidden");
+  elements.capsulePassphraseForm.classList.remove("hidden");
+  elements.capsulePreview.classList.add("hidden");
+  if (previewId) await api.cancelPrivateMemoryCapsule(previewId).catch(() => {});
+}
+
+function clearCapsuleSecrets() {
+  elements.capsulePassphraseInput.value = "";
+  elements.capsuleConfirmInput.value = "";
+}
+
+function showCapsuleError(message) {
+  elements.capsuleError.textContent = message;
+  elements.capsuleError.classList.remove("hidden");
+}
+
+function shortId(value) {
+  const id = String(value || "");
+  return id.length > 12 ? `${id.slice(0, 8)}…` : id;
 }
 
 function actionButton(label, variant) {

@@ -109,3 +109,49 @@ test("private memory deduplicates, records promotion, and forgets explicitly", a
   assert.equal((await store.list()).length, 0);
   assert.deepEqual((await store.journal()).map((entry) => entry.operation), ["add", "promote", "forget"]);
 });
+
+test("private memory exports full records and imports them with capsule lineage", async () => {
+  const sourceRoot = await mkdtemp(join(tmpdir(), "amos-private-memory-export-"));
+  const destinationRoot = await mkdtemp(join(tmpdir(), "amos-private-memory-import-"));
+  const source = new PrivateMemoryStore({
+    filePath: join(sourceRoot, "private-memory.json"),
+    ...codec(),
+    now: () => new Date("2026-07-26T10:00:00Z"),
+    createId: () => "source-id"
+  });
+  await source.add({
+    name: "portable.md",
+    mime: "text/markdown",
+    kind: "document",
+    size: 16,
+    sha256: "f".repeat(64),
+    text: "Portable context"
+  });
+  const [record] = await source.exportRecords();
+  assert.equal(record.text, "Portable context");
+  assert.equal(record.companyResult, null);
+
+  let index = 0;
+  const destination = new PrivateMemoryStore({
+    filePath: join(destinationRoot, "private-memory.json"),
+    ...codec(),
+    now: () => new Date("2026-07-26T11:00:00Z"),
+    createId: () => `destination-${++index}`
+  });
+  const imported = await destination.importCapsuleRecords([record], {
+    capsuleId: "capsule-1",
+    parentCapsuleId: "capsule-parent",
+    importedAt: "2026-07-26T11:00:00Z"
+  });
+  assert.equal(imported.imported.length, 1);
+  const [memory] = await destination.list();
+  assert.equal(memory.lineage.capsuleId, "capsule-1");
+  assert.equal(memory.lineage.parentCapsuleId, "capsule-parent");
+  assert.equal((await destination.get(memory.id)).text, "Portable context");
+
+  const duplicate = await destination.importCapsuleRecords([record], {
+    capsuleId: "capsule-1"
+  });
+  assert.equal(duplicate.imported.length, 0);
+  assert.equal(duplicate.duplicates.length, 1);
+});

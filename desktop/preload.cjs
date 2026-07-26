@@ -34,6 +34,14 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   usePrivateMemory: (id) => ipcRenderer.invoke("desktop:use-private-memory", id),
   promotePrivateMemory: (id) => ipcRenderer.invoke("desktop:promote-private-memory", id),
   forgetPrivateMemory: (id) => ipcRenderer.invoke("desktop:forget-private-memory", id),
+  exportPrivateMemoryCapsule: (input) =>
+    ipcRenderer.invoke("desktop:export-private-memory-capsule", input),
+  previewPrivateMemoryCapsule: (input) =>
+    ipcRenderer.invoke("desktop:preview-private-memory-capsule", input),
+  importPrivateMemoryCapsule: (previewId) =>
+    ipcRenderer.invoke("desktop:import-private-memory-capsule", previewId),
+  cancelPrivateMemoryCapsule: (previewId) =>
+    ipcRenderer.invoke("desktop:cancel-private-memory-capsule", previewId),
   pathForFile: (file) => webUtils.getPathForFile(file),
   chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
   openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),

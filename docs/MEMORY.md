@@ -70,10 +70,11 @@ local journal. Forgetting a local item does not delete a company copy that the
 user previously promoted; the managed copy remains subject to AMOS retention
 and deletion policy.
 
-## Capsule contract
+## Portable capsules
 
-The codebase now defines the version-1 capsule manifest used by later portable
-memory work. A manifest carries:
+AMOS Desktop 0.8.0 can export one private item or the complete private-memory
+store as a `.amos-memory` capsule, then preview and import it on another device.
+A version-1 manifest carries:
 
 - format and version;
 - capsule, subject, and optional tenant IDs;
@@ -85,15 +86,27 @@ memory work. A manifest carries:
 - signatures for shared, company, and receipt material; and
 - a bounded sync journal with base-version references.
 
-This phase defines and validates the contract; it does not yet export an archive.
-Encrypted export/import, device transfer, fork lineage, and reconnect conflict
-review remain Phase 4.
+The manifest and private content are encrypted together with AES-256-GCM. A
+32-byte key is derived from the owner's passphrase with scrypt; the clear
+envelope contains only the format/version, cipher parameters, creation time,
+and opaque capsule ID. GCM authenticates both the encrypted content and clear
+header, so a wrong passphrase or modified file cannot be imported.
+
+Before import, Desktop decrypts and validates the manifest and every content
+hash, then shows the item names, types, sizes, and lineage. Nothing is written
+until the user confirms. Existing content is deduplicated by source SHA-256.
+Imported items receive new local IDs while retaining the capsule, parent
+capsule, source-memory, and import lineage. Re-exporting a set of items from one
+capsule creates a new capsule that identifies the prior capsule as its parent.
+
+Unlocked previews live only in memory, expire after ten minutes, and are
+discarded when canceled. Passphrases are never written to settings, memory,
+activity, or the capsule itself.
 
 ## Export policy
 
 - Session memory must be promoted before export.
-- Private memory may eventually be exported only as an owner-controlled
-  encrypted capsule.
+- Private memory may be exported only as an owner-controlled encrypted capsule.
 - Shared and company memory require a current AMOS policy decision and AMOS
   signature.
 - Receipt exports require current authorization, a valid signature, and remain
@@ -101,3 +114,8 @@ review remain Phase 4.
 
 Credentials, OAuth tokens, provider keys, and unrestricted raw application data
 are never valid capsule entries.
+
+Portable private memory is now implemented. Governed company-cache export and
+reconnect reconciliation remain separate work because they require live
+server-issued identity, scope, expiry, provenance, revocation, signatures, and
+conflict review.
