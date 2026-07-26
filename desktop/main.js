@@ -244,6 +244,16 @@ function registerIpc() {
     return controller.chooseWorkspace(result.filePaths[0]);
   });
   ipcMain.handle("desktop:open-approvals", () => controller.openApprovals());
+  ipcMain.handle("desktop:open-external", async (_event, value) => {
+    if (typeof value !== "string" || value.length > 2_048) {
+      throw new Error("AMOS blocked an invalid external link");
+    }
+    const url = new URL(value);
+    if (!["https:", "http:", "mailto:"].includes(url.protocol)) {
+      throw new Error("AMOS blocked an unsupported external link");
+    }
+    await shell.openExternal(url.href);
+  });
   ipcMain.handle("desktop:update-state", () => updateManager?.state() || updateState);
   ipcMain.handle("desktop:check-for-updates", () => updateManager?.check());
   ipcMain.handle("desktop:download-update", () => updateManager?.download());

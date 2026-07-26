@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   pathForFile: (file) => webUtils.getPathForFile(file),
   chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
   openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),
+  openExternal: (url) => ipcRenderer.invoke("desktop:open-external", url),
   updateState: () => ipcRenderer.invoke("desktop:update-state"),
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("desktop:download-update"),
