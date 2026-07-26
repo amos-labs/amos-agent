@@ -8,18 +8,26 @@ import { createFileTools } from "./tools/files.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { createWebTools } from "./tools/web.js";
 
-export function createRegistry() {
+export function createRegistry({ extraTools = [] } = {}) {
   const registry = new ToolRegistry();
   registry.register(createBashTool());
   for (const tool of createCodingTools()) registry.register(tool);
   for (const tool of createFileTools()) registry.register(tool);
   for (const tool of createWebTools()) registry.register(tool);
   for (const tool of createAmosTools()) registry.register(tool);
+  for (const tool of extraTools) registry.register(tool);
   return registry;
 }
 
-export function createRuntime({ config, approvals, oauth = null, useOAuth = false, fetchImpl }) {
-  const registry = createRegistry();
+export function createRuntime({
+  config,
+  approvals,
+  oauth = null,
+  useOAuth = false,
+  fetchImpl,
+  extraTools = []
+}) {
+  const registry = createRegistry({ extraTools });
   const modelConfig = {
     ...config.model,
     getAccessToken: config.model.usesAmosIdentity

@@ -55,7 +55,9 @@ The model should choose the clearest safe representation for the work:
 - editable drafts; and
 - a split view combining evidence, proposed action, and expected impact.
 
-Chat remains the command surface. The canvas becomes the durable work surface.
+Chat remains the command surface. The canvas becomes the structured work
+surface; cross-session durability arrives only with the governed cache and
+capsule phases.
 
 ### Implementation direction
 
@@ -65,30 +67,44 @@ Use a typed `CanvasSpec` rather than model-generated arbitrary HTML:
 {
   "version": "1",
   "title": "Campaign performance",
+  "source": {
+    "kind": "live",
+    "label": "AMOS growth engine",
+    "refreshed_at": "2026-07-26T12:00:00Z",
+    "references": [
+      { "type": "campaign", "id": "campaign-1", "label": "Launch campaign" }
+    ]
+  },
   "blocks": [
     {
       "type": "metric",
       "label": "Playground sessions",
-      "value_binding": "result.metrics.playground_sessions"
+      "value": 42
     },
     {
       "type": "timeseries",
-      "data_binding": "result.daily_sessions",
-      "x": "date",
-      "y": "sessions"
+      "series": [
+        {
+          "name": "Sessions",
+          "points": [{ "x": "2026-07-25", "y": 16 }]
+        }
+      ]
     },
     {
-      "type": "approval",
-      "pending_id_binding": "result.proposed_change.pending_id"
+      "type": "decision",
+      "kind": "approval",
+      "status": "pending",
+      "summary": "Increase the winning campaign.",
+      "pending_id": "pending-1"
     }
   ]
 }
 ```
 
-Desktop owns the renderer and supports a small, versioned block catalog. Data
-bindings refer to the bounded result of an AMOS query or task, not to arbitrary
-SQL, code, or remote content. Interactive controls invoke named governed tools;
-they do not execute code embedded by the model.
+Desktop owns the renderer and supports a small, versioned block catalog. Values
+must come from bounded AMOS or local results, not arbitrary SQL, code, or remote
+content. Interactive controls invoke named governed flows; they do not execute
+code embedded by the model.
 
 ### Safety invariants
 
@@ -232,10 +248,15 @@ The Phase 1 contract and first private-memory slice landed in AMOS Desktop
 
 ### Phase 2 — canvas
 
-- Add versioned `CanvasSpec` and the first six safe blocks.
-- Teach company-overview, goals, approvals, proof, and campaign responses to
-  return canvas-capable structured results.
-- Save canvas source references and refresh state.
+- [x] Add versioned `CanvasSpec` and the first six safe blocks.
+- [x] Add a provider-neutral canvas tool that can present bounded results from
+  company-overview, goals, approvals, proof, campaigns, and other AMOS engines.
+- [x] Carry canvas source references, refreshed timestamps, stale state, and a
+  refresh prompt through a bounded session history.
+
+The first Phase 2 slice landed in AMOS Desktop 0.6.0. Cross-session company-data
+cache persistence remains intentionally deferred until Phase 3 because it must
+enforce current identity, scope, expiry, and revocation.
 
 ### Phase 3 — curated offline intelligence
 

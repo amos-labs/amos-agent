@@ -7,6 +7,7 @@
 - [Authentication and identity](AUTHENTICATION.md)
 - [Intelligence and infrastructure profiles](INTELLIGENCE_PROVIDERS.md)
 - [Safety model](SAFETY.md)
+- [Typed company canvas](CANVAS.md)
 
 ## Product direction
 

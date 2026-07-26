@@ -53,6 +53,7 @@ AMOS managed platform
 - Local PDF, DOCX, text, and source extraction
 - Explicit **Use for this task**, **Keep in private memory**, or **Add to company memory** handling
 - Keychain-protected private memory with reuse, promotion, and permanent forget controls
+- Typed company canvases for metrics, tables, trends, briefs, evidence, approvals, and receipts
 - Local workspace grants, search, reads, Git status/diff, and atomic patches
 - Approval-gated shell commands and file changes
 - Live work, decisions, approval notifications, activity, and proof
@@ -191,6 +192,7 @@ as the AMOS platform grows.
 - [Intelligence and infrastructure profiles](docs/INTELLIGENCE_PROVIDERS.md)
 - [Safety model](docs/SAFETY.md)
 - [Memory classes and private-memory controls](docs/MEMORY.md)
+- [Typed company canvas](docs/CANVAS.md)
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Contributing](CONTRIBUTING.md)
 
@@ -200,7 +202,7 @@ The near-term product path is:
 
 1. reliable signed distribution on macOS and Windows;
 2. streaming, cancellation, and durable task checkpoints;
-3. typed dynamic canvases for company data and active work;
+3. richer typed canvases and managed result adapters for company data and active work;
 4. encrypted private local memory with explicit promotion into shared AMOS memory;
 5. curated small-model offline operation; and
 6. encrypted, portable memory capsules with safe reconnect reconciliation.

@@ -52,6 +52,17 @@ task-local unless the user explicitly selects **Keep in private memory** or
 - vision-capability checks before images reach a model; and
 - per-item task-local, encrypted private-memory, or governed company-memory selection.
 
+### Typed company canvas
+
+Desktop can safely present bounded AMOS and local results as metrics, filterable
+tables, time-series charts, Markdown briefs, source lists, and decision cards.
+The model supplies a versioned data specification rather than HTML or script.
+Every view carries source and freshness metadata, and pending decisions still
+open the existing signed-in AMOS approval flow.
+
+Canvas history is session-only in 0.6.0; Desktop does not silently persist a
+second offline copy of company data. See [Typed company canvas](CANVAS.md).
+
 ### Private memory
 
 - encrypted locally with macOS Keychain protection;
@@ -196,7 +207,7 @@ The next product layers build on the signed distribution foundation:
 
 1. streaming output, cancellation, and durable resumable tasks;
 2. signed device identity and policy-controlled environment grants;
-3. typed dynamic canvases for company data and active work;
+3. richer typed canvas blocks and managed AMOS result adapters;
 4. richer private-memory retrieval, sharing proposals, and capsule export;
 5. curated offline intelligence with hardware-aware installation;
 6. portable encrypted memory capsules and reconnect reconciliation; and
