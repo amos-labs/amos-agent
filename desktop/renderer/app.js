@@ -1,3 +1,5 @@
+import { shouldSubmitPrompt } from "../../src/desktop/input.js";
+
 const api = window.amosDesktop;
 
 const providerDefaults = {
@@ -87,7 +89,7 @@ function bindActions() {
   });
   elements.promptForm.addEventListener("submit", runTask);
   elements.promptInput.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+    if (shouldSubmitPrompt(event)) {
       event.preventDefault();
       elements.promptForm.requestSubmit();
     }
