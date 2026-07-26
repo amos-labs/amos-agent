@@ -1,6 +1,6 @@
 {
   "name": "@amos-labs/amos-agent",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "AMOS Desktop and local agent: model-independent operators for the governed AMOS company brain.",
   "type": "module",
   "main": "desktop/main.js",
@@ -17,7 +17,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js && node --check src/desktop/input.js && node --check src/desktop/remoteState.js",
+    "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js && node --check src/desktop/attachments.js && node --check src/desktop/input.js && node --check src/desktop/remoteState.js && node --check src/tools/coding.js",
     "desktop": "electron desktop/main.js",
     "desktop:build": "electron-builder --mac dmg zip",
     "desktop:release": "electron-builder --config desktop/electron-builder.release.yml --mac --publish never",
@@ -84,5 +84,9 @@
     "kimi",
     "moonshot",
     "local-agent"
-  ]
+  ],
+  "dependencies": {
+    "mammoth": "1.12.0",
+    "pdfjs-dist": "6.1.200"
+  }
 }

@@ -40,6 +40,8 @@ let currentView = "operator";
 let selectedProvider = "kimi";
 let pendingApproval = null;
 let running = false;
+let attachments = [];
+let dragDepth = 0;
 
 const elements = Object.fromEntries(
   [
@@ -49,6 +51,7 @@ const elements = Object.fromEntries(
     "identityDetail", "identityBadge", "decisionBadge",
     "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
     "messages", "promptForm", "promptInput", "runButton", "clearButton", "liveEvents",
+    "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
     "modelInput", "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
@@ -65,6 +68,7 @@ async function initialize() {
   bindActions();
   bindEvents();
   state = await api.state();
+  updateAttachments(state.attachments || []);
   selectedProvider = state.settings.provider;
   render();
   elements.loading.classList.add("hidden");
@@ -94,6 +98,25 @@ function bindActions() {
       elements.promptForm.requestSubmit();
     }
   });
+  elements.promptInput.addEventListener("paste", handlePaste);
+  elements.attachButton.addEventListener("click", chooseAttachments);
+  elements.promptForm.addEventListener("dragenter", (event) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    dragDepth += 1;
+    elements.promptForm.classList.add("drop-active");
+  });
+  elements.promptForm.addEventListener("dragover", (event) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  });
+  elements.promptForm.addEventListener("dragleave", (event) => {
+    if (!hasDraggedFiles(event)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) elements.promptForm.classList.remove("drop-active");
+  });
+  elements.promptForm.addEventListener("drop", handleDrop);
   elements.clearButton.addEventListener("click", clearSession);
   elements.settingsForm.addEventListener("submit", saveSettings);
   elements.testButton.addEventListener("click", testModel);
@@ -164,6 +187,7 @@ function render() {
   renderSettings();
   renderActivity();
   renderDecisions();
+  renderAttachments();
 }
 
 function showView(view) {
@@ -473,22 +497,152 @@ async function testModel() {
   }
 }
 
+async function chooseAttachments() {
+  if (running) return;
+  setButtonBusy(elements.attachButton, true, "Adding…");
+  try {
+    updateAttachments(await api.chooseAttachments());
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.attachButton, false, "＋ Attach");
+  }
+}
+
+async function handlePaste(event) {
+  if (running) return;
+  const images = [...(event.clipboardData?.items || [])]
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  if (images.length === 0) return;
+  event.preventDefault();
+  try {
+    for (const image of images) {
+      const bytes = await image.arrayBuffer();
+      updateAttachments(await api.addPastedImage({
+        name: image.name || `screenshot-${Date.now()}.png`,
+        mime: image.type || "image/png",
+        bytes
+      }));
+    }
+    toast(images.length === 1 ? "Screenshot attached." : `${images.length} screenshots attached.`);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function handleDrop(event) {
+  if (!hasDraggedFiles(event)) return;
+  event.preventDefault();
+  dragDepth = 0;
+  elements.promptForm.classList.remove("drop-active");
+  if (running) return;
+  const paths = [...event.dataTransfer.files].map((file) => api.pathForFile(file)).filter(Boolean);
+  if (paths.length === 0) return;
+  try {
+    updateAttachments(await api.addAttachmentPaths(paths));
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function hasDraggedFiles(event) {
+  return [...(event.dataTransfer?.types || [])].includes("Files");
+}
+
+function updateAttachments(next) {
+  const previous = new Map(attachments.map((item) => [item.id, item]));
+  attachments = (next || []).map((item) => ({
+    ...item,
+    retention:
+      item.memoryStatus === "requested"
+        ? "company"
+        : previous.get(item.id)?.retention || "task"
+  }));
+  renderAttachments();
+}
+
+function renderAttachments() {
+  if (!elements.attachmentList) return;
+  elements.attachmentList.replaceChildren();
+  elements.attachmentList.classList.toggle("hidden", attachments.length === 0);
+  for (const attachment of attachments) {
+    const chip = document.createElement("article");
+    chip.className = "attachment-chip";
+    const icon = document.createElement("span");
+    icon.className = "attachment-icon";
+    icon.textContent = attachment.kind === "image" ? "▧" : "≡";
+
+    const copy = document.createElement("div");
+    copy.className = "attachment-copy";
+    const name = document.createElement("strong");
+    name.textContent = attachment.name;
+    const detail = document.createElement("small");
+    detail.textContent = `${attachment.kind === "image" ? "Image" : "Document"} · ${formatBytes(attachment.size)}`;
+    const retention = document.createElement("select");
+    retention.className = "attachment-memory";
+    retention.setAttribute("aria-label", `Retention for ${attachment.name}`);
+    retention.append(
+      option("task", "Use for this task"),
+      option("company", attachment.memoryStatus === "requested" ? "Submitted to AMOS memory" : "Add to company memory")
+    );
+    retention.value = attachment.retention;
+    retention.disabled = running || attachment.memoryStatus === "requested";
+    retention.addEventListener("change", () => {
+      attachment.retention = retention.value;
+    });
+    copy.append(name, detail, retention);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "attachment-remove";
+    remove.setAttribute("aria-label", `Remove ${attachment.name}`);
+    remove.textContent = "×";
+    remove.disabled = running;
+    remove.addEventListener("click", async () => {
+      try {
+        updateAttachments(await api.removeAttachment(attachment.id));
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
+    chip.append(icon, copy, remove);
+    elements.attachmentList.append(chip);
+  }
+}
+
 async function runTask(event) {
   event.preventDefault();
   if (running) return;
   const prompt = elements.promptInput.value.trim();
-  if (!prompt) return;
-  addMessage("user", prompt);
+  if (!prompt && attachments.length === 0) return;
+  const attachmentSummary = attachments.length > 0
+    ? `\n\nAttached: ${attachments.map((item) => item.name).join(", ")}`
+    : "";
+  addMessage("user", `${prompt || "Review the attached material."}${attachmentSummary}`);
   elements.promptInput.value = "";
   const pending = addMessage("pending", "AMOS is loading company context and determining the next action…");
   setRunning(true);
 
   try {
-    const result = await api.run(prompt);
+    const submitted = [...attachments];
+    const result = await api.run({
+      text: prompt,
+      attachments: submitted.map((item) => ({ id: item.id, retention: item.retention }))
+    });
     pending.remove();
     addMessage("assistant", result.answer);
     state.activity = result.activity;
     renderActivity();
+    for (const attachment of submitted) {
+      await api.removeAttachment(attachment.id);
+    }
+    updateAttachments([]);
+    const failures = (result.memory || []).filter((item) => item.status === "failed");
+    if (failures.length > 0) {
+      toast(`Task completed, but ${failures.length} item${failures.length === 1 ? "" : "s"} could not be added to company memory.`, true);
+    }
   } catch (error) {
     pending.remove();
     addMessage("error", error.message);
@@ -499,6 +653,7 @@ async function runTask(event) {
 
 async function clearSession() {
   await api.clear();
+  updateAttachments([]);
   const welcome = elements.messages.querySelector(".welcome-message");
   elements.messages.replaceChildren();
   if (welcome) elements.messages.append(welcome);
@@ -569,9 +724,11 @@ function renderActivity() {
 function setRunning(value) {
   running = value;
   elements.runButton.disabled = value;
+  elements.attachButton.disabled = value;
   elements.promptInput.disabled = value;
   elements.runningIndicator.textContent = value ? "Working" : "Idle";
   elements.runningIndicator.classList.toggle("active", value);
+  renderAttachments();
 }
 
 async function resolveApproval(approved) {
@@ -631,4 +788,18 @@ function text(value) {
   const element = document.createElement("span");
   element.textContent = value;
   return element;
+}
+
+function option(value, label) {
+  const element = document.createElement("option");
+  element.value = value;
+  element.textContent = label;
+  return element;
+}
+
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (bytes < 1_024) return `${bytes} B`;
+  if (bytes < 1_024 ** 2) return `${Math.round(bytes / 1_024)} KB`;
+  return `${Math.round((bytes / 1_024 ** 2) * 10) / 10} MB`;
 }

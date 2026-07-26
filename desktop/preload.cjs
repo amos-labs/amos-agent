@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 const eventChannels = new Set([
   "agent:event",
@@ -17,8 +17,13 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
-  run: (text) => ipcRenderer.invoke("desktop:run", text),
+  run: (input) => ipcRenderer.invoke("desktop:run", input),
   clear: () => ipcRenderer.invoke("desktop:clear"),
+  chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
+  addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),
+  addPastedImage: (input) => ipcRenderer.invoke("desktop:add-pasted-image", input),
+  removeAttachment: (id) => ipcRenderer.invoke("desktop:remove-attachment", id),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
   openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),
   resolveApproval: (id, approved) =>

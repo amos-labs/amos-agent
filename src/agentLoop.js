@@ -14,8 +14,8 @@ export class AgentLoop {
     this.messages = [{ role: "system", content: SYSTEM_PROMPT }];
   }
 
-  async run(userText, { onEvent = () => {} } = {}) {
-    this.messages.push({ role: "user", content: userText });
+  async run(userContent, { onEvent = () => {} } = {}) {
+    this.messages.push({ role: "user", content: userContent });
 
     for (let turn = 0; turn < this.config.agent.maxToolTurns; turn += 1) {
       const response = await this.modelClient.chat({

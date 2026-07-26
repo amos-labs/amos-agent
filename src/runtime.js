@@ -3,6 +3,7 @@ import { createModelClient } from "./model/providers.js";
 import { AmosMcpClient } from "./mcp/amosMcpClient.js";
 import { createAmosTools } from "./tools/amos.js";
 import { createBashTool } from "./tools/bash.js";
+import { createCodingTools } from "./tools/coding.js";
 import { createFileTools } from "./tools/files.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { createWebTools } from "./tools/web.js";
@@ -10,6 +11,7 @@ import { createWebTools } from "./tools/web.js";
 export function createRegistry() {
   const registry = new ToolRegistry();
   registry.register(createBashTool());
+  for (const tool of createCodingTools()) registry.register(tool);
   for (const tool of createFileTools()) registry.register(tool);
   for (const tool of createWebTools()) registry.register(tool);
   for (const tool of createAmosTools()) registry.register(tool);

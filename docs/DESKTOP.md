@@ -12,6 +12,11 @@ revival of the deprecated hosted harness.
 - provider and infrastructure selection
 - hardware-aware local-model guidance
 - local workspace picker
+- document and source-file upload with local PDF/DOCX/text extraction
+- drag-and-drop attachments and pasted screenshots
+- explicit per-attachment choice between task-local use and governed company memory
+- vision-capability enforcement before an image reaches a model
+- repository search, git inspection, and approval-gated atomic patches
 - real AMOS Agent task loop
 - live tool activity
 - local shell and write approval modal
@@ -78,12 +83,13 @@ repository. Keep local development builds unsigned with `desktop:dir` or
 
 ## Next production slices
 
-1. Stream model output and expose cancellation.
-2. Enroll each desktop with an AMOS device key and sign local-action receipts.
-3. Add explicit, policy-controlled environment grants for repositories, folders,
+1. Stream model and terminal output and expose cancellation.
+2. Add durable, resumable plans and task checkpoints shared with AMOS.
+3. Enroll each desktop with an AMOS device key and sign local-action receipts.
+4. Add explicit, policy-controlled environment grants for repositories, folders,
    local applications, and private-network connectors.
-4. Persist resumable task checkpoints through AMOS.
-5. Add AWS profile/SigV4 support for Bedrock.
-6. Add a curated local model installer for supported Mac hardware.
-7. Add automatic signed updates.
-8. Ship signed Windows installers and MDM-friendly enterprise packages.
+5. Add local project memory with explicit promotion, refresh, and forgetting rules.
+6. Add AWS profile/SigV4 support for Bedrock.
+7. Add a curated local model installer for supported Mac hardware.
+8. Add automatic signed updates.
+9. Ship signed Windows installers and MDM-friendly enterprise packages.
