@@ -282,6 +282,7 @@ export class DesktopController {
   oauthFor(settings) {
     return new AmosOAuthSession({
       mcpUrl: settings.amosMcpUrl,
+      clientName: "AMOS Desktop",
       store: new FileTokenStore(join(this.userDataPath, "oauth.json")),
       openBrowser: (url) => {
         this.openBrowser(url);

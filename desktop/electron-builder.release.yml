@@ -16,7 +16,7 @@ mac:
   notarize: true
   entitlements: desktop/entitlements.mac.plist
   entitlementsInherit: desktop/entitlements.mac.plist
-  icon: desktop/assets/amos-mark-1024.png
+  icon: desktop/assets/amos-app-icon-1024.png
   artifactName: AMOS-Desktop-macOS-${arch}.${ext}
   target:
     - target: dmg

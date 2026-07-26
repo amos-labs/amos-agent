@@ -41,6 +41,7 @@ test("OAuth login performs discovery, DCR, PKCE callback, and token storage", as
     }
     if (value.endsWith("/oauth/register")) {
       const body = JSON.parse(options.body);
+      assert.equal(body.client_name, "AMOS Agent");
       redirectUri = body.redirect_uris[0];
       return jsonResponse(201, { client_id: "amos-agent-client" });
     }
@@ -83,6 +84,45 @@ test("OAuth login performs discovery, DCR, PKCE callback, and token storage", as
   assert.equal(credentials.access_token, "access-1");
   assert.equal(credentials.client_id, "amos-agent-client");
   assert.equal((await stored.read()).refresh_token, "refresh-1");
+});
+
+test("OAuth discovery permits a separately hosted HTTPS browser authorization endpoint", async () => {
+  const session = new AmosOAuthSession({
+    mcpUrl: "https://platform.custom.amoslabs.com/mcp",
+    store: new MemoryStore(),
+    fetchImpl: discoveryFetch({
+      authorization_endpoint: "https://app.amoslabs.com/oauth/authorize"
+    })
+  });
+
+  const metadata = await session.discover();
+  assert.equal(metadata.authorization_endpoint, "https://app.amoslabs.com/oauth/authorize");
+});
+
+test("OAuth discovery keeps token and registration endpoints pinned to the issuer", async () => {
+  for (const field of ["token_endpoint", "registration_endpoint"]) {
+    const session = new AmosOAuthSession({
+      mcpUrl: "https://platform.custom.amoslabs.com/mcp",
+      store: new MemoryStore(),
+      fetchImpl: discoveryFetch({
+        [field]: `https://other.example/oauth/${field}`
+      })
+    });
+
+    await assert.rejects(session.discover(), new RegExp(`${field.replace("_", " ")} must share the issuer origin`));
+  }
+});
+
+test("OAuth discovery rejects an insecure browser authorization endpoint", async () => {
+  const session = new AmosOAuthSession({
+    mcpUrl: "https://platform.custom.amoslabs.com/mcp",
+    store: new MemoryStore(),
+    fetchImpl: discoveryFetch({
+      authorization_endpoint: "http://app.amoslabs.com/oauth/authorize"
+    })
+  });
+
+  await assert.rejects(session.discover(), /authorization endpoint must use HTTPS/);
 });
 
 test("OAuth refresh rotates and stores the refresh token", async () => {
@@ -135,4 +175,27 @@ class MemoryStore {
   async clear() {
     this.value = null;
   }
+}
+
+function discoveryFetch(overrides = {}) {
+  return async (url) => {
+    const value = String(url);
+    if (value.endsWith("/.well-known/oauth-protected-resource/mcp")) {
+      return jsonResponse(200, {
+        resource: "https://platform.custom.amoslabs.com/mcp",
+        authorization_servers: ["https://platform.custom.amoslabs.com"]
+      });
+    }
+    if (value.endsWith("/.well-known/oauth-authorization-server")) {
+      return jsonResponse(200, {
+        issuer: "https://platform.custom.amoslabs.com",
+        authorization_endpoint: "https://platform.custom.amoslabs.com/oauth/authorize",
+        token_endpoint: "https://platform.custom.amoslabs.com/oauth/token",
+        registration_endpoint: "https://platform.custom.amoslabs.com/oauth/register",
+        code_challenge_methods_supported: ["S256"],
+        ...overrides
+      });
+    }
+    throw new Error(`Unexpected URL ${value}`);
+  };
 }

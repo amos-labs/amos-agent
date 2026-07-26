@@ -35,10 +35,20 @@ function assertSameOrigin(endpoint, issuer, label) {
   }
 }
 
+function assertSecureEndpoint(endpoint, label) {
+  if (!endpoint) throw new Error(`AMOS OAuth metadata did not advertise a ${label}`);
+  try {
+    originFor(endpoint);
+  } catch {
+    throw new Error(`AMOS OAuth ${label} must use HTTPS except for localhost development`);
+  }
+}
+
 export class AmosOAuthSession {
   constructor({
     mcpUrl,
     store,
+    clientName = "AMOS Agent",
     fetchImpl = fetchCompat,
     openBrowser = openSystemBrowser,
     requestTimeoutMs = 20_000,
@@ -46,6 +56,7 @@ export class AmosOAuthSession {
   }) {
     this.mcpUrl = mcpUrl;
     this.store = store;
+    this.clientName = clientName;
     this.fetch = fetchImpl;
     this.openBrowser = openBrowser;
     this.requestTimeoutMs = requestTimeoutMs;
@@ -64,13 +75,12 @@ export class AmosOAuthSession {
     if (new URL(issuer).origin !== authorizationOrigin) {
       throw new Error("AMOS OAuth metadata issuer does not match the advertised authorization server");
     }
-    for (const [field, label] of [
-      ["authorization_endpoint", "authorization endpoint"],
-      ["token_endpoint", "token endpoint"],
-      ["registration_endpoint", "registration endpoint"]
-    ]) {
-      assertSameOrigin(metadata[field], issuer, label);
-    }
+    // Browser consent may intentionally live on a separate first-party app
+    // origin. Trust the endpoint advertised by the HTTPS issuer metadata, while
+    // keeping token issuance and dynamic registration pinned to the issuer.
+    assertSecureEndpoint(metadata.authorization_endpoint, "authorization endpoint");
+    assertSameOrigin(metadata.token_endpoint, issuer, "token endpoint");
+    assertSameOrigin(metadata.registration_endpoint, issuer, "registration endpoint");
     if (!metadata.code_challenge_methods_supported?.includes("S256")) {
       throw new Error("AMOS OAuth server does not advertise PKCE S256");
     }
@@ -88,7 +98,7 @@ export class AmosOAuthSession {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          client_name: "AMOS Agent",
+          client_name: this.clientName,
           redirect_uris: [receiver.redirectUri],
           token_endpoint_auth_method: "none",
           grant_types: ["authorization_code", "refresh_token"],
