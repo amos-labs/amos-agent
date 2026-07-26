@@ -96,6 +96,13 @@ Production updates come only from the configured signed release feed.
 
 ## Offline and memory roadmap
 
+Private Desktop memory is encrypted with platform Keychain protection and
+remains user-authoritative. Reusing it sends bounded content to the selected
+model for that task but does not add it to company memory. Promotion uses the
+ordinary AMOS company-document tool and therefore inherits the user's tenant,
+scope, policy, and proof boundary. **Forget** removes the encrypted local item;
+a previously promoted AMOS copy remains governed company memory.
+
 Offline company work must fail safe:
 
 - cached company context carries source, scope, age, and expiry;

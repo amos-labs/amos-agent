@@ -48,9 +48,9 @@ let updateState = null;
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
-    "decisionsView",
+    "decisionsView", "memoryView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "workspaceLabel",
-    "identityDetail", "identityBadge", "decisionBadge",
+    "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge",
     "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
     "messages", "promptForm", "promptInput", "runButton", "clearButton", "liveEvents",
     "attachmentList", "attachButton",
@@ -60,7 +60,8 @@ const elements = Object.fromEntries(
     "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "pendingDecisions",
-    "recentDecisions", "updateButton"
+    "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
+    "memoryClassGrid"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -162,6 +163,7 @@ function render() {
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
+    elements.memoryView.classList.add("hidden");
     elements.decisionsView.classList.add("hidden");
     elements.activityView.classList.add("hidden");
     elements.settingsView.classList.add("hidden");
@@ -196,12 +198,14 @@ function render() {
   renderActivity();
   renderDecisions();
   renderAttachments();
+  renderPrivateMemory();
 }
 
 function showView(view) {
   currentView = view;
   const map = {
     operator: elements.operatorView,
+    memory: elements.memoryView,
     decisions: elements.decisionsView,
     activity: elements.activityView,
     settings: elements.settingsView
@@ -211,6 +215,117 @@ function showView(view) {
   for (const button of document.querySelectorAll(".nav-item")) {
     button.classList.toggle("active", button.dataset.view === view);
   }
+}
+
+function renderPrivateMemory() {
+  if (!state) return;
+  const memories = Array.isArray(state.privateMemory) ? state.privateMemory : [];
+  elements.privateMemoryBadge.textContent = String(memories.length);
+  elements.privateMemoryBadge.classList.toggle("hidden", memories.length === 0);
+  elements.privateMemoryEmpty.classList.toggle("hidden", memories.length > 0);
+  elements.privateMemoryList.replaceChildren();
+
+  for (const memory of memories) {
+    const card = document.createElement("article");
+    card.className = "private-memory-card";
+    const icon = document.createElement("span");
+    icon.className = "private-memory-icon";
+    icon.textContent = memory.kind === "image" ? "▧" : "≡";
+    const content = document.createElement("div");
+    content.className = "private-memory-copy";
+    const meta = document.createElement("div");
+    meta.className = "private-memory-meta";
+    const privacy = document.createElement("span");
+    privacy.textContent = "Encrypted · private";
+    const date = document.createElement("time");
+    date.textContent = relativeTime(memory.updatedAt);
+    meta.append(privacy, date);
+    const title = document.createElement("h2");
+    title.textContent = memory.name;
+    const detail = document.createElement("p");
+    detail.textContent = `${memory.kind === "image" ? "Image" : "Document"} · ${formatBytes(memory.size)}`;
+    content.append(meta, title, detail);
+    if (memory.promotedAt) {
+      const promoted = document.createElement("span");
+      promoted.className = "memory-promoted";
+      promoted.textContent = `Also in company memory · ${relativeTime(memory.promotedAt)}`;
+      content.append(promoted);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "private-memory-actions";
+    const use = actionButton("Use in next task", "secondary");
+    use.addEventListener("click", async () => {
+      setButtonBusy(use, true, "Adding…");
+      try {
+        const result = await api.usePrivateMemory(memory.id);
+        state.privateMemory = result.privateMemory;
+        updateAttachments(result.attachments);
+        renderPrivateMemory();
+        showView("operator");
+        elements.promptInput.focus();
+        toast(`${memory.name} is attached to the next task.`);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        setButtonBusy(use, false, "Use in next task");
+      }
+    });
+    const promote = actionButton(memory.promotedAt ? "Promote again" : "Promote to company", "secondary");
+    promote.addEventListener("click", async () => {
+      setButtonBusy(promote, true, "Promoting…");
+      try {
+        const result = await api.promotePrivateMemory(memory.id);
+        state.privateMemory = result.privateMemory;
+        renderPrivateMemory();
+        toast(`${memory.name} was submitted to governed company memory.`);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        setButtonBusy(promote, false, memory.promotedAt ? "Promote again" : "Promote to company");
+      }
+    });
+    const forget = actionButton("Forget", "danger");
+    forget.addEventListener("click", async () => {
+      if (!window.confirm(`Permanently forget “${memory.name}” on this Mac?`)) return;
+      setButtonBusy(forget, true, "Forgetting…");
+      try {
+        const result = await api.forgetPrivateMemory(memory.id);
+        state.privateMemory = result.privateMemory;
+        renderPrivateMemory();
+        toast(`${memory.name} was forgotten.`);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        setButtonBusy(forget, false, "Forget");
+      }
+    });
+    actions.append(use, promote, forget);
+    card.append(icon, content, actions);
+    elements.privateMemoryList.append(card);
+  }
+
+  elements.memoryClassGrid.replaceChildren();
+  for (const memoryClass of state.memoryClasses || []) {
+    const card = document.createElement("article");
+    card.className = `memory-class-card ${memoryClass.id}`;
+    const label = document.createElement("span");
+    label.textContent = memoryClass.label;
+    const authority = document.createElement("small");
+    authority.textContent = memoryClass.authority === "amos" ? "AMOS governed" : memoryClass.authority === "user" ? "You control it" : "This session";
+    const description = document.createElement("p");
+    description.textContent = memoryClass.description;
+    card.append(label, authority, description);
+    elements.memoryClassGrid.append(card);
+  }
+}
+
+function actionButton(label, variant) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `button ${variant === "danger" ? "danger" : variant}`;
+  button.textContent = label;
+  return button;
 }
 
 function renderIdentity() {
@@ -593,6 +708,7 @@ function renderAttachments() {
     retention.setAttribute("aria-label", `Retention for ${attachment.name}`);
     retention.append(
       option("task", "Use for this task"),
+      option("private", attachment.memoryStatus === "private" ? "Saved privately on this Mac" : "Keep in private memory"),
       option("company", attachment.memoryStatus === "requested" ? "Submitted to AMOS memory" : "Add to company memory")
     );
     retention.value = attachment.retention;
@@ -642,7 +758,9 @@ async function runTask(event) {
     pending.remove();
     addMessage("assistant", result.answer);
     state.activity = result.activity;
+    state.privateMemory = result.privateMemory || state.privateMemory;
     renderActivity();
+    renderPrivateMemory();
     for (const attachment of submitted) {
       await api.removeAttachment(attachment.id);
     }
@@ -655,6 +773,13 @@ async function runTask(event) {
     pending.remove();
     addMessage("error", error.message);
   } finally {
+    try {
+      const latest = await api.state();
+      state.privateMemory = latest.privateMemory || [];
+      renderPrivateMemory();
+    } catch {
+      // Task completion must not be masked if a local memory refresh fails.
+    }
     setRunning(false);
   }
 }

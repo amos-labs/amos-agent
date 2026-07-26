@@ -221,10 +221,14 @@ architecture.
 
 ### Phase 1 — memory contract
 
-- Formalize private, shared, company, and receipt memory classes.
-- Define capsule manifest, encryption, signatures, export policy, and sync
+- [x] Formalize session, private, shared, company, and receipt memory classes.
+- [x] Define capsule manifest, encryption, signatures, export policy, and sync
   journal.
-- Add local private memory with explicit promote/forget controls.
+- [x] Add encrypted local private memory with explicit reuse, promote, and
+  forget controls.
+
+The Phase 1 contract and first private-memory slice landed in AMOS Desktop
+0.5.0. Capsule archive transfer and reconnect reconciliation remain Phase 4.
 
 ### Phase 2 — canvas
 

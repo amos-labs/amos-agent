@@ -7,10 +7,18 @@ import { listModelProviders } from "../model/providers.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
+import { MEMORY_CLASSES } from "./memoryContract.js";
 import { approvalReviewUrl, DesktopRemoteStateClient } from "./remoteState.js";
 
 export class DesktopController {
-  constructor({ userDataPath, settingsStore, openBrowser, emit, notify = () => {} }) {
+  constructor({
+    userDataPath,
+    settingsStore,
+    privateMemoryStore = null,
+    openBrowser,
+    emit,
+    notify = () => {}
+  }) {
     this.userDataPath = userDataPath;
     this.settingsStore = settingsStore;
     this.openBrowser = openBrowser;
@@ -27,6 +35,7 @@ export class DesktopController {
     };
     this.remoteRefreshPromise = null;
     this.attachments = new AttachmentManager();
+    this.privateMemoryStore = privateMemoryStore;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
     });
@@ -52,7 +61,9 @@ export class DesktopController {
       settings: redactSettings(settings),
       system: systemProfile(),
       activity: this.activity.slice(-100),
-      attachments: this.attachments.list()
+      attachments: this.attachments.list(),
+      memoryClasses: Object.values(MEMORY_CLASSES),
+      privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : []
     };
   }
 
@@ -85,6 +96,48 @@ export class DesktopController {
   removeAttachment(id) {
     this.attachments.remove(id);
     return this.attachments.list();
+  }
+
+  async usePrivateMemory(id) {
+    const store = this.requirePrivateMemory();
+    const memory = await store.get(id);
+    const attachment = this.attachments.addPrivateMemory(memory);
+    this.record("memory", `Added private memory ${memory.name} to the next task`);
+    return {
+      attachments: this.attachments.list(),
+      privateMemory: await store.list(),
+      attachment
+    };
+  }
+
+  async forgetPrivateMemory(id) {
+    const store = this.requirePrivateMemory();
+    const memory = await store.get(id);
+    await store.forget(id);
+    this.record("memory", `Forgot private memory ${memory.name}`);
+    return { privateMemory: await store.list() };
+  }
+
+  async promotePrivateMemory(id) {
+    const store = this.requirePrivateMemory();
+    const memory = await store.get(id);
+    const attachment = this.attachments.addPrivateMemory(memory);
+    try {
+      const { config, runtime } = await this.getRuntime({ requireAmos: true });
+      const [result] = await this.persistCompanyMemory(
+        [{ id: attachment.id, retention: "company" }],
+        runtime,
+        config
+      );
+      if (!result || result.status === "failed") {
+        throw new Error(result?.error || "AMOS could not promote that private memory");
+      }
+      const promoted = await store.markPromoted(id, result.result || { status: result.status });
+      this.record("memory", `Promoted ${memory.name} into governed company memory`);
+      return { privateMemory: await store.list(), promoted };
+    } finally {
+      this.attachments.remove(attachment.id);
+    }
   }
 
   async login() {
@@ -231,7 +284,10 @@ export class DesktopController {
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
     const { config, runtime } = await this.getRuntime({ requireAmos: true });
-    const memory = await this.persistCompanyMemory(references, runtime, config);
+    const memory = [
+      ...await this.persistPrivateMemory(references),
+      ...await this.persistCompanyMemory(references, runtime, config)
+    ];
     const modelContent = this.attachments.buildMessageContent(
       prompt,
       references,
@@ -252,7 +308,8 @@ export class DesktopController {
         answer,
         activity: this.activity.slice(-100),
         attachments: this.attachments.list(),
-        memory
+        memory,
+        privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : []
       };
     } finally {
       this.send("agent:status", { running: false });
@@ -331,6 +388,34 @@ export class DesktopController {
       }
     }
     return results;
+  }
+
+  async persistPrivateMemory(references) {
+    const results = [];
+    const seen = new Set();
+    for (const reference of references) {
+      if (reference?.retention !== "private" || !reference.id || seen.has(reference.id)) continue;
+      seen.add(reference.id);
+      const item = this.attachments.get(reference.id);
+      try {
+        const saved = await this.requirePrivateMemory().add(this.attachments.privateMemoryRecord(item.id));
+        this.attachments.markPrivateSaved(item.id, { private_memory_id: saved.item.id });
+        const status = saved.status === "already_saved" ? "already_saved" : "saved_private";
+        this.record("memory", `${saved.status === "already_saved" ? "Reused" : "Saved"} ${item.name} in private memory`);
+        results.push({ id: item.id, name: item.name, status, privateMemory: saved.item });
+      } catch (error) {
+        this.record("memory", `Could not save ${item.name} privately: ${error.message}`);
+        results.push({ id: item.id, name: item.name, status: "failed", error: error.message });
+      }
+    }
+    return results;
+  }
+
+  requirePrivateMemory() {
+    if (!this.privateMemoryStore) {
+      throw new Error("Private memory is unavailable because platform encryption is not configured");
+    }
+    return this.privateMemoryStore;
   }
 
   resetRuntime() {

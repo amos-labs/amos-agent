@@ -168,6 +168,50 @@ export class AttachmentManager {
     item.memoryResult = result;
   }
 
+  markPrivateSaved(id, result) {
+    const item = this.get(id);
+    item.memoryStatus = "private";
+    item.memoryResult = result;
+  }
+
+  privateMemoryRecord(id) {
+    const item = this.get(id);
+    return {
+      name: item.name,
+      mime: item.mime,
+      kind: item.kind,
+      size: item.size,
+      sha256: item.sha256,
+      text: item.kind === "document" ? item.text : "",
+      bufferBase64: item.kind === "image" ? item.buffer.toString("base64") : "",
+      source: "amos-desktop"
+    };
+  }
+
+  addPrivateMemory(memory) {
+    this.assertCapacity();
+    const kind = memory?.kind === "image" ? "image" : "document";
+    const buffer = kind === "image" ? Buffer.from(String(memory.bufferBase64 || ""), "base64") : null;
+    const text = kind === "document" ? String(memory.text || "") : "";
+    if (kind === "image" && buffer.length === 0) throw new Error("That private image is empty");
+    if (kind === "document" && !text.trim()) throw new Error("That private document has no readable text");
+    const item = {
+      id: randomUUID(),
+      name: cleanName(memory.name),
+      mime: String(memory.mime || (kind === "image" ? "image/png" : "text/plain")),
+      kind,
+      size: Number(memory.size) || (buffer?.length || Buffer.byteLength(text)),
+      sha256: String(memory.sha256 || createHash("sha256").update(buffer || text).digest("hex")),
+      sourcePath: null,
+      buffer,
+      text,
+      memoryStatus: "private",
+      memoryResult: { private_memory_id: memory.id }
+    };
+    this.items.set(item.id, item);
+    return publicAttachment(item);
+  }
+
   assertCapacity() {
     if (this.items.size >= MAX_ATTACHMENTS) {
       throw new Error(`AMOS Desktop accepts up to ${MAX_ATTACHMENTS} attachments per session`);
