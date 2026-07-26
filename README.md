@@ -15,7 +15,9 @@ agent owns local reasoning, bash, local files, and the MCP bridge.
 AMOS Desktop packages this agent into a downloadable operator console for
 macOS. It provides guided setup, AMOS OAuth, infrastructure selection, local
 workspace grants, human approval prompts, live work visibility, and activity
-history.
+history. Its universal composer accepts documents, source files, dragged files,
+and pasted screenshots. Each attachment stays task-local unless the user
+explicitly promotes it into governed AMOS company memory.
 
 ```bash
 npm install
@@ -149,6 +151,9 @@ amos-agent logout
 - `list_files` — list workspace files.
 - `read_file` — read workspace text files.
 - `write_file` — write workspace text files after user approval by default.
+- `search_files` — search workspace text with bounded file/line evidence.
+- `git_status` / `git_diff` — inspect repository changes without mutation.
+- `apply_patch` — validate and atomically apply a unified patch after approval.
 - `web_fetch` — fetch and compact a known URL.
 - `web_search` — Brave Search when `BRAVE_SEARCH_API_KEY` is configured.
 - `amos_get_started`

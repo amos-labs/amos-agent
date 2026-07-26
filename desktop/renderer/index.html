@@ -138,14 +138,20 @@
               </div>
 
               <form id="promptForm" class="composer">
+                <div id="attachmentList" class="attachment-list hidden" aria-live="polite"></div>
                 <textarea
                   id="promptInput"
                   rows="3"
-                  placeholder="Ask about the company or describe work to move forward…"
+                  placeholder="Ask about the company, attach a document, paste a screenshot, or describe work to move forward…"
                   aria-label="Task for AMOS"
                 ></textarea>
                 <div class="composer-bottom">
-                  <div class="scope-note"><span class="status-dot green"></span> AMOS policy and proof are active</div>
+                  <div class="composer-tools">
+                    <button id="attachButton" class="attach-button" type="button" aria-label="Attach documents or images">
+                      <span>＋</span> Attach
+                    </button>
+                    <div class="scope-note"><span class="status-dot green"></span> AMOS policy and proof are active</div>
+                  </div>
                   <button id="runButton" class="button primary" type="submit">Run with AMOS <span>→</span></button>
                 </div>
               </form>

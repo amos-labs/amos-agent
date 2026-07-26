@@ -263,7 +263,69 @@ button { color: inherit; }
 .message p { margin: 0; white-space: pre-wrap; line-height: 1.62; }
 .message.pending { color: var(--muted); }
 
-.composer { margin: 0 24px 24px; border: 1px solid rgba(109,147,255,.28); border-radius: 15px; background: #0a1222; box-shadow: 0 12px 42px rgba(0,0,0,.2); }
+.composer { position: relative; margin: 0 24px 24px; border: 1px solid rgba(109,147,255,.28); border-radius: 15px; background: #0a1222; box-shadow: 0 12px 42px rgba(0,0,0,.2); transition: border-color .15s, background .15s; }
+.composer.drop-active { border-color: var(--blue); background: rgba(109,147,255,.08); }
+.composer.drop-active::after {
+  position: absolute;
+  inset: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--blue);
+  border-radius: 11px;
+  background: rgba(8,14,27,.9);
+  color: var(--ink);
+  content: "Drop files to attach";
+  font-size: 13px;
+  font-weight: 800;
+  pointer-events: none;
+  z-index: 5;
+}
+.attachment-list { display: flex; overflow-x: auto; gap: 9px; padding: 12px 14px 0; }
+.attachment-chip {
+  display: grid;
+  grid-template-columns: auto minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-width: 270px;
+  max-width: 360px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255,255,255,.025);
+}
+.attachment-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(109,147,255,.12);
+  color: var(--blue-2);
+  font-size: 15px;
+}
+.attachment-copy { min-width: 0; }
+.attachment-copy strong { display: block; overflow: hidden; color: var(--ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-copy small { display: block; margin-top: 3px; color: var(--muted-2); font-size: 8px; }
+.attachment-memory {
+  max-width: 142px;
+  margin-top: 6px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--blue-2);
+  font-size: 8px;
+  cursor: pointer;
+}
+.attachment-remove {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+.attachment-remove:hover { background: rgba(255,117,87,.1); color: #ff9c86; }
 .composer textarea {
   display: block;
   width: 100%;
@@ -278,6 +340,20 @@ button { color: inherit; }
 }
 .composer textarea::placeholder { color: var(--muted-2); }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; padding: 10px 11px 11px 18px; border-top: 1px solid var(--line); }
+.composer-tools { display: flex; align-items: center; gap: 13px; }
+.attach-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.attach-button:hover { color: var(--ink); }
+.attach-button span { color: var(--blue); font-size: 15px; line-height: 1; }
 .scope-note { display: flex; align-items: center; gap: 9px; color: var(--muted-2); font-size: 10px; }
 
 .work-panel { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; background: #0a1221; }

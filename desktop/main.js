@@ -136,8 +136,33 @@ function registerIpc() {
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
   ipcMain.handle("desktop:open-approval", (_event, id) => controller.openApproval(id));
   ipcMain.handle("desktop:test-model", () => controller.testModel());
-  ipcMain.handle("desktop:run", (_event, text) => controller.run(text));
+  ipcMain.handle("desktop:run", (_event, input) => controller.run(input));
   ipcMain.handle("desktop:clear", () => controller.clear());
+  ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
+  ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({
+    name: input?.name,
+    mime: input?.mime,
+    bytes: new Uint8Array(input?.bytes || [])
+  }));
+  ipcMain.handle("desktop:remove-attachment", (_event, id) => controller.removeAttachment(id));
+  ipcMain.handle("desktop:choose-attachments", async () => {
+    const result = await dialog.showOpenDialog(window, {
+      title: "Attach files to AMOS",
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: "Documents, code, and images",
+          extensions: [
+            "pdf", "docx", "txt", "md", "csv", "tsv", "json", "yaml", "yml",
+            "html", "css", "js", "jsx", "ts", "tsx", "py", "rb", "rs", "go",
+            "java", "c", "cpp", "h", "swift", "sql", "png", "jpg", "jpeg", "webp", "gif"
+          ]
+        }
+      ]
+    });
+    if (result.canceled) return controller.state().then((state) => state.attachments);
+    return controller.addAttachmentPaths(result.filePaths);
+  });
   ipcMain.handle("desktop:resolve-approval", (_event, input) =>
     controller.resolveApproval(input?.id, input?.approved)
   );
