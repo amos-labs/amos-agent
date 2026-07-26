@@ -1,5 +1,11 @@
 import { AmosMcpClient, extractMcpText } from "../mcp/amosMcpClient.js";
 import { fetchCompat } from "../util/fetchCompat.js";
+import {
+  DEFAULT_COMPANY_CACHE_TTL_SECONDS,
+  MAX_COMPANY_CACHE_TTL_SECONDS,
+  MIN_COMPANY_CACHE_TTL_SECONDS,
+  verifyCompanyCacheGrant
+} from "./companyCache.js";
 
 export class DesktopRemoteStateClient {
   constructor({ mcpUrl, oauth, requestTimeoutMs = 30_000 }, fetchImpl = fetchCompat) {
@@ -48,6 +54,84 @@ export class DesktopRemoteStateClient {
         ? payload.pending_operations.map(normalizeApproval).filter(Boolean)
         : []
     };
+  }
+
+  async companyCache({
+    identity,
+    ttlSeconds = DEFAULT_COMPANY_CACHE_TTL_SECONDS
+  } = {}) {
+    if (!identity || identity.principal_type !== "user") {
+      throw new Error("A signed-in AMOS user is required to refresh company context");
+    }
+    const ttl = Number(ttlSeconds);
+    if (
+      !Number.isSafeInteger(ttl) ||
+      ttl < MIN_COMPANY_CACHE_TTL_SECONDS ||
+      ttl > MAX_COMPANY_CACHE_TTL_SECONDS
+    ) {
+      throw new Error(
+        `Company context lifetime must be between ${MIN_COMPANY_CACHE_TTL_SECONDS} and ${MAX_COMPANY_CACHE_TTL_SECONDS} seconds`
+      );
+    }
+    const result = parseMcpJson(
+      await this.mcp.callTool("resume_company", {
+        issue_offline_cache: true,
+        cache_ttl_seconds: ttl
+      }),
+      "AMOS company cache"
+    );
+    const metadata = result?.offline_cache;
+    if (!metadata?.token) {
+      throw new Error("AMOS did not issue a signed company cache");
+    }
+    const issuer = amosOrigin(this.mcpUrl);
+    const jwks = await this.fetchJwks(issuer);
+    const claims = verifyCompanyCacheGrant({
+      token: metadata.token,
+      jwks,
+      expectedIssuer: issuer,
+      expectedIdentity: identity
+    });
+    const snapshot = { ...result };
+    delete snapshot.offline_cache;
+    if (!sameJson(snapshot, claims.snapshot)) {
+      throw new Error("AMOS company-cache envelope does not match its signed snapshot");
+    }
+    const jwk = jwks.keys.find((key) => key.kid === metadata.kid);
+    if (!jwk) throw new Error("AMOS company-cache key is missing from its live JWKS");
+    return {
+      token: metadata.token,
+      claims,
+      jwk
+    };
+  }
+
+  async fetchJwks(issuer = amosOrigin(this.mcpUrl)) {
+    const url = new URL("/.well-known/amos-app-auth/jwks.json", issuer);
+    if (url.origin !== amosOrigin(this.mcpUrl)) {
+      throw new Error("AMOS company-cache keys must share the connected server origin");
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    try {
+      const response = await this.fetch(url.toString(), {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal
+      });
+      const payload = await parseJsonResponse(response, "AMOS signing keys");
+      if (!response.ok || !Array.isArray(payload.keys)) {
+        throw new Error(
+          payload.error || `AMOS signing-key request failed with ${response.status}`
+        );
+      }
+      return payload;
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("AMOS signing-key request timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async fetchApprovals(token) {
@@ -138,4 +222,20 @@ async function parseJsonResponse(response, label) {
   } catch {
     throw new Error(`${label} returned an invalid response (${response.status})`);
   }
+}
+
+function sameJson(left, right) {
+  return JSON.stringify(canonicalJson(left)) === JSON.stringify(canonicalJson(right));
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalJson(value[key])])
+    );
+  }
+  return value;
 }

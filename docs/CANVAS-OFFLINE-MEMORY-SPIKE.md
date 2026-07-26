@@ -244,8 +244,8 @@ architecture.
   forget controls.
 
 The Phase 1 contract and first private-memory slice landed in AMOS Desktop
-0.5.0. Portable private archive transfer and fork lineage land in 0.8.0;
-governed company-cache reconciliation remains later Phase 4 work.
+0.5.0. Portable private archive transfer and fork lineage landed in 0.8.0.
+The separately authorized read-only company briefing lands in 0.9.0.
 
 ### Phase 2 — canvas
 
@@ -266,12 +266,15 @@ enforce current identity, scope, expiry, and revocation.
   explicit storage removal, and local runner discovery.
 - [x] Explicit local-only indicator and a physically reduced tool registry with
   no AMOS or public-web tools.
-- [ ] Bounded company-cache retrieval with server-issued identity, scope,
+- [x] Bounded company-cache retrieval with server-issued identity, scope,
   expiry, provenance, and revocation controls.
 
-The first Phase 3 slice lands in AMOS Desktop 0.7.0. It is immediately useful
+The first Phase 3 slice landed in AMOS Desktop 0.7.0. It is immediately useful
 for local workspaces, explicitly attached private memory, and local canvases.
-It intentionally does not create an offline copy of company data yet.
+AMOS Desktop 0.9.0 completes this phase with an explicit, encrypted,
+server-signed, read-only copy of the bounded company briefing. The local
+runtime receives only a sectioned read tool; it still receives no live AMOS or
+public-web tools.
 
 ### Phase 4 — portable and forkable work
 

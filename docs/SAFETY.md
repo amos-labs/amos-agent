@@ -118,6 +118,13 @@ is blocked, and approval synchronization is paused. The UI continuously labels
 the mode and the local model in use. This is stronger than relying on a prompt
 to tell a model that the network is unavailable.
 
+AMOS Desktop 0.9 may add one offline company-context tool only after the user
+explicitly captures a valid server-signed briefing. The tool is read-only,
+sectioned, provenance-first, and unavailable after expiry. The stored grant is
+encrypted with operating-system protection, contains no credentials, and
+cannot call, approve, or replay any AMOS operation. Reconnect revalidates it
+against live identity and signing keys before continued use.
+
 ## Advanced environment controls
 
 ```bash

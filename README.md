@@ -54,6 +54,7 @@ AMOS managed platform
 - Explicit **Use for this task**, **Keep in private memory**, or **Add to company memory** handling
 - Keychain-protected private memory with reuse, promotion, and permanent forget controls
 - Passphrase-encrypted `.amos-memory` export/import with preview, tamper detection, deduplication, and fork lineage
+- Explicit four-hour, server-signed company briefings for read-only offline work
 - Typed company canvases for metrics, tables, trends, briefs, evidence, approvals, and receipts
 - Local workspace grants, search, reads, Git status/diff, and atomic patches
 - Approval-gated shell commands and file changes
@@ -100,6 +101,13 @@ progress, supports explicit removal, and can activate a visibly separate
 local-only operating mode. In that mode AMOS and public-web tools are not
 exposed to the model. Desktop follows the Mac's light or dark appearance by
 default, with an immediate header switch and persistent overrides.
+
+AMOS Desktop 0.9 adds an explicit offline company-context grant. While online,
+a signed-in user can ask AMOS for a short-lived, server-signed copy of the
+already bounded `resume_company` briefing. Desktop verifies the signature and
+current identity, encrypts the grant with operating-system protection, and
+exposes one read-only tool in local-only mode. It never carries credentials,
+write authority, approvals, or permission to replay work.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 
@@ -200,6 +208,7 @@ as the AMOS platform grows.
 - [Intelligence and infrastructure profiles](docs/INTELLIGENCE_PROVIDERS.md)
 - [Safety model](docs/SAFETY.md)
 - [Memory classes and private-memory controls](docs/MEMORY.md)
+- [Signed offline company context](docs/OFFLINE_COMPANY_CONTEXT.md)
 - [Typed company canvas](docs/CANVAS.md)
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Contributing](CONTRIBUTING.md)

@@ -1,10 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import {
   approvalReviewUrl,
   DesktopRemoteStateClient,
   parseMcpJson
 } from "../src/desktop/remoteState.js";
+import {
+  COMPANY_CACHE_AUDIENCE,
+  COMPANY_CACHE_FORMAT,
+  COMPANY_CACHE_TOKEN_TYPE,
+  COMPANY_CACHE_VERSION
+} from "../src/desktop/companyCache.js";
 
 function response(status, payload) {
   return {
@@ -114,3 +121,98 @@ test("MCP identity parsing fails closed on malformed content", () => {
     /invalid response/
   );
 });
+
+test("Desktop requests, verifies, and binds the exact signed company snapshot", async () => {
+  const signed = signedCompanyCache();
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "user-token"; } }
+    },
+    async (url) => {
+      assert.equal(
+        String(url),
+        "https://app.amoslabs.com/.well-known/amos-app-auth/jwks.json"
+      );
+      return response(200, { keys: [signed.jwk] });
+    }
+  );
+  let requested;
+  client.mcp.callTool = async (name, args) => {
+    requested = { name, args };
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          ...signed.claims.snapshot,
+          offline_cache: {
+            token: signed.token,
+            kid: signed.jwk.kid
+          }
+        })
+      }]
+    };
+  };
+
+  const grant = await client.companyCache({
+    identity: {
+      sub: "user-1",
+      tenant_id: "tenant-1",
+      principal_type: "user"
+    }
+  });
+  assert.equal(requested.name, "resume_company");
+  assert.equal(requested.args.issue_offline_cache, true);
+  assert.equal(requested.args.cache_ttl_seconds, 14_400);
+  assert.equal(grant.claims.snapshot.company_state.name, "Northwind Labs");
+  assert.equal(grant.jwk.kid, "desktop-cache-test");
+});
+
+function signedCompanyCache() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const jwk = {
+    ...publicKey.export({ format: "jwk" }),
+    kid: "desktop-cache-test",
+    use: "sig",
+    alg: "EdDSA"
+  };
+  const now = Math.floor(Date.now() / 1000);
+  const claims = {
+    cache_format: COMPANY_CACHE_FORMAT,
+    cache_version: COMPANY_CACHE_VERSION,
+    cache_id: "cache-test",
+    iss: "https://app.amoslabs.com",
+    aud: COMPANY_CACHE_AUDIENCE,
+    sub: "user-1",
+    tenant_id: "tenant-1",
+    tenant_slug: "northwind",
+    role: "owner",
+    principal_type: "user",
+    scopes: ["data:read"],
+    scope_fingerprint: createHash("sha256").update("data:read").digest("hex"),
+    iat: now,
+    nbf: now,
+    exp: now + 14_400,
+    snapshot: {
+      resume_version: "1",
+      generated_at: new Date(now * 1000).toISOString(),
+      company_state: { status: "available", name: "Northwind Labs" }
+    }
+  };
+  const encodedHeader = Buffer.from(JSON.stringify({
+    alg: "EdDSA",
+    typ: COMPANY_CACHE_TOKEN_TYPE,
+    kid: jwk.kid
+  })).toString("base64url");
+  const encodedClaims = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = sign(
+    null,
+    Buffer.from(`${encodedHeader}.${encodedClaims}`, "ascii"),
+    privateKey
+  ).toString("base64url");
+  return {
+    claims,
+    jwk,
+    token: `${encodedHeader}.${encodedClaims}.${signature}`
+  };
+}
