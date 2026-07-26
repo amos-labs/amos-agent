@@ -62,14 +62,16 @@ export function createBashTool() {
         cwd,
         bashPath: context.config.safety.bashPath,
         timeoutMs,
-        maxOutputBytes: context.config.safety.maxOutputBytes
+        maxOutputBytes: context.config.safety.maxOutputBytes,
+        signal: context.signal
       });
     }
   };
 }
 
-export function runBash(command, { cwd, bashPath, timeoutMs, maxOutputBytes }) {
+export function runBash(command, { cwd, bashPath, timeoutMs, maxOutputBytes, signal = null }) {
   return new Promise((resolve) => {
+    const abortSignal = signal;
     const boundedTimeoutMs = boundedNumber(timeoutMs, 60_000, 100, 600_000);
     const boundedOutputBytes = boundedNumber(maxOutputBytes, 24_000, 1_024, 1_048_576);
     const child = spawn(bashPath, ["-lc", command], {
@@ -82,6 +84,7 @@ export function runBash(command, { cwd, bashPath, timeoutMs, maxOutputBytes }) {
     const stdout = boundedCollector(boundedOutputBytes);
     const stderr = boundedCollector(boundedOutputBytes);
     let timedOut = false;
+    let canceled = false;
     let settled = false;
     let killTimer;
 
@@ -92,6 +95,14 @@ export function runBash(command, { cwd, bashPath, timeoutMs, maxOutputBytes }) {
       killTimer.unref?.();
     }, boundedTimeoutMs);
     timer.unref?.();
+    const abort = () => {
+      canceled = true;
+      killProcessTree(child, "SIGTERM");
+      killTimer = setTimeout(() => killProcessTree(child, "SIGKILL"), 500);
+      killTimer.unref?.();
+    };
+    if (abortSignal?.aborted) abort();
+    else abortSignal?.addEventListener("abort", abort, { once: true });
 
     child.stdout.on("data", (chunk) => {
       stdout.add(chunk);
@@ -110,12 +121,13 @@ export function runBash(command, { cwd, bashPath, timeoutMs, maxOutputBytes }) {
       });
     });
 
-    child.on("close", (code, signal) => {
+    child.on("close", (code, processSignal) => {
       finish({
-        ok: code === 0 && !timedOut,
+        ok: code === 0 && !timedOut && !canceled,
         exit_code: code,
-        signal,
+        signal: processSignal,
         timed_out: timedOut,
+        canceled,
         cwd,
         stdout: stdout.text(),
         stderr: stderr.text()
@@ -127,6 +139,7 @@ export function runBash(command, { cwd, bashPath, timeoutMs, maxOutputBytes }) {
       settled = true;
       clearTimeout(timer);
       clearTimeout(killTimer);
+      abortSignal?.removeEventListener("abort", abort);
       resolve(result);
     }
   });

@@ -33,6 +33,7 @@ AMOS managed platform
 - local files, repository inspection, patches, and shell execution;
 - task-local documents, screenshots, and extracted content;
 - transient session transcript and local activity;
+- streamed model output, active-task cancellation, and encrypted restart checkpoints;
 - OAuth 2.1 + PKCE client and automatic token refresh;
 - compact MCP bootstrap and on-demand AMOS engine loading; and
 - native approval and update notifications.
@@ -74,6 +75,11 @@ observe-and-draft mode.
 Complete assistant messages are preserved between tool turns because reasoning
 models may return structured fields in addition to visible content.
 
+When supported by the configured OpenAI-compatible endpoint, Desktop consumes
+SSE deltas and incrementally assembles both visible text and structured tool
+calls. One task-level abort signal is linked to the model request, AMOS MCP
+requests, public web requests, and spawned local process trees.
+
 ## Desktop process boundary
 
 The Electron renderer:
@@ -89,6 +95,34 @@ encrypted through Electron `safeStorage` before being written to disk.
 
 The model never receives raw OAuth refresh tokens, integration credentials, or
 the unrestricted child-process environment.
+
+## Durable task boundary
+
+Interactive, personally authenticated company tasks create an encrypted local
+checkpoint before model work begins. The checkpoint stores the human objective,
+attachment names, high-level completed tool names, bounded partial response,
+and fingerprints of the current `resume_company` sections. It never stores tool
+arguments, provider credentials, OAuth tokens, or authority to replay work.
+
+A completed task removes its checkpoint. A crash or normal restart converts a
+still-running checkpoint to **interrupted**. Cancellation and failures retain a
+reviewable checkpoint.
+
+Resume is deliberately a reauthorization sequence:
+
+```text
+user chooses Revalidate & resume
+  -> fresh personal whoami
+  -> exact subject + tenant pin check
+  -> fresh resume_company section fingerprints
+  -> fresh approval queue
+  -> show drift and prepare no-replay continuation
+  -> user reviews and explicitly presses Run
+```
+
+The continuation tells the model to inspect current authoritative sources,
+receipts, and approvals, and never infer that a side effect completed merely
+because the checkpoint mentions it.
 
 ## Universal input
 

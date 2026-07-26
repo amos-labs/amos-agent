@@ -25,6 +25,11 @@ import {
   reconciliationIsFresh
 } from "./offlineProposal.js";
 import {
+  buildTaskResumePrompt,
+  onlineTaskSource,
+  reconcileTaskCheckpoint
+} from "./taskCheckpoint.js";
+import {
   amosOrigin,
   approvalReviewUrl,
   DesktopRemoteStateClient
@@ -33,6 +38,7 @@ import { createCanvasTool } from "../tools/canvas.js";
 import { createCompanyCacheTool } from "../tools/companyCache.js";
 import { createOfflineProposalTool } from "../tools/offlineProposal.js";
 import { OFFLINE_SYSTEM_PROMPT } from "../prompts.js";
+import { createAbortError, isAbortError } from "../util/abort.js";
 
 export class DesktopController {
   constructor({
@@ -41,6 +47,7 @@ export class DesktopController {
     privateMemoryStore = null,
     companyCacheStore = null,
     offlineProposalStore = null,
+    taskCheckpointStore = null,
     offlineManager = null,
     openBrowser,
     emit,
@@ -68,6 +75,9 @@ export class DesktopController {
     this.companyCacheStore = companyCacheStore;
     this.companyCacheRevalidatedFor = null;
     this.offlineProposalStore = offlineProposalStore;
+    this.taskCheckpointStore = taskCheckpointStore;
+    this.activeTask = null;
+    this.checkpointWrites = Promise.resolve();
     this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
     this.approvals = new DesktopApprovalBridge({
@@ -103,7 +113,16 @@ export class DesktopController {
       memoryClasses: Object.values(MEMORY_CLASSES),
       privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
       companyCache: await this.companyCacheState(),
-      offlineProposals: await this.offlineProposalState()
+      offlineProposals: await this.offlineProposalState(),
+      taskCheckpoints: await this.taskCheckpointState(),
+      activeTask: this.activeTask
+        ? {
+            id: this.activeTask.id,
+            startedAt: this.activeTask.startedAt,
+            phase: this.activeTask.phase,
+            summary: this.activeTask.summary
+          }
+        : null
     };
   }
 
@@ -301,6 +320,66 @@ export class DesktopController {
     });
     await this.sendOfflineProposals();
     return { offlineProposals: await this.offlineProposalState() };
+  }
+
+  async initializeTaskCheckpoints() {
+    if (!this.taskCheckpointStore) return [];
+    const checkpoints = await this.taskCheckpointStore.initialize();
+    this.send("task-checkpoints:changed", checkpoints);
+    return checkpoints;
+  }
+
+  async prepareTaskCheckpoint(id) {
+    if (this.activeTask) {
+      throw new Error("Wait for the current task to finish before resuming another one");
+    }
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "resuming interrupted work");
+    const checkpoint = await this.requireTaskCheckpointStore().get(id);
+    const [identity, snapshot, approvalState] = await Promise.all([
+      remote.identity(),
+      remote.companySnapshot(),
+      remote.approvals()
+    ]);
+    const reconciliation = reconcileTaskCheckpoint({
+      checkpoint,
+      identity,
+      snapshot,
+      approvals: approvalState.pending_operations
+    });
+    const saved = await this.requireTaskCheckpointStore().update(id, {
+      reconciliation,
+      phase: "revalidated",
+      summary: "Revalidated against the current user, company, and approval queue"
+    });
+    this.identity = identity;
+    this.record("task", `Revalidated interrupted task: ${saved.title}`, {
+      task_id: saved.id,
+      changed_sections: reconciliation.changedSections,
+      pending_approvals: reconciliation.pendingApprovalCount,
+      execution_started: false,
+      replay_allowed: false
+    });
+    await this.sendTaskCheckpoints();
+    return {
+      checkpoint: saved,
+      prompt: buildTaskResumePrompt(saved),
+      executionStarted: false,
+      taskCheckpoints: await this.taskCheckpointState()
+    };
+  }
+
+  async removeTaskCheckpoint(id) {
+    if (this.activeTask?.id === id) {
+      throw new Error("Cancel the running task before removing its checkpoint");
+    }
+    const store = this.requireTaskCheckpointStore();
+    const checkpoint = await store.get(id);
+    await store.remove(id);
+    this.record("task", `Removed interrupted task: ${checkpoint.title}`, {
+      task_id: checkpoint.id
+    });
+    return { taskCheckpoints: await this.sendTaskCheckpoints() };
   }
 
   async chooseWorkspace(path) {
@@ -618,44 +697,94 @@ export class DesktopController {
   }
 
   async run(input) {
+    if (this.activeTask) throw new Error("AMOS is already running a task");
     const references = Array.isArray(input?.attachments) ? input.attachments : [];
     const requestedPrompt = typeof input === "string" ? input : input?.text;
+    const resumeTaskId =
+      typeof input === "object" && input?.resumeTaskId
+        ? String(input.resumeTaskId).trim().slice(0, 128)
+        : null;
     const prompt = String(requestedPrompt || "").trim() ||
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
+    const taskId = randomUUID();
+    const abortController = new AbortController();
+    this.activeTask = {
+      id: taskId,
+      abortController,
+      startedAt: new Date().toISOString(),
+      phase: "starting",
+      summary: "Preparing the task",
+      checkpointed: false
+    };
+    this.send("agent:status", {
+      running: true,
+      taskId,
+      phase: "starting",
+      summary: "Preparing the task"
+    });
     const settings = await this.settingsStore.read();
     const offline = settings.operatingMode === "offline";
-    const { config, runtime } = await this.getRuntime({
-      requireAmos: !offline,
-      offline
-    });
-    if (offline && references.some((reference) => reference?.retention === "company")) {
-      throw new Error(
-        "Company memory is unavailable in local-only mode. Use this task only, keep it private, or return online."
-      );
-    }
-    const memory = [
-      ...await this.persistPrivateMemory(references),
-      ...(offline ? [] : await this.persistCompanyMemory(references, runtime, config))
-    ];
-    const modelContent = this.attachments.buildMessageContent(
-      prompt,
-      references,
-      config.model.capabilities
-    );
-    this.record("user", prompt);
-    this.send("agent:status", { running: true });
     try {
+      const { config, runtime } = await this.getRuntime({
+        requireAmos: !offline,
+        offline
+      });
+      if (offline && references.some((reference) => reference?.retention === "company")) {
+        throw new Error(
+          "Company memory is unavailable in local-only mode. Use this task only, keep it private, or return online."
+        );
+      }
+      if (!offline) {
+        await this.startOnlineTaskCheckpoint({
+          id: taskId,
+          prompt,
+          references,
+          settings,
+          resumeTaskId
+        });
+      }
+      const memory = [
+        ...await this.persistPrivateMemory(references),
+        ...(offline
+          ? []
+          : await this.persistCompanyMemory(
+              references,
+              runtime,
+              config,
+              abortController.signal
+            ))
+      ];
+      const modelContent = this.attachments.buildMessageContent(
+        prompt,
+        references,
+        config.model.capabilities
+      );
+      this.record("user", prompt);
       const answer = await runtime.loop.run(modelContent, {
+        signal: abortController.signal,
         onEvent: (event) => {
           const safeEvent = sanitizeAgentEvent(event);
-          this.record("tool", toolEventSummary(safeEvent), safeEvent);
           this.send("agent:event", safeEvent);
+          if (safeEvent.type !== "assistant_delta") {
+            this.record(
+              safeEvent.type === "phase" ? "task" : "tool",
+              toolEventSummary(safeEvent),
+              safeEvent
+            );
+          }
+          this.captureTaskProgress(safeEvent);
         }
       });
+      await this.checkpointWrites.catch(() => {});
+      if (this.activeTask?.checkpointed) {
+        await this.requireTaskCheckpointStore().remove(taskId);
+        await this.sendTaskCheckpoints();
+      }
       this.record("assistant", answer);
       return {
         answer,
+        taskId,
         activity: this.activity.slice(-100),
         attachments: this.attachments.list(),
         ...this.canvases.state(),
@@ -663,9 +792,56 @@ export class DesktopController {
         privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
         offlineProposals: await this.offlineProposalState()
       };
+    } catch (error) {
+      const canceled = isAbortError(error) || abortController.signal.aborted;
+      if (this.activeTask?.checkpointed) {
+        await this.queueCheckpointUpdate(taskId, {
+          status: canceled ? "canceled" : "failed",
+          phase: canceled ? "canceled" : "failed",
+          summary: canceled
+            ? "Canceled by the user; review before continuing"
+            : `Stopped safely: ${String(error.message || "unknown error").slice(0, 500)}`
+        }).catch(() => {});
+        await this.sendTaskCheckpoints();
+      }
+      if (canceled) throw createAbortError();
+      throw error;
     } finally {
-      this.send("agent:status", { running: false });
+      if (this.activeTask?.id === taskId) this.activeTask = null;
+      this.send("agent:status", { running: false, taskId });
     }
+  }
+
+  async cancelTask(id = null) {
+    const active = this.activeTask;
+    if (!active || (id && active.id !== id)) {
+      return { canceled: false, message: "No matching AMOS task is running" };
+    }
+    active.phase = "canceling";
+    active.summary = "Stopping safely";
+    this.send("agent:event", {
+      type: "phase",
+      phase: "canceling",
+      summary: "Stopping the current model, network, and local process work"
+    });
+    this.approvals.cancelAll();
+    active.abortController.abort();
+    return { canceled: true, taskId: active.id };
+  }
+
+  async interruptActiveTask() {
+    if (!this.activeTask) return false;
+    const active = this.activeTask;
+    if (active.checkpointed) {
+      await this.queueCheckpointUpdate(active.id, {
+        status: "interrupted",
+        phase: "interrupted",
+        summary: "AMOS Desktop closed before this task finished"
+      }).catch(() => {});
+    }
+    this.approvals.cancelAll();
+    active.abortController.abort();
+    return true;
   }
 
   resolveApproval(id, approved) {
@@ -688,7 +864,7 @@ export class DesktopController {
     return { ok: true };
   }
 
-  async persistCompanyMemory(references, runtime, config) {
+  async persistCompanyMemory(references, runtime, config, signal = null) {
     const results = [];
     const seen = new Set();
     for (const reference of references) {
@@ -725,23 +901,29 @@ export class DesktopController {
                   "Prepare an accurate searchable description of this image for governed company memory."
                 )
               }
-            ]
+            ],
+            signal
           });
           imageDescription = String(described.message?.content || "").trim();
         }
 
         const payload = this.attachments.memoryPayload(item.id, imageDescription);
-        const result = await runtime.amosClient.callTool("call_engine_tool", {
-          engine: "company",
-          tool: "store_document",
-          arguments: payload
-        });
+        const result = await runtime.amosClient.callTool(
+          "call_engine_tool",
+          {
+            engine: "company",
+            tool: "store_document",
+            arguments: payload
+          },
+          { signal }
+        );
         this.attachments.markMemoryRequested(item.id, result);
         const safeResult = summarizeResult(result);
         this.record("memory", `Submitted ${item.name} to governed company memory`, safeResult);
         this.send("agent:event", { type: "tool_end", name: eventName, result: safeResult });
         results.push({ id: item.id, name: item.name, status: "requested", result: safeResult });
       } catch (error) {
+        if (signal?.aborted || isAbortError(error)) throw createAbortError();
         this.record("memory", `Could not add ${item.name} to company memory: ${error.message}`);
         this.send("agent:event", { type: "tool_error", name: eventName, error: error.message });
         results.push({ id: item.id, name: item.name, status: "failed", error: error.message });
@@ -795,21 +977,160 @@ export class DesktopController {
     }
   }
 
+  requireTaskCheckpointStore() {
+    if (!this.taskCheckpointStore) {
+      throw new Error("Task recovery is unavailable because platform encryption is not configured");
+    }
+    return this.taskCheckpointStore;
+  }
+
+  async taskCheckpointState() {
+    if (!this.taskCheckpointStore) return [];
+    try {
+      return await this.taskCheckpointStore.list();
+    } catch (error) {
+      this.record("task", `Could not read encrypted task checkpoints: ${error.message}`);
+      return [];
+    }
+  }
+
+  async sendTaskCheckpoints() {
+    const taskCheckpoints = await this.taskCheckpointState();
+    this.send("task-checkpoints:changed", taskCheckpoints);
+    return taskCheckpoints;
+  }
+
+  async startOnlineTaskCheckpoint({ id, prompt, references, settings, resumeTaskId = null }) {
+    if (!this.taskCheckpointStore) return null;
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (!shouldUseOAuth(config, credentials)) {
+      this.send("agent:event", {
+        type: "phase",
+        phase: "checkpoint_unavailable",
+        summary: "Personal AMOS sign-in is required for restart-safe company tasks"
+      });
+      return null;
+    }
+    this.activeTask.phase = "checkpointing";
+    this.activeTask.summary = "Pinning the current user and company context";
+    this.send("agent:event", {
+      type: "phase",
+      phase: "checkpointing",
+      summary: "Pinning the current user and company context"
+    });
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const signal = this.activeTask.abortController.signal;
+    const [identity, snapshot] = await Promise.all([
+      remote.identity({ signal }),
+      remote.companySnapshot({ signal })
+    ]);
+    const resumed = resumeTaskId
+      ? await this.taskCheckpointStore.get(resumeTaskId)
+      : null;
+    if (resumed) {
+      reconcileTaskCheckpoint({
+        checkpoint: resumed,
+        identity,
+        snapshot,
+        approvals: []
+      });
+    }
+    const names = references
+      .map((reference) => this.attachments.list().find((item) => item.id === reference?.id)?.name)
+      .filter(Boolean);
+    const checkpoint = await this.taskCheckpointStore.start({
+      id,
+      title: resumed?.title || null,
+      replacesId: resumed?.id || null,
+      objective: prompt,
+      attachmentNames: names,
+      source: onlineTaskSource({ identity, snapshot }),
+      mode: "online"
+    });
+    this.identity = identity;
+    this.activeTask.checkpointed = true;
+    this.activeTask.phase = "thinking";
+    this.activeTask.summary = "Checkpoint secured; beginning the task";
+    this.activeTask.lastCheckpointAt = Date.now();
+    this.activeTask.partialLength = 0;
+    this.send("task-checkpoints:changed", await this.taskCheckpointStore.list());
+    this.send("agent:event", {
+      type: "phase",
+      phase: "checkpointed",
+      summary: "Restart-safe checkpoint encrypted on this computer"
+    });
+    return checkpoint;
+  }
+
+  captureTaskProgress(event) {
+    const active = this.activeTask;
+    if (!active?.checkpointed) return;
+    if (event.type === "assistant_delta") {
+      const text = String(event.text || "");
+      const elapsed = Date.now() - Number(active.lastCheckpointAt || 0);
+      if (text.length - Number(active.partialLength || 0) < 500 && elapsed < 2_000) return;
+      active.lastCheckpointAt = Date.now();
+      active.partialLength = text.length;
+      this.queueCheckpointUpdate(active.id, {
+        partialResponse: text,
+        phase: "responding",
+        summary: "Producing a response"
+      });
+      return;
+    }
+    if (event.type === "phase") {
+      active.phase = event.phase;
+      active.summary = event.summary;
+      this.queueCheckpointUpdate(active.id, {
+        phase: event.phase,
+        summary: event.summary
+      });
+      return;
+    }
+    if (event.type === "tool_end") {
+      this.queueCheckpointUpdate(active.id, {
+        phase: "acting",
+        summary: `Completed ${event.name}`,
+        completedStep: `Completed ${event.name}`
+      });
+    } else if (event.type === "tool_error") {
+      this.queueCheckpointUpdate(active.id, {
+        phase: "evaluating",
+        summary: `${event.name} returned an error; AMOS was evaluating the next safe step`,
+        completedStep: `${event.name} did not complete`
+      });
+    }
+  }
+
+  queueCheckpointUpdate(id, input) {
+    if (!this.taskCheckpointStore) return Promise.resolve(null);
+    this.checkpointWrites = this.checkpointWrites
+      .catch(() => null)
+      .then(() => this.taskCheckpointStore.update(id, input));
+    return this.checkpointWrites;
+  }
+
   async sendOfflineProposals() {
     const offlineProposals = await this.offlineProposalState();
     this.send("offline-proposals:changed", offlineProposals);
     return offlineProposals;
   }
 
-  async personalRemote(settings) {
+  async personalRemote(settings, purpose = "continuing an offline draft") {
     if (settings.operatingMode === "offline") {
-      throw new Error("Return to online company mode before comparing an offline draft");
+      throw new Error(`Return to online company mode before ${purpose}`);
     }
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
     if (!shouldUseOAuth(config, credentials)) {
-      throw new Error("Connect AMOS with your personal sign-in before continuing an offline draft");
+      throw new Error(`Connect AMOS with your personal sign-in before ${purpose}`);
     }
     return new DesktopRemoteStateClient({
       mcpUrl: settings.amosMcpUrl,
@@ -1130,6 +1451,22 @@ function runtimeSettingsChanged(previous, next) {
 }
 
 function sanitizeAgentEvent(event) {
+  if (event.type === "assistant_delta") {
+    return {
+      type: event.type,
+      turn: Number(event.turn || 0),
+      delta: String(event.delta || ""),
+      text: String(event.text || "")
+    };
+  }
+  if (event.type === "phase") {
+    return {
+      type: event.type,
+      phase: String(event.phase || "working").slice(0, 80),
+      turn: Number(event.turn || 0),
+      summary: String(event.summary || "Working").slice(0, 500)
+    };
+  }
   if (event.type === "tool_start") {
     return { type: event.type, name: event.name, args: event.args };
   }
@@ -1145,11 +1482,14 @@ function sanitizeAgentEvent(event) {
 
 function summarizeResult(result) {
   const encoded = JSON.stringify(result);
+  if (encoded === undefined) return null;
   if (encoded.length <= 4000) return result;
   return { truncated: true, preview: encoded.slice(0, 4000) };
 }
 
 function toolEventSummary(event) {
+  if (event.type === "phase") return event.summary || `Task ${event.phase}`;
+  if (event.type === "assistant_delta") return "Streaming response";
   if (event.type === "tool_start") return `Started ${event.name}`;
   if (event.type === "tool_error") return `${event.name} failed: ${event.error}`;
   return `Completed ${event.name}`;

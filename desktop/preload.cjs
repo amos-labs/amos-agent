@@ -8,6 +8,7 @@ const eventChannels = new Set([
   "canvas:changed",
   "offline:changed",
   "offline-proposals:changed",
+  "task-checkpoints:changed",
   "remote:changed",
   "auth:browser",
   "update:changed"
@@ -31,10 +32,15 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:prepare-offline-proposal", id),
   removeOfflineProposal: (id) =>
     ipcRenderer.invoke("desktop:remove-offline-proposal", id),
+  prepareTaskCheckpoint: (id) =>
+    ipcRenderer.invoke("desktop:prepare-task-checkpoint", id),
+  removeTaskCheckpoint: (id) =>
+    ipcRenderer.invoke("desktop:remove-task-checkpoint", id),
   installOfflineModel: (id) => ipcRenderer.invoke("desktop:install-offline-model", id),
   removeOfflineModel: (id) => ipcRenderer.invoke("desktop:remove-offline-model", id),
   activateOfflineModel: (id) => ipcRenderer.invoke("desktop:activate-offline-model", id),
   run: (input) => ipcRenderer.invoke("desktop:run", input),
+  cancelTask: (id) => ipcRenderer.invoke("desktop:cancel-task", id),
   clear: () => ipcRenderer.invoke("desktop:clear"),
   removeCanvas: (id) => ipcRenderer.invoke("desktop:remove-canvas", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),

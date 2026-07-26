@@ -50,7 +50,8 @@ export function createCodingTools() {
         return runProgram("git", ["status", "--short", "--branch"], {
           cwd: context.config.safety.workspaceRoot,
           timeoutMs: 15_000,
-          maxOutputBytes: context.config.safety.maxOutputBytes
+          maxOutputBytes: context.config.safety.maxOutputBytes,
+          signal: context.signal
         });
       }
     },
@@ -80,7 +81,8 @@ export function createCodingTools() {
         return runProgram("git", command, {
           cwd: root,
           timeoutMs: 15_000,
-          maxOutputBytes: context.config.safety.maxOutputBytes
+          maxOutputBytes: context.config.safety.maxOutputBytes,
+          signal: context.signal
         });
       }
     },
@@ -115,7 +117,8 @@ export function createCodingTools() {
           cwd: root,
           input: patch,
           timeoutMs: 20_000,
-          maxOutputBytes: context.config.safety.maxOutputBytes
+          maxOutputBytes: context.config.safety.maxOutputBytes,
+          signal: context.signal
         });
         if (!checked.ok) return { ...checked, phase: "check", files: paths };
 
@@ -136,7 +139,8 @@ export function createCodingTools() {
           cwd: root,
           input: patch,
           timeoutMs: 20_000,
-          maxOutputBytes: context.config.safety.maxOutputBytes
+          maxOutputBytes: context.config.safety.maxOutputBytes,
+          signal: context.signal
         });
         return { ...applied, phase: "apply", files: paths };
       }
@@ -201,7 +205,7 @@ async function searchFile(path, root, query, caseSensitive, matches, maxResults)
   }
 }
 
-function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes }) {
+function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes, signal = null }) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
@@ -211,12 +215,19 @@ function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes 
     let stdout = Buffer.alloc(0);
     let stderr = Buffer.alloc(0);
     let timedOut = false;
+    let canceled = false;
     let settled = false;
     const limit = boundedNumber(maxOutputBytes, 24_000, 1_024, 1_048_576);
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGKILL");
     }, boundedNumber(timeoutMs, 15_000, 100, 600_000));
+    const abort = () => {
+      canceled = true;
+      child.kill("SIGKILL");
+    };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
 
     child.stdout.on("data", (chunk) => {
       stdout = Buffer.concat([stdout, Buffer.from(chunk)]).subarray(0, limit);
@@ -226,10 +237,11 @@ function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes 
     });
     child.on("error", (error) => finish({ ok: false, error: error.message }));
     child.on("close", (code, signal) => finish({
-      ok: code === 0 && !timedOut,
+      ok: code === 0 && !timedOut && !canceled,
       exit_code: code,
       signal,
       timed_out: timedOut,
+      canceled,
       stdout: stdout.toString("utf8"),
       stderr: stderr.toString("utf8")
     }));
@@ -239,6 +251,7 @@ function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes 
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener("abort", abort);
       resolve(result);
     }
   });

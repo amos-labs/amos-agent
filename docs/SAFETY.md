@@ -23,6 +23,8 @@ The core rules are:
 - File writes and patches require approval by default.
 - Shell commands require approval by default.
 - Command timeouts terminate the full process group.
+- User cancellation terminates the active process group and propagates to model,
+  MCP, and web requests.
 
 ## Child-process environment
 
@@ -93,6 +95,24 @@ Production updates come only from the configured signed release feed.
 - Downloads require explicit user action.
 - Restart/install requires explicit user action.
 - Active work blocks restart.
+
+## Restart-safe tasks
+
+Signed-in company tasks are checkpointed with operating-system encryption.
+Checkpoints contain the objective and bounded progress descriptions, but never
+provider credentials, OAuth tokens, raw tool arguments, or automatic replay
+authority.
+
+After restart, cancellation, or failure, continuation requires:
+
+- the same personal AMOS subject and tenant;
+- a fresh company briefing and section-drift comparison;
+- a fresh approval-queue read; and
+- an explicit user action to load and then submit the continuation.
+
+Existing receipts remain the source of truth for whether an action completed.
+The resume prompt directs the model not to repeat an action unless current
+evidence shows that it remains necessary.
 
 ## Offline and memory roadmap
 

@@ -6,6 +6,7 @@ import {
   MIN_COMPANY_CACHE_TTL_SECONDS,
   verifyCompanyCacheGrant
 } from "./companyCache.js";
+import { createAbortError, linkAbortSignal } from "../util/abort.js";
 
 export class DesktopRemoteStateClient {
   constructor({ mcpUrl, oauth, requestTimeoutMs = 30_000 }, fetchImpl = fetchCompat) {
@@ -23,14 +24,14 @@ export class DesktopRemoteStateClient {
     );
   }
 
-  async identity() {
-    const result = await this.mcp.callTool("whoami");
+  async identity({ signal = null } = {}) {
+    const result = await this.mcp.callTool("whoami", {}, { signal });
     return parseMcpJson(result, "AMOS identity");
   }
 
-  async companySnapshot() {
+  async companySnapshot({ signal = null } = {}) {
     const snapshot = parseMcpJson(
-      await this.mcp.callTool("resume_company", {}),
+      await this.mcp.callTool("resume_company", {}, { signal }),
       "AMOS company briefing"
     );
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
@@ -41,12 +42,12 @@ export class DesktopRemoteStateClient {
     return current;
   }
 
-  async approvals() {
+  async approvals({ signal = null } = {}) {
     let token = await this.oauth.getAccessToken();
-    let response = await this.fetchApprovals(token);
+    let response = await this.fetchApprovals(token, { signal });
     if (response.status === 401) {
       token = await this.oauth.getAccessToken({ forceRefresh: true });
-      response = await this.fetchApprovals(token);
+      response = await this.fetchApprovals(token, { signal });
     }
 
     const payload = await parseJsonResponse(response, "AMOS approvals");
@@ -147,9 +148,10 @@ export class DesktopRemoteStateClient {
     }
   }
 
-  async fetchApprovals(token) {
+  async fetchApprovals(token, { signal = null } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const unlink = linkAbortSignal(signal, controller);
     try {
       return await this.fetch(`${amosOrigin(this.mcpUrl)}/api/v1/approvals`, {
         method: "GET",
@@ -160,10 +162,12 @@ export class DesktopRemoteStateClient {
         signal: controller.signal
       });
     } catch (error) {
+      if (signal?.aborted) throw createAbortError();
       if (error.name === "AbortError") throw new Error("AMOS approvals request timed out");
       throw error;
     } finally {
       clearTimeout(timer);
+      unlink();
     }
   }
 }
