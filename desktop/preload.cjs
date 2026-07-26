@@ -6,7 +6,8 @@ const eventChannels = new Set([
   "approval:requested",
   "activity:changed",
   "remote:changed",
-  "auth:browser"
+  "auth:browser",
+  "update:changed"
 ]);
 
 contextBridge.exposeInMainWorld("amosDesktop", {
@@ -26,6 +27,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   pathForFile: (file) => webUtils.getPathForFile(file),
   chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
   openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),
+  updateState: () => ipcRenderer.invoke("desktop:update-state"),
+  checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),
+  downloadUpdate: () => ipcRenderer.invoke("desktop:download-update"),
+  installUpdate: () => ipcRenderer.invoke("desktop:install-update"),
   resolveApproval: (id, approved) =>
     ipcRenderer.invoke("desktop:resolve-approval", { id, approved }),
   on(channel, callback) {

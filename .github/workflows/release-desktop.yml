@@ -62,10 +62,17 @@ jobs:
             dist/AMOS-Desktop-macOS-x64.dmg
             dist/AMOS-Desktop-macOS-arm64.zip
             dist/AMOS-Desktop-macOS-x64.zip
+            dist/AMOS-Desktop-macOS-arm64.zip.blockmap
+            dist/AMOS-Desktop-macOS-x64.zip.blockmap
+            dist/latest-mac.yml
           )
           for asset in "${required[@]}"; do
             test -s "$asset" || { echo "::error::Missing release asset: $asset"; exit 1; }
           done
+          grep -q "AMOS-Desktop-macOS-arm64.zip" dist/latest-mac.yml ||
+            { echo "::error::Update metadata is missing the Apple Silicon ZIP"; exit 1; }
+          grep -q "AMOS-Desktop-macOS-x64.zip" dist/latest-mac.yml ||
+            { echo "::error::Update metadata is missing the Intel ZIP"; exit 1; }
           (
             cd dist
             shasum -a 256 \
@@ -73,6 +80,9 @@ jobs:
               AMOS-Desktop-macOS-x64.dmg \
               AMOS-Desktop-macOS-arm64.zip \
               AMOS-Desktop-macOS-x64.zip \
+              AMOS-Desktop-macOS-arm64.zip.blockmap \
+              AMOS-Desktop-macOS-x64.zip.blockmap \
+              latest-mac.yml \
               > SHA256SUMS.txt
           )
 
@@ -80,12 +90,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            dist/AMOS-Desktop-macOS-arm64.dmg \
-            dist/AMOS-Desktop-macOS-x64.dmg \
-            dist/AMOS-Desktop-macOS-arm64.zip \
-            dist/AMOS-Desktop-macOS-x64.zip \
-            dist/SHA256SUMS.txt \
+          assets=(
+            dist/AMOS-Desktop-macOS-arm64.dmg
+            dist/AMOS-Desktop-macOS-x64.dmg
+            dist/AMOS-Desktop-macOS-arm64.zip
+            dist/AMOS-Desktop-macOS-x64.zip
+            dist/latest-mac.yml
+            dist/SHA256SUMS.txt
+          )
+          for blockmap in dist/*.blockmap; do
+            test -e "$blockmap" && assets+=("$blockmap")
+          done
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "AMOS Desktop ${GITHUB_REF_NAME#v}" \
             --generate-notes \

@@ -17,7 +17,9 @@ macOS. It provides guided setup, AMOS OAuth, infrastructure selection, local
 workspace grants, human approval prompts, live work visibility, and activity
 history. Its universal composer accepts documents, source files, dragged files,
 and pasted screenshots. Each attachment stays task-local unless the user
-explicitly promotes it into governed AMOS company memory.
+explicitly promotes it into governed AMOS company memory. Signed releases check
+for updates in the background, notify the user, and install only after an
+explicit download and restart decision.
 
 ```bash
 npm install
@@ -32,6 +34,10 @@ npm run desktop:dir
 
 Release builds require an Apple Developer ID, hardened runtime, signing, and
 notarization. See [docs/DESKTOP.md](docs/DESKTOP.md).
+
+The proposed architecture for typed company-data canvases, private/offline
+memory, portable memory capsules, and curated small local models is in
+[docs/CANVAS-OFFLINE-MEMORY-SPIKE.md](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md).
 
 ## CLI runtime
 
