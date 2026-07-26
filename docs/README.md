@@ -1,0 +1,19 @@
+# AMOS Desktop documentation
+
+## Start here
+
+- [Desktop product, installation, and releases](DESKTOP.md)
+- [Architecture and trust boundaries](ARCHITECTURE.md)
+- [Authentication and identity](AUTHENTICATION.md)
+- [Intelligence and infrastructure profiles](INTELLIGENCE_PROVIDERS.md)
+- [Safety model](SAFETY.md)
+
+## Product direction
+
+- [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)
+
+## Repository policies
+
+- [Contributing](../CONTRIBUTING.md)
+- [Security](../SECURITY.md)
+- [License](../LICENSE)

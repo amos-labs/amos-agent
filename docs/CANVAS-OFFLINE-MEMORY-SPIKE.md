@@ -210,9 +210,14 @@ It must clearly label offline answers and the age of cached company context.
 
 ### Phase 0 — distribution foundation
 
-- Signed in-app update checks.
-- Explicit download and restart/install.
-- Windows-safe updater abstraction.
+- [x] Signed macOS in-app update checks.
+- [x] Explicit download and restart/install.
+- [x] Platform-neutral updater state and UI abstraction.
+- [ ] Signed Windows packaging and release-feed validation.
+
+The first three items landed in AMOS Desktop 0.4.0. Windows packaging remains a
+distribution project; it does not require a different canvas, memory, or offline
+architecture.
 
 ### Phase 1 — memory contract
 

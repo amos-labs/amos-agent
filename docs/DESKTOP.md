@@ -1,81 +1,143 @@
 # AMOS Desktop
 
-AMOS Desktop is the user-friendly distribution of the open-source AMOS Agent.
-It is an operator console, not a replacement for the managed platform and not a
-revival of the deprecated hosted harness.
+AMOS Desktop is the native distribution of the open-source AMOS Agent. It gives
+people a focused way to use their chosen intelligence with the governed AMOS
+company brain and an explicitly granted local workspace.
 
-## Alpha capabilities
+The desktop application is the primary user experience. The CLI remains
+available for developers, CI, and controlled automation.
 
-- macOS desktop shell
-- AMOS OAuth 2.1 + PKCE
-- signed-in user, company, role, and effective-scope identity
-- provider and infrastructure selection
-- hardware-aware local-model guidance
-- local workspace picker
-- document and source-file upload with local PDF/DOCX/text extraction
-- drag-and-drop attachments and pasted screenshots
-- explicit per-attachment choice between task-local use and governed company memory
-- vision-capability enforcement before an image reaches a model
-- repository search, git inspection, and approval-gated atomic patches
-- real AMOS Agent task loop
-- live tool activity
-- local shell and write approval modal
-- direct link to the durable AMOS approval inbox
-- tenant-scoped decision inbox with 30-second background refresh
-- native approval notifications and a persistent menu-bar/system-tray surface
-- one-click, session-authenticated approval review (the AI remains unable to approve itself)
-- signed update checks on launch and every six hours
-- native update-available notifications with explicit download and restart/install controls
-- local session activity
-- provider secrets encrypted with operating-system-backed `safeStorage`
+## Install a release
 
-## Run locally
+Download the current signed macOS installer:
+
+- [Apple Silicon](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg)
+- [Intel](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
+
+Open the DMG and drag **AMOS Desktop** into **Applications**. Official releases
+are signed with the AMOS Labs Developer ID and notarized by Apple.
+
+## First run
+
+Desktop guides the user through three independent grants:
+
+1. **Connect the company** — browser-based AMOS OAuth identifies the user,
+   company, role, and effective scopes.
+2. **Choose intelligence** — AMOS-hosted, AWS/customer cloud, provider API,
+   compatible endpoint, or a supported local runtime.
+3. **Choose a workspace** — optional local folder that AMOS may inspect and
+   change through visible approval gates.
+
+The local workspace is not uploaded wholesale to AMOS. Attachments stay
+task-local unless the user explicitly selects **Add to company memory**.
+
+## Current capabilities
+
+### Company operation
+
+- compact AMOS MCP bootstrap and on-demand engine loading;
+- durable company context and connected application tools;
+- tenant-scoped decisions and approval center links;
+- native approval notifications;
+- activity and plain-language proof visibility; and
+- model-independent company operation.
+
+### Universal input
+
+- file picker and drag/drop;
+- pasted screenshots;
+- local PDF and DOCX extraction;
+- text, Markdown, structured data, and source files;
+- vision-capability checks before images reach a model; and
+- per-item task-local or company-memory selection.
+
+### Coding and local work
+
+- explicit workspace grant;
+- bounded file listing, reading, writing, and search;
+- Git status and diff;
+- validated atomic patches;
+- approval-gated shell commands and local mutations;
+- scrubbed child-process environment; and
+- live tool activity.
+
+### Intelligence choices
+
+- AMOS-hosted inference;
+- Amazon Bedrock;
+- customer-controlled OpenAI-compatible endpoints;
+- provider APIs, including Moonshot/Kimi; and
+- Ollama or llama.cpp local runtimes.
+
+### Distribution
+
+- Apple Silicon and Intel macOS applications;
+- hardened runtime, signing, and notarization;
+- signed update checks after launch and every six hours;
+- native update-available and ready-to-install notifications;
+- explicit download and restart/install; and
+- no restart while a task is active.
+
+## Update behavior
+
+Packaged applications read the release feed generated alongside each signed
+GitHub release. Development builds never contact the production feed.
+
+Update states are:
+
+1. check in the background;
+2. notify when a newer signed version exists;
+3. wait for **Download**;
+4. show progress;
+5. wait for **Restart and install**; and
+6. refuse restart while AMOS is working.
+
+The menu-bar item also exposes update status and a manual check.
+
+## Run from source
 
 ```bash
 npm install
+npm test
 npm run desktop
 ```
 
-The desktop settings file is stored under Electron's per-user application data
-directory. Provider secrets are encrypted before being written. AMOS OAuth
-credentials remain owner-only and isolated inside the same application data
-directory.
+Settings and encrypted provider secrets are stored under Electron's per-user
+application-data directory. Use a separate user-data directory when testing
+authentication or first-run behavior.
 
-## Package
+## Build locally
 
 ```bash
 npm run desktop:dir
 npm run desktop:build
 ```
 
-`desktop:dir` creates an unpacked application for local testing.
-`desktop:build` creates macOS DMG and ZIP artifacts for Apple Silicon and Intel.
+- `desktop:dir` creates an unpacked application.
+- `desktop:build` creates unsigned local macOS DMG and ZIP artifacts.
+- `desktop:release` creates the release-layout artifacts used by CI.
 
-Pushing a version tag such as `v0.2.1` runs
-`.github/workflows/release-desktop.yml`. The workflow verifies the package
-version, signs and notarizes both architectures, verifies that every required
-installer exists, and then publishes all release assets in one explicit GitHub
-release:
+Local builds are intentionally unsigned and cannot validate the production
+auto-update chain.
 
-- `AMOS-Desktop-macOS-arm64.dmg` — Apple Silicon
-- `AMOS-Desktop-macOS-x64.dmg` — Intel
-- matching ZIP archives for update infrastructure
-- `latest-mac.yml` and blockmaps used by the signed in-app updater
+## Official release process
 
-The app never installs an update in the middle of a task. It announces a signed
-release, waits for the user to download it, and exposes **Restart and install**
-only after the download completes. Development builds do not contact the
-production update feed.
+Pushing a tag matching `package.json`, such as `v0.4.0`, starts
+`.github/workflows/release-desktop.yml`.
 
-The permanent dashboard download URLs are:
+The workflow:
 
-```text
-https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg
-https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg
-```
+1. runs tests and syntax checks;
+2. verifies the tag and signing/notarization configuration;
+3. builds Apple Silicon and Intel applications;
+4. signs and notarizes both architectures;
+5. produces DMG installers and ZIP update payloads;
+6. generates blockmaps and an architecture-aware `latest-mac.yml`;
+7. validates that both architectures are present;
+8. writes SHA-256 checksums; and
+9. publishes one non-draft GitHub release.
 
-The release job targets the `MAC_CSC_LINK` GitHub environment and fails closed
-unless the following environment secrets exist:
+Release secrets live in the protected `MAC_CSC_LINK` GitHub environment:
 
 - `MAC_CSC_LINK`
 - `MAC_CSC_KEY_PASSWORD`
@@ -83,20 +145,48 @@ unless the following environment secrets exist:
 - `APPLE_APP_SPECIFIC_PASSWORD`
 - `APPLE_TEAM_ID`
 
-These supply the AMOS Labs Developer ID Application certificate and Apple
-notarization credentials. The repository includes hardened-runtime entitlements
-and a release-only electron-builder configuration; secrets never belong in the
-repository. Keep local development builds unsigned with `desktop:dir` or
-`desktop:build`.
+No signing or notarization secret belongs in the repository.
 
-## Next production slices
+## Troubleshooting
 
-1. Stream model and terminal output and expose cancellation.
-2. Add durable, resumable plans and task checkpoints shared with AMOS.
-3. Enroll each desktop with an AMOS device key and sign local-action receipts.
-4. Add explicit, policy-controlled environment grants for repositories, folders,
-   local applications, and private-network connectors.
-5. Add local project memory with explicit promotion, refresh, and forgetting rules.
-6. Add AWS profile/SigV4 support for Bedrock.
-7. Add a curated local model installer for supported Mac hardware.
-8. Ship signed Windows installers and MDM-friendly enterprise packages.
+### The app cannot connect to AMOS
+
+- Confirm the system browser completed login.
+- Confirm the AMOS endpoint is HTTPS.
+- Disconnect and reconnect to restart discovery and PKCE.
+- Review [Authentication](AUTHENTICATION.md).
+
+### A local model is selected but tasks fail
+
+- Confirm its compatible endpoint is running.
+- Confirm the configured model supports the required context and tool calls.
+- Use a managed or customer-cloud profile for work beyond the device's
+  capabilities.
+
+### No update appears
+
+- Update checks run only in a packaged signed build.
+- GitHub releases must be published, not draft.
+- The release must contain `latest-mac.yml` plus the correct architecture ZIP.
+- The installed version must be lower than the release version.
+
+### AMOS cannot read a file
+
+- The path must be inside the selected workspace.
+- Symlink escapes and common credential files are intentionally blocked.
+- Unsupported binary formats should be connected through AMOS or converted
+  before attachment.
+
+## Product roadmap
+
+The next product layers build on the signed distribution foundation:
+
+1. streaming output, cancellation, and durable resumable tasks;
+2. signed device identity and policy-controlled environment grants;
+3. typed dynamic canvases for company data and active work;
+4. private local memory with explicit sharing and promotion;
+5. curated offline intelligence with hardware-aware installation;
+6. portable encrypted memory capsules and reconnect reconciliation; and
+7. Windows installers and enterprise/MDM packaging.
+
+See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).
