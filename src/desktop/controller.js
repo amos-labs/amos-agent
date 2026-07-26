@@ -6,18 +6,29 @@ import { FileTokenStore } from "../auth/tokenStore.js";
 import { listModelProviders } from "../model/providers.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
+import { approvalReviewUrl, DesktopRemoteStateClient } from "./remoteState.js";
 
 export class DesktopController {
-  constructor({ userDataPath, settingsStore, openBrowser, emit }) {
+  constructor({ userDataPath, settingsStore, openBrowser, emit, notify = () => {} }) {
     this.userDataPath = userDataPath;
     this.settingsStore = settingsStore;
     this.openBrowser = openBrowser;
     this.emit = emit;
+    this.notify = notify;
     this.runtime = null;
     this.activity = [];
+    this.identity = null;
+    this.approvalsAvailable = true;
+    this.remoteStatus = {
+      syncing: false,
+      lastSyncedAt: null,
+      error: null
+    };
+    this.remoteRefreshPromise = null;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
     });
+    this.companyApprovals = [];
   }
 
   async state() {
@@ -25,9 +36,15 @@ export class DesktopController {
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
+    const useOAuth = shouldUseOAuth(config, credentials);
     return {
       configured: validateConfig(config).length === 0,
-      connected: shouldUseOAuth(config, credentials) || Boolean(config.amos.apiKey),
+      connected: useOAuth || Boolean(config.amos.apiKey),
+      connectionMode: useOAuth ? "user" : config.amos.apiKey ? "api_key" : "disconnected",
+      identity: this.identity,
+      approvals: this.companyApprovals,
+      approvalsAvailable: this.approvalsAvailable,
+      remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model),
       providers: listModelProviders(),
       settings: redactSettings(settings),
@@ -61,15 +78,120 @@ export class DesktopController {
     });
     this.resetRuntime();
     this.record("auth", "AMOS account connected");
+    await this.refreshRemote({ notify: true });
     return this.state();
   }
 
   async logout() {
     const settings = await this.settingsStore.read();
     await this.oauthFor(settings).logout();
+    await this.settingsStore.write({ ...settings, notifiedApprovalIds: [] });
     this.resetRuntime();
+    this.identity = null;
+    this.companyApprovals = [];
+    this.approvalsAvailable = true;
+    this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null };
+    this.sendRemoteState();
     this.record("auth", "AMOS account disconnected");
     return this.state();
+  }
+
+  async refreshRemote({ notify = true } = {}) {
+    if (this.remoteRefreshPromise) return this.remoteRefreshPromise;
+    this.remoteRefreshPromise = this.refreshRemoteInner({ notify }).finally(() => {
+      this.remoteRefreshPromise = null;
+    });
+    return this.remoteRefreshPromise;
+  }
+
+  async refreshRemoteInner({ notify }) {
+    const settings = await this.settingsStore.read();
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (!shouldUseOAuth(config, credentials)) {
+      this.identity = null;
+      this.companyApprovals = [];
+      this.approvalsAvailable = true;
+      this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null };
+      this.sendRemoteState();
+      return this.state();
+    }
+
+    this.remoteStatus = { ...this.remoteStatus, syncing: true, error: null };
+    this.sendRemoteState();
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const [identityResult, approvalsResult] = await Promise.allSettled([
+      remote.identity(),
+      remote.approvals()
+    ]);
+
+    const errors = [];
+    if (identityResult.status === "fulfilled") {
+      this.identity = identityResult.value;
+    } else {
+      errors.push(identityResult.reason?.message || "Could not load AMOS identity");
+    }
+
+    if (approvalsResult.status === "fulfilled") {
+      this.approvalsAvailable = approvalsResult.value.available;
+      this.companyApprovals = approvalsResult.value.pending_operations;
+      if (notify && approvalsResult.value.available) {
+        await this.notifyNewCompanyApprovals(settings);
+      }
+    } else {
+      errors.push(approvalsResult.reason?.message || "Could not load AMOS approvals");
+    }
+
+    this.remoteStatus = {
+      syncing: false,
+      lastSyncedAt: new Date().toISOString(),
+      error: errors.length > 0 ? errors.join(" ") : null
+    };
+    this.sendRemoteState();
+    return this.state();
+  }
+
+  async notifyNewCompanyApprovals(settings) {
+    const known = new Set(settings.notifiedApprovalIds || []);
+    const pending = this.companyApprovals.filter((approval) => approval.status === "pending");
+    const fresh = pending.filter((approval) => !known.has(approval.id));
+    if (fresh.length === 0) return;
+
+    const first = fresh[0];
+    this.notify({
+      count: fresh.length,
+      title: fresh.length === 1 ? "AMOS approval needed" : `${fresh.length} AMOS approvals need you`,
+      // Keep lock-screen notifications useful without exposing company data.
+      // The signed-in decision view carries the full business summary.
+      body: fresh.length === 1
+        ? "A governed company decision is waiting for your review."
+        : `${fresh.length} governed company decisions are waiting for your review.`,
+      approval: first,
+      reviewUrl: approvalReviewUrl(settings.amosMcpUrl, first)
+    });
+
+    const notifiedApprovalIds = [...known, ...fresh.map((approval) => approval.id)].slice(-200);
+    await this.settingsStore.write({ ...settings, notifiedApprovalIds });
+  }
+
+  async openApproval(id) {
+    const approval = this.companyApprovals.find((item) => item.id === id);
+    if (!approval) throw new Error("That approval is no longer available");
+    const settings = await this.settingsStore.read();
+    await this.openBrowser(approvalReviewUrl(settings.amosMcpUrl, approval));
+    return { opened: true };
+  }
+
+  async openApprovals() {
+    const settings = await this.settingsStore.read();
+    const url = new URL("/settings/approvals", settings.amosMcpUrl);
+    await this.openBrowser(url.toString());
+    return { opened: true };
   }
 
   async testModel() {
@@ -184,14 +306,25 @@ export class DesktopController {
   send(channel, payload) {
     this.emit(channel, payload);
   }
+
+  sendRemoteState() {
+    this.send("remote:changed", {
+      identity: this.identity,
+      approvals: this.companyApprovals,
+      approvalsAvailable: this.approvalsAvailable,
+      remoteStatus: { ...this.remoteStatus }
+    });
+  }
 }
 
 function redactSettings(settings) {
-  return {
+  const redacted = {
     ...settings,
     apiKey: "",
     hasApiKey: Boolean(settings.apiKey)
   };
+  delete redacted.notifiedApprovalIds;
+  return redacted;
 }
 
 function publicProvider(config) {

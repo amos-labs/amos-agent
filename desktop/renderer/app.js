@@ -42,14 +42,18 @@ let running = false;
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
+    "decisionsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "workspaceLabel",
+    "identityDetail", "identityBadge", "decisionBadge",
     "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
     "messages", "promptForm", "promptInput", "runButton", "clearButton", "liveEvents",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
     "modelInput", "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
-    "onboardingWorkspaceButton", "disconnectButton"
+    "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
+    "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "pendingDecisions",
+    "recentDecisions"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -63,6 +67,7 @@ async function initialize() {
   render();
   elements.loading.classList.add("hidden");
   elements.app.classList.remove("hidden");
+  api.refreshRemote().catch(() => {});
 }
 
 function bindActions() {
@@ -92,6 +97,8 @@ function bindActions() {
   elements.testButton.addEventListener("click", testModel);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
   elements.approvalsButton.addEventListener("click", () => api.openApprovals());
+  elements.allApprovalsButton.addEventListener("click", () => api.openApprovals());
+  elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
   elements.denyButton.addEventListener("click", () => resolveApproval(false));
 }
@@ -102,6 +109,12 @@ function bindEvents() {
   api.on("activity:changed", (activity) => {
     if (state) state.activity = activity;
     renderActivity();
+  });
+  api.on("remote:changed", (remote) => {
+    if (!state) return;
+    Object.assign(state, remote);
+    renderIdentity();
+    renderDecisions();
   });
   api.on("approval:requested", (approval) => {
     pendingApproval = approval;
@@ -117,6 +130,7 @@ function render() {
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
+    elements.decisionsView.classList.add("hidden");
     elements.activityView.classList.add("hidden");
     elements.settingsView.classList.add("hidden");
   } else {
@@ -124,8 +138,7 @@ function render() {
   }
 
   elements.connectionDot.classList.toggle("connected", state.connected);
-  elements.connectionLabel.textContent = state.connected ? "AMOS connected" : "AMOS not connected";
-  elements.connectionDetail.textContent = state.connected ? "Company governance active" : "Connect your company";
+  renderIdentity();
   elements.runtimeBadge.textContent = state.configured
     ? `${state.provider.displayName} · ${state.provider.model}`
     : "Intelligence not configured";
@@ -148,12 +161,14 @@ function render() {
 
   renderSettings();
   renderActivity();
+  renderDecisions();
 }
 
 function showView(view) {
   currentView = view;
   const map = {
     operator: elements.operatorView,
+    decisions: elements.decisionsView,
     activity: elements.activityView,
     settings: elements.settingsView
   };
@@ -162,6 +177,164 @@ function showView(view) {
   for (const button of document.querySelectorAll(".nav-item")) {
     button.classList.toggle("active", button.dataset.view === view);
   }
+}
+
+function renderIdentity() {
+  if (!state) return;
+  const identity = state.identity;
+  const user = identity?.user;
+  const person = user?.name || user?.email || "";
+  const company = identity?.tenant_slug || "";
+  const role = identity?.role || "";
+
+  elements.connectionDot.classList.toggle("connected", state.connected);
+  elements.connectionLabel.textContent = person || (state.connected ? "AMOS connected" : "AMOS not connected");
+  elements.connectionDetail.textContent = state.connected
+    ? [company, role].filter(Boolean).join(" · ") || "Company governance active"
+    : "Connect your company";
+  elements.identityDetail.textContent =
+    user?.name && user?.email
+      ? user.email
+      : state.connectionMode === "api_key"
+        ? "Machine credential · reconnect for personal decisions"
+        : "";
+  elements.identityBadge.textContent = person
+    ? `${person}${role ? ` · ${role}` : ""}`
+    : "";
+  elements.identityBadge.classList.toggle("hidden", !person);
+}
+
+function renderDecisions() {
+  if (!state) return;
+  const approvals = Array.isArray(state.approvals) ? state.approvals : [];
+  const pending = approvals.filter((approval) => approval.status === "pending");
+  const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
+  elements.decisionBadge.textContent = String(pending.length);
+  elements.decisionBadge.classList.toggle("hidden", pending.length === 0);
+
+  const sync = state.remoteStatus || {};
+  elements.decisionSyncStatus.textContent = sync.syncing
+    ? "Syncing…"
+    : sync.lastSyncedAt
+      ? `Synced ${relativeTime(sync.lastSyncedAt)}`
+      : "Not synced";
+  elements.refreshDecisionsButton.disabled = Boolean(sync.syncing);
+
+  const notice = !state.connected
+    ? "Connect your AMOS account to receive governed company decisions."
+    : state.connectionMode === "api_key"
+      ? "Reconnect with your personal AMOS sign-in to receive decisions under your own identity."
+      : state.approvalsAvailable === false
+        ? "Your current company role does not include approval authority."
+        : sync.error
+          ? `AMOS could not complete the latest sync: ${sync.error}`
+          : "";
+  elements.decisionNotice.textContent = notice;
+  elements.decisionNotice.classList.toggle("hidden", !notice);
+
+  elements.pendingDecisions.replaceChildren();
+  if (pending.length === 0) {
+    elements.pendingDecisions.append(
+      decisionEmpty(
+        sync.syncing ? "Checking for decisions…" : "Nothing is waiting for your approval."
+      )
+    );
+  } else {
+    for (const approval of pending) {
+      elements.pendingDecisions.append(decisionCard(approval, true));
+    }
+  }
+
+  elements.recentDecisions.replaceChildren();
+  if (recent.length === 0) {
+    elements.recentDecisions.append(decisionEmpty("Recent decision outcomes will appear here."));
+  } else {
+    for (const approval of recent) {
+      elements.recentDecisions.append(decisionCard(approval, false));
+    }
+  }
+}
+
+function decisionCard(approval, actionable) {
+  const card = document.createElement("article");
+  card.className = `decision-card ${approval.status}`;
+  const content = document.createElement("div");
+  content.className = "decision-content";
+  const meta = document.createElement("div");
+  meta.className = "decision-meta";
+  const status = document.createElement("span");
+  status.className = `decision-status ${approval.status}`;
+  status.textContent = approval.status.replaceAll("_", " ");
+  const time = document.createElement("time");
+  time.dateTime = approval.requested_at;
+  time.textContent = approval.requested_at ? new Date(approval.requested_at).toLocaleString() : "";
+  meta.append(status, time);
+  const title = document.createElement("h2");
+  title.textContent = humanizeTool(approval.verb);
+  const summary = document.createElement("p");
+  summary.textContent = approval.review_summary || humanizeTool(approval.verb);
+  const provenance = document.createElement("small");
+  provenance.textContent = [
+    approval.agency_origin === "goal_pursuit" ? "Autonomous goal" : "Requested work",
+    approval.decided_by ? `decided by ${approval.decided_by}` : "",
+    approval.last_error ? `execution error: ${approval.last_error}` : ""
+  ].filter(Boolean).join(" · ");
+  content.append(meta, title, summary, provenance);
+
+  const actions = document.createElement("div");
+  actions.className = "decision-card-actions";
+  if (actionable) {
+    const review = document.createElement("button");
+    review.className = "button primary";
+    review.textContent = "Review securely →";
+    review.addEventListener("click", async () => {
+      setButtonBusy(review, true, "Opening…");
+      try {
+        await api.openApproval(approval.id);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        setButtonBusy(review, false, "Review securely →");
+      }
+    });
+    actions.append(review);
+  }
+  const details = document.createElement("details");
+  const detailsLabel = document.createElement("summary");
+  detailsLabel.textContent = "Exact request";
+  const request = document.createElement("pre");
+  request.textContent = JSON.stringify(approval.args || {}, null, 2);
+  details.append(detailsLabel, request);
+  actions.append(details);
+  card.append(content, actions);
+  return card;
+}
+
+function decisionEmpty(message) {
+  const empty = document.createElement("div");
+  empty.className = "decision-empty";
+  empty.textContent = message;
+  return empty;
+}
+
+async function refreshDecisions() {
+  setButtonBusy(elements.refreshDecisionsButton, true, "Refreshing…");
+  try {
+    state = await api.refreshRemote();
+    render();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.refreshDecisionsButton, false, "Refresh");
+  }
+}
+
+function relativeTime(value) {
+  const elapsed = Math.max(0, Date.now() - new Date(value).getTime());
+  if (elapsed < 60_000) return "just now";
+  const minutes = Math.floor(elapsed / 60_000);
+  if (minutes < 60) return `${minutes}m ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
 }
 
 function renderStep(element, complete) {

@@ -8,6 +8,7 @@ revival of the deprecated hosted harness.
 
 - macOS desktop shell
 - AMOS OAuth 2.1 + PKCE
+- signed-in user, company, role, and effective-scope identity
 - provider and infrastructure selection
 - hardware-aware local-model guidance
 - local workspace picker
@@ -15,6 +16,9 @@ revival of the deprecated hosted harness.
 - live tool activity
 - local shell and write approval modal
 - direct link to the durable AMOS approval inbox
+- tenant-scoped decision inbox with 30-second background refresh
+- native approval notifications and a persistent menu-bar/system-tray surface
+- one-click, session-authenticated approval review (the AI remains unable to approve itself)
 - local session activity
 - provider secrets encrypted with operating-system-backed `safeStorage`
 
@@ -76,8 +80,10 @@ repository. Keep local development builds unsigned with `desktop:dir` or
 
 1. Stream model output and expose cancellation.
 2. Enroll each desktop with an AMOS device key and sign local-action receipts.
-3. Persist resumable task checkpoints through AMOS.
-4. Add AWS profile/SigV4 support for Bedrock.
-5. Add a curated local model installer for supported Mac hardware.
-6. Add automatic signed updates.
-7. Add MDM-friendly enterprise packages and policy-controlled local grants.
+3. Add explicit, policy-controlled environment grants for repositories, folders,
+   local applications, and private-network connectors.
+4. Persist resumable task checkpoints through AMOS.
+5. Add AWS profile/SigV4 support for Bedrock.
+6. Add a curated local model installer for supported Mac hardware.
+7. Add automatic signed updates.
+8. Ship signed Windows installers and MDM-friendly enterprise packages.
