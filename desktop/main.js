@@ -208,6 +208,7 @@ function registerIpc() {
   ipcMain.handle("desktop:test-model", () => controller.testModel());
   ipcMain.handle("desktop:run", (_event, input) => controller.run(input));
   ipcMain.handle("desktop:clear", () => controller.clear());
+  ipcMain.handle("desktop:remove-canvas", (_event, id) => controller.removeCanvas(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({
     name: input?.name,

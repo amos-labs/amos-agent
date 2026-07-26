@@ -7,8 +7,10 @@ import { listModelProviders } from "../model/providers.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
+import { DesktopCanvasManager } from "./canvas.js";
 import { MEMORY_CLASSES } from "./memoryContract.js";
 import { approvalReviewUrl, DesktopRemoteStateClient } from "./remoteState.js";
+import { createCanvasTool } from "../tools/canvas.js";
 
 export class DesktopController {
   constructor({
@@ -35,6 +37,7 @@ export class DesktopController {
     };
     this.remoteRefreshPromise = null;
     this.attachments = new AttachmentManager();
+    this.canvases = new DesktopCanvasManager();
     this.privateMemoryStore = privateMemoryStore;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
@@ -62,6 +65,7 @@ export class DesktopController {
       system: systemProfile(),
       activity: this.activity.slice(-100),
       attachments: this.attachments.list(),
+      ...this.canvases.state(),
       memoryClasses: Object.values(MEMORY_CLASSES),
       privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : []
     };
@@ -308,6 +312,7 @@ export class DesktopController {
         answer,
         activity: this.activity.slice(-100),
         attachments: this.attachments.list(),
+        ...this.canvases.state(),
         memory,
         privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : []
       };
@@ -320,11 +325,19 @@ export class DesktopController {
     return { resolved: this.approvals.resolve(id, approved) };
   }
 
+  removeCanvas(id) {
+    const removed = this.canvases.remove(id);
+    if (removed) this.send("canvas:changed", this.canvases.state());
+    return this.canvases.state();
+  }
+
   async clear() {
     if (this.runtime) this.runtime.loop.clear();
     this.attachments.clear();
+    this.canvases.clear();
     this.activity = [];
     this.send("activity:changed", []);
+    this.send("canvas:changed", this.canvases.state());
     return { ok: true };
   }
 
@@ -440,7 +453,26 @@ export class DesktopController {
     this.runtime = {
       config,
       oauth,
-      runtime: createRuntime({ config, approvals: this.approvals, oauth, useOAuth })
+      runtime: createRuntime({
+        config,
+        approvals: this.approvals,
+        oauth,
+        useOAuth,
+        extraTools: [
+          createCanvasTool({
+            present: (spec) => {
+              const canvas = this.canvases.present(spec);
+              this.record("canvas", `Presented ${canvas.title}`, {
+                canvasId: canvas.id,
+                blockCount: canvas.blocks.length,
+                source: canvas.source.label
+              });
+              this.send("canvas:changed", this.canvases.state());
+              return canvas;
+            }
+          })
+        ]
+      })
     };
     return this.runtime;
   }

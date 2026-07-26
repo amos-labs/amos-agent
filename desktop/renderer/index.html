@@ -27,6 +27,9 @@
           <button class="nav-item active" data-view="operator">
             <span class="nav-icon">⌁</span><span>Operator</span>
           </button>
+          <button class="nav-item" data-view="canvas">
+            <span class="nav-icon">▦</span><span>Canvas</span><span id="canvasBadge" class="nav-badge canvas-badge hidden">0</span>
+          </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon">◎</span><span>Private memory</span><span id="privateMemoryBadge" class="nav-badge memory-badge hidden">0</span>
           </button>
@@ -181,6 +184,31 @@
                 </div>
               </div>
             </aside>
+          </div>
+        </section>
+
+        <section id="canvasView" class="view canvas-view hidden">
+          <div class="canvas-shell">
+            <div class="canvas-heading">
+              <div>
+                <span class="eyebrow">LIVE COMPANY VIEW</span>
+                <h1 id="canvasTitle">A clearer view of the work.</h1>
+                <p id="canvasSubtitle">AMOS can turn current company context into a bounded, source-aware operating view.</p>
+              </div>
+              <div class="canvas-actions">
+                <button id="canvasRefreshButton" class="button secondary hidden" type="button">Refresh with AMOS</button>
+                <button id="canvasCloseButton" class="button ghost hidden" type="button">Close canvas</button>
+              </div>
+            </div>
+            <div id="canvasSourceBar" class="canvas-source-bar hidden"></div>
+            <div id="canvasTabs" class="canvas-tabs hidden" role="tablist" aria-label="Open canvases"></div>
+            <div id="canvasEmpty" class="canvas-empty">
+              <span>▦</span>
+              <strong>No canvas open yet</strong>
+              <p>Ask AMOS to compare performance, chart a trend, show a decision, or organize company data into a table.</p>
+              <button id="canvasStartButton" class="button primary" type="button">Ask AMOS for a view</button>
+            </div>
+            <div id="canvasBlocks" class="canvas-blocks hidden"></div>
           </div>
         </section>
 

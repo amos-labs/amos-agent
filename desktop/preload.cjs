@@ -5,6 +5,7 @@ const eventChannels = new Set([
   "agent:status",
   "approval:requested",
   "activity:changed",
+  "canvas:changed",
   "remote:changed",
   "auth:browser",
   "update:changed"
@@ -20,6 +21,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
   run: (input) => ipcRenderer.invoke("desktop:run", input),
   clear: () => ipcRenderer.invoke("desktop:clear"),
+  removeCanvas: (id) => ipcRenderer.invoke("desktop:remove-canvas", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),
   addPastedImage: (input) => ipcRenderer.invoke("desktop:add-pasted-image", input),

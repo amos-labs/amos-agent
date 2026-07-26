@@ -44,13 +44,14 @@ let running = false;
 let attachments = [];
 let dragDepth = 0;
 let updateState = null;
+let activeCanvasId = null;
 
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
-    "decisionsView", "memoryView",
+    "decisionsView", "memoryView", "canvasView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "workspaceLabel",
-    "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge",
+    "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge",
     "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
     "messages", "promptForm", "promptInput", "runButton", "clearButton", "liveEvents",
     "attachmentList", "attachButton",
@@ -61,7 +62,9 @@ const elements = Object.fromEntries(
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "pendingDecisions",
     "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
-    "memoryClassGrid"
+    "memoryClassGrid", "canvasTitle", "canvasSubtitle", "canvasRefreshButton",
+    "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasBlocks",
+    "canvasStartButton"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -130,6 +133,12 @@ function bindActions() {
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
   elements.denyButton.addEventListener("click", () => resolveApproval(false));
   elements.updateButton.addEventListener("click", handleUpdate);
+  elements.canvasStartButton.addEventListener("click", () => {
+    showView("operator");
+    elements.promptInput.value = "Show me the most important company metrics and decisions right now.";
+    elements.promptInput.focus();
+  });
+  elements.canvasCloseButton.addEventListener("click", removeActiveCanvas);
 }
 
 function bindEvents() {
@@ -138,6 +147,14 @@ function bindEvents() {
   api.on("activity:changed", (activity) => {
     if (state) state.activity = activity;
     renderActivity();
+  });
+  api.on("canvas:changed", (canvasState) => {
+    if (!state) return;
+    state.canvases = canvasState.canvases || [];
+    state.activeCanvasId = canvasState.activeCanvasId || null;
+    activeCanvasId = state.activeCanvasId;
+    renderCanvas();
+    if (activeCanvasId) showView("canvas");
   });
   api.on("remote:changed", (remote) => {
     if (!state) return;
@@ -163,6 +180,7 @@ function render() {
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
+    elements.canvasView.classList.add("hidden");
     elements.memoryView.classList.add("hidden");
     elements.decisionsView.classList.add("hidden");
     elements.activityView.classList.add("hidden");
@@ -199,12 +217,15 @@ function render() {
   renderDecisions();
   renderAttachments();
   renderPrivateMemory();
+  activeCanvasId = state.activeCanvasId || activeCanvasId;
+  renderCanvas();
 }
 
 function showView(view) {
   currentView = view;
   const map = {
     operator: elements.operatorView,
+    canvas: elements.canvasView,
     memory: elements.memoryView,
     decisions: elements.decisionsView,
     activity: elements.activityView,
@@ -214,6 +235,335 @@ function showView(view) {
   elements.onboardingView.classList.add("hidden");
   for (const button of document.querySelectorAll(".nav-item")) {
     button.classList.toggle("active", button.dataset.view === view);
+  }
+}
+
+function renderCanvas() {
+  if (!state) return;
+  const canvases = Array.isArray(state.canvases) ? state.canvases : [];
+  if (!canvases.some((canvas) => canvas.id === activeCanvasId)) {
+    activeCanvasId = state.activeCanvasId || canvases[0]?.id || null;
+  }
+  const canvas = canvases.find((item) => item.id === activeCanvasId) || null;
+
+  elements.canvasBadge.textContent = String(canvases.length);
+  elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
+  elements.canvasEmpty.classList.toggle("hidden", Boolean(canvas));
+  elements.canvasBlocks.classList.toggle("hidden", !canvas);
+  elements.canvasSourceBar.classList.toggle("hidden", !canvas);
+  elements.canvasTabs.classList.toggle("hidden", canvases.length < 2);
+  elements.canvasCloseButton.classList.toggle("hidden", !canvas);
+  elements.canvasRefreshButton.classList.toggle("hidden", !canvas?.source?.refreshPrompt);
+  elements.canvasTabs.replaceChildren();
+  elements.canvasBlocks.replaceChildren();
+  elements.canvasSourceBar.replaceChildren();
+
+  for (const item of canvases) {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = `canvas-tab${item.id === activeCanvasId ? " active" : ""}`;
+    tab.textContent = item.title;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", String(item.id === activeCanvasId));
+    tab.addEventListener("click", () => {
+      activeCanvasId = item.id;
+      renderCanvas();
+    });
+    elements.canvasTabs.append(tab);
+  }
+
+  if (!canvas) {
+    elements.canvasTitle.textContent = "A clearer view of the work.";
+    elements.canvasSubtitle.textContent =
+      "AMOS can turn current company context into a bounded, source-aware operating view.";
+    return;
+  }
+
+  elements.canvasTitle.textContent = canvas.title;
+  elements.canvasSubtitle.textContent = canvas.subtitle || "A current operating view generated from the sources below.";
+  renderCanvasSource(canvas);
+  for (const block of canvas.blocks) elements.canvasBlocks.append(renderCanvasBlock(block));
+
+  elements.canvasRefreshButton.onclick = () => {
+    showView("operator");
+    elements.promptInput.value = canvas.source.refreshPrompt;
+    elements.promptInput.focus();
+  };
+}
+
+function renderCanvasSource(canvas) {
+  const source = canvas.source;
+  const live = document.createElement("span");
+  live.className = `canvas-source-kind ${source.kind}`;
+  live.textContent = source.kind === "live" ? "Live AMOS data" : `${source.kind} data`;
+  const label = document.createElement("strong");
+  label.textContent = source.label;
+  const time = document.createElement("time");
+  time.dateTime = source.refreshedAt;
+  time.textContent = `Refreshed ${relativeTime(source.refreshedAt)}`;
+  const refs = document.createElement("span");
+  refs.textContent = `${source.references.length} source${source.references.length === 1 ? "" : "s"}`;
+  const stale = Boolean(source.staleAfter) && Date.parse(source.staleAfter) <= Date.now();
+  if (stale) {
+    live.classList.add("stale");
+    live.textContent = "Refresh recommended";
+  }
+  elements.canvasSourceBar.append(live, label, time, refs);
+}
+
+function renderCanvasBlock(block) {
+  if (block.type === "metric") return renderCanvasMetric(block);
+  if (block.type === "table") return renderCanvasTable(block);
+  if (block.type === "timeseries") return renderCanvasTimeseries(block);
+  if (block.type === "markdown") return renderCanvasMarkdown(block);
+  if (block.type === "sources") return renderCanvasSources(block);
+  return renderCanvasDecision(block);
+}
+
+function renderCanvasMetric(block) {
+  const card = document.createElement("article");
+  card.className = `canvas-block canvas-metric trend-${block.trend}`;
+  const label = document.createElement("span");
+  label.className = "canvas-metric-label";
+  label.textContent = block.label;
+  const value = document.createElement("strong");
+  value.className = "canvas-metric-value";
+  value.textContent = `${block.value}${block.unit ? ` ${block.unit}` : ""}`;
+  card.append(label, value);
+  if (block.change) {
+    const change = document.createElement("span");
+    change.className = "canvas-metric-change";
+    change.textContent = `${block.trend === "up" ? "↑" : block.trend === "down" ? "↓" : "→"} ${block.change}`;
+    card.append(change);
+  }
+  if (block.note) {
+    const note = document.createElement("p");
+    note.textContent = block.note;
+    card.append(note);
+  }
+  return card;
+}
+
+function renderCanvasTable(block) {
+  const card = canvasCard(block, "canvas-table-block wide");
+  if (block.searchable && block.rows.length > 5) {
+    const filter = document.createElement("input");
+    filter.className = "canvas-filter";
+    filter.type = "search";
+    filter.placeholder = "Filter this table…";
+    filter.setAttribute("aria-label", `Filter ${block.title || "table"}`);
+    filter.addEventListener("input", () => renderCanvasTableRows(body, block, filter.value));
+    card.append(filter);
+  }
+  const scroll = document.createElement("div");
+  scroll.className = "canvas-table-scroll";
+  const table = document.createElement("table");
+  const head = document.createElement("thead");
+  const headingRow = document.createElement("tr");
+  for (const column of block.columns) {
+    const header = document.createElement("th");
+    header.textContent = column.label;
+    headingRow.append(header);
+  }
+  head.append(headingRow);
+  const body = document.createElement("tbody");
+  renderCanvasTableRows(body, block, "");
+  table.append(head, body);
+  scroll.append(table);
+  card.append(scroll);
+  return card;
+}
+
+function renderCanvasTableRows(body, block, query) {
+  const normalized = query.trim().toLowerCase();
+  const rows = normalized
+    ? block.rows.filter((row) =>
+      block.columns.some((column) => String(row[column.key] ?? "").toLowerCase().includes(normalized))
+    )
+    : block.rows;
+  body.replaceChildren();
+  for (const row of rows) {
+    const tableRow = document.createElement("tr");
+    for (const column of block.columns) {
+      const cell = document.createElement("td");
+      cell.textContent = formatCanvasValue(row[column.key], column.format);
+      tableRow.append(cell);
+    }
+    body.append(tableRow);
+  }
+  if (rows.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = block.columns.length;
+    cell.className = "canvas-table-empty";
+    cell.textContent = "No rows match that filter.";
+    row.append(cell);
+    body.append(row);
+  }
+}
+
+function renderCanvasTimeseries(block) {
+  const card = canvasCard(block, "canvas-chart-block wide");
+  const chart = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  chart.classList.add("canvas-chart");
+  chart.setAttribute("viewBox", "0 0 760 260");
+  chart.setAttribute("role", "img");
+  chart.setAttribute("aria-label", block.title || "Time series");
+  const allPoints = block.series.flatMap((series) => series.points);
+  const values = allPoints.map((point) => point.y);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const range = maximum - minimum || 1;
+  const left = 42;
+  const top = 20;
+  const width = 690;
+  const height = 190;
+  const colors = ["#7da2ff", "#45d6a0", "#ff9b73", "#c49bff", "#f2cf5b", "#6cd2f2"];
+
+  for (let index = 0; index < 4; index += 1) {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    const y = top + (height / 3) * index;
+    line.setAttribute("x1", left);
+    line.setAttribute("x2", left + width);
+    line.setAttribute("y1", y);
+    line.setAttribute("y2", y);
+    line.classList.add("canvas-chart-grid");
+    chart.append(line);
+  }
+
+  block.series.forEach((series, seriesIndex) => {
+    if (series.points.length === 0) return;
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    path.setAttribute("fill", "none");
+    path.setAttribute("stroke", colors[seriesIndex]);
+    path.setAttribute("stroke-width", "3");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    path.setAttribute(
+      "points",
+      series.points.map((point, pointIndex) => {
+        const x = left + (width * pointIndex) / Math.max(1, series.points.length - 1);
+        const y = top + height - ((point.y - minimum) / range) * height;
+        return `${x},${y}`;
+      }).join(" ")
+    );
+    chart.append(path);
+  });
+  card.append(chart);
+  const legend = document.createElement("div");
+  legend.className = "canvas-chart-legend";
+  block.series.forEach((series, index) => {
+    const item = document.createElement("span");
+    const dot = document.createElement("i");
+    dot.style.background = colors[index];
+    item.append(dot, document.createTextNode(series.name));
+    legend.append(item);
+  });
+  card.append(legend);
+  return card;
+}
+
+function renderCanvasMarkdown(block) {
+  const card = canvasCard(block, "canvas-markdown-block wide");
+  const markdown = document.createElement("div");
+  markdown.className = "markdown-content";
+  renderMarkdown(markdown, block.content);
+  card.append(markdown);
+  return card;
+}
+
+function renderCanvasSources(block) {
+  const card = canvasCard(block, "canvas-sources-block");
+  const list = document.createElement("ul");
+  for (const source of block.items) {
+    const item = document.createElement("li");
+    const label = document.createElement("strong");
+    label.textContent = source.label;
+    const detail = document.createElement("span");
+    detail.textContent = [
+      source.type,
+      source.id,
+      source.observedAt ? `observed ${relativeTime(source.observedAt)}` : ""
+    ].filter(Boolean).join(" · ");
+    item.append(label, detail);
+    list.append(item);
+  }
+  card.append(list);
+  return card;
+}
+
+function renderCanvasDecision(block) {
+  const card = canvasCard(block, `canvas-decision-block ${block.status}`);
+  const status = document.createElement("span");
+  status.className = `canvas-decision-status ${block.status}`;
+  status.textContent = `${block.kind} · ${block.status}`;
+  const summary = document.createElement("p");
+  summary.textContent = block.summary;
+  card.append(status, summary);
+  if (block.details.length > 0) {
+    const details = document.createElement("dl");
+    for (const detail of block.details) {
+      const term = document.createElement("dt");
+      term.textContent = detail.label;
+      const value = document.createElement("dd");
+      value.textContent = String(detail.value ?? "—");
+      details.append(term, value);
+    }
+    card.append(details);
+  }
+  if (block.kind === "approval" && block.status === "pending" && block.pendingId) {
+    const review = document.createElement("button");
+    review.type = "button";
+    review.className = "button primary";
+    review.textContent = "Review securely →";
+    review.addEventListener("click", () =>
+      api.openApproval(block.pendingId).catch((error) => toast(error.message, true))
+    );
+    card.append(review);
+  }
+  return card;
+}
+
+function canvasCard(block, className) {
+  const card = document.createElement("article");
+  card.className = `canvas-block ${className}`;
+  if (block.title) {
+    const title = document.createElement("h2");
+    title.textContent = block.title;
+    card.append(title);
+  }
+  return card;
+}
+
+function formatCanvasValue(value, format) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (format === "currency" && Number.isFinite(Number(value))) {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(Number(value));
+  }
+  if (format === "percent" && Number.isFinite(Number(value))) {
+    return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(Number(value))}%`;
+  }
+  if (format === "number" && Number.isFinite(Number(value))) {
+    return new Intl.NumberFormat().format(Number(value));
+  }
+  if ((format === "date" || format === "datetime") && !Number.isNaN(Date.parse(value))) {
+    return format === "date"
+      ? new Date(value).toLocaleDateString()
+      : new Date(value).toLocaleString();
+  }
+  return String(value);
+}
+
+async function removeActiveCanvas() {
+  if (!activeCanvasId) return;
+  try {
+    const result = await api.removeCanvas(activeCanvasId);
+    state.canvases = result.canvases;
+    state.activeCanvasId = result.activeCanvasId;
+    activeCanvasId = result.activeCanvasId;
+    renderCanvas();
+  } catch (error) {
+    toast(error.message, true);
   }
 }
 
@@ -758,6 +1108,8 @@ async function runTask(event) {
     pending.remove();
     addMessage("assistant", result.answer);
     state.activity = result.activity;
+    state.canvases = result.canvases || state.canvases;
+    state.activeCanvasId = result.activeCanvasId || state.activeCanvasId;
     state.privateMemory = result.privateMemory || state.privateMemory;
     renderActivity();
     renderPrivateMemory();
@@ -786,11 +1138,15 @@ async function runTask(event) {
 
 async function clearSession() {
   await api.clear();
+  state.canvases = [];
+  state.activeCanvasId = null;
+  activeCanvasId = null;
   updateAttachments([]);
   const welcome = elements.messages.querySelector(".welcome-message");
   elements.messages.replaceChildren();
   if (welcome) elements.messages.append(welcome);
   elements.liveEvents.replaceChildren(emptyLiveState());
+  renderCanvas();
 }
 
 function addMessage(role, content) {

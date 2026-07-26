@@ -187,6 +187,18 @@ All current and future local state preserves these rules:
 
 See [CANVAS-OFFLINE-MEMORY-SPIKE.md](CANVAS-OFFLINE-MEMORY-SPIKE.md).
 
+## Typed canvas boundary
+
+AMOS Desktop 0.6.0 adds a session-only typed canvas. The model can propose one
+of six bounded block types through `desktop_present_canvas`; Desktop validates
+the complete specification and renders local components. The renderer never
+accepts model-generated HTML or script.
+
+Canvas source identifiers and freshness state remain visible. Pending approval
+cards only open the existing signed-in AMOS decision flow. No new write or
+approval authority is introduced, and no canvas company data is persisted
+across application sessions in this phase.
+
 ## Non-goals
 
 This repository should not become a second hosted harness or managed platform.
