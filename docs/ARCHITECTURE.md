@@ -179,9 +179,10 @@ and exposes explicit reuse, promotion, and forget controls.
 AMOS Desktop 0.7 adds the first offline-intelligence slice: hardware-aware
 recommendations, a catalog covered by the signed application release, Ollama
 runtime discovery, resumable installation/removal controls, and an explicit
-local-only tool registry. Portable capsules and a governed company-data cache
-remain planned extensions. All current and future local state preserves these
-rules:
+local-only tool registry. AMOS Desktop 0.8 adds portable private-memory
+capsules. AMOS Desktop 0.9 adds an explicit, server-signed company briefing
+that is encrypted locally and can be read only inside the reduced local-only
+runtime. All current and future local state preserves these rules:
 
 - shared AMOS data remains server-authoritative;
 - private memory is not silently promoted;
@@ -213,6 +214,7 @@ online company
 
 local-only
   local workspace + private-memory attachments + typed canvas
+  optional verified, unexpired, read-only company briefing
   no AMOS MCP tools
   no public-web tools
 ```
@@ -221,6 +223,13 @@ The offline boundary is enforced when the tool registry is created. The
 local-only system prompt communicates the same boundary to the model, but the
 prompt is not the security control. Switching modes clears the current runtime
 so a previously created online registry cannot leak into an offline session.
+
+The company briefing is not a second authorization system. AMOS signs the
+exact tenant- and scope-bounded `resume_company` result with a distinct token
+type and audience. Desktop verifies the current JWKS, user, tenant, issuer,
+scope fingerprint, signature, and expiry before storing it. A reconnect
+revalidates the saved grant against the live identity and current signing-key
+set; a mismatch removes it. Logout removes it as well.
 
 ## Non-goals
 

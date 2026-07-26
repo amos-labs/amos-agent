@@ -115,7 +115,33 @@ activity, or the capsule itself.
 Credentials, OAuth tokens, provider keys, and unrestricted raw application data
 are never valid capsule entries.
 
-Portable private memory is now implemented. Governed company-cache export and
-reconnect reconciliation remain separate work because they require live
-server-issued identity, scope, expiry, provenance, revocation, signatures, and
-conflict review.
+Portable private memory is now implemented. Export of governed company memory
+and reconciliation of queued offline work remain separate because they require
+live policy, current data, idempotency, signatures, and explicit conflict
+review.
+
+## Signed offline company context
+
+AMOS Desktop 0.9 implements a deliberately narrower capability than exporting
+company memory. A signed-in user may explicitly capture the already bounded
+`resume_company` briefing for a short period of offline use.
+
+- AMOS derives the user, tenant, role, and scopes from the authenticated
+  connection; the model cannot supply them.
+- The exact snapshot is signed with AMOS's rotating Ed25519 key under a
+  company-cache-specific token type and audience.
+- Desktop verifies the live JWKS and exact user, tenant, issuer, canonical
+  scope fingerprint, validity window, signature, and signed snapshot.
+- The verified token and public key are stored together inside a local
+  operating-system-encrypted envelope.
+- Local-only mode exposes one sectioned read tool. It does not expose AMOS MCP,
+  company writes, approvals, receipts, or public web access.
+- The default lifetime is four hours; AMOS permits only 15 minutes through 24
+  hours. Expired data is unavailable to the model.
+- Reconnect revalidates against the current user, tenant, and live AMOS signing
+  keys. A mismatch removes the copy. Disconnecting the AMOS account removes it
+  immediately from the device.
+
+The saved briefing is point-in-time evidence, not current company truth and
+never action authority. See
+[Signed offline company context](OFFLINE_COMPANY_CONTEXT.md).

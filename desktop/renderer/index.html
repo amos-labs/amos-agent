@@ -31,7 +31,7 @@
             <span class="nav-icon">▦</span><span>Canvas</span><span id="canvasBadge" class="nav-badge canvas-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="memory">
-            <span class="nav-icon">◎</span><span>Private memory</span><span id="privateMemoryBadge" class="nav-badge memory-badge hidden">0</span>
+            <span class="nav-icon">◎</span><span>Memory</span><span id="privateMemoryBadge" class="nav-badge memory-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="decisions">
             <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
@@ -223,10 +223,10 @@
           <div class="section-heading memory-heading">
             <div>
               <span class="eyebrow">YOUR CONTEXT · YOUR CONTROL</span>
-              <h1>Private memory on this Mac.</h1>
+              <h1>Private memory and verified company context.</h1>
               <p>
-                Keep working context encrypted locally, bring it into a task when useful,
-                promote it into governed company memory when it belongs there, or forget it completely.
+                Keep private working context encrypted locally. When you choose, AMOS can also
+                make a short-lived, server-signed company briefing available for offline work.
               </p>
             </div>
             <div class="memory-boundary">
@@ -237,6 +237,26 @@
               </div>
             </div>
           </div>
+          <section id="companyCacheCard" class="company-cache-card">
+            <div class="company-cache-icon">◇</div>
+            <div class="company-cache-copy">
+              <span class="eyebrow accent">SERVER-SIGNED · READ-ONLY · SHORT-LIVED</span>
+              <h2 id="companyCacheStatus">No offline company context</h2>
+              <p id="companyCacheDetail">
+                Connect with your personal AMOS sign-in, then explicitly store a four-hour
+                briefing for local-only work. It never includes credentials or action authority.
+              </p>
+              <div id="companyCacheMeta" class="company-cache-meta"></div>
+            </div>
+            <div class="company-cache-actions">
+              <button id="companyCacheRefreshButton" class="button primary" type="button">
+                Make available offline
+              </button>
+              <button id="companyCacheRemoveButton" class="button danger hidden" type="button">
+                Remove
+              </button>
+            </div>
+          </section>
           <div class="memory-transfer">
             <div>
               <span class="eyebrow accent">PORTABLE · ENCRYPTED · FORKABLE</span>

@@ -209,6 +209,24 @@ Local-only mode exposes local workspace, private-memory attachment, and typed
 canvas tools. AMOS MCP, public web, company-memory promotion, live approvals,
 and proof are unavailable until the user explicitly returns online.
 
+### Make a company briefing available offline
+
+1. Connect AMOS with your personal browser sign-in.
+2. Open **Memory** while the top bar reads **ONLINE COMPANY**.
+3. Select **Make available offline** and confirm the first local copy.
+4. Confirm the card shows the company, captured time, expiry, role, and scope
+   count.
+5. Activate a downloaded local model from **Intelligence**.
+
+The default grant lasts four hours. It is a server-signed copy of the exact
+bounded company briefing the user could read at capture time, encrypted with
+operating-system protection. In local-only mode the model receives one
+sectioned read tool and no AMOS action, approval, web, or company-memory write
+tools. Expired context is suppressed. Returning online revalidates the grant
+against the live user, tenant, and AMOS signing keys; logout removes it.
+
+See [Signed offline company context](OFFLINE_COMPANY_CONTEXT.md).
+
 ### No update appears
 
 - Update checks run only in a packaged signed build.
@@ -231,8 +249,8 @@ The next product layers build on the signed distribution foundation:
 2. signed device identity and policy-controlled environment grants;
 3. richer typed canvas blocks and managed AMOS result adapters;
 4. richer private-memory retrieval and sharing proposals;
-5. deeper offline retrieval against a server-authorized company cache;
-6. governed company-cache retrieval and reconnect reconciliation; and
+5. richer retrieval within the bounded signed company briefing;
+6. explicit offline proposal reconciliation without silent replay; and
 7. Windows installers and enterprise/MDM packaging.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

@@ -10,13 +10,21 @@ import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import {
+  DEFAULT_COMPANY_CACHE_TTL_SECONDS
+} from "./companyCache.js";
+import {
   readPrivateMemoryCapsule,
   writePrivateMemoryCapsule
 } from "./memoryCapsule.js";
 import { MEMORY_CLASSES } from "./memoryContract.js";
 import { assessHardware } from "./offlineIntelligence.js";
-import { approvalReviewUrl, DesktopRemoteStateClient } from "./remoteState.js";
+import {
+  amosOrigin,
+  approvalReviewUrl,
+  DesktopRemoteStateClient
+} from "./remoteState.js";
 import { createCanvasTool } from "../tools/canvas.js";
+import { createCompanyCacheTool } from "../tools/companyCache.js";
 import { OFFLINE_SYSTEM_PROMPT } from "../prompts.js";
 
 export class DesktopController {
@@ -24,6 +32,7 @@ export class DesktopController {
     userDataPath,
     settingsStore,
     privateMemoryStore = null,
+    companyCacheStore = null,
     offlineManager = null,
     openBrowser,
     emit,
@@ -48,6 +57,8 @@ export class DesktopController {
     this.attachments = new AttachmentManager();
     this.canvases = new DesktopCanvasManager();
     this.privateMemoryStore = privateMemoryStore;
+    this.companyCacheStore = companyCacheStore;
+    this.companyCacheRevalidatedFor = null;
     this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
     this.approvals = new DesktopApprovalBridge({
@@ -81,7 +92,8 @@ export class DesktopController {
       attachments: this.attachments.list(),
       ...this.canvases.state(),
       memoryClasses: Object.values(MEMORY_CLASSES),
-      privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : []
+      privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
+      companyCache: await this.companyCacheState()
     };
   }
 
@@ -147,6 +159,53 @@ export class DesktopController {
     });
     this.resetRuntime();
     this.record("settings", `Local-only mode activated with ${modelId}`);
+    return this.state();
+  }
+
+  async refreshCompanyCache(ttlSeconds = DEFAULT_COMPANY_CACHE_TTL_SECONDS) {
+    if (!this.companyCacheStore) {
+      throw new Error("Encrypted company context is unavailable on this computer");
+    }
+    const settings = await this.settingsStore.read();
+    if (settings.operatingMode === "offline") {
+      throw new Error("Return to online company mode before refreshing company context");
+    }
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (!shouldUseOAuth(config, credentials)) {
+      throw new Error("Connect AMOS with your personal sign-in before storing company context");
+    }
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const identity = await remote.identity();
+    const grant = await remote.companyCache({ identity, ttlSeconds });
+    await this.companyCacheStore.write(grant);
+    this.companyCacheRevalidatedFor = cacheRevalidationKey(grant.claims);
+    this.identity = identity;
+    this.resetRuntime();
+    this.record(
+      "memory",
+      `Refreshed signed company context for ${grant.claims.tenant_slug}`,
+      {
+        cache_id: grant.claims.cache_id,
+        expires_at: new Date(grant.claims.exp * 1000).toISOString(),
+        read_only: true
+      }
+    );
+    await this.sendRemoteState();
+    return this.state();
+  }
+
+  async removeCompanyCache() {
+    if (this.companyCacheStore) await this.companyCacheStore.clear();
+    this.companyCacheRevalidatedFor = null;
+    this.resetRuntime();
+    this.record("memory", "Removed offline company context from this computer");
+    await this.sendRemoteState();
     return this.state();
   }
 
@@ -321,13 +380,15 @@ export class DesktopController {
   async logout() {
     const settings = await this.settingsStore.read();
     await this.oauthFor(settings).logout();
+    if (this.companyCacheStore) await this.companyCacheStore.clear();
+    this.companyCacheRevalidatedFor = null;
     await this.settingsStore.write({ ...settings, notifiedApprovalIds: [] });
     this.resetRuntime();
     this.identity = null;
     this.companyApprovals = [];
     this.approvalsAvailable = true;
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
-    this.sendRemoteState();
+    await this.sendRemoteState();
     this.record("auth", "AMOS account disconnected");
     return this.state();
   }
@@ -349,7 +410,7 @@ export class DesktopController {
         error: null,
         paused: true
       };
-      this.sendRemoteState();
+      await this.sendRemoteState();
       return this.state();
     }
     const oauth = this.oauthFor(settings);
@@ -360,12 +421,12 @@ export class DesktopController {
       this.companyApprovals = [];
       this.approvalsAvailable = true;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
-      this.sendRemoteState();
+      await this.sendRemoteState();
       return this.state();
     }
 
     this.remoteStatus = { ...this.remoteStatus, syncing: true, error: null };
-    this.sendRemoteState();
+    await this.sendRemoteState();
     const remote = new DesktopRemoteStateClient({
       mcpUrl: settings.amosMcpUrl,
       oauth,
@@ -379,6 +440,11 @@ export class DesktopController {
     const errors = [];
     if (identityResult.status === "fulfilled") {
       this.identity = identityResult.value;
+      try {
+        await this.revalidateCompanyCache(remote, identityResult.value, settings);
+      } catch (error) {
+        errors.push(error.message);
+      }
     } else {
       errors.push(identityResult.reason?.message || "Could not load AMOS identity");
     }
@@ -399,7 +465,7 @@ export class DesktopController {
       error: errors.length > 0 ? errors.join(" ") : null,
       paused: false
     };
-    this.sendRemoteState();
+    await this.sendRemoteState();
     return this.state();
   }
 
@@ -617,6 +683,74 @@ export class DesktopController {
     return this.privateMemoryStore;
   }
 
+  async companyCacheState() {
+    if (!this.companyCacheStore) {
+      return {
+        available: false,
+        status: "unavailable",
+        error: "Platform encryption is unavailable"
+      };
+    }
+    try {
+      return await this.companyCacheStore.status();
+    } catch (error) {
+      return {
+        available: false,
+        status: "error",
+        error: error.message
+      };
+    }
+  }
+
+  async readCompanyCache(settings, expectedIdentity = this.identity) {
+    if (!this.companyCacheStore) return null;
+    return this.companyCacheStore.read({
+      expectedIssuer: amosOrigin(settings.amosMcpUrl),
+      expectedIdentity:
+        expectedIdentity?.principal_type === "user" ? expectedIdentity : null
+    });
+  }
+
+  async revalidateCompanyCache(remote, identity, settings) {
+    if (!this.companyCacheStore) return;
+    const status = await this.companyCacheStore.status();
+    if (status.status === "missing") {
+      this.companyCacheRevalidatedFor = null;
+      return;
+    }
+    if (status.status === "expired") {
+      this.companyCacheRevalidatedFor = null;
+      this.resetRuntime();
+      return;
+    }
+    const key = [
+      status.cacheId,
+      identity?.sub || "",
+      identity?.tenant_id || ""
+    ].join(":");
+    if (key === this.companyCacheRevalidatedFor) return;
+    try {
+      const jwks = await remote.fetchJwks();
+      const grant = await this.companyCacheStore.read({
+        expectedIssuer: amosOrigin(settings.amosMcpUrl),
+        expectedIdentity: identity,
+        jwks
+      });
+      this.companyCacheRevalidatedFor = cacheRevalidationKey(grant.claims);
+    } catch {
+      await this.companyCacheStore.clear();
+      this.companyCacheRevalidatedFor = null;
+      this.resetRuntime();
+      this.record(
+        "memory",
+        "Removed company context because its current user, company, expiry, or signing key no longer matched AMOS"
+      );
+      throw new Error(
+        "Stored company context was removed because AMOS could not revalidate it for this user"
+      );
+    }
+  }
+
   resetRuntime() {
     this.approvals.cancelAll();
     this.runtime = null;
@@ -640,6 +774,34 @@ export class DesktopController {
     if (requireAmos && !useOAuth && !config.amos.apiKey) {
       throw new Error("Connect AMOS before running company tasks");
     }
+    const extraTools = [
+      createCanvasTool({
+        present: (spec) => {
+          const canvas = this.canvases.present(spec);
+          this.record("canvas", `Presented ${canvas.title}`, {
+            canvasId: canvas.id,
+            blockCount: canvas.blocks.length,
+            source: canvas.source.label
+          });
+          this.send("canvas:changed", this.canvases.state());
+          return canvas;
+        }
+      })
+    ];
+    if (offline && this.companyCacheStore) {
+      try {
+        const cached = await this.readCompanyCache(settings);
+        if (cached) {
+          extraTools.push(
+            createCompanyCacheTool({
+              read: () => this.readCompanyCache(settings)
+            })
+          );
+        }
+      } catch {
+        // Expired, mismatched, or corrupt company context never enters the tool registry.
+      }
+    }
     this.runtime = {
       offline,
       config,
@@ -652,20 +814,7 @@ export class DesktopController {
         includeAmos: !offline,
         includeWeb: !offline,
         systemPrompt: offline ? OFFLINE_SYSTEM_PROMPT : undefined,
-        extraTools: [
-          createCanvasTool({
-            present: (spec) => {
-              const canvas = this.canvases.present(spec);
-              this.record("canvas", `Presented ${canvas.title}`, {
-                canvasId: canvas.id,
-                blockCount: canvas.blocks.length,
-                source: canvas.source.label
-              });
-              this.send("canvas:changed", this.canvases.state());
-              return canvas;
-            }
-          })
-        ]
+        extraTools
       })
     };
     return this.runtime;
@@ -714,12 +863,13 @@ export class DesktopController {
     this.emit(channel, payload);
   }
 
-  sendRemoteState() {
+  async sendRemoteState() {
     this.send("remote:changed", {
       identity: this.identity,
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
-      remoteStatus: { ...this.remoteStatus }
+      remoteStatus: { ...this.remoteStatus },
+      companyCache: await this.companyCacheState()
     });
   }
 }
@@ -746,6 +896,10 @@ function privateMemoryTenant(identity) {
     identity?.tenant_slug ||
     null;
   return value ? String(value).slice(0, 256) : null;
+}
+
+function cacheRevalidationKey(claims) {
+  return [claims.cache_id, claims.sub, claims.tenant_id].join(":");
 }
 
 function publicCapsuleSummary(summary) {

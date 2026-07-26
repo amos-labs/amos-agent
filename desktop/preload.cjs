@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
   refreshOffline: () => ipcRenderer.invoke("desktop:refresh-offline"),
+  refreshCompanyCache: (ttlSeconds) =>
+    ipcRenderer.invoke("desktop:refresh-company-cache", ttlSeconds),
+  removeCompanyCache: () => ipcRenderer.invoke("desktop:remove-company-cache"),
   installOfflineModel: (id) => ipcRenderer.invoke("desktop:install-offline-model", id),
   removeOfflineModel: (id) => ipcRenderer.invoke("desktop:remove-offline-model", id),
   activateOfflineModel: (id) => ipcRenderer.invoke("desktop:activate-offline-model", id),

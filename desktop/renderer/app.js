@@ -65,6 +65,8 @@ const elements = Object.fromEntries(
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "pendingDecisions",
     "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
+    "companyCacheCard", "companyCacheStatus", "companyCacheDetail", "companyCacheMeta",
+    "companyCacheRefreshButton", "companyCacheRemoveButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -155,6 +157,8 @@ function bindActions() {
   );
   elements.memoryExportButton.addEventListener("click", () => openCapsuleFlow("export"));
   elements.memoryImportButton.addEventListener("click", () => openCapsuleFlow("import"));
+  elements.companyCacheRefreshButton.addEventListener("click", refreshCompanyCache);
+  elements.companyCacheRemoveButton.addEventListener("click", removeCompanyCache);
   elements.capsulePassphraseForm.addEventListener("submit", handleCapsulePassphrase);
   elements.capsuleCancelButton.addEventListener("click", closeCapsuleModal);
   elements.capsulePreviewCancelButton.addEventListener("click", closeCapsuleModal);
@@ -189,6 +193,7 @@ function bindEvents() {
     Object.assign(state, remote);
     renderIdentity();
     renderDecisions();
+    renderCompanyCache();
   });
   api.on("update:changed", (nextUpdateState) => {
     updateState = nextUpdateState;
@@ -246,7 +251,9 @@ function render() {
   const scopeText = elements.scopeNote.querySelector("span:last-child");
   scopeDot.classList.toggle("green", !state.mode?.offline);
   scopeText.textContent = state.mode?.offline
-    ? "Local-only · no company or public-network tools"
+    ? state.companyCache?.available
+      ? "Local-only · signed company context · no live network"
+      : "Local-only · no company or public-network tools"
     : "AMOS policy and proof are active";
   renderUpdate();
 
@@ -258,7 +265,9 @@ function render() {
     custom: "Inference runs at the configured endpoint; AMOS retains company state and authority."
   };
   elements.deploymentSummary.textContent = state.mode?.offline
-    ? "Local-only mode: no live AMOS or public-network tools are exposed to this session."
+    ? state.companyCache?.available
+      ? "Local-only mode: a server-signed, read-only company briefing is available; live AMOS actions and public-network tools remain absent."
+      : "Local-only mode: no live AMOS or public-network tools are exposed to this session."
     : boundary[state.provider.deployment] || boundary.custom;
 
   renderSettings();
@@ -267,6 +276,7 @@ function render() {
   renderDecisions();
   renderAttachments();
   renderPrivateMemory();
+  renderCompanyCache();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
 }
@@ -726,6 +736,102 @@ function renderPrivateMemory() {
     description.textContent = memoryClass.description;
     card.append(label, authority, description);
     elements.memoryClassGrid.append(card);
+  }
+}
+
+function renderCompanyCache() {
+  if (!state) return;
+  const cache = state.companyCache || { status: "missing", available: false };
+  const status = cache.status || "missing";
+  elements.companyCacheCard.classList.toggle("active", status === "active");
+  elements.companyCacheCard.classList.toggle("expired", status === "expired");
+  elements.companyCacheCard.classList.toggle("error", status === "error");
+  elements.companyCacheRemoveButton.classList.toggle(
+    "hidden",
+    ["missing", "unavailable"].includes(status)
+  );
+  elements.companyCacheRefreshButton.disabled =
+    state.mode?.offline ||
+    !state.connected ||
+    state.connectionMode !== "user";
+  elements.companyCacheRefreshButton.textContent =
+    status === "active" ? "Refresh four hours" : "Make available offline";
+
+  if (status === "active") {
+    elements.companyCacheStatus.textContent = `${cache.tenantSlug || "Company"} context is ready offline`;
+    elements.companyCacheDetail.textContent =
+      "AMOS Desktop can read this verified point-in-time briefing in local-only mode. Every company action still requires a live connection and fresh policy evaluation.";
+  } else if (status === "expired") {
+    elements.companyCacheStatus.textContent = "Offline company context expired";
+    elements.companyCacheDetail.textContent =
+      "The briefing is no longer available to the model. Return online and refresh it under your current identity and permissions.";
+  } else if (status === "error") {
+    elements.companyCacheStatus.textContent = "Offline company context needs attention";
+    elements.companyCacheDetail.textContent =
+      cache.error || "AMOS Desktop could not validate the encrypted company cache.";
+  } else if (status === "unavailable") {
+    elements.companyCacheStatus.textContent = "Encrypted company context is unavailable";
+    elements.companyCacheDetail.textContent =
+      cache.error || "This computer cannot currently protect a local company briefing.";
+  } else {
+    elements.companyCacheStatus.textContent = "No offline company context";
+    elements.companyCacheDetail.textContent =
+      "Connect with your personal AMOS sign-in, then explicitly store a four-hour briefing for local-only work. It never includes credentials or action authority.";
+  }
+
+  elements.companyCacheMeta.replaceChildren();
+  for (const value of [
+    cache.issuedAt ? `Captured ${relativeTime(cache.issuedAt)}` : "",
+    cache.expiresAt
+      ? `${status === "expired" ? "Expired" : "Expires"} ${new Date(cache.expiresAt).toLocaleString()}`
+      : "",
+    cache.role ? `Role ${cache.role}` : "",
+    cache.scopeCount ? `${cache.scopeCount} effective scopes` : "",
+    status !== "missing" && status !== "unavailable" ? "Read-only · no credentials" : ""
+  ].filter(Boolean)) {
+    const item = document.createElement("span");
+    item.textContent = value;
+    elements.companyCacheMeta.append(item);
+  }
+}
+
+async function refreshCompanyCache() {
+  const firstCopy = !state.companyCache || state.companyCache.status === "missing";
+  if (
+    firstCopy &&
+    !window.confirm(
+      "Store a server-signed company briefing on this Mac for up to four hours? It is encrypted locally, read-only, and contains no credentials."
+    )
+  ) {
+    return;
+  }
+  setButtonBusy(elements.companyCacheRefreshButton, true, "Verifying…");
+  try {
+    state = await api.refreshCompanyCache(14_400);
+    render();
+    toast("Signed company context is available offline for four hours.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(
+      elements.companyCacheRefreshButton,
+      false,
+      state.companyCache?.status === "active" ? "Refresh four hours" : "Make available offline"
+    );
+  }
+}
+
+async function removeCompanyCache() {
+  if (!window.confirm("Remove the offline company briefing from this Mac?")) return;
+  setButtonBusy(elements.companyCacheRemoveButton, true, "Removing…");
+  try {
+    state = await api.removeCompanyCache();
+    render();
+    toast("Offline company context was removed.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.companyCacheRemoveButton, false, "Remove");
   }
 }
 
