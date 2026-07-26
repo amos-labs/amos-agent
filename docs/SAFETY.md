@@ -90,7 +90,8 @@ data is processed.
 Production updates come only from the configured signed release feed.
 
 - Development builds do not query it.
-- macOS applications are signed and notarized.
+- macOS applications are signed and notarized; Windows applications and NSIS
+  installers are Authenticode-signed.
 - Update metadata carries cryptographic hashes for architecture-specific ZIPs.
 - Downloads require explicit user action.
 - Restart/install requires explicit user action.
@@ -116,7 +117,8 @@ evidence shows that it remains necessary.
 
 ## Offline and memory roadmap
 
-Private Desktop memory is encrypted with platform Keychain protection and
+Private Desktop memory is encrypted with Electron `safeStorage`—Keychain on
+macOS and DPAPI on Windows—and
 remains user-authoritative. Reusing it sends bounded content to the selected
 model for that task but does not add it to company memory. Promotion uses the
 ordinary AMOS company-document tool and therefore inherits the user's tenant,

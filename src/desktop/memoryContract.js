@@ -23,7 +23,7 @@ export const MEMORY_CLASSES = Object.freeze({
     persistence: "encrypted_local",
     mutable: true,
     exportPolicy: "encrypted_owner_export",
-    description: "Encrypted on this Mac and visible only to you until you promote it."
+    description: "Encrypted on this computer and visible only to you until you promote it."
   }),
   shared: Object.freeze({
     id: "shared",

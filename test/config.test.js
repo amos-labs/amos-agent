@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadConfig } from "../src/config.js";
+import { defaultShellPath, loadConfig } from "../src/config.js";
 
 test("authentication mode defaults to auto and accepts explicit API-key mode", () => {
   assert.equal(loadConfig({}, ".").auth.mode, "auto");
@@ -47,4 +47,13 @@ test("local providers do not require a provider credential", () => {
   const config = loadConfig({ AMOS_MODEL_PROVIDER: "ollama" }, ".");
   assert.equal(config.model.baseUrl, "http://127.0.0.1:11434/v1");
   assert.equal(config.model.apiKeyRequired, false);
+});
+
+test("desktop commands use a native shell by default and accept an explicit override", () => {
+  assert.equal(defaultShellPath("win32"), "powershell.exe");
+  assert.equal(defaultShellPath("darwin"), "/bin/bash");
+  assert.equal(
+    loadConfig({ AMOS_AGENT_SHELL: "pwsh.exe", AMOS_AGENT_BASH: "legacy.exe" }, ".").safety.bashPath,
+    "pwsh.exe"
+  );
 });

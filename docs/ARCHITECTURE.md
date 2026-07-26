@@ -195,9 +195,11 @@ model-supplied record or tenant identifier is never sufficient authority.
 
 ## Signed distribution
 
-Release tags build macOS DMG and ZIP artifacts for Intel and Apple Silicon.
-GitHub Actions signs and notarizes the application, generates architecture-aware
-update metadata and blockmaps, and publishes checksums.
+Release tags build macOS DMG and ZIP artifacts for Intel and Apple Silicon plus
+a Windows x64 NSIS installer. GitHub Actions signs and notarizes the macOS
+application, Authenticode-signs the Windows application and installer, generates
+platform-specific update metadata and blockmaps, and publishes one checksum
+manifest after both platform jobs pass.
 
 Packaged applications check the signed feed after launch and periodically.
 Downloads and restart/install remain explicit, and the app will not restart

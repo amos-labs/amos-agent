@@ -1,6 +1,6 @@
 {
   "name": "@amos-labs/amos-agent",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "AMOS Desktop and local agent: model-independent operators for the governed AMOS company brain.",
   "type": "module",
   "main": "desktop/main.js",
@@ -21,7 +21,10 @@
     "desktop": "electron desktop/main.js",
     "desktop:build": "electron-builder --mac dmg zip",
     "desktop:release": "electron-builder --config desktop/electron-builder.release.yml --mac --publish never",
-    "desktop:dir": "electron-builder --mac dir"
+    "desktop:dir": "electron-builder --mac dir",
+    "desktop:build:win": "electron-builder --win nsis --x64 --publish never",
+    "desktop:dir:win": "electron-builder --win dir --x64 --publish never",
+    "desktop:release:win": "electron-builder --config desktop/electron-builder.release.yml --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^39.2.7",
@@ -75,6 +78,28 @@
     "dmg": {
       "title": "AMOS Desktop",
       "artifactName": "AMOS-Desktop-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "icon": "desktop/assets/amos-app-icon-1024.png",
+      "verifyUpdateCodeSignature": true,
+      "artifactName": "AMOS-Desktop-Windows-${arch}-Setup.${ext}",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "AMOS Desktop",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     }
   },
   "keywords": [

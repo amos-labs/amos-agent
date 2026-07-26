@@ -9,13 +9,17 @@ available for developers, CI, and controlled automation.
 
 ## Install a release
 
-Download the current signed macOS installer:
+Download the current signed installer:
 
 - [Apple Silicon](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg)
-- [Intel](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
+- [Intel Mac](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
+- [Windows 10/11 x64](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-Windows-x64-Setup.exe)
 
-Open the DMG and drag **AMOS Desktop** into **Applications**. Official releases
-are signed with the AMOS Labs Developer ID and notarized by Apple.
+On macOS, open the DMG and drag **AMOS Desktop** into **Applications**. On
+Windows, run the per-user installer; no administrator account is required.
+Official macOS releases are signed with the AMOS Labs Developer ID and notarized
+by Apple. Official Windows releases are Authenticode-signed and verified before
+publication.
 
 ## First run
 
@@ -65,7 +69,8 @@ second offline copy of company data. See [Typed company canvas](CANVAS.md).
 
 ### Private memory
 
-- encrypted locally with macOS Keychain protection;
+- encrypted locally with operating-system protection (Keychain on macOS and
+  DPAPI on Windows);
 - visible in a dedicated Desktop memory view;
 - reusable in a future task without uploading it;
 - promoted to company memory only through an explicit user action and the
@@ -109,15 +114,15 @@ See [Streaming, cancellation, and restart-safe tasks](TASK_LIFECYCLE.md).
 
 ### Appearance
 
-- follows the current macOS light or dark appearance by default;
+- follows the current operating-system light or dark appearance by default;
 - switches immediately from the header control;
 - supports persistent Light and Dark overrides; and
 - keeps the system-following choice available under **Intelligence**.
 
 ### Distribution
 
-- Apple Silicon and Intel macOS applications;
-- hardened runtime, signing, and notarization;
+- Apple Silicon and Intel macOS applications plus Windows 10/11 x64;
+- hardened macOS runtime, Apple signing/notarization, and Windows Authenticode signing;
 - signed update checks after launch and every six hours;
 - native update-available and ready-to-install notifications;
 - explicit download and restart/install; and
@@ -137,7 +142,8 @@ Update states are:
 5. wait for **Restart and install**; and
 6. refuse restart while AMOS is working.
 
-The menu-bar item also exposes update status and a manual check.
+The macOS menu-bar or Windows system-tray item also exposes update status and a
+manual check.
 
 ## Run from source
 
@@ -156,31 +162,36 @@ authentication or first-run behavior.
 ```bash
 npm run desktop:dir
 npm run desktop:build
+npm run desktop:dir:win
+npm run desktop:build:win
 ```
 
-- `desktop:dir` creates an unpacked application.
+- `desktop:dir` creates an unpacked macOS application.
 - `desktop:build` creates unsigned local macOS DMG and ZIP artifacts.
-- `desktop:release` creates the release-layout artifacts used by CI.
+- `desktop:dir:win` creates an unpacked Windows x64 application.
+- `desktop:build:win` creates an unsigned local Windows x64 NSIS installer.
+- `desktop:release` and `desktop:release:win` create the signed release layouts
+  used by CI.
 
 Local builds are intentionally unsigned and cannot validate the production
 auto-update chain.
 
 ## Official release process
 
-Pushing a tag matching `package.json`, such as `v0.4.0`, starts
+Pushing a tag matching `package.json`, such as `v0.12.0`, starts
 `.github/workflows/release-desktop.yml`.
 
 The workflow:
 
 1. runs tests and syntax checks;
 2. verifies the tag and signing/notarization configuration;
-3. builds Apple Silicon and Intel applications;
-4. signs and notarizes both architectures;
-5. produces DMG installers and ZIP update payloads;
-6. generates blockmaps and an architecture-aware `latest-mac.yml`;
-7. validates that both architectures are present;
-8. writes SHA-256 checksums; and
-9. publishes one non-draft GitHub release.
+3. builds, signs, and notarizes Apple Silicon and Intel applications;
+4. builds and Authenticode-signs the Windows x64 NSIS installer;
+5. verifies each installer on its native CI runner;
+6. generates macOS and Windows blockmaps plus `latest-mac.yml` and `latest.yml`;
+7. joins both platform artifact sets only after both signing jobs pass;
+8. writes one cross-platform SHA-256 manifest; and
+9. publishes one non-draft GitHub release containing both platforms.
 
 Release secrets live in the protected `MAC_CSC_LINK` GitHub environment:
 
@@ -189,6 +200,16 @@ Release secrets live in the protected `MAC_CSC_LINK` GitHub environment:
 - `APPLE_ID`
 - `APPLE_APP_SPECIFIC_PASSWORD`
 - `APPLE_TEAM_ID`
+
+Windows release secrets live in the protected `WIN_CSC_LINK` environment:
+
+- `WIN_CSC_LINK`
+- `WIN_CSC_KEY_PASSWORD`
+
+`WIN_CSC_LINK` is a base64-encoded or otherwise electron-builder-compatible
+Windows code-signing certificate. The release build is fail-closed:
+`forceCodeSigning` prevents an official tag from publishing an unsigned
+installer.
 
 No signing or notarization secret belongs in the repository.
 
@@ -262,7 +283,9 @@ proof govern any resulting action. See
 
 - Update checks run only in a packaged signed build.
 - GitHub releases must be published, not draft.
-- The release must contain `latest-mac.yml` plus the correct architecture ZIP.
+- macOS releases must contain `latest-mac.yml` and the correct architecture ZIP.
+- Windows releases must contain `latest.yml`, the x64 NSIS installer, and its
+  blockmap.
 - The installed version must be lower than the release version.
 
 ### AMOS cannot read a file
@@ -276,12 +299,12 @@ proof govern any resulting action. See
 
 The next product layers build on the signed distribution foundation:
 
-1. Windows installers and signed update-feed validation;
-2. signed device identity and policy-controlled environment grants;
-3. richer typed canvas blocks and managed AMOS result adapters;
-4. richer private-memory retrieval and sharing proposals;
-5. richer retrieval within the bounded signed company briefing;
-6. richer offline-draft conflict explanations and lifecycle controls; and
-7. enterprise/MDM packaging.
+1. signed device identity and policy-controlled environment grants;
+2. richer typed canvas blocks and managed AMOS result adapters;
+3. richer private-memory retrieval and sharing proposals;
+4. richer retrieval within the bounded signed company briefing;
+5. richer offline-draft conflict explanations and lifecycle controls;
+6. enterprise/MDM packaging; and
+7. Windows on Arm and managed-store distribution.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

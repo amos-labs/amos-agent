@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   macos:
-    name: Sign, notarize, and publish macOS
+    name: Sign and notarize macOS
     environment: MAC_CSC_LINK
     runs-on: macos-15
     timeout-minutes: 45
@@ -73,9 +73,127 @@ jobs:
             { echo "::error::Update metadata is missing the Apple Silicon ZIP"; exit 1; }
           grep -q "AMOS-Desktop-macOS-x64.zip" dist/latest-mac.yml ||
             { echo "::error::Update metadata is missing the Intel ZIP"; exit 1; }
+
+      - name: Upload macOS release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos
+          if-no-files-found: error
+          retention-days: 3
+          path: |
+            dist/AMOS-Desktop-macOS-arm64.dmg
+            dist/AMOS-Desktop-macOS-x64.dmg
+            dist/AMOS-Desktop-macOS-arm64.zip
+            dist/AMOS-Desktop-macOS-x64.zip
+            dist/AMOS-Desktop-macOS-arm64.zip.blockmap
+            dist/AMOS-Desktop-macOS-x64.zip.blockmap
+            dist/latest-mac.yml
+
+  windows:
+    name: Sign and package Windows
+    environment: WIN_CSC_LINK
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: |
+          npm test
+          npm run check
+
+      - name: Verify release version and signing configuration
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          node -e 'const p=require("./package.json"); const tag=process.env.GITHUB_REF_NAME; if (tag !== `v${p.version}`) { console.error(`Tag ${tag} must match package version v${p.version}`); process.exit(1); }'
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
+            throw "WIN_CSC_LINK is not configured"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
+            throw "WIN_CSC_KEY_PASSWORD is not configured"
+          }
+
+      - name: Build signed installer
+        run: npm run desktop:release:win
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+
+      - name: Verify Windows release assets and signature
+        shell: pwsh
+        run: |
+          $required = @(
+            "dist/AMOS-Desktop-Windows-x64-Setup.exe",
+            "dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap",
+            "dist/latest.yml"
+          )
+          foreach ($asset in $required) {
+            if (!(Test-Path $asset) -or (Get-Item $asset).Length -eq 0) {
+              throw "Missing release asset: $asset"
+            }
+          }
+          if (!(Select-String -Path "dist/latest.yml" -Pattern "AMOS-Desktop-Windows-x64-Setup.exe" -Quiet)) {
+            throw "Windows update metadata does not reference the signed installer"
+          }
+          $signature = Get-AuthenticodeSignature "dist/AMOS-Desktop-Windows-x64-Setup.exe"
+          if ($signature.Status -ne "Valid") {
+            throw "Windows installer signature is not valid: $($signature.Status)"
+          }
+
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          if-no-files-found: error
+          retention-days: 3
+          path: |
+            dist/AMOS-Desktop-Windows-x64-Setup.exe
+            dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap
+            dist/latest.yml
+
+  publish:
+    name: Publish desktop release
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify the complete cross-platform release
+        run: |
+          required=(
+            dist/AMOS-Desktop-macOS-arm64.dmg
+            dist/AMOS-Desktop-macOS-x64.dmg
+            dist/AMOS-Desktop-macOS-arm64.zip
+            dist/AMOS-Desktop-macOS-x64.zip
+            dist/AMOS-Desktop-macOS-arm64.zip.blockmap
+            dist/AMOS-Desktop-macOS-x64.zip.blockmap
+            dist/latest-mac.yml
+            dist/AMOS-Desktop-Windows-x64-Setup.exe
+            dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap
+            dist/latest.yml
+          )
+          for asset in "${required[@]}"; do
+            test -s "$asset" || { echo "::error::Missing release asset: $asset"; exit 1; }
+          done
           (
             cd dist
-            shasum -a 256 \
+            sha256sum \
               AMOS-Desktop-macOS-arm64.dmg \
               AMOS-Desktop-macOS-x64.dmg \
               AMOS-Desktop-macOS-arm64.zip \
@@ -83,6 +201,9 @@ jobs:
               AMOS-Desktop-macOS-arm64.zip.blockmap \
               AMOS-Desktop-macOS-x64.zip.blockmap \
               latest-mac.yml \
+              AMOS-Desktop-Windows-x64-Setup.exe \
+              AMOS-Desktop-Windows-x64-Setup.exe.blockmap \
+              latest.yml \
               > SHA256SUMS.txt
           )
 
@@ -95,12 +216,14 @@ jobs:
             dist/AMOS-Desktop-macOS-x64.dmg
             dist/AMOS-Desktop-macOS-arm64.zip
             dist/AMOS-Desktop-macOS-x64.zip
+            dist/AMOS-Desktop-macOS-arm64.zip.blockmap
+            dist/AMOS-Desktop-macOS-x64.zip.blockmap
             dist/latest-mac.yml
+            dist/AMOS-Desktop-Windows-x64-Setup.exe
+            dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap
+            dist/latest.yml
             dist/SHA256SUMS.txt
           )
-          for blockmap in dist/*.blockmap; do
-            test -e "$blockmap" && assets+=("$blockmap")
-          done
           gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
             --repo "$GITHUB_REPOSITORY" \
             --title "AMOS Desktop ${GITHUB_REF_NAME#v}" \
