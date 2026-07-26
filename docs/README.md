@@ -8,6 +8,7 @@
 - [Intelligence and infrastructure profiles](INTELLIGENCE_PROVIDERS.md)
 - [Safety model](SAFETY.md)
 - [Signed offline company context](OFFLINE_COMPANY_CONTEXT.md)
+- [Offline draft reconciliation](OFFLINE_RECONCILIATION.md)
 - [Typed company canvas](CANVAS.md)
 
 ## Product direction

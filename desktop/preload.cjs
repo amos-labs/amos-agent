@@ -7,6 +7,7 @@ const eventChannels = new Set([
   "activity:changed",
   "canvas:changed",
   "offline:changed",
+  "offline-proposals:changed",
   "remote:changed",
   "auth:browser",
   "update:changed"
@@ -24,6 +25,12 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   refreshCompanyCache: (ttlSeconds) =>
     ipcRenderer.invoke("desktop:refresh-company-cache", ttlSeconds),
   removeCompanyCache: () => ipcRenderer.invoke("desktop:remove-company-cache"),
+  reconcileOfflineProposal: (id) =>
+    ipcRenderer.invoke("desktop:reconcile-offline-proposal", id),
+  prepareOfflineProposal: (id) =>
+    ipcRenderer.invoke("desktop:prepare-offline-proposal", id),
+  removeOfflineProposal: (id) =>
+    ipcRenderer.invoke("desktop:remove-offline-proposal", id),
   installOfflineModel: (id) => ipcRenderer.invoke("desktop:install-offline-model", id),
   removeOfflineModel: (id) => ipcRenderer.invoke("desktop:remove-offline-model", id),
   activateOfflineModel: (id) => ipcRenderer.invoke("desktop:activate-offline-model", id),

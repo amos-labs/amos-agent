@@ -65,7 +65,9 @@ and identifying metadata do not remain as plaintext in that file.
 
 When local-only mode starts, Desktop constructs a physically smaller tool
 registry. AMOS MCP and public-web tools are absent. If a valid grant exists,
-Desktop adds only `desktop_read_company_cache`.
+Desktop adds `desktop_read_company_cache` and, when encrypted draft storage is
+available, `desktop_stage_offline_proposal`. The latter stores outcome-level
+local drafts only; it cannot queue an AMOS call.
 
 The tool returns:
 
@@ -90,6 +92,8 @@ to be removed and the local runtime to be rebuilt without it.
 The user can remove the copy from **Memory** at any time. Disconnecting the
 AMOS account removes it automatically.
 
-Future queued offline proposals require a separate reconciliation contract:
-explicit diff and conflict review, current policy evaluation, idempotency, and
-human confirmation. This cache does not implement or imply that authority.
+AMOS Desktop 0.10 implements a separate outcome-draft reconciliation contract:
+explicit live comparison, exact user and tenant binding, a ten-minute
+comparison lifetime, and a user-reviewed reauthorization prompt. It does not
+store or replay tool calls. See
+[Offline draft reconciliation](OFFLINE_RECONCILIATION.md).

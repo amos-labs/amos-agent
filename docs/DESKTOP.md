@@ -227,6 +227,23 @@ against the live user, tenant, and AMOS signing keys; logout removes it.
 
 See [Signed offline company context](OFFLINE_COMPANY_CONTEXT.md).
 
+### Continue work drafted offline
+
+1. While in local-only mode, ask AMOS to prepare future company work. With a
+   valid signed briefing, the local model can stage an encrypted outcome draft.
+2. Return to **ONLINE COMPANY** and open **Decisions**.
+3. Select **Compare with live company**. Desktop checks the exact user and
+   tenant before reading a fresh company briefing.
+4. Review the changed sections. Comparisons expire after ten minutes.
+5. Select **Continue in Operator**. Desktop fills the composer but does not run
+   the task.
+6. Review the prompt and press **Run** to explicitly request current online
+   evaluation.
+
+No offline tool call is stored or replayed. Current AMOS policy, approvals, and
+proof govern any resulting action. See
+[Offline draft reconciliation](OFFLINE_RECONCILIATION.md).
+
 ### No update appears
 
 - Update checks run only in a packaged signed build.
@@ -250,7 +267,7 @@ The next product layers build on the signed distribution foundation:
 3. richer typed canvas blocks and managed AMOS result adapters;
 4. richer private-memory retrieval and sharing proposals;
 5. richer retrieval within the bounded signed company briefing;
-6. explicit offline proposal reconciliation without silent replay; and
+6. richer offline-draft conflict explanations and lifecycle controls; and
 7. Windows installers and enterprise/MDM packaging.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

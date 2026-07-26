@@ -62,7 +62,7 @@ const elements = Object.fromEntries(
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
-    "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "pendingDecisions",
+    "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
     "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
     "companyCacheCard", "companyCacheStatus", "companyCacheDetail", "companyCacheMeta",
@@ -187,6 +187,11 @@ function bindEvents() {
     if (!state) return;
     state.offline = offline;
     renderOfflineModels();
+  });
+  api.on("offline-proposals:changed", (offlineProposals) => {
+    if (!state) return;
+    state.offlineProposals = offlineProposals || [];
+    renderDecisions();
   });
   api.on("remote:changed", (remote) => {
     if (!state) return;
@@ -1024,10 +1029,12 @@ function renderIdentity() {
 function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
+  const proposals = Array.isArray(state.offlineProposals) ? state.offlineProposals : [];
   const pending = approvals.filter((approval) => approval.status === "pending");
   const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  elements.decisionBadge.textContent = String(pending.length);
-  elements.decisionBadge.classList.toggle("hidden", pending.length === 0);
+  const waitingCount = pending.length + proposals.length;
+  elements.decisionBadge.textContent = String(waitingCount);
+  elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
 
   const sync = state.remoteStatus || {};
   elements.decisionSyncStatus.textContent = sync.paused
@@ -1040,7 +1047,9 @@ function renderDecisions() {
   elements.refreshDecisionsButton.disabled = Boolean(sync.syncing || sync.paused);
 
   const notice = sync.paused
-    ? "Return to online company mode to refresh or decide governed company work."
+    ? proposals.length > 0
+      ? "Offline drafts remain local. Return online to compare them with the live company; nothing will replay automatically."
+      : "Return to online company mode to refresh or decide governed company work."
     : !state.connected
       ? "Connect your AMOS account to receive governed company decisions."
       : state.connectionMode === "api_key"
@@ -1052,6 +1061,17 @@ function renderDecisions() {
             : "";
   elements.decisionNotice.textContent = notice;
   elements.decisionNotice.classList.toggle("hidden", !notice);
+
+  elements.offlineProposalList.replaceChildren();
+  if (proposals.length === 0) {
+    elements.offlineProposalList.append(
+      decisionEmpty("No offline company-work drafts are waiting.")
+    );
+  } else {
+    for (const proposal of proposals) {
+      elements.offlineProposalList.append(offlineProposalCard(proposal));
+    }
+  }
 
   elements.pendingDecisions.replaceChildren();
   if (pending.length === 0) {
@@ -1073,6 +1093,144 @@ function renderDecisions() {
     for (const approval of recent) {
       elements.recentDecisions.append(decisionCard(approval, false));
     }
+  }
+}
+
+function offlineProposalCard(proposal) {
+  const fresh = proposalReconciliationIsFresh(proposal);
+  const card = document.createElement("article");
+  card.className = `decision-card offline-proposal ${fresh ? "reconciled" : "draft"}`;
+
+  const content = document.createElement("div");
+  content.className = "decision-content";
+  const meta = document.createElement("div");
+  meta.className = "decision-meta";
+  const status = document.createElement("span");
+  status.className = `decision-status ${fresh ? "reconciled" : "draft"}`;
+  status.textContent = fresh ? "compared with live company" : "local draft";
+  const time = document.createElement("time");
+  time.dateTime = proposal.createdAt;
+  time.textContent = proposal.createdAt
+    ? `Drafted ${new Date(proposal.createdAt).toLocaleString()}`
+    : "";
+  meta.append(status, time);
+
+  const title = document.createElement("h2");
+  title.textContent = proposal.title;
+  const summary = document.createElement("p");
+  summary.textContent = proposal.summary;
+  const provenance = document.createElement("small");
+  provenance.textContent = [
+    proposal.source?.tenantSlug,
+    proposal.source?.observedAt
+      ? `context captured ${new Date(proposal.source.observedAt).toLocaleString()}`
+      : "",
+    "encrypted locally",
+    "never queued"
+  ].filter(Boolean).join(" · ");
+  const outcomes = document.createElement("ul");
+  outcomes.className = "proposal-outcomes";
+  for (const action of proposal.proposedActions || []) {
+    const item = document.createElement("li");
+    item.textContent = action;
+    outcomes.append(item);
+  }
+  content.append(meta, title, summary, outcomes, provenance);
+
+  if (proposal.reconciliation) {
+    const comparison = document.createElement("div");
+    comparison.className = `proposal-comparison ${proposal.reconciliation.risk}`;
+    const changed = proposal.reconciliation.changedSections || [];
+    const missing = proposal.reconciliation.missingSections || [];
+    comparison.textContent = fresh
+      ? changed.length > 0 || missing.length > 0
+        ? `Live context changed: ${[...changed, ...missing].join(", ")}. AMOS must evaluate the draft again.`
+        : "No change was detected in the compared sections. AMOS must still evaluate the draft again."
+      : "The live comparison is more than 10 minutes old. Compare again before continuing.";
+    content.append(comparison);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "decision-card-actions proposal-actions";
+  if (fresh && !state.mode?.offline && state.connectionMode === "user") {
+    const continueButton = actionButton("Continue in Operator →", "primary");
+    continueButton.addEventListener("click", () =>
+      continueOfflineProposal(proposal.id, continueButton)
+    );
+    actions.append(continueButton);
+  } else {
+    const compare = actionButton(
+      state.mode?.offline
+        ? "Reconnect to compare"
+        : state.connectionMode !== "user"
+          ? "Personal sign-in required"
+          : "Compare with live company",
+      "primary"
+    );
+    compare.disabled = Boolean(state.mode?.offline || state.connectionMode !== "user");
+    compare.addEventListener("click", () => compareOfflineProposal(proposal.id, compare));
+    actions.append(compare);
+  }
+
+  const remove = actionButton("Remove draft", "danger");
+  remove.addEventListener("click", () => removeOfflineProposal(proposal, remove));
+  actions.append(remove);
+  card.append(content, actions);
+  return card;
+}
+
+function proposalReconciliationIsFresh(proposal) {
+  const checkedAt = Date.parse(proposal?.reconciliation?.checkedAt || "");
+  const elapsed = Date.now() - checkedAt;
+  return (
+    proposal?.status === "reconciled" &&
+    Number.isFinite(checkedAt) &&
+    elapsed >= 0 &&
+    elapsed <= 10 * 60_000
+  );
+}
+
+async function compareOfflineProposal(id, button) {
+  setButtonBusy(button, true, "Comparing…");
+  try {
+    const result = await api.reconcileOfflineProposal(id);
+    state.offlineProposals = result.offlineProposals || [];
+    renderDecisions();
+    toast("Compared with the live company. Nothing was submitted or replayed.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(button, false, "Compare with live company");
+  }
+}
+
+async function continueOfflineProposal(id, button) {
+  setButtonBusy(button, true, "Loading…");
+  try {
+    const result = await api.prepareOfflineProposal(id);
+    elements.promptInput.value = result.prompt;
+    showView("operator");
+    elements.promptInput.focus();
+    toast("Draft loaded. Review it, then press Run to explicitly reauthorize current evaluation.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(button, false, "Continue in Operator →");
+  }
+}
+
+async function removeOfflineProposal(proposal, button) {
+  if (!window.confirm(`Remove the local draft “${proposal.title}”?`)) return;
+  setButtonBusy(button, true, "Removing…");
+  try {
+    const result = await api.removeOfflineProposal(proposal.id);
+    state.offlineProposals = result.offlineProposals || [];
+    renderDecisions();
+    toast("Offline draft removed.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(button, false, "Remove draft");
   }
 }
 
@@ -1607,8 +1765,10 @@ async function runTask(event) {
     state.canvases = result.canvases || state.canvases;
     state.activeCanvasId = result.activeCanvasId || state.activeCanvasId;
     state.privateMemory = result.privateMemory || state.privateMemory;
+    state.offlineProposals = result.offlineProposals || state.offlineProposals;
     renderActivity();
     renderPrivateMemory();
+    renderDecisions();
     for (const attachment of submitted) {
       await api.removeAttachment(attachment.id);
     }
@@ -1624,7 +1784,9 @@ async function runTask(event) {
     try {
       const latest = await api.state();
       state.privateMemory = latest.privateMemory || [];
+      state.offlineProposals = latest.offlineProposals || [];
       renderPrivateMemory();
+      renderDecisions();
     } catch {
       // Task completion must not be masked if a local memory refresh fails.
     }

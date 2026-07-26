@@ -122,6 +122,32 @@ test("MCP identity parsing fails closed on malformed content", () => {
   );
 });
 
+test("Desktop reads a fresh company briefing without requesting an offline token", async () => {
+  const client = new DesktopRemoteStateClient({
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    oauth: { async getAccessToken() { return "user-token"; } }
+  });
+  let requested;
+  client.mcp.callTool = async (name, args) => {
+    requested = { name, args };
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          generated_at: "2026-07-26T12:00:00.000Z",
+          company_state: { name: "Northwind Labs" },
+          offline_cache: { token: "must-not-leave-client" }
+        })
+      }]
+    };
+  };
+
+  const snapshot = await client.companySnapshot();
+  assert.deepEqual(requested, { name: "resume_company", args: {} });
+  assert.equal(snapshot.company_state.name, "Northwind Labs");
+  assert.equal(Object.hasOwn(snapshot, "offline_cache"), false);
+});
+
 test("Desktop requests, verifies, and binds the exact signed company snapshot", async () => {
   const signed = signedCompanyCache();
   const client = new DesktopRemoteStateClient(

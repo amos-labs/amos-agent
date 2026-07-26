@@ -55,6 +55,7 @@ AMOS managed platform
 - Keychain-protected private memory with reuse, promotion, and permanent forget controls
 - Passphrase-encrypted `.amos-memory` export/import with preview, tamper detection, deduplication, and fork lineage
 - Explicit four-hour, server-signed company briefings for read-only offline work
+- Encrypted offline outcome drafts with live diff, identity pinning, and explicit reauthorization
 - Typed company canvases for metrics, tables, trends, briefs, evidence, approvals, and receipts
 - Local workspace grants, search, reads, Git status/diff, and atomic patches
 - Approval-gated shell commands and file changes
@@ -108,6 +109,14 @@ already bounded `resume_company` briefing. Desktop verifies the signature and
 current identity, encrypts the grant with operating-system protection, and
 exposes one read-only tool in local-only mode. It never carries credentials,
 write authority, approvals, or permission to replay work.
+
+AMOS Desktop 0.10 adds outcome-level offline drafts. A local model can stage
+human-readable proposed work, but it cannot queue AMOS tool arguments or
+actions. On reconnect, Desktop checks the exact user and tenant, compares the
+captured section fingerprints with a fresh read-only company briefing, and
+shows any drift in **Decisions**. Continuing only fills the online Operator
+composer; the user must still press **Run**, and current AMOS policy, approvals,
+and receipts govern everything that follows.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 
@@ -209,6 +218,7 @@ as the AMOS platform grows.
 - [Safety model](docs/SAFETY.md)
 - [Memory classes and private-memory controls](docs/MEMORY.md)
 - [Signed offline company context](docs/OFFLINE_COMPANY_CONTEXT.md)
+- [Offline draft reconciliation](docs/OFFLINE_RECONCILIATION.md)
 - [Typed company canvas](docs/CANVAS.md)
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Contributing](CONTRIBUTING.md)
@@ -222,7 +232,7 @@ The near-term product path is:
 3. richer typed canvases and managed result adapters for company data and active work;
 4. encrypted private local memory with explicit promotion into shared AMOS memory;
 5. curated small-model offline operation with an explicit local-only boundary; and
-6. governed company-cache retrieval and safe reconnect reconciliation for portable memory.
+6. governed company-cache retrieval and explicit offline-draft reconciliation without replay.
 
 The governing principle is constant: **local intelligence may observe, reason,
 draft, and execute within explicit grants; AMOS remains authoritative for

@@ -115,10 +115,11 @@ activity, or the capsule itself.
 Credentials, OAuth tokens, provider keys, and unrestricted raw application data
 are never valid capsule entries.
 
-Portable private memory is now implemented. Export of governed company memory
-and reconciliation of queued offline work remain separate because they require
-live policy, current data, idempotency, signatures, and explicit conflict
-review.
+Portable private memory is implemented. Export of governed company memory
+remains separate. AMOS Desktop 0.10 reconciles offline outcome drafts without
+storing tool arguments: it checks current identity and data, shows section
+drift, and requires explicit online reauthorization before ordinary AMOS policy
+can evaluate any action.
 
 ## Signed offline company context
 
@@ -145,3 +146,8 @@ company memory. A signed-in user may explicitly capture the already bounded
 The saved briefing is point-in-time evidence, not current company truth and
 never action authority. See
 [Signed offline company context](OFFLINE_COMPANY_CONTEXT.md).
+
+Offline outcome drafts retain only business-readable intent, assumptions, and
+signed-context fingerprints. They remain private local state until the user
+compares and explicitly continues them. See
+[Offline draft reconciliation](OFFLINE_RECONCILIATION.md).

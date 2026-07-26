@@ -28,6 +28,19 @@ export class DesktopRemoteStateClient {
     return parseMcpJson(result, "AMOS identity");
   }
 
+  async companySnapshot() {
+    const snapshot = parseMcpJson(
+      await this.mcp.callTool("resume_company", {}),
+      "AMOS company briefing"
+    );
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      throw new Error("AMOS company briefing returned an invalid response");
+    }
+    const current = { ...snapshot };
+    delete current.offline_cache;
+    return current;
+  }
+
   async approvals() {
     let token = await this.oauth.getAccessToken();
     let response = await this.fetchApprovals(token);

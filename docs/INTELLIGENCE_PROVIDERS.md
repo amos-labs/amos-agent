@@ -164,9 +164,12 @@ Local-only mode is a tool boundary, not merely a status label:
 - returning online does not replay or execute anything from the offline
   session.
 
-This first slice does not persist a cross-session cache of AMOS company data.
-That cache requires server-issued scope, expiry, provenance, and revocation
-metadata before it can ship safely.
+AMOS Desktop 0.9 adds an explicit server-signed, encrypted, short-lived company
+briefing with scope, expiry, provenance, and signing-key revalidation. Version
+0.10 adds encrypted outcome drafts tied to that briefing. Returning online
+compares their section fingerprints with a fresh read-only company briefing and
+requires an explicit user-reviewed Operator prompt; it never replays a stored
+tool invocation.
 
 ## Adding a provider
 
