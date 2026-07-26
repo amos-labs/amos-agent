@@ -36,7 +36,9 @@ test("company-cache verifier accepts the exact user, tenant, issuer, audience, a
 test("company-cache verifier rejects tampering, unknown keys, expiry, and identity drift", () => {
   const grant = signedGrant();
   const pieces = grant.token.split(".");
-  pieces[2] = `${pieces[2].slice(0, -1)}${pieces[2].endsWith("a") ? "b" : "a"}`;
+  // Flip a fully significant base64url character. Changing the final character
+  // can alter only unused padding bits and therefore decode to the same signature.
+  pieces[2] = `${pieces[2][0] === "a" ? "b" : "a"}${pieces[2].slice(1)}`;
   assert.throws(
     () => verifyCompanyCacheGrant({
       token: pieces.join("."),

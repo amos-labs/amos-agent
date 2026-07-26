@@ -1,6 +1,6 @@
 {
   "name": "@amos-labs/amos-agent",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "AMOS Desktop and local agent: model-independent operators for the governed AMOS company brain.",
   "type": "module",
   "main": "desktop/main.js",
@@ -17,7 +17,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js && node --check src/desktop/attachments.js && node --check src/desktop/canvas.js && node --check src/desktop/companyCache.js && node --check src/desktop/controller.js && node --check src/desktop/input.js && node --check src/desktop/markdown.js && node --check src/desktop/memoryCapsule.js && node --check src/desktop/memoryContract.js && node --check src/desktop/offlineIntelligence.js && node --check src/desktop/privateMemoryStore.js && node --check src/desktop/remoteState.js && node --check src/desktop/updateManager.js && node --check src/tools/canvas.js && node --check src/tools/coding.js && node --check src/tools/companyCache.js",
+    "check": "node --check bin/amos-agent.js && node --check desktop/main.js && node --check desktop/preload.cjs && node --check desktop/renderer/app.js && node --check src/desktop/attachments.js && node --check src/desktop/canvas.js && node --check src/desktop/companyCache.js && node --check src/desktop/controller.js && node --check src/desktop/input.js && node --check src/desktop/markdown.js && node --check src/desktop/memoryCapsule.js && node --check src/desktop/memoryContract.js && node --check src/desktop/offlineIntelligence.js && node --check src/desktop/offlineProposal.js && node --check src/desktop/privateMemoryStore.js && node --check src/desktop/remoteState.js && node --check src/desktop/updateManager.js && node --check src/tools/canvas.js && node --check src/tools/coding.js && node --check src/tools/companyCache.js && node --check src/tools/offlineProposal.js",
     "desktop": "electron desktop/main.js",
     "desktop:build": "electron-builder --mac dmg zip",
     "desktop:release": "electron-builder --config desktop/electron-builder.release.yml --mac --publish never",

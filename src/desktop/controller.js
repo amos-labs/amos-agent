@@ -19,12 +19,19 @@ import {
 import { MEMORY_CLASSES } from "./memoryContract.js";
 import { assessHardware } from "./offlineIntelligence.js";
 import {
+  buildReauthorizationPrompt,
+  proposalSourceFromGrant,
+  reconcileOfflineProposal,
+  reconciliationIsFresh
+} from "./offlineProposal.js";
+import {
   amosOrigin,
   approvalReviewUrl,
   DesktopRemoteStateClient
 } from "./remoteState.js";
 import { createCanvasTool } from "../tools/canvas.js";
 import { createCompanyCacheTool } from "../tools/companyCache.js";
+import { createOfflineProposalTool } from "../tools/offlineProposal.js";
 import { OFFLINE_SYSTEM_PROMPT } from "../prompts.js";
 
 export class DesktopController {
@@ -33,6 +40,7 @@ export class DesktopController {
     settingsStore,
     privateMemoryStore = null,
     companyCacheStore = null,
+    offlineProposalStore = null,
     offlineManager = null,
     openBrowser,
     emit,
@@ -59,6 +67,7 @@ export class DesktopController {
     this.privateMemoryStore = privateMemoryStore;
     this.companyCacheStore = companyCacheStore;
     this.companyCacheRevalidatedFor = null;
+    this.offlineProposalStore = offlineProposalStore;
     this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
     this.approvals = new DesktopApprovalBridge({
@@ -93,7 +102,8 @@ export class DesktopController {
       ...this.canvases.state(),
       memoryClasses: Object.values(MEMORY_CLASSES),
       privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
-      companyCache: await this.companyCacheState()
+      companyCache: await this.companyCacheState(),
+      offlineProposals: await this.offlineProposalState()
     };
   }
 
@@ -207,6 +217,90 @@ export class DesktopController {
     this.record("memory", "Removed offline company context from this computer");
     await this.sendRemoteState();
     return this.state();
+  }
+
+  async stageOfflineProposal(input) {
+    const settings = await this.settingsStore.read();
+    if (settings.operatingMode !== "offline") {
+      throw new Error("Offline drafts can only be staged in explicit local-only mode");
+    }
+    const grant = await this.readCompanyCache(settings);
+    if (!grant) {
+      throw new Error("Store a signed company briefing before staging offline company work");
+    }
+    const proposal = await this.requireOfflineProposalStore().add(
+      input,
+      proposalSourceFromGrant(grant)
+    );
+    this.record("draft", `Staged offline draft: ${proposal.title}`, {
+      proposal_id: proposal.id,
+      tenant_slug: proposal.source.tenantSlug,
+      replay_allowed: false
+    });
+    await this.sendOfflineProposals();
+    return proposal;
+  }
+
+  async reconcileOfflineProposal(id) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings);
+    const proposal = await this.requireOfflineProposalStore().get(id);
+    const identity = await remote.identity();
+    assertProposalIdentity(proposal, identity);
+    const liveSnapshot = await remote.companySnapshot();
+    const reconciliation = reconcileOfflineProposal({
+      proposal,
+      liveSnapshot,
+      identity
+    });
+    const saved = await this.requireOfflineProposalStore().saveReconciliation(
+      id,
+      reconciliation
+    );
+    this.identity = identity;
+    this.record("draft", `Compared offline draft with live company: ${saved.title}`, {
+      proposal_id: saved.id,
+      risk: reconciliation.risk,
+      changed_sections: reconciliation.changedSections,
+      replay_allowed: false
+    });
+    await this.sendOfflineProposals();
+    return { proposal: saved, offlineProposals: await this.offlineProposalState() };
+  }
+
+  async prepareOfflineProposal(id) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings);
+    const [proposal, identity] = await Promise.all([
+      this.requireOfflineProposalStore().get(id),
+      remote.identity()
+    ]);
+    assertProposalIdentity(proposal, identity);
+    if (!reconciliationIsFresh(proposal)) {
+      throw new Error("Compare this draft with the live company again before continuing");
+    }
+    this.identity = identity;
+    this.record("draft", `Loaded offline draft into Operator: ${proposal.title}`, {
+      proposal_id: proposal.id,
+      execution_started: false,
+      replay_allowed: false
+    });
+    return {
+      proposal,
+      prompt: buildReauthorizationPrompt(proposal),
+      executionStarted: false
+    };
+  }
+
+  async removeOfflineProposal(id) {
+    const store = this.requireOfflineProposalStore();
+    const proposal = await store.get(id);
+    await store.remove(id);
+    this.record("draft", `Removed offline draft: ${proposal.title}`, {
+      proposal_id: proposal.id
+    });
+    await this.sendOfflineProposals();
+    return { offlineProposals: await this.offlineProposalState() };
   }
 
   async chooseWorkspace(path) {
@@ -566,7 +660,8 @@ export class DesktopController {
         attachments: this.attachments.list(),
         ...this.canvases.state(),
         memory,
-        privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : []
+        privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
+        offlineProposals: await this.offlineProposalState()
       };
     } finally {
       this.send("agent:status", { running: false });
@@ -683,6 +778,46 @@ export class DesktopController {
     return this.privateMemoryStore;
   }
 
+  requireOfflineProposalStore() {
+    if (!this.offlineProposalStore) {
+      throw new Error("Offline drafts are unavailable because platform encryption is not configured");
+    }
+    return this.offlineProposalStore;
+  }
+
+  async offlineProposalState() {
+    if (!this.offlineProposalStore) return [];
+    try {
+      return await this.offlineProposalStore.list();
+    } catch (error) {
+      this.record("draft", `Could not read encrypted offline drafts: ${error.message}`);
+      return [];
+    }
+  }
+
+  async sendOfflineProposals() {
+    const offlineProposals = await this.offlineProposalState();
+    this.send("offline-proposals:changed", offlineProposals);
+    return offlineProposals;
+  }
+
+  async personalRemote(settings) {
+    if (settings.operatingMode === "offline") {
+      throw new Error("Return to online company mode before comparing an offline draft");
+    }
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (!shouldUseOAuth(config, credentials)) {
+      throw new Error("Connect AMOS with your personal sign-in before continuing an offline draft");
+    }
+    return new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+  }
+
   async companyCacheState() {
     if (!this.companyCacheStore) {
       return {
@@ -797,6 +932,13 @@ export class DesktopController {
               read: () => this.readCompanyCache(settings)
             })
           );
+          if (this.offlineProposalStore) {
+            extraTools.push(
+              createOfflineProposalTool({
+                stage: (input) => this.stageOfflineProposal(input)
+              })
+            );
+          }
         }
       } catch {
         // Expired, mismatched, or corrupt company context never enters the tool registry.
@@ -869,8 +1011,21 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       remoteStatus: { ...this.remoteStatus },
-      companyCache: await this.companyCacheState()
+      companyCache: await this.companyCacheState(),
+      offlineProposals: await this.offlineProposalState()
     });
+  }
+}
+
+function assertProposalIdentity(proposal, identity) {
+  const subjectId = String(identity?.sub || identity?.user?.id || "");
+  const tenantId = String(identity?.tenant_id || "");
+  if (
+    identity?.principal_type !== "user" ||
+    subjectId !== proposal?.source?.subjectId ||
+    tenantId !== proposal?.source?.tenantId
+  ) {
+    throw new Error("This offline draft belongs to a different AMOS user or company");
   }
 }
 

@@ -16,6 +16,7 @@ import electronUpdater from "electron-updater";
 import { DesktopSettingsStore } from "../src/desktop/settingsStore.js";
 import { DesktopController } from "../src/desktop/controller.js";
 import { CompanyCacheStore } from "../src/desktop/companyCache.js";
+import { OfflineProposalStore } from "../src/desktop/offlineProposal.js";
 import { OllamaModelManager } from "../src/desktop/offlineIntelligence.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
@@ -213,6 +214,15 @@ function registerIpc() {
     controller.refreshCompanyCache(ttlSeconds)
   );
   ipcMain.handle("desktop:remove-company-cache", () => controller.removeCompanyCache());
+  ipcMain.handle("desktop:reconcile-offline-proposal", (_event, id) =>
+    controller.reconcileOfflineProposal(id)
+  );
+  ipcMain.handle("desktop:prepare-offline-proposal", (_event, id) =>
+    controller.prepareOfflineProposal(id)
+  );
+  ipcMain.handle("desktop:remove-offline-proposal", (_event, id) =>
+    controller.removeOfflineProposal(id)
+  );
   ipcMain.handle("desktop:install-offline-model", (_event, id) =>
     controller.installOfflineModel(id)
   );
@@ -333,6 +343,11 @@ app.whenReady().then(() => {
     encrypt,
     decrypt
   });
+  const offlineProposalStore = new OfflineProposalStore({
+    filePath: join(app.getPath("userData"), "offline-proposals.json"),
+    encrypt,
+    decrypt
+  });
   const offlineManager = new OllamaModelManager({
     emit: (payload) => send("offline:changed", payload)
   });
@@ -341,6 +356,7 @@ app.whenReady().then(() => {
     settingsStore,
     privateMemoryStore,
     companyCacheStore,
+    offlineProposalStore,
     offlineManager,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,

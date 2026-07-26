@@ -107,9 +107,9 @@ Offline company work must fail safe:
 
 - cached company context carries source, scope, age, and expiry;
 - offline answers clearly disclose cached versus live context;
-- queued company work remains a proposal;
+- offline company work is stored only as an outcome proposal, never a queued tool call;
 - reconnect re-evaluates current identity, data, policy, and idempotency;
-- nothing queued offline executes silently; and
+- nothing drafted offline executes silently; and
 - memory exports never include credentials.
 
 AMOS Desktop 0.7 enforces an explicit local-only tool surface. AMOS MCP and
@@ -124,6 +124,12 @@ sectioned, provenance-first, and unavailable after expiry. The stored grant is
 encrypted with operating-system protection, contains no credentials, and
 cannot call, approve, or replay any AMOS operation. Reconnect revalidates it
 against live identity and signing keys before continued use.
+
+AMOS Desktop 0.10 adds encrypted offline outcome drafts. Reconnect checks the
+user and tenant before fetching a fresh company briefing, compares section
+fingerprints, and requires a current comparison plus an explicit user action to
+load the draft into Operator. Loading does not submit it; the user must still
+press **Run**, and current AMOS policy remains authoritative.
 
 ## Advanced environment controls
 

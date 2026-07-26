@@ -182,7 +182,10 @@ runtime discovery, resumable installation/removal controls, and an explicit
 local-only tool registry. AMOS Desktop 0.8 adds portable private-memory
 capsules. AMOS Desktop 0.9 adds an explicit, server-signed company briefing
 that is encrypted locally and can be read only inside the reduced local-only
-runtime. All current and future local state preserves these rules:
+runtime. AMOS Desktop 0.10 adds encrypted outcome drafts whose signed-context
+section fingerprints are compared with a fresh live briefing before the user
+may load a reauthorization prompt into Operator. All local state preserves
+these rules:
 
 - shared AMOS data remains server-authoritative;
 - private memory is not silently promoted;
@@ -215,6 +218,7 @@ online company
 local-only
   local workspace + private-memory attachments + typed canvas
   optional verified, unexpired, read-only company briefing
+  optional encrypted outcome-draft staging; no queued tool calls
   no AMOS MCP tools
   no public-web tools
 ```
