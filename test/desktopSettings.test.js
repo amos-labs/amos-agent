@@ -73,6 +73,22 @@ test("desktop settings accept only known intelligence providers", () => {
   );
 });
 
+test("desktop appearance defaults to the Mac and accepts explicit overrides", () => {
+  assert.equal(sanitizeSettings(DEFAULT_DESKTOP_SETTINGS).appearance, "system");
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, appearance: "light" }).appearance,
+    "light"
+  );
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, appearance: "dark" }).appearance,
+    "dark"
+  );
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, appearance: "sepia" }).appearance,
+    "system"
+  );
+});
+
 test("local-only mode requires a local intelligence provider", () => {
   assert.throws(
     () =>

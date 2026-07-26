@@ -97,7 +97,8 @@ AMOS Desktop 0.7 adds a guided offline path for Ollama: it assesses the
 computer, recommends one of three curated profiles, shows resumable download
 progress, supports explicit removal, and can activate a visibly separate
 local-only operating mode. In that mode AMOS and public-web tools are not
-exposed to the model.
+exposed to the model. Desktop follows the Mac's light or dark appearance by
+default, with an immediate header switch and persistent overrides.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 

@@ -93,6 +93,13 @@ receipt memory remain authoritative in managed AMOS.
 - provider APIs, including Moonshot/Kimi; and
 - Ollama or llama.cpp local runtimes.
 
+### Appearance
+
+- follows the current macOS light or dark appearance by default;
+- switches immediately from the header control;
+- supports persistent Light and Dark overrides; and
+- keeps the system-following choice available under **Intelligence**.
+
 ### Distribution
 
 - Apple Silicon and Intel macOS applications;

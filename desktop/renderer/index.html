@@ -66,6 +66,12 @@
             <span class="eyebrow">THE GOVERNED COMPANY BRAIN</span>
           </div>
           <div class="topbar-actions">
+            <label id="appearanceControl" class="appearance-control" title="Toggle light or dark appearance">
+              <span aria-hidden="true">☀︎</span>
+              <input id="appearanceToggle" type="checkbox" role="switch" aria-label="Switch appearance">
+              <i aria-hidden="true"></i>
+              <span aria-hidden="true">☾</span>
+            </label>
             <button id="updateButton" class="button update-button hidden" type="button"></button>
             <span id="identityBadge" class="identity-badge hidden"></span>
             <span id="modeBadge" class="mode-badge">ONLINE COMPANY</span>
@@ -295,6 +301,15 @@
             </div>
 
             <div class="configuration-card">
+              <div class="field">
+                <label for="appearanceInput">Appearance</label>
+                <select id="appearanceInput" name="appearance">
+                  <option value="system">Follow this Mac</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+                <small>AMOS follows macOS by default. The header switch sets a local override.</small>
+              </div>
               <div class="field">
                 <label for="operatingModeInput">Operating boundary</label>
                 <select id="operatingModeInput" name="operatingMode">

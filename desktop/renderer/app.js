@@ -52,6 +52,7 @@ const elements = Object.fromEntries(
     "decisionsView", "memoryView", "canvasView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge",
+    "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
     "messages", "promptForm", "promptInput", "runButton", "clearButton", "liveEvents",
     "attachmentList", "attachButton",
@@ -135,6 +136,7 @@ function bindActions() {
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
   elements.denyButton.addEventListener("click", () => resolveApproval(false));
   elements.updateButton.addEventListener("click", handleUpdate);
+  elements.appearanceToggle.addEventListener("change", toggleAppearance);
   elements.canvasStartButton.addEventListener("click", () => {
     showView("operator");
     elements.promptInput.value = "Show me the most important company metrics and decisions right now.";
@@ -148,6 +150,9 @@ function bindActions() {
 }
 
 function bindEvents() {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if ((state?.settings?.appearance || "system") === "system") applyAppearance("system");
+  });
   api.on("agent:event", renderLiveEvent);
   api.on("agent:status", ({ running: isRunning }) => setRunning(isRunning));
   api.on("activity:changed", (activity) => {
@@ -185,6 +190,7 @@ function bindEvents() {
 }
 
 function render() {
+  applyAppearance(state.settings.appearance || "system");
   const needsOnboarding =
     !sessionStorage.getItem("amos-onboarding-complete") &&
     ((!state.connected && !state.mode?.offline) || !state.configured || !state.settings.workspace);
@@ -905,6 +911,7 @@ function renderSettings() {
   if (document.activeElement !== elements.baseUrlInput) elements.baseUrlInput.value = settings.baseUrl || "";
   elements.reasoningInput.value = settings.reasoningEffort || "max";
   elements.operatingModeInput.value = settings.operatingMode || "online";
+  elements.appearanceInput.value = settings.appearance || "system";
   elements.mcpInput.value = settings.amosMcpUrl;
   elements.apiKeyHelp.textContent = settings.hasApiKey
     ? "A credential is stored securely. Leave blank to keep it."
@@ -1079,6 +1086,7 @@ async function persistSettings() {
     baseUrl: elements.baseUrlInput.value,
     reasoningEffort: elements.reasoningInput.value,
     operatingMode: elements.operatingModeInput.value,
+    appearance: elements.appearanceInput.value,
     amosMcpUrl: elements.mcpInput.value
   };
   if (elements.apiKeyInput.value) payload.apiKey = elements.apiKeyInput.value;
@@ -1086,6 +1094,44 @@ async function persistSettings() {
   state = await api.saveSettings(payload);
   elements.apiKeyInput.value = "";
   return state;
+}
+
+async function toggleAppearance(event) {
+  const previous = state.settings.appearance || "system";
+  const appearance = event.currentTarget.checked ? "dark" : "light";
+  applyAppearance(appearance);
+  try {
+    state = await api.saveSettings({ appearance });
+    render();
+    toast(`${appearance === "dark" ? "Dark" : "Light"} appearance enabled.`);
+  } catch (error) {
+    applyAppearance(previous);
+    toast(error.message, true);
+  }
+}
+
+function applyAppearance(preference) {
+  const normalized = ["system", "light", "dark"].includes(preference) ? preference : "system";
+  if (normalized === "system") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.dataset.theme = normalized;
+  }
+  const effective = normalized === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : normalized;
+  elements.appearanceToggle.checked = effective === "dark";
+  elements.appearanceToggle.setAttribute(
+    "aria-label",
+    `Switch to ${effective === "dark" ? "light" : "dark"} appearance${
+      normalized === "system" ? " (currently following this Mac)" : ""
+    }`
+  );
+  elements.appearanceControl.title =
+    normalized === "system"
+      ? `Following this Mac · currently ${effective}`
+      : `${effective[0].toUpperCase()}${effective.slice(1)} override`;
+  if (elements.appearanceInput) elements.appearanceInput.value = normalized;
 }
 
 async function refreshOfflineModels() {

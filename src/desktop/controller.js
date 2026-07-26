@@ -86,11 +86,15 @@ export class DesktopController {
       ...settings,
       apiKey: settings.apiKey === undefined ? current.apiKey : settings.apiKey
     });
-    this.resetRuntime();
-    this.record(
-      "settings",
-      `Intelligence set to ${saved.provider} · ${saved.model} · ${saved.operatingMode}`
-    );
+    if (runtimeSettingsChanged(current, saved)) {
+      this.resetRuntime();
+      this.record(
+        "settings",
+        `Intelligence set to ${saved.provider} · ${saved.model} · ${saved.operatingMode}`
+      );
+    } else if (current.appearance !== saved.appearance) {
+      this.record("settings", `Appearance set to ${saved.appearance}`);
+    }
     return this.state();
   }
 
@@ -666,6 +670,19 @@ function operatingMode(settings, config) {
       : "Live AMOS company tools, policy, approvals, proof, and allowed web tools are available.",
     valid: !offline || config.model.deployment === "local"
   };
+}
+
+function runtimeSettingsChanged(previous, next) {
+  return [
+    "provider",
+    "model",
+    "baseUrl",
+    "apiKey",
+    "reasoningEffort",
+    "operatingMode",
+    "workspace",
+    "amosMcpUrl"
+  ].some((key) => previous[key] !== next[key]);
 }
 
 function sanitizeAgentEvent(event) {

@@ -17,6 +17,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   baseUrl: "https://api.moonshot.ai/v1",
   reasoningEffort: "max",
   operatingMode: "online",
+  appearance: "system",
   workspace: "",
   amosMcpUrl: "https://app.amoslabs.com/mcp",
   notifiedApprovalIds: []
@@ -104,6 +105,9 @@ export function sanitizeSettings(input = {}) {
       ? input.reasoningEffort
       : "max",
     operatingMode,
+    appearance: ["system", "light", "dark"].includes(input.appearance)
+      ? input.appearance
+      : "system",
     workspace: clean(input.workspace, 4096),
     amosMcpUrl: validateEndpoint(input.amosMcpUrl || DEFAULT_DESKTOP_SETTINGS.amosMcpUrl, {
       requireHttps: true
