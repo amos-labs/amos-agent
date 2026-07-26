@@ -260,9 +260,17 @@ enforce current identity, scope, expiry, and revocation.
 
 ### Phase 3 — curated offline intelligence
 
-- Hardware assessment and model recommendation.
-- Signed model manifest, download manager, storage controls, and local runner.
-- Offline mode indicator and bounded cached-memory retrieval.
+- [x] Hardware assessment and model recommendation.
+- [x] Release-signed curated catalog, resumable Ollama download manager,
+  explicit storage removal, and local runner discovery.
+- [x] Explicit local-only indicator and a physically reduced tool registry with
+  no AMOS or public-web tools.
+- [ ] Bounded company-cache retrieval with server-issued identity, scope,
+  expiry, provenance, and revocation controls.
+
+The first Phase 3 slice lands in AMOS Desktop 0.7.0. It is immediately useful
+for local workspaces, explicitly attached private memory, and local canvases.
+It intentionally does not create an offline copy of company data yet.
 
 ### Phase 4 — portable and forkable work
 

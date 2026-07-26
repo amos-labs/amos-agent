@@ -176,8 +176,12 @@ private-memory store. The store contains encrypted envelopes rather than
 plaintext filenames or content, maintains a bounded append-only sync journal,
 and exposes explicit reuse, promotion, and forget controls.
 
-Offline intelligence and portable capsule transfer remain planned extensions.
-All current and future local state preserves these rules:
+AMOS Desktop 0.7 adds the first offline-intelligence slice: hardware-aware
+recommendations, a catalog covered by the signed application release, Ollama
+runtime discovery, resumable installation/removal controls, and an explicit
+local-only tool registry. Portable capsules and a governed company-data cache
+remain planned extensions. All current and future local state preserves these
+rules:
 
 - shared AMOS data remains server-authoritative;
 - private memory is not silently promoted;
@@ -198,6 +202,25 @@ Canvas source identifiers and freshness state remain visible. Pending approval
 cards only open the existing signed-in AMOS decision flow. No new write or
 approval authority is introduced, and no canvas company data is persisted
 across application sessions in this phase.
+
+## Offline runtime boundary
+
+Online and local-only sessions are constructed as different runtimes:
+
+```text
+online company
+  local workspace + optional web + AMOS MCP + typed canvas
+
+local-only
+  local workspace + private-memory attachments + typed canvas
+  no AMOS MCP tools
+  no public-web tools
+```
+
+The offline boundary is enforced when the tool registry is created. The
+local-only system prompt communicates the same boundary to the model, but the
+prompt is not the security control. Switching modes clears the current runtime
+so a previously created online registry cannot leak into an offline session.
 
 ## Non-goals
 

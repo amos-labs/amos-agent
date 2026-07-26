@@ -73,6 +73,44 @@ test("desktop settings accept only known intelligence providers", () => {
   );
 });
 
+test("desktop appearance defaults to the Mac and accepts explicit overrides", () => {
+  assert.equal(sanitizeSettings(DEFAULT_DESKTOP_SETTINGS).appearance, "system");
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, appearance: "light" }).appearance,
+    "light"
+  );
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, appearance: "dark" }).appearance,
+    "dark"
+  );
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, appearance: "sepia" }).appearance,
+    "system"
+  );
+});
+
+test("local-only mode requires a local intelligence provider", () => {
+  assert.throws(
+    () =>
+      sanitizeSettings({
+        provider: "kimi",
+        operatingMode: "offline",
+        baseUrl: "https://api.moonshot.ai/v1",
+        amosMcpUrl: "https://app.amoslabs.com/mcp"
+      }),
+    /requires an Ollama or llama.cpp/
+  );
+
+  const settings = sanitizeSettings({
+    provider: "ollama",
+    model: "qwen3:4b",
+    operatingMode: "offline",
+    baseUrl: "http://127.0.0.1:11434/v1",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(settings.operatingMode, "offline");
+});
+
 test("desktop settings retain only a bounded approval-notification history", () => {
   const notifiedApprovalIds = Array.from({ length: 205 }, (_, index) =>
     `${index}`.padStart(36, "0")

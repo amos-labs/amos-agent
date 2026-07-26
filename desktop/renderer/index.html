@@ -66,8 +66,15 @@
             <span class="eyebrow">THE GOVERNED COMPANY BRAIN</span>
           </div>
           <div class="topbar-actions">
+            <label id="appearanceControl" class="appearance-control" title="Toggle light or dark appearance">
+              <span aria-hidden="true">☀︎</span>
+              <input id="appearanceToggle" type="checkbox" role="switch" aria-label="Switch appearance">
+              <i aria-hidden="true"></i>
+              <span aria-hidden="true">☾</span>
+            </label>
             <button id="updateButton" class="button update-button hidden" type="button"></button>
             <span id="identityBadge" class="identity-badge hidden"></span>
+            <span id="modeBadge" class="mode-badge">ONLINE COMPANY</span>
             <span id="runtimeBadge" class="runtime-badge">Intelligence not configured</span>
             <button id="approvalsButton" class="button ghost">Open approvals</button>
           </div>
@@ -157,7 +164,7 @@
                     <button id="attachButton" class="attach-button" type="button" aria-label="Attach documents or images">
                       <span>＋</span> Attach
                     </button>
-                    <div class="scope-note"><span class="status-dot green"></span> AMOS policy and proof are active</div>
+                    <div id="scopeNote" class="scope-note"><span class="status-dot green"></span><span>AMOS policy and proof are active</span></div>
                   </div>
                   <button id="runButton" class="button primary" type="submit">Run with AMOS <span>→</span></button>
                 </div>
@@ -295,6 +302,23 @@
 
             <div class="configuration-card">
               <div class="field">
+                <label for="appearanceInput">Appearance</label>
+                <select id="appearanceInput" name="appearance">
+                  <option value="system">Follow this Mac</option>
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                </select>
+                <small>AMOS follows macOS by default. The header switch sets a local override.</small>
+              </div>
+              <div class="field">
+                <label for="operatingModeInput">Operating boundary</label>
+                <select id="operatingModeInput" name="operatingMode">
+                  <option value="online">Online company — AMOS tools, governance, and proof</option>
+                  <option value="offline">Local-only — no company or public-network tools</option>
+                </select>
+                <small>Local-only mode never uses cached credentials or silently executes queued work when you reconnect.</small>
+              </div>
+              <div class="field">
                 <label for="modelInput">Model</label>
                 <input id="modelInput" name="model" autocomplete="off" placeholder="kimi-k3">
               </div>
@@ -332,6 +356,30 @@
               </div>
             </div>
           </form>
+
+          <section class="offline-intelligence-card">
+            <div class="offline-heading">
+              <div>
+                <span class="eyebrow accent">CURATED OFFLINE INTELLIGENCE</span>
+                <h2>Keep useful work moving without a network.</h2>
+                <p>
+                  AMOS uses a release-signed model catalog and Ollama's verified,
+                  resumable model downloads. Offline answers can use local files,
+                  private memory, and local canvases—but never pretend to have live company authority.
+                </p>
+              </div>
+              <div class="offline-actions">
+                <span id="offlineRuntimeStatus" class="offline-runtime-status">Checking local runtime…</span>
+                <button id="offlineInstallRuntimeButton" class="button ghost" type="button">Get Ollama</button>
+                <button id="offlineRefreshButton" class="button secondary" type="button">Refresh</button>
+              </div>
+            </div>
+            <div id="offlineModelList" class="offline-model-list"></div>
+            <div class="offline-trust-note">
+              <span>Release-signed catalog</span>
+              <code id="offlineManifestDigest"></code>
+            </div>
+          </section>
         </section>
       </main>
     </div>

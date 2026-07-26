@@ -93,6 +93,13 @@ Changing the intelligence does not reconnect the company or change the user's
 AMOS authority. Models without reliable tool use should be limited to
 observe-and-draft workflows.
 
+AMOS Desktop 0.7 adds a guided offline path for Ollama: it assesses the
+computer, recommends one of three curated profiles, shows resumable download
+progress, supports explicit removal, and can activate a visibly separate
+local-only operating mode. In that mode AMOS and public-web tools are not
+exposed to the model. Desktop follows the Mac's light or dark appearance by
+default, with an immediate header switch and persistent overrides.
+
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 
 ## Security model
@@ -204,7 +211,7 @@ The near-term product path is:
 2. streaming, cancellation, and durable task checkpoints;
 3. richer typed canvases and managed result adapters for company data and active work;
 4. encrypted private local memory with explicit promotion into shared AMOS memory;
-5. curated small-model offline operation; and
+5. curated small-model offline operation with an explicit local-only boundary; and
 6. encrypted, portable memory capsules with safe reconnect reconciliation.
 
 The governing principle is constant: **local intelligence may observe, reason,

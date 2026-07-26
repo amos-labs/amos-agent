@@ -101,6 +101,19 @@ AMOS_MODEL_PROVIDER=ollama
 AMOS_MODEL=your-local-model
 ```
 
+AMOS Desktop 0.7 can manage a small curated Ollama catalog directly from the
+Intelligence screen. The catalog is embedded inside the signed application
+bundle, displays a SHA-256 content identifier, and cannot be extended by model
+output. Ollama supplies digest-verified, resumable downloads and model removal.
+The first profiles are:
+
+- `qwen3:4b` for compact systems;
+- `qwen3:8b` for a balanced local profile; and
+- `gpt-oss:20b` for higher-memory systems.
+
+The recommendation leaves memory headroom for Desktop and normal applications;
+it is not a claim that the local model matches managed frontier intelligence.
+
 ## llama.cpp
 
 `llama-server` defaults to:
@@ -137,6 +150,23 @@ Local HTTP is allowed only for loopback endpoints.
 - Company application credentials remain in AMOS managed connectors.
 - Offline work may draft company actions, but those actions must be
   reauthorized after reconnecting.
+
+## Local-only operating mode
+
+Local-only mode is a tool boundary, not merely a status label:
+
+- the selected intelligence provider must be Ollama or llama.cpp;
+- AMOS MCP tools are absent from the model's tool list;
+- public web tools are absent from the model's tool list;
+- company-memory promotion and company approval refresh are paused;
+- local workspace, private-memory attachments, and typed local canvases remain
+  available; and
+- returning online does not replay or execute anything from the offline
+  session.
+
+This first slice does not persist a cross-session cache of AMOS company data.
+That cache requires server-issued scope, expiry, provenance, and revocation
+metadata before it can ship safely.
 
 ## Adding a provider
 

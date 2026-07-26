@@ -33,3 +33,17 @@ test("malformed tool JSON is returned as an error and never executes", async () 
   assert.equal(await loop.run("test"), "recovered");
   assert.equal(calls, 0);
 });
+
+test("custom operating prompt survives a cleared session", () => {
+  const loop = new AgentLoop({
+    config: { agent: { maxToolTurns: 1 } },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    systemPrompt: "LOCAL ONLY",
+    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "" } }) }
+  });
+  loop.messages.push({ role: "user", content: "test" });
+  loop.clear();
+  assert.deepEqual(loop.messages, [{ role: "system", content: "LOCAL ONLY" }]);
+});

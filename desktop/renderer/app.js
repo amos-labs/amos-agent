@@ -50,13 +50,14 @@ const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
     "decisionsView", "memoryView", "canvasView",
-    "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "workspaceLabel",
+    "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge",
+    "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
     "messages", "promptForm", "promptInput", "runButton", "clearButton", "liveEvents",
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
-    "modelInput", "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "mcpInput",
+    "modelInput", "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
@@ -64,7 +65,8 @@ const elements = Object.fromEntries(
     "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "memoryClassGrid", "canvasTitle", "canvasSubtitle", "canvasRefreshButton",
     "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasBlocks",
-    "canvasStartButton"
+    "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
+    "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -79,6 +81,7 @@ async function initialize() {
   render();
   elements.loading.classList.add("hidden");
   elements.app.classList.remove("hidden");
+  api.refreshOffline().catch(() => {});
   api.refreshRemote().catch(() => {});
 }
 
@@ -133,15 +136,23 @@ function bindActions() {
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
   elements.denyButton.addEventListener("click", () => resolveApproval(false));
   elements.updateButton.addEventListener("click", handleUpdate);
+  elements.appearanceToggle.addEventListener("change", toggleAppearance);
   elements.canvasStartButton.addEventListener("click", () => {
     showView("operator");
     elements.promptInput.value = "Show me the most important company metrics and decisions right now.";
     elements.promptInput.focus();
   });
   elements.canvasCloseButton.addEventListener("click", removeActiveCanvas);
+  elements.offlineRefreshButton.addEventListener("click", refreshOfflineModels);
+  elements.offlineInstallRuntimeButton.addEventListener("click", () =>
+    api.openExternal("https://ollama.com/download")
+  );
 }
 
 function bindEvents() {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if ((state?.settings?.appearance || "system") === "system") applyAppearance("system");
+  });
   api.on("agent:event", renderLiveEvent);
   api.on("agent:status", ({ running: isRunning }) => setRunning(isRunning));
   api.on("activity:changed", (activity) => {
@@ -155,6 +166,11 @@ function bindEvents() {
     activeCanvasId = state.activeCanvasId;
     renderCanvas();
     if (activeCanvasId) showView("canvas");
+  });
+  api.on("offline:changed", (offline) => {
+    if (!state) return;
+    state.offline = offline;
+    renderOfflineModels();
   });
   api.on("remote:changed", (remote) => {
     if (!state) return;
@@ -174,9 +190,10 @@ function bindEvents() {
 }
 
 function render() {
+  applyAppearance(state.settings.appearance || "system");
   const needsOnboarding =
     !sessionStorage.getItem("amos-onboarding-complete") &&
-    (!state.connected || !state.configured || !state.settings.workspace);
+    ((!state.connected && !state.mode?.offline) || !state.configured || !state.settings.workspace);
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
@@ -194,13 +211,31 @@ function render() {
   elements.runtimeBadge.textContent = state.configured
     ? `${state.provider.displayName} · ${state.provider.model}`
     : "Intelligence not configured";
+  elements.modeBadge.textContent = state.mode?.offline ? "LOCAL-ONLY" : "ONLINE COMPANY";
+  elements.modeBadge.classList.toggle("offline", Boolean(state.mode?.offline));
   elements.workspaceLabel.textContent = state.settings.workspace || "Choose a folder";
   elements.connectButton.textContent = state.connected ? "Reconnect AMOS" : "Connect AMOS";
-  renderStep(elements.connectCheck, state.connected);
+  renderStep(elements.connectCheck, state.connected || state.mode?.offline);
   renderStep(elements.providerCheck, state.configured);
   renderStep(elements.workspaceCheck, Boolean(state.settings.workspace));
-  elements.enterButton.disabled = !(state.connected && state.configured && state.settings.workspace);
+  elements.enterButton.disabled = !(
+    (state.connected || state.mode?.offline) &&
+    state.configured &&
+    state.settings.workspace &&
+    state.mode?.valid !== false
+  );
   elements.disconnectButton.classList.toggle("hidden", !state.connected);
+  elements.approvalsButton.disabled = Boolean(state.mode?.offline);
+  elements.runButton.replaceChildren(
+    document.createTextNode(state.mode?.offline ? "Run locally " : "Run with AMOS "),
+    text("→")
+  );
+  const scopeDot = elements.scopeNote.querySelector(".status-dot");
+  const scopeText = elements.scopeNote.querySelector("span:last-child");
+  scopeDot.classList.toggle("green", !state.mode?.offline);
+  scopeText.textContent = state.mode?.offline
+    ? "Local-only · no company or public-network tools"
+    : "AMOS policy and proof are active";
   renderUpdate();
 
   const boundary = {
@@ -210,9 +245,12 @@ function render() {
     cloud: "Inference runs with the model provider; AMOS retains company state and authority.",
     custom: "Inference runs at the configured endpoint; AMOS retains company state and authority."
   };
-  elements.deploymentSummary.textContent = boundary[state.provider.deployment] || boundary.custom;
+  elements.deploymentSummary.textContent = state.mode?.offline
+    ? "Local-only mode: no live AMOS or public-network tools are exposed to this session."
+    : boundary[state.provider.deployment] || boundary.custom;
 
   renderSettings();
+  renderOfflineModels();
   renderActivity();
   renderDecisions();
   renderAttachments();
@@ -686,11 +724,15 @@ function renderIdentity() {
   const company = identity?.tenant_slug || "";
   const role = identity?.role || "";
 
-  elements.connectionDot.classList.toggle("connected", state.connected);
-  elements.connectionLabel.textContent = person || (state.connected ? "AMOS connected" : "AMOS not connected");
-  elements.connectionDetail.textContent = state.connected
-    ? [company, role].filter(Boolean).join(" · ") || "Company governance active"
-    : "Connect your company";
+  elements.connectionDot.classList.toggle("connected", state.connected && !state.mode?.offline);
+  elements.connectionLabel.textContent = state.mode?.offline
+    ? "Local-only mode"
+    : person || (state.connected ? "AMOS connected" : "AMOS not connected");
+  elements.connectionDetail.textContent = state.mode?.offline
+    ? "Live company access paused"
+    : state.connected
+      ? [company, role].filter(Boolean).join(" · ") || "Company governance active"
+      : "Connect your company";
   elements.identityDetail.textContent =
     user?.name && user?.email
       ? user.email
@@ -712,22 +754,26 @@ function renderDecisions() {
   elements.decisionBadge.classList.toggle("hidden", pending.length === 0);
 
   const sync = state.remoteStatus || {};
-  elements.decisionSyncStatus.textContent = sync.syncing
-    ? "Syncing…"
-    : sync.lastSyncedAt
-      ? `Synced ${relativeTime(sync.lastSyncedAt)}`
-      : "Not synced";
-  elements.refreshDecisionsButton.disabled = Boolean(sync.syncing);
+  elements.decisionSyncStatus.textContent = sync.paused
+    ? "Paused in local-only mode"
+    : sync.syncing
+      ? "Syncing…"
+      : sync.lastSyncedAt
+        ? `Synced ${relativeTime(sync.lastSyncedAt)}`
+        : "Not synced";
+  elements.refreshDecisionsButton.disabled = Boolean(sync.syncing || sync.paused);
 
-  const notice = !state.connected
-    ? "Connect your AMOS account to receive governed company decisions."
-    : state.connectionMode === "api_key"
-      ? "Reconnect with your personal AMOS sign-in to receive decisions under your own identity."
-      : state.approvalsAvailable === false
-        ? "Your current company role does not include approval authority."
-        : sync.error
-          ? `AMOS could not complete the latest sync: ${sync.error}`
-          : "";
+  const notice = sync.paused
+    ? "Return to online company mode to refresh or decide governed company work."
+    : !state.connected
+      ? "Connect your AMOS account to receive governed company decisions."
+      : state.connectionMode === "api_key"
+        ? "Reconnect with your personal AMOS sign-in to receive decisions under your own identity."
+        : state.approvalsAvailable === false
+          ? "Your current company role does not include approval authority."
+          : sync.error
+            ? `AMOS could not complete the latest sync: ${sync.error}`
+            : "";
   elements.decisionNotice.textContent = notice;
   elements.decisionNotice.classList.toggle("hidden", !notice);
 
@@ -864,6 +910,8 @@ function renderSettings() {
   if (document.activeElement !== elements.modelInput) elements.modelInput.value = settings.model || "";
   if (document.activeElement !== elements.baseUrlInput) elements.baseUrlInput.value = settings.baseUrl || "";
   elements.reasoningInput.value = settings.reasoningEffort || "max";
+  elements.operatingModeInput.value = settings.operatingMode || "online";
+  elements.appearanceInput.value = settings.appearance || "system";
   elements.mcpInput.value = settings.amosMcpUrl;
   elements.apiKeyHelp.textContent = settings.hasApiKey
     ? "A credential is stored securely. Leave blank to keep it."
@@ -872,6 +920,96 @@ function renderSettings() {
     strong(`${state.system.arch.toUpperCase()} · ${state.system.memoryGb} GB memory`),
     text(state.system.localRecommendation)
   );
+}
+
+function renderOfflineModels() {
+  if (!state?.offline) return;
+  const offline = state.offline;
+  const runtime = offline.runtime || {};
+  elements.offlineRuntimeStatus.textContent = runtime.available
+    ? `Ollama ${runtime.version || ""} is ready on this computer`
+    : runtime.error || "Ollama is not running on this computer";
+  elements.offlineRuntimeStatus.classList.toggle("ready", Boolean(runtime.available));
+  elements.offlineRuntimeStatus.classList.toggle("error", !runtime.available);
+  elements.offlineManifestDigest.textContent = offline.manifest?.digest
+    ? `sha256:${offline.manifest.digest}`
+    : "";
+  elements.offlineModelList.replaceChildren();
+
+  for (const model of offline.models || []) {
+    const card = document.createElement("article");
+    card.className = `offline-model-card${model.recommended ? " recommended" : ""}`;
+    const labels = document.createElement("div");
+    labels.className = "offline-model-labels";
+    const profile = document.createElement("span");
+    profile.textContent = model.recommended ? "Recommended for this Mac" : model.id;
+    labels.append(profile);
+    if (model.installed) {
+      const installed = document.createElement("span");
+      installed.className = "installed";
+      installed.textContent = "Installed";
+      labels.append(installed);
+    }
+    const title = document.createElement("h3");
+    title.textContent = model.name;
+    const description = document.createElement("p");
+    description.textContent = model.description;
+    const meta = document.createElement("div");
+    meta.className = "offline-model-meta";
+    for (const value of [
+      `≈ ${formatBytes(model.approximateSizeBytes)}`,
+      `${model.recommendedMemoryGb} GB recommended`,
+      ...(model.capabilities || []).slice(0, 3)
+    ]) {
+      const pill = document.createElement("span");
+      pill.textContent = value;
+      meta.append(pill);
+    }
+    card.append(labels, title, description, meta);
+
+    if (model.download) {
+      const progress = document.createElement("div");
+      progress.className = "offline-model-progress";
+      const fill = document.createElement("i");
+      fill.style.width = `${model.download.percent || 0}%`;
+      progress.append(fill);
+      const progressLabel = document.createElement("p");
+      progressLabel.className = "offline-model-progress-label";
+      progressLabel.textContent = model.download.error
+        ? `Download failed: ${model.download.error}`
+        : `${model.download.status} · ${model.download.percent || 0}%`;
+      card.append(progress, progressLabel);
+    }
+
+    const actions = document.createElement("div");
+    actions.className = "offline-model-actions";
+    const active =
+      state.settings.provider === "ollama" &&
+      state.settings.model === model.id &&
+      state.settings.operatingMode === "offline";
+    if (!model.installed) {
+      const download = actionButton("Download", "primary");
+      download.disabled =
+        !runtime.available ||
+        Boolean(model.download && model.download.status !== "failed") ||
+        state.system.memoryGb < model.minimumMemoryGb;
+      download.title = state.system.memoryGb < model.minimumMemoryGb
+        ? `This profile needs at least ${model.minimumMemoryGb} GB memory`
+        : "";
+      download.addEventListener("click", () => installOfflineModel(model.id));
+      actions.append(download);
+    } else {
+      const activate = actionButton(active ? "Active offline" : "Use offline", "primary");
+      activate.disabled = active;
+      activate.addEventListener("click", () => activateOfflineModel(model.id));
+      const remove = actionButton("Remove", "danger");
+      remove.disabled = active;
+      remove.addEventListener("click", () => removeOfflineModel(model.id));
+      actions.append(activate, remove);
+    }
+    card.append(actions);
+    elements.offlineModelList.append(card);
+  }
 }
 
 function selectProvider(providerId) {
@@ -947,6 +1085,8 @@ async function persistSettings() {
     model: elements.modelInput.value,
     baseUrl: elements.baseUrlInput.value,
     reasoningEffort: elements.reasoningInput.value,
+    operatingMode: elements.operatingModeInput.value,
+    appearance: elements.appearanceInput.value,
     amosMcpUrl: elements.mcpInput.value
   };
   if (elements.apiKeyInput.value) payload.apiKey = elements.apiKeyInput.value;
@@ -954,6 +1094,86 @@ async function persistSettings() {
   state = await api.saveSettings(payload);
   elements.apiKeyInput.value = "";
   return state;
+}
+
+async function toggleAppearance(event) {
+  const previous = state.settings.appearance || "system";
+  const appearance = event.currentTarget.checked ? "dark" : "light";
+  applyAppearance(appearance);
+  try {
+    state = await api.saveSettings({ appearance });
+    render();
+    toast(`${appearance === "dark" ? "Dark" : "Light"} appearance enabled.`);
+  } catch (error) {
+    applyAppearance(previous);
+    toast(error.message, true);
+  }
+}
+
+function applyAppearance(preference) {
+  const normalized = ["system", "light", "dark"].includes(preference) ? preference : "system";
+  if (normalized === "system") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.dataset.theme = normalized;
+  }
+  const effective = normalized === "system"
+    ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+    : normalized;
+  elements.appearanceToggle.checked = effective === "dark";
+  elements.appearanceToggle.setAttribute(
+    "aria-label",
+    `Switch to ${effective === "dark" ? "light" : "dark"} appearance${
+      normalized === "system" ? " (currently following this Mac)" : ""
+    }`
+  );
+  elements.appearanceControl.title =
+    normalized === "system"
+      ? `Following this Mac · currently ${effective}`
+      : `${effective[0].toUpperCase()}${effective.slice(1)} override`;
+  if (elements.appearanceInput) elements.appearanceInput.value = normalized;
+}
+
+async function refreshOfflineModels() {
+  setButtonBusy(elements.offlineRefreshButton, true, "Checking…");
+  try {
+    state.offline = await api.refreshOffline();
+    renderOfflineModels();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.offlineRefreshButton, false, "Refresh");
+  }
+}
+
+async function installOfflineModel(modelId) {
+  try {
+    await api.installOfflineModel(modelId);
+    toast("Offline model installed.");
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function activateOfflineModel(modelId) {
+  try {
+    state = await api.activateOfflineModel(modelId);
+    selectedProvider = state.settings.provider;
+    toast("Local-only mode is active.");
+    render();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function removeOfflineModel(modelId) {
+  try {
+    state.offline = await api.removeOfflineModel(modelId);
+    toast("Offline model removed.");
+    renderOfflineModels();
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 async function testModel() {

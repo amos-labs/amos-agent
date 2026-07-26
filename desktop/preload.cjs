@@ -6,6 +6,7 @@ const eventChannels = new Set([
   "approval:requested",
   "activity:changed",
   "canvas:changed",
+  "offline:changed",
   "remote:changed",
   "auth:browser",
   "update:changed"
@@ -19,6 +20,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
+  refreshOffline: () => ipcRenderer.invoke("desktop:refresh-offline"),
+  installOfflineModel: (id) => ipcRenderer.invoke("desktop:install-offline-model", id),
+  removeOfflineModel: (id) => ipcRenderer.invoke("desktop:remove-offline-model", id),
+  activateOfflineModel: (id) => ipcRenderer.invoke("desktop:activate-offline-model", id),
   run: (input) => ipcRenderer.invoke("desktop:run", input),
   clear: () => ipcRenderer.invoke("desktop:clear"),
   removeCanvas: (id) => ipcRenderer.invoke("desktop:remove-canvas", id),

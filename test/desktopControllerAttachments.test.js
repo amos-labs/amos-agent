@@ -14,7 +14,7 @@ test("desktop explicitly promotes selected document attachments into governed co
   let modelContent;
   const controller = new DesktopController({
     userDataPath: root,
-    settingsStore: {},
+    settingsStore: { read: async () => ({ operatingMode: "online" }) },
     openBrowser() {},
     emit(channel, payload) {
       events.push({ channel, payload });

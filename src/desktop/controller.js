@@ -9,14 +9,17 @@ import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import { MEMORY_CLASSES } from "./memoryContract.js";
+import { assessHardware } from "./offlineIntelligence.js";
 import { approvalReviewUrl, DesktopRemoteStateClient } from "./remoteState.js";
 import { createCanvasTool } from "../tools/canvas.js";
+import { OFFLINE_SYSTEM_PROMPT } from "../prompts.js";
 
 export class DesktopController {
   constructor({
     userDataPath,
     settingsStore,
     privateMemoryStore = null,
+    offlineManager = null,
     openBrowser,
     emit,
     notify = () => {}
@@ -33,12 +36,14 @@ export class DesktopController {
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: null,
-      error: null
+      error: null,
+      paused: false
     };
     this.remoteRefreshPromise = null;
     this.attachments = new AttachmentManager();
     this.canvases = new DesktopCanvasManager();
     this.privateMemoryStore = privateMemoryStore;
+    this.offlineManager = offlineManager;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
     });
@@ -51,6 +56,7 @@ export class DesktopController {
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
     const useOAuth = shouldUseOAuth(config, credentials);
+    const system = systemProfile();
     return {
       configured: validateConfig(config).length === 0,
       connected: useOAuth || Boolean(config.amos.apiKey),
@@ -62,7 +68,9 @@ export class DesktopController {
       provider: publicProvider(config.model),
       providers: listModelProviders(),
       settings: redactSettings(settings),
-      system: systemProfile(),
+      system,
+      mode: operatingMode(settings, config),
+      offline: this.offlineManager ? this.offlineManager.state(system) : null,
       activity: this.activity.slice(-100),
       attachments: this.attachments.list(),
       ...this.canvases.state(),
@@ -78,8 +86,61 @@ export class DesktopController {
       ...settings,
       apiKey: settings.apiKey === undefined ? current.apiKey : settings.apiKey
     });
+    if (runtimeSettingsChanged(current, saved)) {
+      this.resetRuntime();
+      this.record(
+        "settings",
+        `Intelligence set to ${saved.provider} · ${saved.model} · ${saved.operatingMode}`
+      );
+    } else if (current.appearance !== saved.appearance) {
+      this.record("settings", `Appearance set to ${saved.appearance}`);
+    }
+    return this.state();
+  }
+
+  async refreshOffline() {
+    if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
+    return this.offlineManager.refresh(systemProfile());
+  }
+
+  async installOfflineModel(modelId) {
+    if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
+    const result = await this.offlineManager.install(modelId, systemProfile());
+    this.record("model", `Installed offline model ${modelId}`);
+    return result;
+  }
+
+  async removeOfflineModel(modelId) {
+    if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
+    const settings = await this.settingsStore.read();
+    if (
+      settings.provider === "ollama" &&
+      settings.model === modelId &&
+      settings.operatingMode === "offline"
+    ) {
+      throw new Error("Switch out of local-only mode before removing its active model");
+    }
+    const result = await this.offlineManager.remove(modelId, systemProfile());
+    this.record("model", `Removed offline model ${modelId}`);
+    return result;
+  }
+
+  async activateOfflineModel(modelId) {
+    if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
+    const offline = await this.offlineManager.refresh(systemProfile());
+    const model = offline.models.find((item) => item.id === modelId);
+    if (!model?.installed) throw new Error("Download this model before activating it");
+    const settings = await this.settingsStore.read();
+    await this.settingsStore.write({
+      ...settings,
+      provider: "ollama",
+      model: modelId,
+      baseUrl: "http://127.0.0.1:11434/v1",
+      apiKey: "",
+      operatingMode: "offline"
+    });
     this.resetRuntime();
-    this.record("settings", `Intelligence set to ${saved.provider} · ${saved.model}`);
+    this.record("settings", `Local-only mode activated with ${modelId}`);
     return this.state();
   }
 
@@ -123,6 +184,10 @@ export class DesktopController {
   }
 
   async promotePrivateMemory(id) {
+    const settings = await this.settingsStore.read();
+    if (settings.operatingMode === "offline") {
+      throw new Error("Return to online company mode before promoting private memory");
+    }
     const store = this.requirePrivateMemory();
     const memory = await store.get(id);
     const attachment = this.attachments.addPrivateMemory(memory);
@@ -165,7 +230,7 @@ export class DesktopController {
     this.identity = null;
     this.companyApprovals = [];
     this.approvalsAvailable = true;
-    this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null };
+    this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
     this.sendRemoteState();
     this.record("auth", "AMOS account disconnected");
     return this.state();
@@ -181,6 +246,16 @@ export class DesktopController {
 
   async refreshRemoteInner({ notify }) {
     const settings = await this.settingsStore.read();
+    if (settings.operatingMode === "offline") {
+      this.remoteStatus = {
+        syncing: false,
+        lastSyncedAt: this.remoteStatus.lastSyncedAt,
+        error: null,
+        paused: true
+      };
+      this.sendRemoteState();
+      return this.state();
+    }
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
@@ -188,7 +263,7 @@ export class DesktopController {
       this.identity = null;
       this.companyApprovals = [];
       this.approvalsAvailable = true;
-      this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null };
+      this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
       this.sendRemoteState();
       return this.state();
     }
@@ -225,7 +300,8 @@ export class DesktopController {
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: new Date().toISOString(),
-      error: errors.length > 0 ? errors.join(" ") : null
+      error: errors.length > 0 ? errors.join(" ") : null,
+      paused: false
     };
     this.sendRemoteState();
     return this.state();
@@ -270,7 +346,11 @@ export class DesktopController {
   }
 
   async testModel() {
-    const { runtime, config } = await this.getRuntime({ requireAmos: false });
+    const settings = await this.settingsStore.read();
+    const { runtime, config } = await this.getRuntime({
+      requireAmos: false,
+      offline: settings.operatingMode === "offline"
+    });
     const result = await runtime.modelClient.chat({
       messages: [
         { role: "system", content: "Return exactly: AMOS intelligence ready" },
@@ -287,10 +367,20 @@ export class DesktopController {
     const prompt = String(requestedPrompt || "").trim() ||
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
-    const { config, runtime } = await this.getRuntime({ requireAmos: true });
+    const settings = await this.settingsStore.read();
+    const offline = settings.operatingMode === "offline";
+    const { config, runtime } = await this.getRuntime({
+      requireAmos: !offline,
+      offline
+    });
+    if (offline && references.some((reference) => reference?.retention === "company")) {
+      throw new Error(
+        "Company memory is unavailable in local-only mode. Use this task only, keep it private, or return online."
+      );
+    }
     const memory = [
       ...await this.persistPrivateMemory(references),
-      ...await this.persistCompanyMemory(references, runtime, config)
+      ...(offline ? [] : await this.persistCompanyMemory(references, runtime, config))
     ];
     const modelContent = this.attachments.buildMessageContent(
       prompt,
@@ -436,8 +526,9 @@ export class DesktopController {
     this.runtime = null;
   }
 
-  async getRuntime({ requireAmos }) {
-    if (this.runtime) return this.runtime;
+  async getRuntime({ requireAmos, offline = false }) {
+    if (this.runtime?.offline === offline) return this.runtime;
+    if (this.runtime) this.resetRuntime();
     const settings = await this.settingsStore.read();
     const config = this.configFrom(settings);
     const missing = validateConfig(config);
@@ -447,10 +538,14 @@ export class DesktopController {
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const useOAuth = shouldUseOAuth(config, credentials);
+    if (offline && config.model.deployment !== "local") {
+      throw new Error("Choose and activate a local model before entering local-only mode");
+    }
     if (requireAmos && !useOAuth && !config.amos.apiKey) {
       throw new Error("Connect AMOS before running company tasks");
     }
     this.runtime = {
+      offline,
       config,
       oauth,
       runtime: createRuntime({
@@ -458,6 +553,9 @@ export class DesktopController {
         approvals: this.approvals,
         oauth,
         useOAuth,
+        includeAmos: !offline,
+        includeWeb: !offline,
+        systemPrompt: offline ? OFFLINE_SYSTEM_PROMPT : undefined,
         extraTools: [
           createCanvasTool({
             present: (spec) => {
@@ -552,19 +650,39 @@ function publicProvider(config) {
 
 function systemProfile() {
   const memoryGb = Math.round((totalmem() / 1024 ** 3) * 10) / 10;
-  return {
+  return assessHardware({
     platform: platform(),
     release: release(),
     arch: arch(),
     memoryGb,
     freeMemoryGb: Math.round((freemem() / 1024 ** 3) * 10) / 10,
-    localRecommendation:
-      memoryGb >= 48
-        ? "This computer can run capable quantized local models."
-        : memoryGb >= 24
-          ? "This computer can run smaller local models; managed intelligence is recommended for complex work."
-          : "Use AMOS-hosted or Bedrock intelligence for company operations."
+  });
+}
+
+function operatingMode(settings, config) {
+  const offline = settings.operatingMode === "offline";
+  return {
+    id: offline ? "offline" : "online",
+    offline,
+    label: offline ? "Local-only" : "Online company",
+    description: offline
+      ? "Only local workspace, private memory, and local canvas tools are available."
+      : "Live AMOS company tools, policy, approvals, proof, and allowed web tools are available.",
+    valid: !offline || config.model.deployment === "local"
   };
+}
+
+function runtimeSettingsChanged(previous, next) {
+  return [
+    "provider",
+    "model",
+    "baseUrl",
+    "apiKey",
+    "reasoningEffort",
+    "operatingMode",
+    "workspace",
+    "amosMcpUrl"
+  ].some((key) => previous[key] !== next[key]);
 }
 
 function sanitizeAgentEvent(event) {

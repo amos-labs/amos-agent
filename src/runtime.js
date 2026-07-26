@@ -8,13 +8,21 @@ import { createFileTools } from "./tools/files.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { createWebTools } from "./tools/web.js";
 
-export function createRegistry({ extraTools = [] } = {}) {
+export function createRegistry({
+  extraTools = [],
+  includeAmos = true,
+  includeWeb = true
+} = {}) {
   const registry = new ToolRegistry();
   registry.register(createBashTool());
   for (const tool of createCodingTools()) registry.register(tool);
   for (const tool of createFileTools()) registry.register(tool);
-  for (const tool of createWebTools()) registry.register(tool);
-  for (const tool of createAmosTools()) registry.register(tool);
+  if (includeWeb) {
+    for (const tool of createWebTools()) registry.register(tool);
+  }
+  if (includeAmos) {
+    for (const tool of createAmosTools()) registry.register(tool);
+  }
   for (const tool of extraTools) registry.register(tool);
   return registry;
 }
@@ -25,9 +33,12 @@ export function createRuntime({
   oauth = null,
   useOAuth = false,
   fetchImpl,
-  extraTools = []
+  extraTools = [],
+  includeAmos = true,
+  includeWeb = true,
+  systemPrompt
 }) {
-  const registry = createRegistry({ extraTools });
+  const registry = createRegistry({ extraTools, includeAmos, includeWeb });
   const modelConfig = {
     ...config.model,
     getAccessToken: config.model.usesAmosIdentity
@@ -51,7 +62,8 @@ export function createRuntime({
     registry,
     approvals,
     modelClient,
-    amosClient
+    amosClient,
+    systemPrompt
   });
   return { registry, loop, modelClient, amosClient };
 }
