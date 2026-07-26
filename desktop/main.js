@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
 import { DesktopSettingsStore } from "../src/desktop/settingsStore.js";
 import { DesktopController } from "../src/desktop/controller.js";
+import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -214,6 +215,9 @@ function registerIpc() {
     bytes: new Uint8Array(input?.bytes || [])
   }));
   ipcMain.handle("desktop:remove-attachment", (_event, id) => controller.removeAttachment(id));
+  ipcMain.handle("desktop:use-private-memory", (_event, id) => controller.usePrivateMemory(id));
+  ipcMain.handle("desktop:promote-private-memory", (_event, id) => controller.promotePrivateMemory(id));
+  ipcMain.handle("desktop:forget-private-memory", (_event, id) => controller.forgetPrivateMemory(id));
   ipcMain.handle("desktop:choose-attachments", async () => {
     const result = await dialog.showOpenDialog(window, {
       title: "Attach files to AMOS",
@@ -266,9 +270,15 @@ app.whenReady().then(() => {
     encrypt,
     decrypt
   });
+  const privateMemoryStore = new PrivateMemoryStore({
+    filePath: join(app.getPath("userData"), "private-memory.json"),
+    encrypt,
+    decrypt
+  });
   controller = new DesktopController({
     userDataPath: app.getPath("userData"),
     settingsStore,
+    privateMemoryStore,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,
     notify: notifyApproval

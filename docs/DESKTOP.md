@@ -28,8 +28,9 @@ Desktop guides the user through three independent grants:
 3. **Choose a workspace** — optional local folder that AMOS may inspect and
    change through visible approval gates.
 
-The local workspace is not uploaded wholesale to AMOS. Attachments stay
-task-local unless the user explicitly selects **Add to company memory**.
+The local workspace is not uploaded wholesale to AMOS. Each attachment is
+task-local unless the user explicitly selects **Keep in private memory** or
+**Add to company memory**.
 
 ## Current capabilities
 
@@ -49,7 +50,19 @@ task-local unless the user explicitly selects **Add to company memory**.
 - local PDF and DOCX extraction;
 - text, Markdown, structured data, and source files;
 - vision-capability checks before images reach a model; and
-- per-item task-local or company-memory selection.
+- per-item task-local, encrypted private-memory, or governed company-memory selection.
+
+### Private memory
+
+- encrypted locally with macOS Keychain protection;
+- visible in a dedicated Desktop memory view;
+- reusable in a future task without uploading it;
+- promoted to company memory only through an explicit user action and the
+  existing AMOS governed document path; and
+- permanently removable with **Forget**.
+
+Private memory does not create a local company ACL system. Shared, company, and
+receipt memory remain authoritative in managed AMOS.
 
 ### Coding and local work
 
@@ -184,7 +197,7 @@ The next product layers build on the signed distribution foundation:
 1. streaming output, cancellation, and durable resumable tasks;
 2. signed device identity and policy-controlled environment grants;
 3. typed dynamic canvases for company data and active work;
-4. private local memory with explicit sharing and promotion;
+4. richer private-memory retrieval, sharing proposals, and capsule export;
 5. curated offline intelligence with hardware-aware installation;
 6. portable encrypted memory capsules and reconnect reconciliation; and
 7. Windows installers and enterprise/MDM packaging.

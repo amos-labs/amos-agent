@@ -98,7 +98,8 @@ Documents and screenshots enter through the desktop main process:
 2. extract PDF, DOCX, text, or source content locally;
 3. send images only to a vision-capable model;
 4. keep the material task-local by default; and
-5. call an AMOS document tool only after explicit **Add to company memory**
+5. encrypt it locally only after explicit **Keep in private memory** selection;
+   or call an AMOS document tool only after explicit **Add to company memory**
    selection.
 
 Company-memory persistence remains subject to the signed-in user's AMOS scope
@@ -168,10 +169,15 @@ Packaged applications check the signed feed after launch and periodically.
 Downloads and restart/install remain explicit, and the app will not restart
 during an active task.
 
-## Planned local state
+## Local memory state
 
-Private local memory, offline intelligence, and portable memory capsules are
-planned extensions. They must preserve these rules:
+AMOS Desktop 0.5.0 implements the versioned memory contract and encrypted
+private-memory store. The store contains encrypted envelopes rather than
+plaintext filenames or content, maintains a bounded append-only sync journal,
+and exposes explicit reuse, promotion, and forget controls.
+
+Offline intelligence and portable capsule transfer remain planned extensions.
+All current and future local state preserves these rules:
 
 - shared AMOS data remains server-authoritative;
 - private memory is not silently promoted;

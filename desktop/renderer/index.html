@@ -27,6 +27,9 @@
           <button class="nav-item active" data-view="operator">
             <span class="nav-icon">⌁</span><span>Operator</span>
           </button>
+          <button class="nav-item" data-view="memory">
+            <span class="nav-icon">◎</span><span>Private memory</span><span id="privateMemoryBadge" class="nav-badge memory-badge hidden">0</span>
+          </button>
           <button class="nav-item" data-view="decisions">
             <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
           </button>
@@ -178,6 +181,37 @@
                 </div>
               </div>
             </aside>
+          </div>
+        </section>
+
+        <section id="memoryView" class="view memory-view hidden">
+          <div class="section-heading memory-heading">
+            <div>
+              <span class="eyebrow">YOUR CONTEXT · YOUR CONTROL</span>
+              <h1>Private memory on this Mac.</h1>
+              <p>
+                Keep working context encrypted locally, bring it into a task when useful,
+                promote it into governed company memory when it belongs there, or forget it completely.
+              </p>
+            </div>
+            <div class="memory-boundary">
+              <span class="boundary-icon">◈</span>
+              <div>
+                <strong>Private by default</strong>
+                <p>Content is encrypted with macOS Keychain protection and never becomes company memory unless you explicitly promote it.</p>
+              </div>
+            </div>
+          </div>
+          <div id="privateMemoryList" class="private-memory-list"></div>
+          <div id="privateMemoryEmpty" class="memory-empty">
+            <span>◎</span>
+            <strong>No private memory yet</strong>
+            <p>Attach a document or screenshot in Operator and choose “Keep in private memory.”</p>
+          </div>
+          <div class="memory-contract-section">
+            <span class="eyebrow">ONE MEMORY MODEL · CLEAR AUTHORITY</span>
+            <h2>Know where context lives and who controls it.</h2>
+            <div id="memoryClassGrid" class="memory-class-grid"></div>
           </div>
         </section>
 

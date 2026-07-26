@@ -52,3 +52,22 @@ test("company-memory status prevents silent attachment persistence", async () =>
   manager.markMemoryRequested(attachment.id, { document_id: "doc-1" });
   assert.equal(manager.list()[0].memoryStatus, "requested");
 });
+
+test("private memory can be restored as a task attachment without changing company state", async () => {
+  const manager = new AttachmentManager();
+  const attachment = manager.addPrivateMemory({
+    id: "private-1",
+    name: "private.md",
+    mime: "text/markdown",
+    kind: "document",
+    size: 14,
+    sha256: "d".repeat(64),
+    text: "Private context"
+  });
+
+  assert.equal(attachment.memoryStatus, "private");
+  assert.match(
+    manager.buildMessageContent("Use this", [{ id: attachment.id }], { vision: false }),
+    /Private context/
+  );
+});
