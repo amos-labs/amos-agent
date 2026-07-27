@@ -78,6 +78,7 @@ AMOS managed platform
 - Live user steering that joins the same task at the next safe model/tool boundary
 - Safe cancellation across model, MCP, web, and local process work
 - Encrypted restart checkpoints with identity, company-context, and approval revalidation
+- Visible, skill-backed workflows with task-specific verification criteria
 - Live work, decisions, approval notifications, activity, and proof
 - AMOS-hosted, customer-cloud, provider API, and local-model profiles
 - Signed macOS and Windows releases with in-app update notifications
@@ -104,7 +105,9 @@ The app checks for signed updates after launch and every six hours. It notifies
 you before downloading and never restarts during an active task.
 
 See [Desktop installation and releases](docs/DESKTOP.md) for packaging,
-signing, update, and troubleshooting details.
+signing, update, and troubleshooting details. See
+[skills and workflows](docs/SKILLS_AND_WORKFLOWS.md) for the engine/skill/workflow
+contract and tenant-extension safety model.
 
 ## Choose where intelligence runs
 

@@ -2342,10 +2342,12 @@ function renderLiveEvent(event) {
   }
   if (elements.liveEvents.querySelector(".empty-state")) elements.liveEvents.replaceChildren();
   const card = document.createElement("div");
-  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}`;
+  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}`;
   const title = document.createElement("strong");
   title.textContent =
-    event.type === "phase"
+    event.type === "workflow"
+      ? `◇ ${event.title}`
+      : event.type === "phase"
       ? `◌ ${event.phase}`
       : event.type === "tool_start"
       ? `→ ${event.name}`
@@ -2354,7 +2356,9 @@ function renderLiveEvent(event) {
         : `✓ ${event.name}`;
   const detail = document.createElement("span");
   detail.textContent =
-    event.type === "phase"
+    event.type === "workflow"
+      ? `${event.steps?.join(" → ") || event.summary}${event.doneWhen ? ` · Done when: ${event.doneWhen}` : ""}`
+      : event.type === "phase"
       ? event.summary
       : event.type === "tool_error"
       ? event.error
