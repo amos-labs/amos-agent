@@ -25,7 +25,11 @@ test("desktop demo stores a bounded short-lived credential without putting it in
     callbackReceiverFactory: async () => receiver
   });
 
-  const credentials = await demo.start({ previousWorkspace: "/work/real" });
+  const installId = "25deefb7-0e4f-43ad-8b2f-f2f86fac6594";
+  const credentials = await demo.start({
+    previousWorkspace: "/work/real",
+    installId
+  });
   const launch = new URL(opened);
   assert.equal(launch.origin, "https://app.amoslabs.com");
   assert.equal(launch.pathname, "/playground/console");
@@ -33,6 +37,7 @@ test("desktop demo stores a bounded short-lived credential without putting it in
     launch.searchParams.get("desktop_callback"),
     "http://127.0.0.1:43119/desktop/demo/callback"
   );
+  assert.equal(launch.searchParams.get("desktop_install_id"), installId);
   assert.ok(!opened.includes("amos_demo_secret"));
   assert.equal(credentials.demo, true);
   assert.equal(credentials.previous_workspace, "/work/real");

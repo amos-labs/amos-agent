@@ -36,6 +36,20 @@ cannot connect credentials, spend real money, or escape the demo tenant.
 Connecting a real company replaces the demo credential and restores the
 previous personal workspace.
 
+### Privacy-safe activation measurement
+
+AMOS Desktop creates one random installation UUID on first launch and stores
+it in the app data directory with owner-only permissions. It is not derived
+from hardware, an advertising identifier, an email address, or another device
+fingerprint.
+
+The installation UUID lets AMOS distinguish a download from a successful first
+launch and a completed, tool-backed Northwind task. A person and company are
+attached only after the browser hands off an authenticated demo or the user
+completes AMOS OAuth. Access and refresh tokens are never stored in the
+telemetry file. Telemetry is best-effort and never controls product access,
+policy, billing, or authorization.
+
 ## My company
 
 The normal OAuth path supplies durable company memory, applications, engines,
