@@ -79,7 +79,7 @@ Shared business state, integrations, governance, and receipts remain in AMOS.
    requiring an administrator account.
 3. Open it and choose **Connect AMOS**.
 4. Sign in to the company you are authorized to access.
-5. Choose an intelligence profile.
+5. Use AMOS Hosted immediately, or choose another intelligence profile.
 6. Grant a local workspace only if you want AMOS to work with local files.
 
 The app checks for signed updates after launch and every six hours. It notifies
@@ -93,7 +93,8 @@ signing, update, and troubleshooting details.
 AMOS Desktop uses a provider-neutral, OpenAI-compatible model boundary.
 Supported profiles include:
 
-- **AMOS Intelligence** — AMOS-managed inference in AWS
+- **AMOS Hosted (default)** — zero-config AMOS-managed inference in AWS;
+  included plan credits apply first and additional usage is metered
 - **Amazon Bedrock** — customer- or AMOS-controlled AWS inference
 - **Compatible endpoint** — a customer-controlled HTTPS endpoint
 - **Provider API** — including the Moonshot/Kimi API
@@ -102,6 +103,13 @@ Supported profiles include:
 Changing the intelligence does not reconnect the company or change the user's
 AMOS authority. Models without reliable tool use should be limited to
 observe-and-draft workflows.
+
+AMOS Hosted uses the same short-lived AMOS identity as the company connection.
+Desktop requests the stable `auto` model alias, while the managed platform owns
+provider/model routing. That lets AMOS move from Bedrock to an AMOS-hosted model
+or route by workload without shipping a new desktop build. Explicit provider
+keys, private compatible endpoints, customer Bedrock, and local models remain
+available and are never overwritten after the user selects them.
 
 AMOS Desktop 0.7 adds a guided offline path for Ollama: it assesses the
 computer, recommends one of three curated profiles, shows resumable download
@@ -133,6 +141,13 @@ encrypted checkpoint. After a restart or cancellation, Desktop rechecks the
 exact user and tenant, fetches a fresh `resume_company` briefing and approval
 queue, and loads a no-replay continuation into Operator for explicit review.
 Completed tasks remove their checkpoint.
+
+AMOS Desktop 0.13 makes **AMOS Hosted** the zero-config intelligence path.
+Signing into AMOS supplies short-lived inference authorization automatically;
+included plan credits apply first and additional usage is metered to the
+company. The client requests only the stable `auto` alias so provider/model
+routing can evolve server-side. Existing BYOK, private endpoint, Bedrock, and
+local profiles remain explicit alternatives.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 

@@ -9,6 +9,12 @@ import {
   sanitizeSettings
 } from "../src/desktop/settingsStore.js";
 
+test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.provider, "amos-hosted");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.model, "auto");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.baseUrl, "");
+});
+
 test("desktop settings encrypt provider credentials at rest", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-desktop-settings-"));
   const path = join(directory, "settings.json");

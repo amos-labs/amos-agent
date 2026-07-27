@@ -12,9 +12,9 @@ const PROVIDER_IDS = new Set([
 ]);
 
 export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
-  provider: "kimi",
-  model: "kimi-k3",
-  baseUrl: "https://api.moonshot.ai/v1",
+  provider: "amos-hosted",
+  model: "auto",
+  baseUrl: "",
   reasoningEffort: "max",
   operatingMode: "online",
   appearance: "system",
@@ -82,7 +82,7 @@ export class DesktopSettingsStore {
       AMOS_MODEL_PROVIDER: settings.provider,
       AMOS_MODEL: settings.model,
       AMOS_MODEL_BASE_URL: settings.baseUrl,
-      AMOS_MODEL_API_KEY: settings.apiKey,
+      AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
       AMOS_MODEL_REASONING_EFFORT: settings.reasoningEffort,
       AMOS_AGENT_WORKSPACE: settings.workspace || process.cwd(),
       AMOS_MCP_URL: settings.amosMcpUrl
