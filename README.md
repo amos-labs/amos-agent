@@ -74,6 +74,8 @@ AMOS managed platform
 - Approval-gated shell commands and file changes
 - Digest-addressed local task receipts for completed, failed, and canceled work
 - Streamed responses with visible planning, action, and evaluation phases
+- Productive tasks continue until completion, safe cancellation, or a no-progress safeguard
+- Live user steering that joins the same task at the next safe model/tool boundary
 - Safe cancellation across model, MCP, web, and local process work
 - Encrypted restart checkpoints with identity, company-context, and approval revalidation
 - Live work, decisions, approval notifications, activity, and proof

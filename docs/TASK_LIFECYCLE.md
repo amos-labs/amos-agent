@@ -1,6 +1,6 @@
 # Streaming, cancellation, and restart-safe tasks
 
-AMOS Desktop 0.11 gives long work a visible and durable lifecycle without
+AMOS Desktop gives long work a visible and durable lifecycle without
 creating a second source of business authority.
 
 ## Streaming and progress
@@ -17,6 +17,20 @@ bounded phases in **Live Work**:
 
 Streaming changes presentation, not authority. A partial response cannot call a
 tool or approve an action.
+
+## Steering and progress safeguards
+
+The Operator composer remains available while AMOS works. A submitted direction
+joins the same task, receipt, and checkpoint at the next safe boundary: after a
+complete assistant response or after every tool call in the current batch has a
+corresponding result. The UI confirms both when direction is queued and when the
+agent applies it.
+
+AMOS does not stop productive work after a fixed number of tool cycles. It
+continues until the task completes or the user stops it. Internal safeguards
+only detect repeated identical tool/result cycles and consecutive cycles where
+every tool fails. If one fires, AMOS performs a tool-free final synthesis that
+states what is established, what remains unresolved, and the best next step.
 
 ## Safe cancellation
 
@@ -44,7 +58,7 @@ Before a personally signed-in online company task begins, Desktop:
 
 The checkpoint may contain:
 
-- the user's objective;
+- the user's objective and any directions added while the task was running;
 - attachment filenames, with a reminder to reattach material;
 - high-level completed tool names;
 - a bounded partial response; and

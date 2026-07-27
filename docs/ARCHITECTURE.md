@@ -33,7 +33,7 @@ AMOS managed platform
 - local files, repository inspection, patches, and shell execution;
 - task-local documents, screenshots, and extracted content;
 - transient session transcript and local activity;
-- streamed model output, active-task cancellation, and encrypted restart checkpoints;
+- streamed model output, active-task steering, cancellation, and encrypted restart checkpoints;
 - OAuth 2.1 + PKCE client and automatic token refresh;
 - compact MCP bootstrap and on-demand AMOS engine loading; and
 - native approval and update notifications.
@@ -79,6 +79,17 @@ When supported by the configured OpenAI-compatible endpoint, Desktop consumes
 SSE deltas and incrementally assembles both visible text and structured tool
 calls. One task-level abort signal is linked to the model request, AMOS MCP
 requests, public web requests, and spawned local process trees.
+
+There is no fixed productive-tool-turn ceiling. A task continues while it is
+making progress. Desktop guards only against repeated identical tool/result
+cycles and consecutive all-error cycles. When either guard fires, the model
+receives one tool-free synthesis pass so the user gets the best supported
+result, remaining uncertainty, and next step rather than a counter error.
+
+While a task runs, the Operator composer remains available. New user direction
+is queued and appended to the same transcript after the current assistant
+response or complete tool-call batch has reached a protocol-safe boundary.
+**Stop safely** remains a separate immediate abort control.
 
 ## Desktop process boundary
 

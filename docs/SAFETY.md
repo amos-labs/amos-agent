@@ -166,6 +166,17 @@ AMOS_AGENT_MAX_OUTPUT_BYTES=24000
 These controls are for deliberately isolated automation environments. They are
 not recommended for normal interactive Desktop use.
 
+Productive work has no fixed cycle ceiling. Two progress safeguards remain
+configurable for unusual deployments:
+
+```bash
+AMOS_AGENT_MAX_REPEATED_TOOL_CYCLES=5
+AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES=3
+```
+
+They count only repeated identical tool/result cycles or cycles in which every
+tool fails, not normal productive work.
+
 ## Reporting a problem
 
 Security vulnerabilities should be reported privately as described in

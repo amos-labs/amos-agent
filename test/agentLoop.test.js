@@ -9,7 +9,12 @@ test("malformed tool JSON is returned as an error and never executes", async () 
   const registry = new ToolRegistry();
   registry.register({ name: "danger", handler: () => { calls += 1; } });
   const loop = new AgentLoop({
-    config: { agent: { maxToolTurns: 2 } },
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
     registry,
     approvals: {},
     amosClient: {},
@@ -36,7 +41,12 @@ test("malformed tool JSON is returned as an error and never executes", async () 
 
 test("custom operating prompt survives a cleared session", () => {
   const loop = new AgentLoop({
-    config: { agent: { maxToolTurns: 1 } },
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
@@ -62,7 +72,12 @@ test("agent loop exposes streaming progress and cancels an active tool", async (
   });
   let turn = 0;
   const loop = new AgentLoop({
-    config: { agent: { maxToolTurns: 2 } },
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
     registry,
     approvals: {},
     amosClient: {},
@@ -95,4 +110,199 @@ test("agent loop exposes streaming progress and cancels an active tool", async (
   await assert.rejects(pending, { name: "AbortError" });
   assert.ok(events.some((event) => event.type === "assistant_delta" && event.text === "Working"));
   assert.ok(events.some((event) => event.type === "phase" && event.phase === "acting"));
+});
+
+test("productive work continues beyond the former eight-cycle limit", async () => {
+  const registry = new ToolRegistry();
+  const executed = [];
+  registry.register({
+    name: "inspect_part",
+    async handler(args) {
+      executed.push(args.part);
+      return { ok: true, part: args.part };
+    }
+  });
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        turn += 1;
+        if (turn <= 10) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: `call-${turn}`,
+                function: {
+                  name: "inspect_part",
+                  arguments: JSON.stringify({ part: turn })
+                }
+              }]
+            }
+          };
+        }
+        return { message: { role: "assistant", content: "All ten parts inspected." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Inspect every part"), "All ten parts inspected.");
+  assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+});
+
+test("queued steering is applied to the same task at a safe tool boundary", async () => {
+  const registry = new ToolRegistry();
+  const steering = [];
+  const events = [];
+  let turn = 0;
+  registry.register({
+    name: "inspect_issue",
+    async handler() {
+      steering.push({ content: "Also compare the pinned Plumbline version." });
+      return { ok: true, issue: 312 };
+    }
+  });
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "call-1",
+                function: { name: "inspect_issue", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        assert.equal(messages.at(-1).role, "user");
+        assert.equal(messages.at(-1).content, "Also compare the pinned Plumbline version.");
+        return { message: { role: "assistant", content: "Issue and version compared." } };
+      }
+    }
+  });
+
+  const answer = await loop.run("Inspect issue 312", {
+    takeSteering: () => steering.splice(0),
+    onEvent: (event) => events.push(event)
+  });
+
+  assert.equal(answer, "Issue and version compared.");
+  assert.ok(
+    events.some(
+      (event) => event.type === "phase" && event.phase === "steering_applied"
+    )
+  );
+});
+
+test("steering received during a final model response continues the active task", async () => {
+  const steering = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        if (turn === 1) {
+          steering.push("Focus the answer on the release mismatch.");
+          return { message: { role: "assistant", content: "Initial answer." } };
+        }
+        assert.equal(messages.at(-1).content, "Focus the answer on the release mismatch.");
+        return { message: { role: "assistant", content: "Release mismatch analyzed." } };
+      }
+    }
+  });
+
+  const answer = await loop.run("Analyze the issue", {
+    takeSteering: () => steering.splice(0)
+  });
+
+  assert.equal(answer, "Release mismatch analyzed.");
+  assert.equal(turn, 2);
+});
+
+test("a repeating tool loop ends with a useful synthesis instead of a turn-limit error", async () => {
+  const registry = new ToolRegistry();
+  const events = [];
+  let calls = 0;
+  registry.register({
+    name: "inspect_issue",
+    async handler() {
+      return { ok: true, state: "unchanged" };
+    }
+  });
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        calls += 1;
+        if (tools.length === 0) {
+          return {
+            message: {
+              role: "assistant",
+              content: "The issue is unchanged; inspect the receipt formula next."
+            }
+          };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `call-${calls}`,
+              function: { name: "inspect_issue", arguments: "{}" }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("Diagnose the issue", {
+    onEvent: (event) => events.push(event)
+  });
+
+  assert.equal(answer, "The issue is unchanged; inspect the receipt formula next.");
+  assert.equal(calls, 4);
+  assert.ok(events.some((event) => event.phase === "synthesizing"));
+  assert.doesNotMatch(answer, /Stopped after/i);
+  assert.equal(loop.messages.filter((message) => message.role === "system").length, 1);
 });

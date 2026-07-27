@@ -859,7 +859,12 @@ export class DesktopController {
       startedAt: new Date().toISOString(),
       phase: "starting",
       summary: "Preparing the task",
-      checkpointed: false
+      checkpointed: false,
+      objective: prompt,
+      steeringQueue: [],
+      steeringCount: 0,
+      acceptingSteering: true,
+      receiptEvents: []
     };
     this.send("agent:status", {
       running: true,
@@ -871,7 +876,7 @@ export class DesktopController {
     const boundary = settings.operatingMode;
     const offline = boundary === "offline";
     const company = boundary === "online";
-    const receiptEvents = [];
+    const receiptEvents = this.activeTask.receiptEvents;
     try {
       const { config, runtime } = await this.getRuntime({
         requireAmos: company,
@@ -910,6 +915,15 @@ export class DesktopController {
       this.record("user", prompt);
       const answer = await runtime.loop.run(modelContent, {
         signal: abortController.signal,
+        takeSteering: () => {
+          const active = this.activeTask;
+          if (!active || active.id !== taskId || active.steeringQueue.length === 0) return [];
+          const queued = active.steeringQueue.splice(0);
+          active.steeringCount += queued.length;
+          active.phase = "thinking";
+          active.summary = "Applying the user's latest direction";
+          return queued;
+        },
         onEvent: (event) => {
           const safeEvent = sanitizeAgentEvent(event);
           this.send("agent:event", safeEvent);
@@ -924,6 +938,9 @@ export class DesktopController {
           this.captureTaskProgress(safeEvent);
         }
       });
+      this.activeTask.acceptingSteering = false;
+      this.activeTask.phase = "finalizing";
+      this.activeTask.summary = "Recording the completed result";
       await this.checkpointWrites.catch(() => {});
       if (this.activeTask?.checkpointed) {
         await this.requireTaskCheckpointStore().remove(taskId);
@@ -977,6 +994,54 @@ export class DesktopController {
       if (this.activeTask?.id === taskId) this.activeTask = null;
       this.send("agent:status", { running: false, taskId });
     }
+  }
+
+  async steerTask(id, content) {
+    const active = this.activeTask;
+    if (!active || (id && active.id !== id)) {
+      return { queued: false, message: "No matching AMOS task is running" };
+    }
+    if (
+      !active.acceptingSteering ||
+      active.abortController.signal.aborted ||
+      active.phase === "canceling"
+    ) {
+      return { queued: false, message: "AMOS is already stopping this task" };
+    }
+    const direction = String(content || "").trim();
+    if (!direction) throw new Error("Enter a direction for the active task");
+    if (direction.length > 40_000) {
+      throw new Error("A steering message must be 40,000 characters or fewer");
+    }
+    const queuedAt = new Date().toISOString();
+    active.steeringQueue.push({ content: direction, queuedAt });
+    active.summary = "New direction queued";
+    active.objective = appendSteeringObjective(active.objective, direction, queuedAt);
+    const event = {
+      type: "phase",
+      phase: "steering_queued",
+      summary: "New direction received; AMOS will apply it at the next safe boundary"
+    };
+    this.send("agent:event", event);
+    active.receiptEvents?.push(receiptEvent(event));
+    this.record("user", direction, {
+      task_id: active.id,
+      steering: true,
+      queued_at: queuedAt
+    });
+    if (active.checkpointed) {
+      await this.queueCheckpointUpdate(active.id, {
+        objective: active.objective,
+        phase: "steering_queued",
+        summary: event.summary
+      });
+      await this.sendTaskCheckpoints();
+    }
+    return {
+      queued: true,
+      taskId: active.id,
+      position: active.steeringQueue.length
+    };
   }
 
   async cancelTask(id = null) {
@@ -1719,6 +1784,14 @@ function sanitizeAgentEvent(event) {
     name: event.name,
     result: summarizeResult(event.result)
   };
+}
+
+function appendSteeringObjective(objective, direction, queuedAt) {
+  const entry = `\n\nUser steering (${queuedAt}): ${direction}`;
+  const combined = `${String(objective || "").trim()}${entry}`;
+  return combined.length <= 40_000
+    ? combined
+    : `Earlier objective and steering were truncated for checkpoint safety.\n\n${combined.slice(-39_930)}`;
 }
 
 function receiptEvent(event) {

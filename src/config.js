@@ -48,7 +48,18 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
       braveApiKey: env.BRAVE_SEARCH_API_KEY || ""
     },
     agent: {
-      maxToolTurns: intFromEnv(env.AMOS_AGENT_MAX_TOOL_TURNS, 8, 1, 64)
+      maxRepeatedToolCycles: intFromEnv(
+        env.AMOS_AGENT_MAX_REPEATED_TOOL_CYCLES,
+        5,
+        2,
+        12
+      ),
+      maxConsecutiveToolErrorCycles: intFromEnv(
+        env.AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES,
+        3,
+        1,
+        12
+      )
     }
   };
 }

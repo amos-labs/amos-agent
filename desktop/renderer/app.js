@@ -48,6 +48,7 @@ let activeCanvasId = null;
 let capsuleFlow = null;
 let currentTaskId = null;
 let streamingMessage = null;
+const transientTaskMessages = new Set();
 let resumingCheckpointId = null;
 
 const elements = Object.fromEntries(
@@ -2062,15 +2063,21 @@ function renderAttachments() {
 
 async function runTask(event) {
   event.preventDefault();
-  if (running) return;
   const prompt = elements.promptInput.value.trim();
+  if (running) {
+    if (!prompt) return;
+    await steerTask(prompt);
+    return;
+  }
   if (!prompt && attachments.length === 0) return;
   const attachmentSummary = attachments.length > 0
     ? `\n\nAttached: ${attachments.map((item) => item.name).join(", ")}`
     : "";
   addMessage("user", `${prompt || "Review the attached material."}${attachmentSummary}`);
   elements.promptInput.value = "";
+  clearTransientTaskMessages();
   const pending = addMessage("pending", "AMOS is loading company context and determining the next action…");
+  transientTaskMessages.add(pending);
   streamingMessage = pending;
   setRunning(true);
 
@@ -2083,7 +2090,7 @@ async function runTask(event) {
     });
     resumingCheckpointId = null;
     streamingMessage = null;
-    pending.remove();
+    clearTransientTaskMessages();
     addMessage("assistant", result.answer);
     state.activity = result.activity;
     state.canvases = result.canvases || state.canvases;
@@ -2104,7 +2111,7 @@ async function runTask(event) {
   } catch (error) {
     resumingCheckpointId = null;
     streamingMessage = null;
-    pending.remove();
+    clearTransientTaskMessages();
     addMessage(
       "error",
       error?.code === "AMOS_TASK_CANCELED" || /task canceled/i.test(error.message)
@@ -2125,6 +2132,32 @@ async function runTask(event) {
     }
     setRunning(false);
   }
+}
+
+async function steerTask(direction) {
+  elements.runButton.disabled = true;
+  try {
+    const result = await api.steerTask(currentTaskId, direction);
+    if (!result.queued) {
+      toast(result.message || "AMOS could not queue that direction.", true);
+      return;
+    }
+    addMessage("user", direction);
+    elements.promptInput.value = "";
+    const pending = addMessage("pending", "AMOS is applying your new direction at the next safe boundary…");
+    transientTaskMessages.add(pending);
+    streamingMessage = pending;
+    elements.promptInput.focus();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    elements.runButton.disabled = false;
+  }
+}
+
+function clearTransientTaskMessages() {
+  for (const message of transientTaskMessages) message.remove();
+  transientTaskMessages.clear();
 }
 
 async function cancelTask() {
@@ -2383,14 +2416,20 @@ function renderActivity() {
 
 function setRunning(value) {
   running = value;
-  elements.runButton.disabled = value;
-  elements.runButton.classList.toggle("hidden", value);
+  elements.runButton.disabled = false;
+  elements.runButton.replaceChildren(
+    document.createTextNode(value ? "Steer AMOS " : "Run with AMOS "),
+    text("→")
+  );
   elements.cancelButton.classList.toggle("hidden", !value);
   elements.cancelButton.disabled = false;
   elements.cancelButton.textContent = "Stop safely";
   elements.attachButton.disabled = value;
-  elements.promptInput.disabled = value;
-  elements.runningIndicator.textContent = value ? "Working · safely stoppable" : "Idle";
+  elements.promptInput.disabled = false;
+  elements.promptInput.placeholder = value
+    ? "Add direction while AMOS works…"
+    : "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
+  elements.runningIndicator.textContent = value ? "Working · steer or stop" : "Idle";
   elements.runningIndicator.classList.toggle("active", value);
   renderAttachments();
   renderUpdate();

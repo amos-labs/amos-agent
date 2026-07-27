@@ -8,6 +8,20 @@ test("authentication mode defaults to auto and accepts explicit API-key mode", (
   assert.equal(loadConfig({ AMOS_AGENT_AUTH_MODE: "unexpected" }, ".").auth.mode, "auto");
 });
 
+test("agent work has progress guards instead of a productive-cycle ceiling", () => {
+  const defaults = loadConfig({}, ".").agent;
+  assert.equal(defaults.maxRepeatedToolCycles, 5);
+  assert.equal(defaults.maxConsecutiveToolErrorCycles, 3);
+  assert.equal(Object.hasOwn(defaults, "maxToolTurns"), false);
+
+  const configured = loadConfig({
+    AMOS_AGENT_MAX_REPEATED_TOOL_CYCLES: "5",
+    AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES: "4"
+  }, ".").agent;
+  assert.equal(configured.maxRepeatedToolCycles, 5);
+  assert.equal(configured.maxConsecutiveToolErrorCycles, 4);
+});
+
 test("model provider defaults to Kimi while preserving legacy environment names", () => {
   const config = loadConfig(
     {

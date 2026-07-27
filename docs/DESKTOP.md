@@ -97,6 +97,10 @@ receipt memory remain authoritative in managed AMOS.
 
 - OpenAI-compatible output streams into the current Operator response;
 - Live Work shows planning, action, evaluation, and completion phases;
+- the composer remains active during work so the user can steer the same task
+  at the next safe model/tool boundary;
+- productive tool cycles do not stop at an arbitrary count; repeated
+  no-progress or all-error cycles produce a final supported synthesis;
 - **Stop safely** aborts the real model, MCP, web, and local-process work;
 - signed-in company tasks receive an encrypted local checkpoint;
 - unfinished running tasks become interrupted tasks after restart;

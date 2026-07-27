@@ -250,6 +250,9 @@ function registerIpc() {
     controller.activateOfflineModel(id)
   );
   ipcMain.handle("desktop:run", (_event, input) => controller.run(input));
+  ipcMain.handle("desktop:steer-task", (_event, input) =>
+    controller.steerTask(input?.id, input?.content)
+  );
   ipcMain.handle("desktop:cancel-task", (_event, id) => controller.cancelTask(id));
   ipcMain.handle("desktop:clear", () => controller.clear());
   ipcMain.handle("desktop:remove-canvas", (_event, id) => controller.removeCanvas(id));
