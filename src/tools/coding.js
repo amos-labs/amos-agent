@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { relative } from "node:path";
+import { basename, extname, join, relative } from "node:path";
 import { spawn } from "node:child_process";
 import { assertSafeAgentPath, resolveWorkspacePath, truncateText } from "../util/pathSafety.js";
 import { safeChildEnvironment } from "./bash.js";
@@ -8,6 +8,16 @@ const IGNORED = new Set([".git", "node_modules", "dist", "coverage", ".amos-agen
 
 export function createCodingTools() {
   return [
+    {
+      name: "desktop_inspect_project",
+      source: "local",
+      description:
+        "Build a bounded, read-only briefing of the selected project: stack, manifests, scripts, git state, README context, verification commands, and suggested next tasks.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+      async handler(_args, context) {
+        return inspectProject(context.config.safety.workspaceRoot, context);
+      }
+    },
     {
       name: "search_files",
       source: "local",
@@ -146,6 +156,194 @@ export function createCodingTools() {
       }
     }
   ];
+}
+
+async function inspectProject(root, context) {
+  const inventory = {
+    files: 0,
+    directories: 0,
+    truncated: false,
+    extensions: new Map(),
+    manifests: [],
+    notable: []
+  };
+  await inventoryPath(root, root, inventory);
+  const manifestSet = new Set(inventory.manifests);
+  const packageJson = manifestSet.has("package.json")
+    ? await readJson(join(root, "package.json"))
+    : null;
+  const readmePath = inventory.notable.find((path) => /^readme(?:\.|$)/i.test(basename(path)));
+  const readme = readmePath
+    ? truncateText(await readFile(join(root, readmePath), "utf8").catch(() => ""), 6_000)
+    : "";
+  const [status, branch, recent] = await Promise.all([
+    runProgram("git", ["status", "--short"], {
+      cwd: root,
+      timeoutMs: 10_000,
+      maxOutputBytes: context.config.safety.maxOutputBytes,
+      signal: context.signal
+    }),
+    runProgram("git", ["branch", "--show-current"], {
+      cwd: root,
+      timeoutMs: 10_000,
+      maxOutputBytes: context.config.safety.maxOutputBytes,
+      signal: context.signal
+    }),
+    runProgram("git", ["log", "-5", "--pretty=format:%h %s"], {
+      cwd: root,
+      timeoutMs: 10_000,
+      maxOutputBytes: context.config.safety.maxOutputBytes,
+      signal: context.signal
+    })
+  ]);
+  const scripts = packageJson?.scripts && typeof packageJson.scripts === "object"
+    ? Object.fromEntries(
+        Object.entries(packageJson.scripts)
+          .slice(0, 40)
+          .map(([name, command]) => [String(name).slice(0, 80), String(command).slice(0, 500)])
+      )
+    : {};
+  const verification = verificationCommands(manifestSet, scripts);
+  const stack = detectedStack(manifestSet, packageJson, inventory.extensions);
+  return {
+    project: packageJson?.name || basename(root),
+    workspace: root,
+    branch: branch.ok ? branch.stdout.trim() || null : null,
+    git: {
+      repository: branch.ok || status.ok || recent.ok,
+      dirty: status.ok ? Boolean(status.stdout.trim()) : null,
+      changes: status.ok ? status.stdout.trim().split("\n").filter(Boolean).slice(0, 100) : [],
+      recent_commits: recent.ok ? recent.stdout.trim().split("\n").filter(Boolean) : []
+    },
+    stack,
+    manifests: inventory.manifests,
+    scripts,
+    verification,
+    readme: readme ? { path: readmePath, excerpt: readme } : null,
+    inventory: {
+      files: inventory.files,
+      directories: inventory.directories,
+      truncated: inventory.truncated,
+      top_extensions: [...inventory.extensions.entries()]
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 15)
+        .map(([extension, count]) => ({ extension, count }))
+    },
+    sensitive_files:
+      "Names and contents of .env, credentials, keys, and secrets were intentionally excluded.",
+    suggested_tasks: [
+      "Explain the architecture and main execution paths with file citations",
+      verification.length > 0
+        ? `Run the most relevant existing check: ${verification[0]}`
+        : "Identify the project's real verification path before changing code",
+      status.ok && status.stdout.trim()
+        ? "Review the existing working-tree changes before editing overlapping files"
+        : "Identify one small, high-value improvement and propose it before editing"
+    ]
+  };
+}
+
+async function inventoryPath(path, root, inventory) {
+  if (inventory.files >= 5_000) {
+    inventory.truncated = true;
+    return;
+  }
+  const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (inventory.files >= 5_000) {
+      inventory.truncated = true;
+      return;
+    }
+    if (
+      IGNORED.has(entry.name) ||
+      entry.name === ".env" ||
+      entry.name.startsWith(".env.") ||
+      /(?:credential|secret|private[-_.]?key)/i.test(entry.name)
+    ) {
+      continue;
+    }
+    const absolute = join(path, entry.name);
+    if (entry.isDirectory()) {
+      inventory.directories += 1;
+      await inventoryPath(absolute, root, inventory);
+      continue;
+    }
+    if (!entry.isFile()) continue;
+    inventory.files += 1;
+    const projectPath = relative(root, absolute);
+    const extension = extname(entry.name).toLowerCase() || "[no extension]";
+    inventory.extensions.set(extension, (inventory.extensions.get(extension) || 0) + 1);
+    if (MANIFEST_NAMES.has(entry.name) && !projectPath.includes("/")) {
+      inventory.manifests.push(projectPath);
+    }
+    if (/^(readme|contributing|architecture)(?:\.|$)/i.test(entry.name)) {
+      inventory.notable.push(projectPath);
+    }
+  }
+}
+
+const MANIFEST_NAMES = new Set([
+  "package.json",
+  "Cargo.toml",
+  "go.mod",
+  "pyproject.toml",
+  "requirements.txt",
+  "Gemfile",
+  "composer.json",
+  "pom.xml",
+  "build.gradle",
+  "Package.swift",
+  "Dockerfile",
+  "docker-compose.yml",
+  "docker-compose.yaml"
+]);
+
+async function readJson(path) {
+  try {
+    return JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function detectedStack(manifests, packageJson, extensions) {
+  const stack = [];
+  if (manifests.has("package.json")) {
+    stack.push("Node.js");
+    const dependencies = {
+      ...(packageJson?.dependencies || {}),
+      ...(packageJson?.devDependencies || {})
+    };
+    for (const [dependency, label] of [
+      ["next", "Next.js"],
+      ["react", "React"],
+      ["electron", "Electron"],
+      ["vue", "Vue"],
+      ["svelte", "Svelte"],
+      ["express", "Express"]
+    ]) {
+      if (dependencies[dependency]) stack.push(label);
+    }
+  }
+  if (manifests.has("Cargo.toml")) stack.push("Rust");
+  if (manifests.has("go.mod")) stack.push("Go");
+  if (manifests.has("Gemfile")) stack.push("Ruby");
+  if (manifests.has("pyproject.toml") || manifests.has("requirements.txt")) stack.push("Python");
+  if (manifests.has("Package.swift")) stack.push("Swift");
+  if (extensions.has(".ts") || extensions.has(".tsx")) stack.push("TypeScript");
+  return [...new Set(stack)];
+}
+
+function verificationCommands(manifests, scripts) {
+  const commands = [];
+  for (const name of ["check", "test", "lint", "typecheck", "build"]) {
+    if (scripts[name]) commands.push(`npm run ${name}`);
+  }
+  if (manifests.has("Cargo.toml")) commands.push("cargo test", "cargo clippy --all-targets");
+  if (manifests.has("go.mod")) commands.push("go test ./...");
+  if (manifests.has("Gemfile")) commands.push("bundle exec rspec");
+  if (manifests.has("pyproject.toml") || manifests.has("requirements.txt")) commands.push("pytest");
+  return [...new Set(commands)].slice(0, 10);
 }
 
 export function parsePatchPaths(patch) {

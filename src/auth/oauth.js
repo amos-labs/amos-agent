@@ -152,6 +152,9 @@ export class AmosOAuthSession {
       return credentials.access_token;
     }
     if (!credentials.refresh_token) {
+      if (credentials.demo) {
+        throw new Error("The Northwind demo has expired. Start a fresh demo or connect your AMOS company.");
+      }
       throw new Error("AMOS OAuth session cannot be refreshed. Run `amos-agent login` again.");
     }
     if (!this.refreshPromise) {

@@ -6,6 +6,15 @@ AMOS Desktop lets a person choose where intelligence runs, connect it to the
 company context and capabilities in AMOS, and safely work across both company
 systems and an explicitly selected local workspace.
 
+The first run offers three honest starting points:
+
+- **My workspace** — no AMOS account required; use a provider key or local
+  model for private code, research, documents, and local automation.
+- **Northwind demo** — a short-lived sample company using the real AMOS tool,
+  policy, approval, receipt, and hosted-intelligence boundaries.
+- **My company** — sign in or create an AMOS account for durable organizational
+  memory, connected applications, shared authority, approvals, and proof.
+
 [Download for Apple Silicon](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg)
 ·
 [Download for Intel Mac](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
@@ -60,7 +69,10 @@ AMOS managed platform
 - Encrypted offline outcome drafts with live diff, identity pinning, and explicit reauthorization
 - Typed company canvases for metrics, tables, trends, briefs, evidence, approvals, and receipts
 - Local workspace grants, search, reads, Git status/diff, and atomic patches
+- A bounded project briefing with detected stack, manifests, scripts, Git
+  state, README context, verification commands, and safe suggested next tasks
 - Approval-gated shell commands and file changes
+- Digest-addressed local task receipts for completed, failed, and canceled work
 - Streamed responses with visible planning, action, and evaluation phases
 - Safe cancellation across model, MCP, web, and local process work
 - Encrypted restart checkpoints with identity, company-context, and approval revalidation
@@ -77,10 +89,14 @@ Shared business state, integrations, governance, and receipts remain in AMOS.
 2. On macOS, drag **AMOS Desktop** into **Applications**. On Windows, run the
    signed per-user installer; it adds Start-menu and desktop shortcuts without
    requiring an administrator account.
-3. Open it and choose **Connect AMOS**.
-4. Sign in to the company you are authorized to access.
-5. Use AMOS Hosted immediately, or choose another intelligence profile.
-6. Grant a local workspace only if you want AMOS to work with local files.
+3. Open it and choose **My workspace**, **Northwind demo**, or **My company**.
+4. For personal work, select a local runtime, provider API, Bedrock, or another
+   compatible endpoint. No AMOS account or company tools are required.
+5. For the demo, the browser creates a bounded sample company and securely
+   returns it to Desktop without placing its short-lived key in a URL.
+6. For your company, sign in and use AMOS Hosted immediately—or choose another
+   intelligence profile.
+7. Grant only the local workspace you want AMOS to inspect and operate.
 
 The app checks for signed updates after launch and every six hours. It notifies
 you before downloading and never restarts during an active task.
@@ -148,6 +164,13 @@ included plan credits apply first and additional usage is metered to the
 company. The client requests only the stable `auto` alias so provider/model
 routing can evolve server-side. Existing BYOK, private endpoint, Bedrock, and
 local profiles remain explicit alternatives.
+
+New installations default to balanced reasoning rather than maximum reasoning.
+AMOS Hosted accepts the stable `auto` alias and a reasoning-effort hint, while
+the managed platform owns the actual routine, balanced, or deep model route.
+Users can still explicitly request higher reasoning or choose any supported
+provider. This keeps routine coding, summarization, extraction, and tool work
+from paying frontier-max cost by default.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 
@@ -230,6 +253,7 @@ The example environment file documents provider and advanced CLI configuration:
 
 - `list_files`, `read_file`, and `write_file`
 - `search_files`
+- `desktop_inspect_project`
 - `git_status` and `git_diff`
 - `apply_patch`
 - `run_bash`

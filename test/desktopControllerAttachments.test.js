@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   DesktopController,
-  shouldActivateAmosHosted
+  shouldActivateAmosHosted,
+  shouldUseDesktopOAuth
 } from "../src/desktop/controller.js";
 
 test("AMOS sign-in only replaces the legacy unconfigured Kimi default", () => {
@@ -35,6 +36,30 @@ test("AMOS sign-in only replaces the legacy unconfigured Kimi default", () => {
       apiKey: ""
     }),
     false
+  );
+});
+
+test("expired demo credentials never keep AMOS Desktop connected", () => {
+  const config = { auth: { mode: "oauth" } };
+  assert.equal(
+    shouldUseDesktopOAuth(
+      config,
+      { access_token: "demo", demo: true, expires_at: 2_000 },
+      1_000
+    ),
+    true
+  );
+  assert.equal(
+    shouldUseDesktopOAuth(
+      config,
+      { access_token: "demo", demo: true, expires_at: 1_000 },
+      1_000
+    ),
+    false
+  );
+  assert.equal(
+    shouldUseDesktopOAuth(config, { access_token: "oauth", expires_at: 1_000 }, 2_000),
+    true
   );
 });
 

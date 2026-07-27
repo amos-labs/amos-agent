@@ -20,6 +20,7 @@ import { OfflineProposalStore } from "../src/desktop/offlineProposal.js";
 import { OllamaModelManager } from "../src/desktop/offlineIntelligence.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
+import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
 import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -212,6 +213,8 @@ function decrypt(value) {
 function registerIpc() {
   ipcMain.handle("desktop:state", () => controller.state());
   ipcMain.handle("desktop:save-settings", (_event, settings) => controller.saveSettings(settings));
+  ipcMain.handle("desktop:start-personal", () => controller.startPersonal());
+  ipcMain.handle("desktop:start-demo", () => controller.startDemo());
   ipcMain.handle("desktop:login", () => controller.login());
   ipcMain.handle("desktop:logout", () => controller.logout());
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
@@ -379,6 +382,11 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
+  const localReceiptStore = new LocalReceiptStore({
+    filePath: join(app.getPath("userData"), "local-receipts.json"),
+    encrypt,
+    decrypt
+  });
   const offlineManager = new OllamaModelManager({
     emit: (payload) => send("offline:changed", payload)
   });
@@ -389,6 +397,7 @@ app.whenReady().then(async () => {
     companyCacheStore,
     offlineProposalStore,
     taskCheckpointStore,
+    localReceiptStore,
     offlineManager,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,

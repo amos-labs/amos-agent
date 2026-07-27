@@ -13,6 +13,19 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.provider, "amos-hosted");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.model, "auto");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.baseUrl, "");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.reasoningEffort, "medium");
+});
+
+test("personal workspace mode allows a cloud model without AMOS company access", () => {
+  const settings = sanitizeSettings({
+    provider: "kimi",
+    model: "kimi-k3",
+    operatingMode: "personal",
+    baseUrl: "https://api.moonshot.ai/v1",
+    apiKey: "customer-key",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(settings.operatingMode, "personal");
 });
 
 test("desktop settings encrypt provider credentials at rest", async () => {

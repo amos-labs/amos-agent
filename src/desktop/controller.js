@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 import { homedir, totalmem, freemem, arch, platform, release } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { loadConfig, validateConfig } from "../config.js";
+import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore } from "../auth/tokenStore.js";
 import { listModelProviders } from "../model/providers.js";
@@ -37,7 +39,11 @@ import {
 import { createCanvasTool } from "../tools/canvas.js";
 import { createCompanyCacheTool } from "../tools/companyCache.js";
 import { createOfflineProposalTool } from "../tools/offlineProposal.js";
-import { OFFLINE_SYSTEM_PROMPT } from "../prompts.js";
+import {
+  DEMO_SYSTEM_PROMPT,
+  OFFLINE_SYSTEM_PROMPT,
+  PERSONAL_SYSTEM_PROMPT
+} from "../prompts.js";
 import { createAbortError, isAbortError } from "../util/abort.js";
 
 export class DesktopController {
@@ -48,6 +54,7 @@ export class DesktopController {
     companyCacheStore = null,
     offlineProposalStore = null,
     taskCheckpointStore = null,
+    localReceiptStore = null,
     offlineManager = null,
     openBrowser,
     emit,
@@ -76,6 +83,7 @@ export class DesktopController {
     this.companyCacheRevalidatedFor = null;
     this.offlineProposalStore = offlineProposalStore;
     this.taskCheckpointStore = taskCheckpointStore;
+    this.localReceiptStore = localReceiptStore;
     this.activeTask = null;
     this.checkpointWrites = Promise.resolve();
     this.capsulePreviews = new Map();
@@ -91,12 +99,36 @@ export class DesktopController {
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
-    const useOAuth = shouldUseOAuth(config, credentials);
+    const useOAuth = shouldUseDesktopOAuth(config, credentials);
+    const configured =
+      validateConfig(config).length === 0 &&
+      !(
+        settings.operatingMode === "personal" &&
+        settings.provider === "amos-hosted" &&
+        !useOAuth
+      );
+    const demoExpired = Boolean(credentials?.demo) && !useOAuth;
+    const demo = credentials?.demo
+      ? {
+          tenantId: credentials.tenant_id,
+          expiresAt: new Date(credentials.expires_at).toISOString(),
+          expired: demoExpired
+        }
+      : null;
     const system = systemProfile();
     return {
-      configured: validateConfig(config).length === 0,
+      configured,
       connected: useOAuth || Boolean(config.amos.apiKey),
-      connectionMode: useOAuth ? "user" : config.amos.apiKey ? "api_key" : "disconnected",
+      connectionMode: demo
+        ? demoExpired
+          ? "demo_expired"
+          : "demo"
+        : useOAuth
+          ? "user"
+          : config.amos.apiKey
+            ? "api_key"
+            : "disconnected",
+      demo,
       identity: this.identity,
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
@@ -115,6 +147,7 @@ export class DesktopController {
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState(),
       taskCheckpoints: await this.taskCheckpointState(),
+      localReceipts: this.localReceiptStore ? await this.localReceiptStore.list() : [],
       activeTask: this.activeTask
         ? {
             id: this.activeTask.id,
@@ -196,13 +229,13 @@ export class DesktopController {
       throw new Error("Encrypted company context is unavailable on this computer");
     }
     const settings = await this.settingsStore.read();
-    if (settings.operatingMode === "offline") {
+    if (settings.operatingMode !== "online") {
       throw new Error("Return to online company mode before refreshing company context");
     }
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
-    if (!shouldUseOAuth(config, credentials)) {
+    if (!shouldUseDesktopOAuth(config, credentials)) {
       throw new Error("Connect AMOS with your personal sign-in before storing company context");
     }
     const remote = new DesktopRemoteStateClient({
@@ -386,6 +419,56 @@ export class DesktopController {
     return this.saveSettings({ workspace: path });
   }
 
+  async startPersonal() {
+    const settings = await this.settingsStore.read();
+    const credentials = await this.oauthFor(settings).status();
+    if (credentials?.demo) await this.oauthFor(settings).logout();
+    await this.settingsStore.write({
+      ...settings,
+      workspace: credentials?.demo
+        ? credentials.previous_workspace || ""
+        : settings.workspace,
+      operatingMode: "personal"
+    });
+    this.resetRuntime();
+    this.identity = null;
+    this.companyApprovals = [];
+    this.record("mode", "Private personal workspace enabled");
+    return this.state();
+  }
+
+  async startDemo() {
+    const settings = await this.settingsStore.read();
+    const existing = await this.oauthFor(settings).status();
+    if (existing?.access_token && !existing.demo) {
+      throw new Error("Disconnect your real AMOS company before starting the Northwind demo");
+    }
+    const demoWorkspace = join(this.userDataPath, "northwind-demo-workspace");
+    await mkdir(demoWorkspace, { recursive: true, mode: 0o700 });
+    const demo = new AmosDesktopDemoSession({
+      mcpUrl: settings.amosMcpUrl,
+      store: new FileTokenStore(join(this.userDataPath, "oauth.json")),
+      openBrowser: (url) => {
+        this.openBrowser(url);
+        return true;
+      }
+    });
+    await demo.start({ previousWorkspace: settings.workspace });
+    await this.settingsStore.write({
+      ...settings,
+      provider: "amos-hosted",
+      model: "auto",
+      baseUrl: "",
+      reasoningEffort: "medium",
+      operatingMode: "online",
+      workspace: demoWorkspace
+    });
+    this.resetRuntime();
+    this.record("auth", "Northwind Labs demo company connected");
+    await this.refreshRemote({ notify: false });
+    return this.state();
+  }
+
   async addAttachmentPaths(paths) {
     await this.attachments.addPaths(paths);
     return this.attachments.list();
@@ -423,7 +506,7 @@ export class DesktopController {
 
   async promotePrivateMemory(id) {
     const settings = await this.settingsStore.read();
-    if (settings.operatingMode === "offline") {
+    if (settings.operatingMode !== "online") {
       throw new Error("Return to online company mode before promoting private memory");
     }
     const store = this.requirePrivateMemory();
@@ -540,17 +623,27 @@ export class DesktopController {
   async login() {
     const settings = await this.settingsStore.read();
     const oauth = this.oauthFor(settings);
+    const previous = await oauth.status();
     await oauth.login({
       openBrowser: true,
       onAuthorize: ({ url }) => this.send("auth:browser", { url })
     });
-    if (shouldActivateAmosHosted(settings)) {
-      await this.settingsStore.write({
-        ...settings,
+    const nextSettings = {
+      ...settings,
+      operatingMode: "online",
+      workspace: previous?.demo
+        ? previous.previous_workspace || ""
+        : settings.workspace
+    };
+    if (shouldActivateAmosHosted(settings) || previous?.demo) {
+      Object.assign(nextSettings, {
         provider: "amos-hosted",
         model: "auto",
         baseUrl: ""
       });
+    }
+    await this.settingsStore.write(nextSettings);
+    if (shouldActivateAmosHosted(settings) || previous?.demo) {
       this.record(
         "settings",
         "AMOS Hosted enabled with included credits and metered overage"
@@ -564,10 +657,19 @@ export class DesktopController {
 
   async logout() {
     const settings = await this.settingsStore.read();
-    await this.oauthFor(settings).logout();
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    await oauth.logout();
     if (this.companyCacheStore) await this.companyCacheStore.clear();
     this.companyCacheRevalidatedFor = null;
-    await this.settingsStore.write({ ...settings, notifiedApprovalIds: [] });
+    await this.settingsStore.write({
+      ...settings,
+      workspace: credentials?.demo
+        ? credentials.previous_workspace || ""
+        : settings.workspace,
+      operatingMode: credentials?.demo ? "personal" : settings.operatingMode,
+      notifiedApprovalIds: []
+    });
     this.resetRuntime();
     this.identity = null;
     this.companyApprovals = [];
@@ -588,7 +690,7 @@ export class DesktopController {
 
   async refreshRemoteInner({ notify }) {
     const settings = await this.settingsStore.read();
-    if (settings.operatingMode === "offline") {
+    if (settings.operatingMode !== "online") {
       this.remoteStatus = {
         syncing: false,
         lastSyncedAt: this.remoteStatus.lastSyncedAt,
@@ -601,7 +703,7 @@ export class DesktopController {
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
-    if (!shouldUseOAuth(config, credentials)) {
+    if (!shouldUseDesktopOAuth(config, credentials)) {
       this.identity = null;
       this.companyApprovals = [];
       this.approvalsAvailable = true;
@@ -696,7 +798,7 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const { runtime, config } = await this.getRuntime({
       requireAmos: false,
-      offline: settings.operatingMode === "offline"
+      boundary: settings.operatingMode
     });
     const result = await runtime.modelClient.chat({
       messages: [
@@ -736,18 +838,21 @@ export class DesktopController {
       summary: "Preparing the task"
     });
     const settings = await this.settingsStore.read();
-    const offline = settings.operatingMode === "offline";
+    const boundary = settings.operatingMode;
+    const offline = boundary === "offline";
+    const company = boundary === "online";
+    const receiptEvents = [];
     try {
       const { config, runtime } = await this.getRuntime({
-        requireAmos: !offline,
-        offline
+        requireAmos: company,
+        boundary
       });
-      if (offline && references.some((reference) => reference?.retention === "company")) {
+      if (!company && references.some((reference) => reference?.retention === "company")) {
         throw new Error(
-          "Company memory is unavailable in local-only mode. Use this task only, keep it private, or return online."
+          "Company memory is unavailable in this personal boundary. Use this task only, keep it private, or connect a company."
         );
       }
-      if (!offline) {
+      if (company) {
         await this.startOnlineTaskCheckpoint({
           id: taskId,
           prompt,
@@ -758,7 +863,7 @@ export class DesktopController {
       }
       const memory = [
         ...await this.persistPrivateMemory(references),
-        ...(offline
+        ...(!company
           ? []
           : await this.persistCompanyMemory(
               references,
@@ -779,6 +884,7 @@ export class DesktopController {
           const safeEvent = sanitizeAgentEvent(event);
           this.send("agent:event", safeEvent);
           if (safeEvent.type !== "assistant_delta") {
+            receiptEvents.push(receiptEvent(safeEvent));
             this.record(
               safeEvent.type === "phase" ? "task" : "tool",
               toolEventSummary(safeEvent),
@@ -794,6 +900,15 @@ export class DesktopController {
         await this.sendTaskCheckpoints();
       }
       this.record("assistant", answer);
+      await this.recordLocalReceipt({
+        taskId,
+        status: "completed",
+        boundary,
+        settings,
+        prompt,
+        startedAt: this.activeTask.startedAt,
+        receiptEvents
+      });
       return {
         answer,
         taskId,
@@ -816,6 +931,16 @@ export class DesktopController {
         }).catch(() => {});
         await this.sendTaskCheckpoints();
       }
+      await this.recordLocalReceipt({
+        taskId,
+        status: canceled ? "canceled" : "failed",
+        boundary,
+        settings,
+        prompt,
+        startedAt: this.activeTask?.startedAt,
+        receiptEvents,
+        error: error.message
+      });
       if (canceled) throw createAbortError();
       throw error;
     } finally {
@@ -874,6 +999,42 @@ export class DesktopController {
     this.send("activity:changed", []);
     this.send("canvas:changed", this.canvases.state());
     return { ok: true };
+  }
+
+  async recordLocalReceipt({
+    taskId,
+    status,
+    boundary,
+    settings,
+    prompt,
+    startedAt,
+    receiptEvents,
+    error = null
+  }) {
+    if (!this.localReceiptStore) return null;
+    try {
+      const receipt = await this.localReceiptStore.add({
+        taskId,
+        status,
+        boundary,
+        workspace: basename(settings.workspace || homedir()),
+        model: `${settings.provider}:${settings.model}`,
+        objective: prompt,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        events: receiptEvents,
+        error
+      });
+      this.record("proof", `Local task receipt ${receipt.digest.slice(0, 12)} · ${status}`, {
+        receipt_id: receipt.id,
+        digest: receipt.digest,
+        boundary
+      });
+      return receipt;
+    } catch (receiptError) {
+      this.record("proof", `Could not save local task receipt: ${receiptError.message}`);
+      return null;
+    }
   }
 
   async persistCompanyMemory(references, runtime, config, signal = null) {
@@ -1017,7 +1178,7 @@ export class DesktopController {
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
-    if (!shouldUseOAuth(config, credentials)) {
+    if (!shouldUseDesktopOAuth(config, credentials)) {
       this.send("agent:event", {
         type: "phase",
         phase: "checkpoint_unavailable",
@@ -1135,13 +1296,13 @@ export class DesktopController {
   }
 
   async personalRemote(settings, purpose = "continuing an offline draft") {
-    if (settings.operatingMode === "offline") {
+    if (settings.operatingMode !== "online") {
       throw new Error(`Return to online company mode before ${purpose}`);
     }
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
-    if (!shouldUseOAuth(config, credentials)) {
+    if (!shouldUseDesktopOAuth(config, credentials)) {
       throw new Error(`Connect AMOS with your personal sign-in before ${purpose}`);
     }
     return new DesktopRemoteStateClient({
@@ -1224,8 +1385,9 @@ export class DesktopController {
     this.runtime = null;
   }
 
-  async getRuntime({ requireAmos, offline = false }) {
-    if (this.runtime?.offline === offline) return this.runtime;
+  async getRuntime({ requireAmos, offline = false, boundary = null }) {
+    const requestedBoundary = boundary || (offline ? "offline" : "online");
+    if (this.runtime?.boundary === requestedBoundary) return this.runtime;
     if (this.runtime) this.resetRuntime();
     const settings = await this.settingsStore.read();
     const config = this.configFrom(settings);
@@ -1235,8 +1397,10 @@ export class DesktopController {
     }
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
-    const useOAuth = shouldUseOAuth(config, credentials);
-    if (offline && config.model.deployment !== "local") {
+    const useOAuth = shouldUseDesktopOAuth(config, credentials);
+    const isOffline = requestedBoundary === "offline";
+    const isPersonal = requestedBoundary === "personal";
+    if (isOffline && config.model.deployment !== "local") {
       throw new Error("Choose and activate a local model before entering local-only mode");
     }
     if (requireAmos && !useOAuth && !config.amos.apiKey) {
@@ -1256,7 +1420,7 @@ export class DesktopController {
         }
       })
     ];
-    if (offline && this.companyCacheStore) {
+    if (isOffline && this.companyCacheStore) {
       try {
         const cached = await this.readCompanyCache(settings);
         if (cached) {
@@ -1278,7 +1442,8 @@ export class DesktopController {
       }
     }
     this.runtime = {
-      offline,
+      offline: isOffline,
+      boundary: requestedBoundary,
       config,
       oauth,
       runtime: createRuntime({
@@ -1286,9 +1451,15 @@ export class DesktopController {
         approvals: this.approvals,
         oauth,
         useOAuth,
-        includeAmos: !offline,
-        includeWeb: !offline,
-        systemPrompt: offline ? OFFLINE_SYSTEM_PROMPT : undefined,
+        includeAmos: !isOffline && !isPersonal,
+        includeWeb: !isOffline,
+        systemPrompt: isOffline
+          ? OFFLINE_SYSTEM_PROMPT
+          : isPersonal
+            ? PERSONAL_SYSTEM_PROMPT
+            : credentials?.demo
+              ? DEMO_SYSTEM_PROMPT
+              : undefined,
         extraTools
       })
     };
@@ -1424,6 +1595,13 @@ export function shouldActivateAmosHosted(settings) {
   );
 }
 
+export function shouldUseDesktopOAuth(config, credentials, now = Date.now()) {
+  if (!shouldUseOAuth(config, credentials)) return false;
+  if (!credentials?.demo) return true;
+  const expiresAt = Number(credentials.expires_at);
+  return Number.isFinite(expiresAt) && expiresAt > now;
+}
+
 function publicProvider(config) {
   return {
     id: config.provider,
@@ -1447,13 +1625,17 @@ function systemProfile() {
 
 function operatingMode(settings, config) {
   const offline = settings.operatingMode === "offline";
+  const personal = settings.operatingMode === "personal";
   return {
-    id: offline ? "offline" : "online",
+    id: offline ? "offline" : personal ? "personal" : "online",
     offline,
-    label: offline ? "Local-only" : "Online company",
+    personal,
+    label: offline ? "Local-only" : personal ? "Personal workspace" : "Online company",
     description: offline
       ? "Only local workspace, private memory, and local canvas tools are available."
-      : "Live AMOS company tools, policy, approvals, proof, and allowed web tools are available.",
+      : personal
+        ? "Local workspace, private memory, and allowed web tools are available without company access."
+        : "Live AMOS company tools, policy, approvals, proof, and allowed web tools are available.",
     valid: !offline || config.model.deployment === "local"
   };
 }
@@ -1499,6 +1681,19 @@ function sanitizeAgentEvent(event) {
     name: event.name,
     result: summarizeResult(event.result)
   };
+}
+
+function receiptEvent(event) {
+  if (event.type === "phase") {
+    return { type: "phase", name: event.phase, outcome: event.summary };
+  }
+  if (event.type === "tool_start") {
+    return { type: "tool_start", name: event.name, outcome: "started" };
+  }
+  if (event.type === "tool_error") {
+    return { type: "tool_error", name: event.name, outcome: String(event.error || "failed") };
+  }
+  return { type: String(event.type || "tool_result"), name: event.name, outcome: "completed" };
 }
 
 function summarizeResult(result) {

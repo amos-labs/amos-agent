@@ -88,6 +88,29 @@ test("desktop local-only runtime admits verified cache read and local draft stag
   assert.equal(staged.input.proposedActions[0], "Recheck current account state before preparing a renewal");
 });
 
+test("personal workspace runtime exposes local and web tools without AMOS company authority", async () => {
+  const personalSettings = {
+    ...settings,
+    operatingMode: "personal"
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-personal-controller",
+    settingsStore: { read: async () => personalSettings },
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = () => ({ status: async () => ({}) });
+
+  const { runtime } = await controller.getRuntime({
+    requireAmos: false,
+    boundary: "personal"
+  });
+  const tools = runtime.registry.list();
+  assert.equal(tools.some((tool) => tool.name === "desktop_inspect_project"), true);
+  assert.equal(tools.some((tool) => tool.source === "amos"), false);
+  assert.equal(tools.some((tool) => tool.name.startsWith("web_")), true);
+});
+
 test("desktop clears a saved company cache when live revalidation fails", async () => {
   let cleared = false;
   const controller = new DesktopController({
