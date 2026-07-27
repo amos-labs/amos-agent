@@ -176,6 +176,24 @@ npm run desktop:build:win
 Local builds are intentionally unsigned and cannot validate the production
 auto-update chain.
 
+## Unsigned Windows preview
+
+Until the public Windows signing identity is available, maintainers can run the
+manual `Publish unsigned Windows preview` GitHub Actions workflow. It publishes
+a GitHub prerelease containing:
+
+- `AMOS-Desktop-Windows-Unsigned-Preview-x64-Setup.exe`; and
+- a dedicated SHA-256 checksum file.
+
+The preview uses the separate `com.amoslabs.desktop.preview` application ID,
+installs as **AMOS Desktop Preview**, and disables automatic updates. Windows
+will report an unknown publisher and may show a SmartScreen warning. It is only
+for direct testing and must not be represented as an official or managed
+enterprise release.
+
+The preview workflow does not read Windows signing secrets and does not relax
+the fail-closed production release configuration.
+
 ## Official release process
 
 Pushing a tag matching `package.json`, such as `v0.12.0`, starts

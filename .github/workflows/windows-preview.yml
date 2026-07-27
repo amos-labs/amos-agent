@@ -1,0 +1,99 @@
+name: Publish unsigned Windows preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-unsigned-preview
+  cancel-in-progress: false
+
+jobs:
+  windows-preview:
+    name: Build unsigned Windows preview
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: |
+          npm test
+          npm run check
+
+      - name: Build isolated unsigned preview
+        run: npm run desktop:preview:win
+
+      - name: Verify unsigned preview
+        id: preview
+        shell: pwsh
+        run: |
+          $installer = "dist/AMOS-Desktop-Windows-Unsigned-Preview-x64-Setup.exe"
+          if (!(Test-Path $installer) -or (Get-Item $installer).Length -eq 0) {
+            throw "Missing unsigned preview installer: $installer"
+          }
+
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne "NotSigned") {
+            throw "Expected an unsigned preview, found signature status: $($signature.Status)"
+          }
+
+          $version = node -p "require('./package.json').version"
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          $tag = "windows-preview-v$version-$($env:GITHUB_RUN_NUMBER)-$shortSha"
+          $hash = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant()
+          "$hash  AMOS-Desktop-Windows-Unsigned-Preview-x64-Setup.exe" |
+            Out-File -FilePath "dist/SHA256SUMS-Windows-Preview.txt" -Encoding ascii
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-unsigned-preview
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist/AMOS-Desktop-Windows-Unsigned-Preview-x64-Setup.exe
+            dist/SHA256SUMS-Windows-Preview.txt
+
+      - name: Publish GitHub prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIEW_TAG: ${{ steps.preview.outputs.tag }}
+          PREVIEW_VERSION: ${{ steps.preview.outputs.version }}
+        run: |
+          $notes = @"
+          ## Unsigned Windows testing build
+
+          This is an **unsigned preview**, not an official AMOS Desktop release.
+
+          - Windows will report an unknown publisher and may show a SmartScreen warning.
+          - It installs side-by-side as **AMOS Desktop Preview**.
+          - Automatic updates are disabled.
+          - Do not deploy it as a production or managed-enterprise build.
+
+          Source commit: $env:GITHUB_SHA
+          "@
+          $notes | Out-File -FilePath "$env:RUNNER_TEMP\windows-preview-notes.md" -Encoding utf8
+
+          gh release create $env:PREVIEW_TAG `
+            "dist/AMOS-Desktop-Windows-Unsigned-Preview-x64-Setup.exe" `
+            "dist/SHA256SUMS-Windows-Preview.txt" `
+            --repo $env:GITHUB_REPOSITORY `
+            --target $env:GITHUB_SHA `
+            --title "AMOS Desktop Windows unsigned preview $env:PREVIEW_VERSION" `
+            --notes-file "$env:RUNNER_TEMP\windows-preview-notes.md" `
+            --prerelease `
+            --latest=false

@@ -1,0 +1,28 @@
+appId: com.amoslabs.desktop.preview
+productName: AMOS Desktop Preview
+asar: true
+forceCodeSigning: false
+
+files:
+  - desktop/**/*
+  - src/**/*
+  - package.json
+  - LICENSE
+
+win:
+  icon: desktop/assets/amos-app-icon-1024.png
+  verifyUpdateCodeSignature: false
+  artifactName: AMOS-Desktop-Windows-Unsigned-Preview-${arch}-Setup.${ext}
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AMOS Desktop Preview
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
