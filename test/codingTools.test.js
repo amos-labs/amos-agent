@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCodingTools, parsePatchPaths } from "../src/tools/coding.js";
+import { createCodingTools, parsePatchPaths, runProgram } from "../src/tools/coding.js";
 
 test("patch paths are workspace-relative and reject traversal", () => {
   assert.deepEqual(
@@ -75,4 +75,17 @@ test("project inspection produces a bounded briefing without reading secrets", a
   assert.ok(briefing.verification.includes("npm run test"));
   assert.match(briefing.readme.excerpt, /useful project/);
   assert.equal(JSON.stringify(briefing).includes("never-return-this"), false);
+});
+
+test("program runner tolerates a short-lived child closing unused stdin", async () => {
+  const results = await Promise.all(
+    Array.from({ length: 32 }, () =>
+      runProgram(process.execPath, ["-e", "process.exit(0)"], {
+        cwd: tmpdir(),
+        timeoutMs: 5_000,
+        maxOutputBytes: 4_096
+      })
+    )
+  );
+  assert.equal(results.every((result) => result.ok), true);
 });
