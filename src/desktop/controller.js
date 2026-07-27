@@ -68,6 +68,7 @@ export class DesktopController {
     this.runtime = null;
     this.activity = [];
     this.identity = null;
+    this.accountStatus = null;
     this.approvalsAvailable = true;
     this.remoteStatus = {
       syncing: false,
@@ -130,6 +131,7 @@ export class DesktopController {
             : "disconnected",
       demo,
       identity: this.identity,
+      accountStatus: this.accountStatus,
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       remoteStatus: { ...this.remoteStatus },
@@ -439,9 +441,16 @@ export class DesktopController {
 
   async startDemo() {
     const settings = await this.settingsStore.read();
-    const existing = await this.oauthFor(settings).status();
+    const oauth = this.oauthFor(settings);
+    const existing = await oauth.status();
     if (existing?.access_token && !existing.demo) {
-      throw new Error("Disconnect your real AMOS company before starting the Northwind demo");
+      const accountStatus = await this.accountStatusFor(settings, oauth);
+      if (accountStatus.workspaceActive) {
+        throw new Error(
+          "Your AMOS workspace is already active. Continue with My company to connect data, applications, memory, and policy."
+        );
+      }
+      await oauth.logout();
     }
     const demoWorkspace = join(this.userDataPath, "northwind-demo-workspace");
     await mkdir(demoWorkspace, { recursive: true, mode: 0o700 });
@@ -464,6 +473,7 @@ export class DesktopController {
       workspace: demoWorkspace
     });
     this.resetRuntime();
+    this.accountStatus = null;
     this.record("auth", "Northwind Labs demo company connected");
     await this.refreshRemote({ notify: false });
     return this.state();
@@ -672,6 +682,7 @@ export class DesktopController {
     });
     this.resetRuntime();
     this.identity = null;
+    this.accountStatus = null;
     this.companyApprovals = [];
     this.approvalsAvailable = true;
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -705,6 +716,7 @@ export class DesktopController {
     const config = this.configFrom(settings);
     if (!shouldUseDesktopOAuth(config, credentials)) {
       this.identity = null;
+      this.accountStatus = null;
       this.companyApprovals = [];
       this.approvalsAvailable = true;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -719,9 +731,10 @@ export class DesktopController {
       oauth,
       requestTimeoutMs: config.amos.requestTimeoutMs
     });
-    const [identityResult, approvalsResult] = await Promise.allSettled([
+    const [identityResult, approvalsResult, accountStatusResult] = await Promise.allSettled([
       remote.identity(),
-      remote.approvals()
+      remote.approvals(),
+      remote.intelligenceStatus()
     ]);
 
     const errors = [];
@@ -746,6 +759,13 @@ export class DesktopController {
       errors.push(approvalsResult.reason?.message || "Could not load AMOS approvals");
     }
 
+    if (accountStatusResult.status === "fulfilled") {
+      this.accountStatus = accountStatusResult.value;
+    } else {
+      this.accountStatus = null;
+      errors.push(accountStatusResult.reason?.message || "Could not load AMOS account status");
+    }
+
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: new Date().toISOString(),
@@ -754,6 +774,16 @@ export class DesktopController {
     };
     await this.sendRemoteState();
     return this.state();
+  }
+
+  async accountStatusFor(settings, oauth = this.oauthFor(settings)) {
+    const config = this.configFrom(settings);
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    return remote.intelligenceStatus();
   }
 
   async notifyNewCompanyApprovals(settings) {
@@ -1177,6 +1207,14 @@ export class DesktopController {
     if (!this.taskCheckpointStore) return null;
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
+    if (credentials?.demo) {
+      this.send("agent:event", {
+        type: "phase",
+        phase: "checkpoint_unavailable",
+        summary: "Short-lived demo tasks are not persisted across restarts"
+      });
+      return null;
+    }
     const config = this.configFrom(settings);
     if (!shouldUseDesktopOAuth(config, credentials)) {
       this.send("agent:event", {
