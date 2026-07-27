@@ -403,7 +403,7 @@ async function searchFile(path, root, query, caseSensitive, matches, maxResults)
   }
 }
 
-function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes, signal = null }) {
+export function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes, signal = null }) {
   return new Promise((resolve) => {
     const child = spawn(command, args, {
       cwd,
@@ -415,6 +415,7 @@ function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes,
     let timedOut = false;
     let canceled = false;
     let settled = false;
+    let stdinError = null;
     const limit = boundedNumber(maxOutputBytes, 24_000, 1_024, 1_048_576);
     const timer = setTimeout(() => {
       timedOut = true;
@@ -433,13 +434,20 @@ function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutputBytes,
     child.stderr.on("data", (chunk) => {
       stderr = Buffer.concat([stderr, Buffer.from(chunk)]).subarray(0, limit);
     });
+    child.stdin.on("error", (error) => {
+      // Short-lived read-only programs may exit before Node closes their unused
+      // stdin pipe. Treat that empty-input EPIPE as harmless, but remember
+      // failures when a command actually required input (for example git apply).
+      stdinError = error;
+    });
     child.on("error", (error) => finish({ ok: false, error: error.message }));
     child.on("close", (code, signal) => finish({
-      ok: code === 0 && !timedOut && !canceled,
+      ok: code === 0 && !timedOut && !canceled && !(stdinError && input.length > 0),
       exit_code: code,
       signal,
       timed_out: timedOut,
       canceled,
+      stdin_error: stdinError && input.length > 0 ? stdinError.message : null,
       stdout: stdout.toString("utf8"),
       stderr: stderr.toString("utf8")
     }));

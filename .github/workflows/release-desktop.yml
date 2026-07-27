@@ -89,8 +89,30 @@ jobs:
             dist/AMOS-Desktop-macOS-x64.zip.blockmap
             dist/latest-mac.yml
 
+  windows-signing-config:
+    name: Check Windows signing availability
+    environment: WIN_CSC_LINK
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - name: Check protected signing secrets
+        id: check
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$WIN_CSC_LINK" && -n "$WIN_CSC_KEY_PASSWORD" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Signed Windows publishing is unavailable; use the isolated unsigned preview workflow."
+          fi
+
   windows:
     name: Sign and package Windows
+    needs: windows-signing-config
+    if: needs.windows-signing-config.outputs.configured == 'true'
     environment: WIN_CSC_LINK
     runs-on: windows-2025
     timeout-minutes: 45
@@ -163,18 +185,17 @@ jobs:
             dist/latest.yml
 
   publish:
-    name: Publish desktop release
-    needs: [macos, windows]
+    name: Publish notarized macOS release
+    needs: macos
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: desktop-*
+          name: desktop-macos
           path: dist
-          merge-multiple: true
 
-      - name: Verify the complete cross-platform release
+      - name: Verify the complete macOS release
         run: |
           required=(
             dist/AMOS-Desktop-macOS-arm64.dmg
@@ -184,9 +205,6 @@ jobs:
             dist/AMOS-Desktop-macOS-arm64.zip.blockmap
             dist/AMOS-Desktop-macOS-x64.zip.blockmap
             dist/latest-mac.yml
-            dist/AMOS-Desktop-Windows-x64-Setup.exe
-            dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap
-            dist/latest.yml
           )
           for asset in "${required[@]}"; do
             test -s "$asset" || { echo "::error::Missing release asset: $asset"; exit 1; }
@@ -201,9 +219,6 @@ jobs:
               AMOS-Desktop-macOS-arm64.zip.blockmap \
               AMOS-Desktop-macOS-x64.zip.blockmap \
               latest-mac.yml \
-              AMOS-Desktop-Windows-x64-Setup.exe \
-              AMOS-Desktop-Windows-x64-Setup.exe.blockmap \
-              latest.yml \
               > SHA256SUMS.txt
           )
 
@@ -219,9 +234,6 @@ jobs:
             dist/AMOS-Desktop-macOS-arm64.zip.blockmap
             dist/AMOS-Desktop-macOS-x64.zip.blockmap
             dist/latest-mac.yml
-            dist/AMOS-Desktop-Windows-x64-Setup.exe
-            dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap
-            dist/latest.yml
             dist/SHA256SUMS.txt
           )
           gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
@@ -229,3 +241,44 @@ jobs:
             --title "AMOS Desktop ${GITHUB_REF_NAME#v}" \
             --generate-notes \
             --verify-tag
+
+  attach-windows:
+    name: Attach signed Windows release
+    needs: [publish, windows]
+    if: ${{ always() && needs.publish.result == 'success' && needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: desktop-windows
+          path: dist
+
+      - name: Extend the release checksum manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern SHA256SUMS.txt \
+            --dir dist
+          (
+            cd dist
+            sha256sum \
+              AMOS-Desktop-Windows-x64-Setup.exe \
+              AMOS-Desktop-Windows-x64-Setup.exe.blockmap \
+              latest.yml \
+              >> SHA256SUMS.txt
+          )
+
+      - name: Attach verified Windows assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            dist/AMOS-Desktop-Windows-x64-Setup.exe \
+            dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap \
+            dist/latest.yml \
+            dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber

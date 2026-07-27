@@ -13,13 +13,15 @@ Download the current signed installer:
 
 - [Apple Silicon](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg)
 - [Intel Mac](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
-- [Windows 10/11 x64](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-Windows-x64-Setup.exe)
+- [Windows 10/11 x64 releases](https://github.com/amos-labs/amos-agent/releases)
 
-On macOS, open the DMG and drag **AMOS Desktop** into **Applications**. On
-Windows, run the per-user installer; no administrator account is required.
-Official macOS releases are signed with the AMOS Labs Developer ID and notarized
-by Apple. Official Windows releases are Authenticode-signed and verified before
-publication.
+On macOS, open the DMG and drag **AMOS Desktop** into **Applications**. Official
+macOS releases are signed with the AMOS Labs Developer ID and notarized by
+Apple. When a signed Windows installer is present, run the per-user installer;
+no administrator account is required. Until the Windows signing identity is
+configured, use only the newest release explicitly labeled **Windows unsigned
+preview** and expect an unknown-publisher warning. Preview builds are for direct
+testing, install side-by-side, and do not auto-update.
 
 ## First run
 
@@ -205,12 +207,18 @@ The workflow:
 1. runs tests and syntax checks;
 2. verifies the tag and signing/notarization configuration;
 3. builds, signs, and notarizes Apple Silicon and Intel applications;
-4. builds and Authenticode-signs the Windows x64 NSIS installer;
-5. verifies each installer on its native CI runner;
-6. generates macOS and Windows blockmaps plus `latest-mac.yml` and `latest.yml`;
-7. joins both platform artifact sets only after both signing jobs pass;
-8. writes one cross-platform SHA-256 manifest; and
-9. publishes one non-draft GitHub release containing both platforms.
+4. publishes the verified macOS applications as one non-draft release;
+5. checks whether the protected Windows signing identity is configured;
+6. when configured, builds and Authenticode-signs the Windows x64 NSIS
+   installer on a native runner;
+7. verifies its signature before attaching the installer, blockmap, and
+   `latest.yml` to the same release; and
+8. extends the release SHA-256 manifest with the Windows artifacts.
+
+The absence of Windows signing credentials does not block an official notarized
+macOS release. It also never produces an unsigned artifact under the official
+application identity; unsigned Windows testing remains isolated in the preview
+workflow.
 
 Release secrets live in the protected `MAC_CSC_LINK` GitHub environment:
 
