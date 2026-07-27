@@ -166,7 +166,10 @@
                     </button>
                     <div id="scopeNote" class="scope-note"><span class="status-dot green"></span><span>AMOS policy and proof are active</span></div>
                   </div>
-                  <button id="runButton" class="button primary" type="submit">Run with AMOS <span>→</span></button>
+                  <div class="composer-actions">
+                    <button id="cancelButton" class="button danger hidden" type="button">Stop safely</button>
+                    <button id="runButton" class="button primary" type="submit">Run with AMOS <span>→</span></button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -290,8 +293,8 @@
               <span class="eyebrow">HUMAN AUTHORITY</span>
               <h1>Drafts and decisions waiting for you.</h1>
               <p>
-                Compare offline drafts with the live company before continuing. Review
-                governed work from your signed-in browser. Nothing approves or replays itself.
+                Resume interrupted work only after AMOS revalidates your identity, company
+                context, and approval queue. Nothing approves or replays itself.
               </p>
             </div>
             <div class="decision-actions">
@@ -301,6 +304,14 @@
             </div>
           </div>
           <div id="decisionNotice" class="decision-notice hidden"></div>
+          <div class="recent-heading proposal-heading">
+            <span class="eyebrow accent">INTERRUPTED WORK</span>
+            <p>
+              Encrypted restart checkpoints. Revalidation loads a safe continuation into
+              Operator for your review; it never silently repeats a tool call.
+            </p>
+          </div>
+          <div id="interruptedTaskList" class="decision-list task-checkpoint-list"></div>
           <div class="recent-heading proposal-heading">
             <span class="eyebrow accent">OFFLINE DRAFTS</span>
             <p>

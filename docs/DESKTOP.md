@@ -85,6 +85,20 @@ receipt memory remain authoritative in managed AMOS.
 - scrubbed child-process environment; and
 - live tool activity.
 
+### Durable task lifecycle
+
+- OpenAI-compatible output streams into the current Operator response;
+- Live Work shows planning, action, evaluation, and completion phases;
+- **Stop safely** aborts the real model, MCP, web, and local-process work;
+- signed-in company tasks receive an encrypted local checkpoint;
+- unfinished running tasks become interrupted tasks after restart;
+- resume rechecks the exact personal identity and tenant, a fresh
+  `resume_company` briefing, and the current approval queue; and
+- revalidation fills Operator with a no-replay continuation for explicit
+  review—it never submits or repeats work by itself.
+
+See [Streaming, cancellation, and restart-safe tasks](TASK_LIFECYCLE.md).
+
 ### Intelligence choices
 
 - AMOS-hosted inference;
@@ -262,12 +276,12 @@ proof govern any resulting action. See
 
 The next product layers build on the signed distribution foundation:
 
-1. streaming output, cancellation, and durable resumable tasks;
+1. Windows installers and signed update-feed validation;
 2. signed device identity and policy-controlled environment grants;
 3. richer typed canvas blocks and managed AMOS result adapters;
 4. richer private-memory retrieval and sharing proposals;
 5. richer retrieval within the bounded signed company briefing;
 6. richer offline-draft conflict explanations and lifecycle controls; and
-7. Windows installers and enterprise/MDM packaging.
+7. enterprise/MDM packaging.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

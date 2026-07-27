@@ -1,4 +1,10 @@
 import { fetchCompat } from "../util/fetchCompat.js";
+import {
+  createAbortError,
+  isAbortError,
+  linkAbortSignal,
+  throwIfAborted
+} from "../util/abort.js";
 
 function parseMcpHttpBody(text, contentType = "") {
   if (!text) return {};
@@ -38,7 +44,8 @@ export class AmosMcpClient {
     this.nextId = 1;
   }
 
-  async request(method, params = {}) {
+  async request(method, params = {}, { signal = null } = {}) {
+    throwIfAborted(signal);
     if (!this.url) {
       throw new Error("AMOS_MCP_URL is not configured");
     }
@@ -47,14 +54,15 @@ export class AmosMcpClient {
     let token = this.apiKey || (await this.getAccessToken?.());
     if (!token) throw new Error("AMOS is not connected. Run `amos-agent login` first.");
 
-    let response = await this.send({ id, method, params, token });
+    let response = await this.send({ id, method, params, token, signal });
     if (response.status === 401 && !this.apiKey && this.getAccessToken) {
+      throwIfAborted(signal);
       token = await this.getAccessToken({ forceRefresh: true });
-      response = await this.send({ id, method, params, token });
+      response = await this.send({ id, method, params, token, signal });
     }
 
-    const text = await response.text();
-    const contentType = response.headers?.get?.("content-type") || "";
+    const text = response.text;
+    const contentType = response.contentType;
     let payload = {};
     try {
       payload = parseMcpHttpBody(text, contentType);
@@ -74,41 +82,54 @@ export class AmosMcpClient {
     return payload.result;
   }
 
-  async send({ id, method, params, token }) {
+  async send({ id, method, params, token, signal = null }) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.requestTimeoutMs);
+    const unlink = linkAbortSignal(signal, controller);
     try {
-      return await this.fetch(this.url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json, text/event-stream",
-        "Content-Type": "application/json"
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        method,
-        params
-      })
+      const response = await this.fetch(this.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json, text/event-stream",
+          "Content-Type": "application/json"
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          method,
+          params
+        })
       });
+      return {
+        ok: response.ok,
+        status: response.status,
+        contentType: response.headers?.get?.("content-type") || "",
+        text: await response.text()
+      };
     } catch (error) {
-      if (error.name === "AbortError") throw new Error("AMOS MCP request timed out");
+      if (signal?.aborted) throw createAbortError();
+      if (timedOut || isAbortError(error)) throw new Error("AMOS MCP request timed out");
       throw error;
     } finally {
       clearTimeout(timer);
+      unlink();
     }
   }
 
-  listTools() {
-    return this.request("tools/list");
+  listTools(options = {}) {
+    return this.request("tools/list", {}, options);
   }
 
-  callTool(name, args = {}) {
+  callTool(name, args = {}, options = {}) {
     return this.request("tools/call", {
       name,
       arguments: args
-    });
+    }, options);
   }
 }

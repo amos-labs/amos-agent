@@ -515,6 +515,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .composer textarea::placeholder { color: var(--muted-2); }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; padding: 10px 11px 11px 18px; border-top: 1px solid var(--line); }
 .composer-tools { display: flex; align-items: center; gap: 13px; }
+.composer-actions { display: flex; align-items: center; gap: 9px; }
 .attach-button {
   display: inline-flex;
   align-items: center;
@@ -557,6 +558,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .event-card strong { display: block; overflow: hidden; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .event-card span { display: block; margin-top: 6px; color: var(--muted-2); font-size: 9px; }
 .event-card.error { border-color: rgba(255,117,87,.28); }
+.event-card.phase { border-color: rgba(109,147,255,.2); background: rgba(109,147,255,.045); }
+.event-card.phase strong { color: var(--blue-2); text-transform: capitalize; }
 .boundary-card { display: flex; gap: 12px; margin: 18px; padding: 15px; border: 1px solid rgba(59,213,143,.18); border-radius: 12px; background: rgba(59,213,143,.04); }
 .boundary-icon { color: var(--green); }
 .boundary-card strong { font-size: 11px; }
@@ -908,6 +911,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     linear-gradient(120deg, rgba(109, 147, 255, .08), transparent 52%),
     var(--panel);
 }
+.decision-card.task-checkpoint {
+  border-color: rgba(109, 147, 255, .35);
+  background:
+    linear-gradient(120deg, rgba(109, 147, 255, .08), transparent 52%),
+    var(--panel);
+}
 .decision-card.offline-proposal.reconciled { border-color: rgba(59, 213, 143, .3); }
 .decision-meta { display: flex; align-items: center; gap: 12px; }
 .decision-meta time { color: var(--muted-2); font-size: 9px; }
@@ -936,6 +945,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .decision-status.denied, .decision-status.failed, .decision-status.expired {
   background: rgba(255, 117, 87, .1);
   color: #ff9c86;
+}
+.decision-status.interrupted, .decision-status.canceled {
+  background: rgba(109, 147, 255, .12);
+  color: var(--blue-2);
 }
 .decision-content h2 { margin: 11px 0 7px; font-size: 18px; text-transform: capitalize; }
 .decision-content p { max-width: 780px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }

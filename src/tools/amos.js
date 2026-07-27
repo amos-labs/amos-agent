@@ -43,7 +43,11 @@ export function createAmosTools() {
         additionalProperties: false
       },
       async handler(args, context) {
-        const result = await context.amosClient.callTool("load_engine_tools", { engine: args.engine });
+        const result = await context.amosClient.callTool(
+          "load_engine_tools",
+          { engine: args.engine },
+          { signal: context.signal }
+        );
         const schemas = extractToolSchemas(result);
         const registered = [];
 
@@ -61,11 +65,15 @@ export function createAmosTools() {
               additionalProperties: true
             },
             async handler(toolArgs, innerContext) {
-              return innerContext.amosClient.callTool("call_engine_tool", {
-                engine: args.engine,
-                tool: originalName,
-                arguments: toolArgs
-              });
+              return innerContext.amosClient.callTool(
+                "call_engine_tool",
+                {
+                  engine: args.engine,
+                  tool: originalName,
+                  arguments: toolArgs
+                },
+                { signal: innerContext.signal }
+              );
             }
           });
           registered.push(localName);
@@ -93,11 +101,15 @@ export function createAmosTools() {
         additionalProperties: false
       },
       async handler(args, context) {
-        return context.amosClient.callTool("call_engine_tool", {
-          engine: args.engine,
-          tool: args.tool,
-          arguments: args.arguments || {}
-        });
+        return context.amosClient.callTool(
+          "call_engine_tool",
+          {
+            engine: args.engine,
+            tool: args.tool,
+            arguments: args.arguments || {}
+          },
+          { signal: context.signal }
+        );
       }
     }
   ];
@@ -110,7 +122,11 @@ function mcpTool(name, description, remoteName, parameters = { type: "object", p
     description,
     parameters,
     async handler(args, context) {
-      const result = await context.amosClient.callTool(remoteName, args);
+      const result = await context.amosClient.callTool(
+        remoteName,
+        args,
+        { signal: context.signal }
+      );
       return {
         result,
         text: extractMcpText(result)

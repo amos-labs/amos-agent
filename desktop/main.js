@@ -19,6 +19,7 @@ import { CompanyCacheStore } from "../src/desktop/companyCache.js";
 import { OfflineProposalStore } from "../src/desktop/offlineProposal.js";
 import { OllamaModelManager } from "../src/desktop/offlineIntelligence.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
+import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -223,6 +224,12 @@ function registerIpc() {
   ipcMain.handle("desktop:remove-offline-proposal", (_event, id) =>
     controller.removeOfflineProposal(id)
   );
+  ipcMain.handle("desktop:prepare-task-checkpoint", (_event, id) =>
+    controller.prepareTaskCheckpoint(id)
+  );
+  ipcMain.handle("desktop:remove-task-checkpoint", (_event, id) =>
+    controller.removeTaskCheckpoint(id)
+  );
   ipcMain.handle("desktop:install-offline-model", (_event, id) =>
     controller.installOfflineModel(id)
   );
@@ -233,6 +240,7 @@ function registerIpc() {
     controller.activateOfflineModel(id)
   );
   ipcMain.handle("desktop:run", (_event, input) => controller.run(input));
+  ipcMain.handle("desktop:cancel-task", (_event, id) => controller.cancelTask(id));
   ipcMain.handle("desktop:clear", () => controller.clear());
   ipcMain.handle("desktop:remove-canvas", (_event, id) => controller.removeCanvas(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
@@ -327,7 +335,7 @@ function registerIpc() {
   ipcMain.handle("desktop:install-update", () => installUpdate());
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const settingsStore = new DesktopSettingsStore({
     filePath: join(app.getPath("userData"), "settings.json"),
     encrypt,
@@ -348,6 +356,11 @@ app.whenReady().then(() => {
     encrypt,
     decrypt
   });
+  const taskCheckpointStore = new TaskCheckpointStore({
+    filePath: join(app.getPath("userData"), "task-checkpoints.json"),
+    encrypt,
+    decrypt
+  });
   const offlineManager = new OllamaModelManager({
     emit: (payload) => send("offline:changed", payload)
   });
@@ -357,11 +370,13 @@ app.whenReady().then(() => {
     privateMemoryStore,
     companyCacheStore,
     offlineProposalStore,
+    taskCheckpointStore,
     offlineManager,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,
     notify: notifyApproval
   });
+  await controller.initializeTaskCheckpoints().catch(() => {});
   registerIpc();
   createWindow();
   createTray();
@@ -393,5 +408,6 @@ app.on("before-quit", () => {
   quitting = true;
   clearInterval(remoteSyncTimer);
   updateManager?.stop();
+  controller?.interruptActiveTask().catch(() => {});
   controller?.resetRuntime();
 });

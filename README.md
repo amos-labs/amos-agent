@@ -59,6 +59,9 @@ AMOS managed platform
 - Typed company canvases for metrics, tables, trends, briefs, evidence, approvals, and receipts
 - Local workspace grants, search, reads, Git status/diff, and atomic patches
 - Approval-gated shell commands and file changes
+- Streamed responses with visible planning, action, and evaluation phases
+- Safe cancellation across model, MCP, web, and local process work
+- Encrypted restart checkpoints with identity, company-context, and approval revalidation
 - Live work, decisions, approval notifications, activity, and proof
 - AMOS-hosted, customer-cloud, provider API, and local-model profiles
 - Signed, notarized releases with in-app update notifications
@@ -117,6 +120,15 @@ captured section fingerprints with a fresh read-only company briefing, and
 shows any drift in **Decisions**. Continuing only fills the online Operator
 composer; the user must still press **Run**, and current AMOS policy, approvals,
 and receipts govern everything that follows.
+
+AMOS Desktop 0.11 adds a durable task lifecycle. OpenAI-compatible model output
+streams into Operator while the Live Work panel shows bounded phases and tool
+progress. **Stop safely** aborts the active model request, MCP call, web fetch,
+or local process tree. Signed-in company tasks receive an operating-system
+encrypted checkpoint. After a restart or cancellation, Desktop rechecks the
+exact user and tenant, fetches a fresh `resume_company` briefing and approval
+queue, and loads a no-replay continuation into Operator for explicit review.
+Completed tasks remove their checkpoint.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 
@@ -219,6 +231,7 @@ as the AMOS platform grows.
 - [Memory classes and private-memory controls](docs/MEMORY.md)
 - [Signed offline company context](docs/OFFLINE_COMPANY_CONTEXT.md)
 - [Offline draft reconciliation](docs/OFFLINE_RECONCILIATION.md)
+- [Streaming, cancellation, and restart-safe tasks](docs/TASK_LIFECYCLE.md)
 - [Typed company canvas](docs/CANVAS.md)
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Contributing](CONTRIBUTING.md)
@@ -227,12 +240,11 @@ as the AMOS platform grows.
 
 The near-term product path is:
 
-1. reliable signed distribution on macOS and Windows;
-2. streaming, cancellation, and durable task checkpoints;
+1. signed Windows distribution and update validation;
+2. signed device identity and policy-controlled environment grants;
 3. richer typed canvases and managed result adapters for company data and active work;
-4. encrypted private local memory with explicit promotion into shared AMOS memory;
-5. curated small-model offline operation with an explicit local-only boundary; and
-6. governed company-cache retrieval and explicit offline-draft reconciliation without replay.
+4. richer private-memory retrieval and portable continuity; and
+5. enterprise deployment and fleet-management controls.
 
 The governing principle is constant: **local intelligence may observe, reason,
 draft, and execute within explicit grants; AMOS remains authoritative for

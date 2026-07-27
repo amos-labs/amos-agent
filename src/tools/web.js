@@ -2,6 +2,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { truncateText } from "../util/pathSafety.js";
 import { fetchCompat } from "../util/fetchCompat.js";
+import { linkAbortSignal } from "../util/abort.js";
 
 export function createWebTools() {
   return [
@@ -21,6 +22,7 @@ export function createWebTools() {
       async handler(args, context) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 20_000);
+        const unlink = linkAbortSignal(context.signal, controller);
         try {
           const maxBytes = boundedNumber(args.max_bytes, context.config.safety.maxOutputBytes, 1, context.config.safety.maxOutputBytes);
           const { response, finalUrl } = await fetchPublicUrl(args.url, { signal: controller.signal });
@@ -36,6 +38,7 @@ export function createWebTools() {
           };
         } finally {
           clearTimeout(timeout);
+          unlink();
         }
       }
     },
@@ -68,7 +71,8 @@ export function createWebTools() {
           headers: {
             Accept: "application/json",
             "X-Subscription-Token": context.config.search.braveApiKey
-          }
+          },
+          signal: context.signal
         });
         const payload = await response.json();
         if (!response.ok) {

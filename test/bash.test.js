@@ -36,3 +36,22 @@ test("bash timeout terminates the process group promptly", async () => {
   assert.equal(result.timed_out, true);
   assert.ok(Date.now() - start < 1_500);
 });
+
+test("bash cancellation terminates the process group promptly", async () => {
+  const controller = new AbortController();
+  const start = Date.now();
+  const pending = runBash("sleep 5", {
+    cwd: process.cwd(),
+    bashPath: "/bin/bash",
+    timeoutMs: 5_000,
+    maxOutputBytes: 1_024,
+    signal: controller.signal
+  });
+
+  setTimeout(() => controller.abort(), 50);
+  const result = await pending;
+
+  assert.equal(result.canceled, true);
+  assert.equal(result.ok, false);
+  assert.ok(Date.now() - start < 1_500);
+});

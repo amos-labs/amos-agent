@@ -46,6 +46,9 @@ let dragDepth = 0;
 let updateState = null;
 let activeCanvasId = null;
 let capsuleFlow = null;
+let currentTaskId = null;
+let streamingMessage = null;
+let resumingCheckpointId = null;
 
 const elements = Object.fromEntries(
   [
@@ -55,7 +58,7 @@ const elements = Object.fromEntries(
     "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
-    "messages", "promptForm", "promptInput", "runButton", "clearButton", "liveEvents",
+    "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
     "modelInput", "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
@@ -63,7 +66,7 @@ const elements = Object.fromEntries(
     "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
-    "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
+    "recentDecisions", "interruptedTaskList", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
     "companyCacheCard", "companyCacheStatus", "companyCacheDetail", "companyCacheMeta",
     "companyCacheRefreshButton", "companyCacheRemoveButton",
@@ -109,6 +112,7 @@ function bindActions() {
     showView("operator");
   });
   elements.promptForm.addEventListener("submit", runTask);
+  elements.cancelButton.addEventListener("click", cancelTask);
   elements.promptInput.addEventListener("keydown", (event) => {
     if (shouldSubmitPrompt(event)) {
       event.preventDefault();
@@ -170,7 +174,10 @@ function bindEvents() {
     if ((state?.settings?.appearance || "system") === "system") applyAppearance("system");
   });
   api.on("agent:event", renderLiveEvent);
-  api.on("agent:status", ({ running: isRunning }) => setRunning(isRunning));
+  api.on("agent:status", (taskStatus) => {
+    currentTaskId = taskStatus?.running ? taskStatus.taskId || currentTaskId : null;
+    setRunning(Boolean(taskStatus?.running));
+  });
   api.on("activity:changed", (activity) => {
     if (state) state.activity = activity;
     renderActivity();
@@ -191,6 +198,11 @@ function bindEvents() {
   api.on("offline-proposals:changed", (offlineProposals) => {
     if (!state) return;
     state.offlineProposals = offlineProposals || [];
+    renderDecisions();
+  });
+  api.on("task-checkpoints:changed", (taskCheckpoints) => {
+    if (!state) return;
+    state.taskCheckpoints = taskCheckpoints || [];
     renderDecisions();
   });
   api.on("remote:changed", (remote) => {
@@ -1030,9 +1042,10 @@ function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
   const proposals = Array.isArray(state.offlineProposals) ? state.offlineProposals : [];
+  const checkpoints = Array.isArray(state.taskCheckpoints) ? state.taskCheckpoints : [];
   const pending = approvals.filter((approval) => approval.status === "pending");
   const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  const waitingCount = pending.length + proposals.length;
+  const waitingCount = pending.length + proposals.length + checkpoints.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
 
@@ -1061,6 +1074,17 @@ function renderDecisions() {
             : "";
   elements.decisionNotice.textContent = notice;
   elements.decisionNotice.classList.toggle("hidden", !notice);
+
+  elements.interruptedTaskList.replaceChildren();
+  if (checkpoints.length === 0) {
+    elements.interruptedTaskList.append(
+      decisionEmpty("No interrupted tasks are waiting to be resumed.")
+    );
+  } else {
+    for (const checkpoint of checkpoints) {
+      elements.interruptedTaskList.append(taskCheckpointCard(checkpoint));
+    }
+  }
 
   elements.offlineProposalList.replaceChildren();
   if (proposals.length === 0) {
@@ -1093,6 +1117,110 @@ function renderDecisions() {
     for (const approval of recent) {
       elements.recentDecisions.append(decisionCard(approval, false));
     }
+  }
+}
+
+function taskCheckpointCard(checkpoint) {
+  const card = document.createElement("article");
+  card.className = "decision-card task-checkpoint";
+  const content = document.createElement("div");
+  content.className = "decision-content";
+  const meta = document.createElement("div");
+  meta.className = "decision-meta";
+  const status = document.createElement("span");
+  status.className = `decision-status ${checkpoint.status}`;
+  status.textContent = checkpoint.status;
+  const time = document.createElement("time");
+  time.dateTime = checkpoint.updatedAt;
+  time.textContent = checkpoint.updatedAt
+    ? `Saved ${new Date(checkpoint.updatedAt).toLocaleString()}`
+    : "";
+  meta.append(status, time);
+  const title = document.createElement("h2");
+  title.textContent = checkpoint.title;
+  const summary = document.createElement("p");
+  summary.textContent = checkpoint.progress?.summary || "Task stopped before completion.";
+  const provenance = document.createElement("small");
+  provenance.textContent = [
+    checkpoint.source?.tenantSlug,
+    checkpoint.source?.role,
+    "encrypted locally",
+    "no tool arguments stored",
+    "no automatic replay"
+  ].filter(Boolean).join(" · ");
+  content.append(meta, title, summary);
+  if (checkpoint.progress?.completedSteps?.length) {
+    const completed = document.createElement("ul");
+    completed.className = "proposal-outcomes";
+    for (const step of checkpoint.progress.completedSteps.slice(-5)) {
+      const item = document.createElement("li");
+      item.textContent = step;
+      completed.append(item);
+    }
+    content.append(completed);
+  }
+  if (checkpoint.reconciliation) {
+    const comparison = document.createElement("div");
+    comparison.className = checkpoint.reconciliation.changedSections?.length
+      ? "proposal-comparison context_changed"
+      : "proposal-comparison no_detected_change";
+    comparison.textContent = checkpoint.reconciliation.changedSections?.length
+      ? `Live company context changed: ${checkpoint.reconciliation.changedSections.join(", ")}. AMOS will evaluate the task again.`
+      : `Identity and company context revalidated. ${checkpoint.reconciliation.pendingApprovalCount} approval${checkpoint.reconciliation.pendingApprovalCount === 1 ? "" : "s"} currently pending.`;
+    content.append(comparison);
+  }
+  content.append(provenance);
+
+  const actions = document.createElement("div");
+  actions.className = "decision-card-actions";
+  const resume = actionButton(
+    state.mode?.offline
+      ? "Reconnect to revalidate"
+      : state.connectionMode !== "user"
+        ? "Personal sign-in required"
+        : "Revalidate & resume →",
+    "primary"
+  );
+  resume.disabled = Boolean(state.mode?.offline || state.connectionMode !== "user" || running);
+  resume.addEventListener("click", () => resumeTaskCheckpoint(checkpoint.id, resume));
+  const remove = actionButton("Remove checkpoint", "danger");
+  remove.disabled = running;
+  remove.addEventListener("click", () => removeTaskCheckpoint(checkpoint, remove));
+  actions.append(resume, remove);
+  card.append(content, actions);
+  return card;
+}
+
+async function resumeTaskCheckpoint(id, button) {
+  setButtonBusy(button, true, "Revalidating…");
+  try {
+    const result = await api.prepareTaskCheckpoint(id);
+    state.taskCheckpoints = result.taskCheckpoints || [];
+    elements.promptInput.value = result.prompt;
+    resumingCheckpointId = id;
+    showView("operator");
+    elements.promptInput.focus();
+    renderDecisions();
+    toast("Revalidated and loaded. Review the continuation, then press Run.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(button, false, "Revalidate & resume →");
+  }
+}
+
+async function removeTaskCheckpoint(checkpoint, button) {
+  if (!window.confirm(`Remove the checkpoint for “${checkpoint.title}”?`)) return;
+  setButtonBusy(button, true, "Removing…");
+  try {
+    const result = await api.removeTaskCheckpoint(checkpoint.id);
+    state.taskCheckpoints = result.taskCheckpoints || [];
+    renderDecisions();
+    toast("Task checkpoint removed.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(button, false, "Remove checkpoint");
   }
 }
 
@@ -1751,14 +1879,18 @@ async function runTask(event) {
   addMessage("user", `${prompt || "Review the attached material."}${attachmentSummary}`);
   elements.promptInput.value = "";
   const pending = addMessage("pending", "AMOS is loading company context and determining the next action…");
+  streamingMessage = pending;
   setRunning(true);
 
   try {
     const submitted = [...attachments];
     const result = await api.run({
       text: prompt,
+      resumeTaskId: resumingCheckpointId,
       attachments: submitted.map((item) => ({ id: item.id, retention: item.retention }))
     });
+    resumingCheckpointId = null;
+    streamingMessage = null;
     pending.remove();
     addMessage("assistant", result.answer);
     state.activity = result.activity;
@@ -1778,8 +1910,15 @@ async function runTask(event) {
       toast(`Task completed, but ${failures.length} item${failures.length === 1 ? "" : "s"} could not be added to company memory.`, true);
     }
   } catch (error) {
+    resumingCheckpointId = null;
+    streamingMessage = null;
     pending.remove();
-    addMessage("error", error.message);
+    addMessage(
+      "error",
+      error?.code === "AMOS_TASK_CANCELED" || /task canceled/i.test(error.message)
+        ? "Task stopped safely. Its encrypted checkpoint is available under Decisions if you want to revalidate and continue."
+        : error.message
+    );
   } finally {
     try {
       const latest = await api.state();
@@ -1794,8 +1933,21 @@ async function runTask(event) {
   }
 }
 
+async function cancelTask() {
+  if (!running) return;
+  elements.cancelButton.disabled = true;
+  elements.cancelButton.textContent = "Stopping…";
+  try {
+    const result = await api.cancelTask(currentTaskId);
+    if (!result.canceled) toast(result.message || "No task is running.");
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
 async function clearSession() {
   await api.clear();
+  resumingCheckpointId = null;
   state.canvases = [];
   state.activeCanvasId = null;
   activeCanvasId = null;
@@ -1946,19 +2098,35 @@ function appendInline(container, nodes) {
 }
 
 function renderLiveEvent(event) {
+  if (event.type === "assistant_delta") {
+    if (streamingMessage) {
+      streamingMessage.className = "message assistant streaming";
+      streamingMessage.replaceChildren();
+      const markdown = document.createElement("div");
+      markdown.className = "markdown-content";
+      renderMarkdown(markdown, event.text || "");
+      streamingMessage.append(markdown);
+      elements.messages.scrollTop = elements.messages.scrollHeight;
+    }
+    return;
+  }
   if (elements.liveEvents.querySelector(".empty-state")) elements.liveEvents.replaceChildren();
   const card = document.createElement("div");
-  card.className = `event-card${event.type === "tool_error" ? " error" : ""}`;
+  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}`;
   const title = document.createElement("strong");
   title.textContent =
-    event.type === "tool_start"
+    event.type === "phase"
+      ? `◌ ${event.phase}`
+      : event.type === "tool_start"
       ? `→ ${event.name}`
       : event.type === "tool_error"
         ? `× ${event.name}`
         : `✓ ${event.name}`;
   const detail = document.createElement("span");
   detail.textContent =
-    event.type === "tool_error"
+    event.type === "phase"
+      ? event.summary
+      : event.type === "tool_error"
       ? event.error
       : event.type === "tool_start"
         ? humanizeTool(event.name)
@@ -1998,9 +2166,13 @@ function renderActivity() {
 function setRunning(value) {
   running = value;
   elements.runButton.disabled = value;
+  elements.runButton.classList.toggle("hidden", value);
+  elements.cancelButton.classList.toggle("hidden", !value);
+  elements.cancelButton.disabled = false;
+  elements.cancelButton.textContent = "Stop safely";
   elements.attachButton.disabled = value;
   elements.promptInput.disabled = value;
-  elements.runningIndicator.textContent = value ? "Working" : "Idle";
+  elements.runningIndicator.textContent = value ? "Working · safely stoppable" : "Idle";
   elements.runningIndicator.classList.toggle("active", value);
   renderAttachments();
   renderUpdate();
