@@ -35,7 +35,8 @@ No file is promoted merely because it was attached or discussed.
 ## Private-memory storage
 
 The private store lives in the application's user-data directory and is
-protected with macOS Keychain-backed `safeStorage`.
+protected with operating-system-backed `safeStorage` (Keychain on macOS and
+DPAPI on Windows).
 
 - File and content metadata are inside encrypted envelopes.
 - The plaintext envelope contains only the opaque item ID and ciphertext.

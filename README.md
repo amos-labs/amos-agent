@@ -10,6 +10,8 @@ systems and an explicitly selected local workspace.
 ·
 [Download for Intel Mac](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
 ·
+[Download for Windows](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-Windows-x64-Setup.exe)
+·
 [AMOS Labs](https://amoslabs.com)
 ·
 [Managed platform](https://app.amoslabs.com)
@@ -45,14 +47,14 @@ AMOS managed platform
 
 ## What works today
 
-- Native macOS application for Apple Silicon and Intel
+- Native macOS applications for Apple Silicon and Intel, plus Windows 10/11 x64
 - Browser-based AMOS OAuth 2.1 + PKCE sign-in
 - Signed-in company, role, and effective-scope identity
 - AMOS engine discovery through a compact MCP tool surface
 - Documents, source files, drag/drop, and pasted screenshots
 - Local PDF, DOCX, text, and source extraction
 - Explicit **Use for this task**, **Keep in private memory**, or **Add to company memory** handling
-- Keychain-protected private memory with reuse, promotion, and permanent forget controls
+- Operating-system-protected private memory with reuse, promotion, and permanent forget controls
 - Passphrase-encrypted `.amos-memory` export/import with preview, tamper detection, deduplication, and fork lineage
 - Explicit four-hour, server-signed company briefings for read-only offline work
 - Encrypted offline outcome drafts with live diff, identity pinning, and explicit reauthorization
@@ -64,15 +66,17 @@ AMOS managed platform
 - Encrypted restart checkpoints with identity, company-context, and approval revalidation
 - Live work, decisions, approval notifications, activity, and proof
 - AMOS-hosted, customer-cloud, provider API, and local-model profiles
-- Signed, notarized releases with in-app update notifications
+- Signed macOS and Windows releases with in-app update notifications
 
 AMOS Desktop is not a second CRM, integration vault, or company database.
 Shared business state, integrations, governance, and receipts remain in AMOS.
 
 ## Install
 
-1. Download the correct macOS DMG from the links above.
-2. Drag **AMOS Desktop** into **Applications**.
+1. Download the correct installer from the links above.
+2. On macOS, drag **AMOS Desktop** into **Applications**. On Windows, run the
+   signed per-user installer; it adds Start-menu and desktop shortcuts without
+   requiring an administrator account.
 3. Open it and choose **Connect AMOS**.
 4. Sign in to the company you are authorized to access.
 5. Choose an intelligence profile.
@@ -103,7 +107,7 @@ AMOS Desktop 0.7 adds a guided offline path for Ollama: it assesses the
 computer, recommends one of three curated profiles, shows resumable download
 progress, supports explicit removal, and can activate a visibly separate
 local-only operating mode. In that mode AMOS and public-web tools are not
-exposed to the model. Desktop follows the Mac's light or dark appearance by
+exposed to the model. Desktop follows the operating system's light or dark appearance by
 default, with an immediate header switch and persistent overrides.
 
 AMOS Desktop 0.9 adds an explicit offline company-context grant. While online,
@@ -170,8 +174,16 @@ Create unsigned local DMG/ZIP artifacts:
 npm run desktop:build
 ```
 
-Official releases are signed and notarized in GitHub Actions. Local development
-builds do not contact the production update feed.
+Create an unsigned local Windows x64 installer:
+
+```bash
+npm run desktop:build:win
+```
+
+Official macOS releases are signed and notarized, and official Windows releases
+are Authenticode-signed. GitHub Actions publishes both platforms together only
+after every installer and update manifest passes its platform gate. Local
+development builds do not contact the production update feed.
 
 ## CLI for developers and automation
 
@@ -240,11 +252,11 @@ as the AMOS platform grows.
 
 The near-term product path is:
 
-1. signed Windows distribution and update validation;
-2. signed device identity and policy-controlled environment grants;
-3. richer typed canvases and managed result adapters for company data and active work;
-4. richer private-memory retrieval and portable continuity; and
-5. enterprise deployment and fleet-management controls.
+1. signed device identity and policy-controlled environment grants;
+2. richer typed canvases and managed result adapters for company data and active work;
+3. richer private-memory retrieval and portable continuity;
+4. enterprise deployment and fleet-management controls; and
+5. Windows on Arm and managed-store distribution when customer demand warrants them.
 
 The governing principle is constant: **local intelligence may observe, reason,
 draft, and execute within explicit grants; AMOS remains authoritative for

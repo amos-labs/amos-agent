@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runBash, safeChildEnvironment } from "../src/tools/bash.js";
+import { runBash, safeChildEnvironment, shellInvocation } from "../src/tools/bash.js";
 
 test("bash child environment excludes provider and AMOS secrets", () => {
   const value = safeChildEnvironment({
@@ -11,6 +11,33 @@ test("bash child environment excludes provider and AMOS secrets", () => {
     DATABASE_URL: "postgres://secret"
   });
   assert.deepEqual(value, { PATH: "/bin", HOME: "/tmp/home" });
+});
+
+test("Windows child environment preserves operating-system paths but still excludes secrets", () => {
+  const value = safeChildEnvironment({
+    Path: "C:\\Windows\\System32",
+    SystemRoot: "C:\\Windows",
+    USERPROFILE: "C:\\Users\\amos",
+    AMOS_API_KEY: "amos-secret",
+    AWS_SECRET_ACCESS_KEY: "aws-secret"
+  });
+  assert.deepEqual(value, {
+    Path: "C:\\Windows\\System32",
+    SystemRoot: "C:\\Windows",
+    USERPROFILE: "C:\\Users\\amos"
+  });
+});
+
+test("Windows shells receive native non-interactive arguments", () => {
+  assert.deepEqual(shellInvocation("powershell.exe", "Get-ChildItem", "win32"), [
+    "-NoLogo",
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    "Get-ChildItem"
+  ]);
+  assert.deepEqual(shellInvocation("cmd.exe", "dir", "win32"), ["/d", "/s", "/c", "dir"]);
+  assert.deepEqual(shellInvocation("/bin/bash", "pwd", "darwin"), ["-lc", "pwd"]);
 });
 
 test("bash captures only bounded output", async () => {

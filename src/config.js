@@ -37,7 +37,10 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
       allowOutsideWorkspace: boolFromEnv(env.AMOS_AGENT_ALLOW_OUTSIDE_WORKSPACE, false),
       autoApproveBash: boolFromEnv(env.AMOS_AGENT_AUTO_APPROVE_BASH, false),
       autoApproveWrites: boolFromEnv(env.AMOS_AGENT_AUTO_APPROVE_WRITES, false),
-      bashPath: env.AMOS_AGENT_BASH || "/bin/bash",
+      bashPath:
+        env.AMOS_AGENT_SHELL ||
+        env.AMOS_AGENT_BASH ||
+        defaultShellPath(),
       bashTimeoutMs: intFromEnv(env.AMOS_AGENT_BASH_TIMEOUT_MS, 60_000, 100, 600_000),
       maxOutputBytes: intFromEnv(env.AMOS_AGENT_MAX_OUTPUT_BYTES, 24_000, 1_024, 1_048_576)
     },
@@ -48,6 +51,10 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
       maxToolTurns: intFromEnv(env.AMOS_AGENT_MAX_TOOL_TURNS, 8, 1, 64)
     }
   };
+}
+
+export function defaultShellPath(platformName = process.platform) {
+  return platformName === "win32" ? "powershell.exe" : "/bin/bash";
 }
 
 export function validateConfig(config) {

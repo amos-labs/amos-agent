@@ -41,14 +41,21 @@ let updateState = {
 };
 
 function createWindow() {
+  const platformWindowOptions = process.platform === "darwin"
+    ? {
+        titleBarStyle: "hiddenInset",
+        trafficLightPosition: { x: 18, y: 18 }
+      }
+    : {
+        icon: join(here, "assets", "amos-app-icon-1024.png")
+      };
   window = new BrowserWindow({
     width: 1440,
     height: 920,
     minWidth: 1060,
     minHeight: 700,
     backgroundColor: "#0a1020",
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 18, y: 18 },
+    ...platformWindowOptions,
     webPreferences: {
       preload: join(here, "preload.cjs"),
       contextIsolation: true,
@@ -192,7 +199,7 @@ function installUpdate() {
 
 function encrypt(value) {
   if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("macOS Keychain encryption is unavailable; AMOS will not store this provider key");
+    throw new Error("Operating-system encryption is unavailable; AMOS will not store this provider key");
   }
   return safeStorage.encryptString(value).toString("base64");
 }
@@ -335,7 +342,18 @@ function registerIpc() {
   ipcMain.handle("desktop:install-update", () => installUpdate());
 }
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) app.quit();
+
+app.on("second-instance", () => showWindow());
+
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.amoslabs.desktop");
+}
+
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
+  if (process.platform !== "darwin") Menu.setApplicationMenu(null);
   const settingsStore = new DesktopSettingsStore({
     filePath: join(app.getPath("userData"), "settings.json"),
     encrypt,

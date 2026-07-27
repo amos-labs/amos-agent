@@ -31,6 +31,24 @@ mac:
 dmg:
   title: AMOS Desktop
 
+win:
+  icon: desktop/assets/amos-app-icon-1024.png
+  verifyUpdateCodeSignature: true
+  artifactName: AMOS-Desktop-Windows-${arch}-Setup.${ext}
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AMOS Desktop
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+
 publish:
   provider: github
   owner: amos-labs

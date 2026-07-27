@@ -723,7 +723,7 @@ function renderPrivateMemory() {
     exportCapsule.addEventListener("click", () => openCapsuleFlow("export", [memory.id]));
     const forget = actionButton("Forget", "danger");
     forget.addEventListener("click", async () => {
-      if (!window.confirm(`Permanently forget “${memory.name}” on this Mac?`)) return;
+      if (!window.confirm(`Permanently forget “${memory.name}” on this computer?`)) return;
       setButtonBusy(forget, true, "Forgetting…");
       try {
         const result = await api.forgetPrivateMemory(memory.id);
@@ -817,7 +817,7 @@ async function refreshCompanyCache() {
   if (
     firstCopy &&
     !window.confirm(
-      "Store a server-signed company briefing on this Mac for up to four hours? It is encrypted locally, read-only, and contains no credentials."
+      "Store a server-signed company briefing on this computer for up to four hours? It is encrypted locally, read-only, and contains no credentials."
     )
   ) {
     return;
@@ -839,7 +839,7 @@ async function refreshCompanyCache() {
 }
 
 async function removeCompanyCache() {
-  if (!window.confirm("Remove the offline company briefing from this Mac?")) return;
+  if (!window.confirm("Remove the offline company briefing from this computer?")) return;
   setButtonBusy(elements.companyCacheRemoveButton, true, "Removing…");
   try {
     state = await api.removeCompanyCache();
@@ -868,7 +868,7 @@ function openCapsuleFlow(mode, ids = null) {
     : "Unlock a private-memory capsule.";
   elements.capsuleModalMessage.textContent = exporting
     ? "Create a passphrase with at least 12 characters. AMOS cannot recover it, and the capsule never includes your AMOS login, provider keys, or other application credentials."
-    : "Enter the capsule passphrase, then choose the .amos-memory file. AMOS validates and previews every item before anything is added to this Mac.";
+    : "Enter the capsule passphrase, then choose the .amos-memory file. AMOS validates and previews every item before anything is added to this computer.";
   elements.capsuleConfirmField.classList.toggle("hidden", !exporting);
   elements.capsuleConfirmInput.required = exporting;
   elements.capsuleContinueButton.textContent = exporting
@@ -950,7 +950,7 @@ function renderCapsulePreview(preview) {
   }
   elements.capsulePreviewWarning.classList.toggle("hidden", !preview.subjectMismatch);
   elements.capsulePreviewWarning.textContent = preview.subjectMismatch
-    ? "This capsule was exported under a different user identity. Its contents remain private on this Mac unless you explicitly promote them to governed company memory."
+    ? "This capsule was exported under a different user identity. Its contents remain private on this computer unless you explicitly promote them to governed company memory."
     : "";
 }
 
@@ -1504,7 +1504,7 @@ function renderOfflineModels() {
     const labels = document.createElement("div");
     labels.className = "offline-model-labels";
     const profile = document.createElement("span");
-    profile.textContent = model.recommended ? "Recommended for this Mac" : model.id;
+    profile.textContent = model.recommended ? "Recommended for this computer" : model.id;
     labels.append(profile);
     if (model.installed) {
       const installed = document.createElement("span");
@@ -1686,12 +1686,12 @@ function applyAppearance(preference) {
   elements.appearanceToggle.setAttribute(
     "aria-label",
     `Switch to ${effective === "dark" ? "light" : "dark"} appearance${
-      normalized === "system" ? " (currently following this Mac)" : ""
+      normalized === "system" ? " (currently following this computer)" : ""
     }`
   );
   elements.appearanceControl.title =
     normalized === "system"
-      ? `Following this Mac · currently ${effective}`
+      ? `Following this computer · currently ${effective}`
       : `${effective[0].toUpperCase()}${effective.slice(1)} override`;
   if (elements.appearanceInput) elements.appearanceInput.value = normalized;
 }
@@ -1840,7 +1840,7 @@ function renderAttachments() {
     retention.setAttribute("aria-label", `Retention for ${attachment.name}`);
     retention.append(
       option("task", "Use for this task"),
-      option("private", attachment.memoryStatus === "private" ? "Saved privately on this Mac" : "Keep in private memory"),
+      option("private", attachment.memoryStatus === "private" ? "Saved privately on this computer" : "Keep in private memory"),
       option("company", attachment.memoryStatus === "requested" ? "Submitted to AMOS memory" : "Add to company memory")
     );
     retention.value = attachment.retention;
