@@ -401,7 +401,7 @@ app.whenReady().then(async () => {
   updateManager = new DesktopUpdateManager({
     updater: autoUpdater,
     currentVersion: app.getVersion(),
-    enabled: app.isPackaged,
+    enabled: app.isPackaged && app.getName() === "AMOS Desktop",
     emit: (payload) => send("update:changed", payload),
     notify: notifyUpdate
   });

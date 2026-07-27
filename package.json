@@ -24,7 +24,8 @@
     "desktop:dir": "electron-builder --mac dir",
     "desktop:build:win": "electron-builder --win nsis --x64 --publish never",
     "desktop:dir:win": "electron-builder --win dir --x64 --publish never",
-    "desktop:release:win": "electron-builder --config desktop/electron-builder.release.yml --win nsis --x64 --publish never"
+    "desktop:release:win": "electron-builder --config desktop/electron-builder.release.yml --win nsis --x64 --publish never",
+    "desktop:preview:win": "electron-builder --config desktop/electron-builder.windows-preview.yml --win nsis --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^39.2.7",
