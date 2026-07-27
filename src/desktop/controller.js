@@ -57,6 +57,7 @@ export class DesktopController {
     taskCheckpointStore = null,
     localReceiptStore = null,
     offlineManager = null,
+    telemetry = null,
     openBrowser,
     emit,
     notify = () => {}
@@ -90,6 +91,7 @@ export class DesktopController {
     this.checkpointWrites = Promise.resolve();
     this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
+    this.telemetry = telemetry;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
     });
@@ -463,7 +465,10 @@ export class DesktopController {
         return true;
       }
     });
-    await demo.start({ previousWorkspace: settings.workspace });
+    await demo.start({
+      previousWorkspace: settings.workspace,
+      installId: await this.desktopInstallId()
+    });
     await this.settingsStore.write({
       ...settings,
       provider: "amos-hosted",
@@ -637,6 +642,7 @@ export class DesktopController {
     const previous = await oauth.status();
     await oauth.login({
       openBrowser: true,
+      desktopInstallId: await this.desktopInstallId(),
       onAuthorize: ({ url }) => this.send("auth:browser", { url })
     });
     const nextSettings = {
@@ -967,6 +973,7 @@ export class DesktopController {
         startedAt: this.activeTask.startedAt,
         receiptEvents
       });
+      await this.recordNorthwindValue(settings, receiptEvents);
       return {
         answer,
         taskId,
@@ -1005,6 +1012,29 @@ export class DesktopController {
       if (this.activeTask?.id === taskId) this.activeTask = null;
       this.send("agent:status", { running: false, taskId });
     }
+  }
+
+  async recordNorthwindValue(settings, receiptEvents) {
+    if (!this.telemetry) return;
+    const usedCompanyTool = receiptEvents.some((event) =>
+      ["tool_end", "tool_result"].includes(event?.type)
+    );
+    if (!usedCompanyTool) return;
+    const credentials = await this.oauthFor(settings).status().catch(() => null);
+    if (!credentials?.demo || !credentials.access_token) return;
+    await this.telemetry
+      .record("northwind_demo_value_reached", {
+        mcpUrl: settings.amosMcpUrl,
+        accessToken: credentials.access_token,
+        once: true,
+        context: { surface: "desktop", evidence: "completed_tool_task" }
+      })
+      .catch(() => {});
+  }
+
+  async desktopInstallId() {
+    if (!this.telemetry) return "";
+    return this.telemetry.installId().catch(() => "");
   }
 
   async steerTask(id, content) {

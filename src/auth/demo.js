@@ -33,12 +33,15 @@ export class AmosDesktopDemoSession {
     this.callbackReceiverFactory = callbackReceiverFactory;
   }
 
-  async start({ timeoutMs = 300_000, previousWorkspace = "" } = {}) {
+  async start({ timeoutMs = 300_000, previousWorkspace = "", installId = "" } = {}) {
     const state = randomState();
     const receiver = await this.callbackReceiverFactory({ state, timeoutMs });
     try {
       const url = new URL("/playground/console", amosOrigin(this.mcpUrl));
       url.searchParams.set("src", "desktop-demo");
+      if (/^[0-9a-f-]{36}$/i.test(installId)) {
+        url.searchParams.set("desktop_install_id", installId);
+      }
       url.searchParams.set("desktop_callback", receiver.redirectUri);
       url.searchParams.set("desktop_state", state);
       if (!this.openBrowser(url.toString())) {

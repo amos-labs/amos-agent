@@ -22,6 +22,7 @@ import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
 import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
+import { DesktopTelemetry } from "../src/desktop/telemetry.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { autoUpdater } = electronUpdater;
@@ -393,6 +394,14 @@ app.whenReady().then(async () => {
   const offlineManager = new OllamaModelManager({
     emit: (payload) => send("offline:changed", payload)
   });
+  const telemetry = new DesktopTelemetry({
+    filePath: join(app.getPath("userData"), "desktop-telemetry.json"),
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    architecture: process.arch
+  });
+  const initialSettings = await settingsStore.read();
+  await telemetry.initialize({ mcpUrl: initialSettings.amosMcpUrl }).catch(() => {});
   controller = new DesktopController({
     userDataPath: app.getPath("userData"),
     settingsStore,
@@ -402,6 +411,7 @@ app.whenReady().then(async () => {
     taskCheckpointStore,
     localReceiptStore,
     offlineManager,
+    telemetry,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,
     notify: notifyApproval

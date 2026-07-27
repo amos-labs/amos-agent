@@ -73,10 +73,15 @@ test("OAuth login performs discovery, DCR, PKCE callback, and token storage", as
 
   const credentials = await session.login({
     openBrowser: false,
+    desktopInstallId: "25deefb7-0e4f-43ad-8b2f-f2f86fac6594",
     onAuthorize({ url }) {
       const authorization = new URL(url);
       challenge = authorization.searchParams.get("code_challenge");
       assert.ok(authorization.searchParams.get("state"));
+      assert.equal(
+        authorization.searchParams.get("desktop_install_id"),
+        "25deefb7-0e4f-43ad-8b2f-f2f86fac6594"
+      );
       setImmediate(() => finishCallback({ code: "authorization-code" }));
     }
   });

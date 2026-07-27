@@ -87,7 +87,13 @@ export class AmosOAuthSession {
     return metadata;
   }
 
-  async login({ onAuthorize = () => {}, openBrowser = true, timeoutMs = 300_000, scopes = [] } = {}) {
+  async login({
+    onAuthorize = () => {},
+    openBrowser = true,
+    timeoutMs = 300_000,
+    scopes = [],
+    desktopInstallId = ""
+  } = {}) {
     const metadata = await this.discover();
     const state = randomToken();
     const verifier = randomToken();
@@ -115,6 +121,9 @@ export class AmosOAuthSession {
       authorizationUrl.searchParams.set("code_challenge", pkceChallenge(verifier));
       authorizationUrl.searchParams.set("code_challenge_method", "S256");
       if (scopes.length > 0) authorizationUrl.searchParams.set("scope", scopes.join(" "));
+      if (/^[0-9a-f-]{36}$/i.test(desktopInstallId)) {
+        authorizationUrl.searchParams.set("desktop_install_id", desktopInstallId);
+      }
 
       const url = authorizationUrl.toString();
       onAuthorize({ url, browserOpened: openBrowser ? this.openBrowser(url) : false });
