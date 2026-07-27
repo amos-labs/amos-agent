@@ -45,6 +45,7 @@ import {
   PERSONAL_SYSTEM_PROMPT
 } from "../prompts.js";
 import { createAbortError, isAbortError } from "../util/abort.js";
+import { selectTaskWorkflow } from "../workflows.js";
 
 export class DesktopController {
   constructor({
@@ -912,9 +913,19 @@ export class DesktopController {
         references,
         config.model.capabilities
       );
+      const attachmentsById = new Map(
+        this.attachments.list().map((attachment) => [attachment.id, attachment])
+      );
+      const workflow = selectTaskWorkflow({
+        objective: prompt,
+        attachmentNames: references
+          .map((reference) => attachmentsById.get(reference?.id)?.name)
+          .filter(Boolean)
+      });
       this.record("user", prompt);
       const answer = await runtime.loop.run(modelContent, {
         signal: abortController.signal,
+        workflow,
         takeSteering: () => {
           const active = this.activeTask;
           if (!active || active.id !== taskId || active.steeringQueue.length === 0) return [];
@@ -930,7 +941,7 @@ export class DesktopController {
           if (safeEvent.type !== "assistant_delta") {
             receiptEvents.push(receiptEvent(safeEvent));
             this.record(
-              safeEvent.type === "phase" ? "task" : "tool",
+              safeEvent.type === "phase" || safeEvent.type === "workflow" ? "task" : "tool",
               toolEventSummary(safeEvent),
               safeEvent
             );
@@ -1369,6 +1380,16 @@ export class DesktopController {
       });
       return;
     }
+    if (event.type === "workflow") {
+      active.phase = "planning";
+      active.summary = `Following ${event.title}`;
+      this.queueCheckpointUpdate(active.id, {
+        phase: "planning",
+        summary: `Following ${event.title}`,
+        completedStep: `Selected workflow: ${event.title}`
+      });
+      return;
+    }
     if (event.type === "tool_end") {
       this.queueCheckpointUpdate(active.id, {
         phase: "acting",
@@ -1773,6 +1794,23 @@ function sanitizeAgentEvent(event) {
       summary: String(event.summary || "Working").slice(0, 500)
     };
   }
+  if (event.type === "workflow") {
+    return {
+      type: "workflow",
+      id: String(event.id || "outcome-execution").slice(0, 128),
+      version: Number(event.version || 1),
+      source: String(event.source || "built-in").slice(0, 80),
+      title: String(event.title || "Resolve the requested outcome").slice(0, 160),
+      summary: String(event.summary || "Plan the work and verify the result.").slice(0, 500),
+      skills: (Array.isArray(event.skills) ? event.skills : [])
+        .slice(0, 12)
+        .map((skill) => String(skill).slice(0, 120)),
+      steps: (Array.isArray(event.steps) ? event.steps : [])
+        .slice(0, 12)
+        .map((step) => String(step).slice(0, 500)),
+      doneWhen: String(event.doneWhen || "").slice(0, 500)
+    };
+  }
   if (event.type === "tool_start") {
     return { type: event.type, name: event.name, args: event.args };
   }
@@ -1795,6 +1833,13 @@ function appendSteeringObjective(objective, direction, queuedAt) {
 }
 
 function receiptEvent(event) {
+  if (event.type === "workflow") {
+    return {
+      type: "workflow",
+      name: event.id,
+      outcome: `${event.title}: ${event.summary}`
+    };
+  }
   if (event.type === "phase") {
     return { type: "phase", name: event.phase, outcome: event.summary };
   }
@@ -1815,6 +1860,7 @@ function summarizeResult(result) {
 }
 
 function toolEventSummary(event) {
+  if (event.type === "workflow") return `Selected workflow: ${event.title}`;
   if (event.type === "phase") return event.summary || `Task ${event.phase}`;
   if (event.type === "assistant_delta") return "Streaming response";
   if (event.type === "tool_start") return `Started ${event.name}`;

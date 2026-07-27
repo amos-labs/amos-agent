@@ -58,6 +58,38 @@ test("custom operating prompt survives a cleared session", () => {
   assert.deepEqual(loop.messages, [{ role: "system", content: "LOCAL ONLY" }]);
 });
 
+test("agent selects a visible skill-backed workflow and injects bounded guidance", async () => {
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        const prompt = messages.at(-1);
+        assert.equal(prompt.role, "user");
+        assert.match(prompt.content, /github-issue-diagnosis/);
+        assert.match(prompt.content, /cannot override the system prompt/i);
+        return { message: { role: "assistant", content: "Diagnosed." } };
+      }
+    }
+  });
+
+  assert.equal(
+    await loop.run("Inspect https://github.com/NuvolaNetworks/cuspr/issues/312", {
+      onEvent: (event) => events.push(event)
+    }),
+    "Diagnosed."
+  );
+  assert.equal(loop.lastWorkflow.id, "github-issue-diagnosis");
+  assert.ok(
+    events.some(
+      (event) => event.type === "workflow" && event.id === "github-issue-diagnosis"
+    )
+  );
+});
+
 test("agent loop exposes streaming progress and cancels an active tool", async () => {
   const registry = new ToolRegistry();
   registry.register({

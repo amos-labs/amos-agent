@@ -1,19 +1,35 @@
 import { createHash } from "node:crypto";
 import { SYSTEM_PROMPT } from "./prompts.js";
 import { throwIfAborted } from "./util/abort.js";
+import {
+  applyWorkflowToModelContent,
+  selectTaskWorkflow
+} from "./workflows.js";
 
 export class AgentLoop {
-  constructor({ config, modelClient, kimiClient, registry, approvals, amosClient, systemPrompt = SYSTEM_PROMPT }) {
+  constructor({
+    config,
+    modelClient,
+    kimiClient,
+    registry,
+    approvals,
+    amosClient,
+    systemPrompt = SYSTEM_PROMPT,
+    workflowSelector = selectTaskWorkflow
+  }) {
     this.config = config;
     this.modelClient = modelClient || kimiClient;
     this.registry = registry;
     this.approvals = approvals;
     this.amosClient = amosClient;
     this.systemPrompt = systemPrompt;
+    this.workflowSelector = workflowSelector;
+    this.lastWorkflow = null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
   clear() {
+    this.lastWorkflow = null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -22,11 +38,28 @@ export class AgentLoop {
     {
       onEvent = () => {},
       signal = null,
-      takeSteering = () => []
+      takeSteering = () => [],
+      workflow: selectedWorkflow = null
     } = {}
   ) {
     throwIfAborted(signal);
-    this.messages.push({ role: "user", content: userContent });
+    const workflow = selectedWorkflow || this.workflowSelector({ objective: userContent });
+    this.lastWorkflow = workflow;
+    onEvent({
+      type: "workflow",
+      id: workflow.id,
+      version: workflow.version,
+      source: workflow.source,
+      title: workflow.title,
+      summary: workflow.summary,
+      skills: workflow.skills.map((skill) => skill.name),
+      steps: workflow.steps,
+      doneWhen: workflow.doneWhen
+    });
+    this.messages.push({
+      role: "user",
+      content: applyWorkflowToModelContent(userContent, workflow)
+    });
 
     let turn = 0;
     let previousToolFingerprint = null;
