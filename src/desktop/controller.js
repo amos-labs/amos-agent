@@ -544,6 +544,18 @@ export class DesktopController {
       openBrowser: true,
       onAuthorize: ({ url }) => this.send("auth:browser", { url })
     });
+    if (shouldActivateAmosHosted(settings)) {
+      await this.settingsStore.write({
+        ...settings,
+        provider: "amos-hosted",
+        model: "auto",
+        baseUrl: ""
+      });
+      this.record(
+        "settings",
+        "AMOS Hosted enabled with included credits and metered overage"
+      );
+    }
     this.resetRuntime();
     this.record("auth", "AMOS account connected");
     await this.refreshRemote({ notify: true });
@@ -1289,7 +1301,7 @@ export class DesktopController {
       AMOS_MODEL_PROVIDER: settings.provider,
       AMOS_MODEL: settings.model,
       AMOS_MODEL_BASE_URL: settings.baseUrl,
-      AMOS_MODEL_API_KEY: settings.apiKey,
+      AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
       AMOS_MODEL_REASONING_EFFORT: settings.reasoningEffort,
       AMOS_AGENT_WORKSPACE: settings.workspace || homedir(),
       AMOS_MCP_URL: settings.amosMcpUrl
@@ -1401,6 +1413,15 @@ function redactSettings(settings) {
   };
   delete redacted.notifiedApprovalIds;
   return redacted;
+}
+
+export function shouldActivateAmosHosted(settings) {
+  return (
+    settings?.provider === "kimi" &&
+    (!settings.model || settings.model === "kimi-k3") &&
+    (!settings.baseUrl || settings.baseUrl === "https://api.moonshot.ai/v1") &&
+    !settings.apiKey
+  );
 }
 
 function publicProvider(config) {

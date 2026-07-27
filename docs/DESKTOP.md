@@ -27,8 +27,9 @@ Desktop guides the user through three independent grants:
 
 1. **Connect the company** — browser-based AMOS OAuth identifies the user,
    company, role, and effective scopes.
-2. **Choose intelligence** — AMOS-hosted, AWS/customer cloud, provider API,
-   compatible endpoint, or a supported local runtime.
+2. **Use AMOS Hosted or choose intelligence** — AMOS Hosted works immediately
+   with the AMOS sign-in and existing credit/overage billing; AWS/customer
+   cloud, provider API, compatible endpoint, and local runtime remain available.
 3. **Choose a workspace** — optional local folder that AMOS may inspect and
    change through visible approval gates.
 

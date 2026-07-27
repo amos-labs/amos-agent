@@ -10,9 +10,9 @@ const providerDefaults = {
     credential: "Moonshot API key"
   },
   "amos-hosted": {
-    model: "kimi-k3",
+    model: "auto",
     baseUrl: "",
-    credential: "Uses your AMOS sign-in—no second key"
+    credential: "Uses your AMOS sign-in—no second key. Included credits apply first; additional use is metered."
   },
   bedrock: {
     model: "openai.gpt-oss-120b",
@@ -38,7 +38,7 @@ const providerDefaults = {
 
 let state = null;
 let currentView = "operator";
-let selectedProvider = "kimi";
+let selectedProvider = "amos-hosted";
 let pendingApproval = null;
 let running = false;
 let attachments = [];
@@ -1478,6 +1478,7 @@ function renderSettings() {
   elements.apiKeyHelp.textContent = settings.hasApiKey
     ? "A credential is stored securely. Leave blank to keep it."
     : (providerDefaults[selectedProvider]?.credential || "Provider credential");
+  renderProviderFields();
   elements.systemCard.replaceChildren(
     strong(`${state.system.arch.toUpperCase()} · ${state.system.memoryGb} GB memory`),
     text(state.system.localRecommendation)
@@ -1585,6 +1586,14 @@ function selectProvider(providerId) {
   }
   renderProviderSelection();
   elements.apiKeyHelp.textContent = defaults.credential || "Provider credential";
+  renderProviderFields();
+}
+
+function renderProviderFields() {
+  const managed = selectedProvider === "amos-hosted";
+  elements.modelInput.closest(".field")?.classList.toggle("hidden", managed);
+  elements.baseUrlInput.closest(".field")?.classList.toggle("hidden", managed);
+  elements.apiKeyInput.closest(".field")?.classList.toggle("hidden", managed);
 }
 
 function renderProviderSelection() {

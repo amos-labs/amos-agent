@@ -14,11 +14,11 @@ const PROVIDERS = {
   },
   "amos-hosted": {
     id: "amos-hosted",
-    displayName: "AMOS Intelligence",
-    description: "AMOS-managed open-weight inference hosted in AWS.",
+    displayName: "AMOS Hosted",
+    description: "Ready with your AMOS sign-in. Included credits apply first; additional use is metered.",
     deployment: "amos",
     defaultBaseUrl: "",
-    defaultModel: "kimi-k3",
+    defaultModel: "auto",
     apiKeyEnv: ["AMOS_MODEL_API_KEY"],
     apiKeyRequired: false,
     usesAmosIdentity: true,
@@ -87,22 +87,31 @@ export function resolveModelConfig(env = process.env) {
 
   const region = env.AWS_REGION || env.AWS_DEFAULT_REGION || "us-east-1";
   const bedrockBaseUrl = `https://bedrock-mantle.${region}.api.aws/v1`;
-  const apiKey = env.AMOS_MODEL_API_KEY ||
-    provider.apiKeyEnv?.map((name) => env[name]).find(Boolean) ||
-    provider.defaultApiKey ||
-    "";
+  const hostedBaseUrl = hostedInferenceBaseUrl(env.AMOS_MCP_URL);
+  const hosted = provider.id === "amos-hosted";
+  const apiKey = provider.usesAmosIdentity
+    ? ""
+    : env.AMOS_MODEL_API_KEY ||
+      provider.apiKeyEnv?.map((name) => env[name]).find(Boolean) ||
+      provider.defaultApiKey ||
+      "";
 
   return {
     provider: provider.id,
     displayName: provider.displayName,
     deployment: provider.deployment,
     apiKey,
-    baseUrl:
-      env.AMOS_MODEL_BASE_URL ||
-      env.MOONSHOT_BASE_URL ||
-      env.KIMI_BASE_URL ||
-      (provider.id === "bedrock" ? bedrockBaseUrl : provider.defaultBaseUrl),
-    model: env.AMOS_MODEL || env.KIMI_MODEL || provider.defaultModel,
+    // AMOS Hosted is a first-party trust boundary. Never let a stale BYOK
+    // endpoint redirect the user's AMOS bearer token away from the connected
+    // AMOS origin, and never let a provider-specific model bypass server-side
+    // routing.
+    baseUrl: hosted
+      ? hostedBaseUrl
+      : env.AMOS_MODEL_BASE_URL ||
+        env.MOONSHOT_BASE_URL ||
+        env.KIMI_BASE_URL ||
+        (provider.id === "bedrock" ? bedrockBaseUrl : provider.defaultBaseUrl),
+    model: hosted ? "auto" : env.AMOS_MODEL || env.KIMI_MODEL || provider.defaultModel,
     reasoningEffort: env.AMOS_MODEL_REASONING_EFFORT || env.KIMI_REASONING_EFFORT || "max",
     maxCompletionTokens: boundedInt(
       env.AMOS_MODEL_MAX_COMPLETION_TOKENS || env.KIMI_MAX_COMPLETION_TOKENS,
@@ -125,6 +134,14 @@ export function resolveModelConfig(env = process.env) {
         : booleanValue(env.AMOS_MODEL_SUPPORTS_TOOLS)
     }
   };
+}
+
+export function hostedInferenceBaseUrl(mcpUrl = "https://app.amoslabs.com/mcp") {
+  const url = new URL(mcpUrl);
+  url.pathname = "/v1";
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/, "");
 }
 
 export function validateModelConfig(config) {

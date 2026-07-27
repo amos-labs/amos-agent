@@ -11,30 +11,40 @@ identity or authority.
 
 | Profile | Inference location | Credential | Best fit |
 | --- | --- | --- | --- |
-| AMOS Intelligence | AMOS-managed AWS | AMOS-backed identity | Managed open-weight/private inference |
+| AMOS Hosted | AMOS-managed AWS | AMOS-backed identity | Zero-config managed inference with included credits and metered overage |
 | Amazon Bedrock | Customer or AMOS AWS | Bedrock credential adapter | AWS-standardized and sovereign deployments |
 | Compatible endpoint | Customer-selected HTTPS service | Endpoint credential | Existing model gateways or private serving |
 | Provider API | Provider cloud | Provider API key | Frontier capability without infrastructure |
 | Ollama | User computer | Usually none | Supported local development/offline work |
 | llama.cpp | User computer | Usually none | Direct GGUF/local serving |
 
-## AMOS Intelligence
+## AMOS Hosted
 
 AMOS-managed inference in AWS is for customers who want a managed model
 deployment without reconnecting company systems or operating serving
-infrastructure.
+infrastructure. It is the default Desktop profile after AMOS sign-in.
 
 ```dotenv
 AMOS_MODEL_PROVIDER=amos-hosted
-AMOS_MODEL_BASE_URL=https://inference.example.com/v1
-AMOS_MODEL=your-model
+AMOS_MCP_URL=https://app.amoslabs.com/mcp
+AMOS_MODEL=auto
 ```
 
 The profile obtains short-lived inference authorization from the connected AMOS
 identity. Usage metering and tenant attribution stay attached to the AMOS
-account instead of requiring a second long-lived desktop key.
+account instead of requiring a second long-lived desktop key. The platform
+applies included managed-AI credits first and records additional usage as
+billable overage under the tenant's existing billing relationship.
 
-The exact model and hardware profile may evolve independently from AMOS Desktop.
+Desktop derives the compatible inference endpoint from the AMOS MCP origin
+(`/mcp` becomes `/v1`) and sends only the stable `auto` model alias. The
+platform—not the client—selects the actual provider and model. The exact model,
+provider, and hardware profile may therefore evolve independently from AMOS
+Desktop.
+
+An explicit BYOK, compatible-endpoint, customer-cloud, or local profile always
+remains available. Connecting AMOS only migrates the legacy unconfigured Kimi
+default; it does not overwrite a working user-selected intelligence profile.
 
 ## Amazon Bedrock
 

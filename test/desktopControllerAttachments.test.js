@@ -3,7 +3,40 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DesktopController } from "../src/desktop/controller.js";
+import {
+  DesktopController,
+  shouldActivateAmosHosted
+} from "../src/desktop/controller.js";
+
+test("AMOS sign-in only replaces the legacy unconfigured Kimi default", () => {
+  assert.equal(
+    shouldActivateAmosHosted({
+      provider: "kimi",
+      model: "kimi-k3",
+      baseUrl: "https://api.moonshot.ai/v1",
+      apiKey: ""
+    }),
+    true
+  );
+  assert.equal(
+    shouldActivateAmosHosted({
+      provider: "kimi",
+      model: "kimi-k3",
+      baseUrl: "https://api.moonshot.ai/v1",
+      apiKey: "customer-key"
+    }),
+    false
+  );
+  assert.equal(
+    shouldActivateAmosHosted({
+      provider: "ollama",
+      model: "qwen3:4b",
+      baseUrl: "http://127.0.0.1:11434/v1",
+      apiKey: ""
+    }),
+    false
+  );
+});
 
 test("desktop explicitly promotes selected document attachments into governed company memory", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-controller-attachments-"));

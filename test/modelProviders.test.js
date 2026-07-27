@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   createModelClient,
+  hostedInferenceBaseUrl,
   listModelProviders,
   resolveModelConfig,
   validateModelConfig
@@ -14,10 +15,38 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   assert.ok(providers.some((provider) => provider.id === "ollama" && provider.deployment === "local"));
 });
 
-test("AMOS-hosted provider requires an endpoint and reuses the AMOS identity", () => {
-  const config = resolveModelConfig({ AMOS_MODEL_PROVIDER: "amos-hosted" });
-  assert.deepEqual(validateModelConfig(config), ["AMOS_MODEL_BASE_URL"]);
+test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", () => {
+  const config = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "amos-hosted",
+    AMOS_MCP_URL: "https://app.amoslabs.com/mcp",
+    AMOS_MODEL_API_KEY: "must-not-be-forwarded"
+  });
+  assert.deepEqual(validateModelConfig(config), []);
   assert.equal(config.usesAmosIdentity, true);
+  assert.equal(config.baseUrl, "https://app.amoslabs.com/v1");
+  assert.equal(config.model, "auto");
+  assert.equal(config.apiKey, "");
+});
+
+test("AMOS-hosted endpoint follows a custom AMOS deployment origin", () => {
+  assert.equal(
+    hostedInferenceBaseUrl("https://company.example.com/mcp?ignored=true"),
+    "https://company.example.com/v1"
+  );
+});
+
+test("AMOS-hosted inference ignores stale BYOK routing values", () => {
+  const config = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "amos-hosted",
+    AMOS_MCP_URL: "https://platform.custom.amoslabs.com/mcp",
+    AMOS_MODEL_BASE_URL: "https://api.moonshot.ai/v1",
+    MOONSHOT_BASE_URL: "https://attacker.invalid/v1",
+    KIMI_MODEL: "kimi-k3",
+    AMOS_MODEL: "some-provider-model"
+  });
+
+  assert.equal(config.baseUrl, "https://platform.custom.amoslabs.com/v1");
+  assert.equal(config.model, "auto");
 });
 
 test("OpenAI-compatible client omits reasoning for runtimes without that capability", async () => {
