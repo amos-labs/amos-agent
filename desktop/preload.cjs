@@ -17,6 +17,8 @@ const eventChannels = new Set([
 contextBridge.exposeInMainWorld("amosDesktop", {
   state: () => ipcRenderer.invoke("desktop:state"),
   saveSettings: (settings) => ipcRenderer.invoke("desktop:save-settings", settings),
+  startPersonal: () => ipcRenderer.invoke("desktop:start-personal"),
+  startDemo: () => ipcRenderer.invoke("desktop:start-demo"),
   login: () => ipcRenderer.invoke("desktop:login"),
   logout: () => ipcRenderer.invoke("desktop:logout"),
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),

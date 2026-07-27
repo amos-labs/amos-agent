@@ -83,57 +83,78 @@
         <section id="onboardingView" class="view onboarding hidden">
           <div class="onboarding-copy">
             <span class="eyebrow accent">WELCOME TO AMOS DESKTOP</span>
-            <h1>Private intelligence.<br>One company to operate.</h1>
+            <h1>Start useful.<br>Connect when ready.</h1>
             <p>
-              Choose where intelligence runs, connect the AMOS company brain, and define
-              what this computer is allowed to touch.
+              Work privately on this computer, explore a live sample company, or connect
+              your own AMOS company. You can change paths later without losing the local workspace.
             </p>
             <div class="principles">
+              <span>Local first</span>
               <span>Model independent</span>
               <span>Human governed</span>
-              <span>Every action proven</span>
+              <span>Company actions proven</span>
             </div>
           </div>
 
           <div class="setup-panel">
-            <div class="setup-step">
-              <div class="step-number">01</div>
-              <div class="step-content">
-                <h2>Connect your company</h2>
-                <p>AMOS supplies durable company memory, connections, policy, approvals, and receipts.</p>
-                <button id="connectButton" class="button primary">Connect AMOS</button>
-              </div>
-              <span id="connectCheck" class="step-check">—</span>
+            <div class="setup-heading">
+              <span class="eyebrow">CHOOSE A STARTING POINT</span>
+              <h2>What do you want to operate?</h2>
             </div>
-            <div class="setup-step">
-              <div class="step-number">02</div>
-              <div class="step-content">
-                <h2>Choose intelligence</h2>
-                <p id="onboardingProviderText">AMOS Hosted is ready with your account. Bring your own provider, private endpoint, or local model whenever you choose.</p>
-                <button class="button secondary" data-open-settings>Change intelligence</button>
-              </div>
-              <span id="providerCheck" class="step-check">—</span>
+            <div class="start-mode-grid">
+              <button id="localModeButton" class="start-mode-card" type="button">
+                <span class="start-mode-kicker">NO ACCOUNT REQUIRED</span>
+                <strong>My workspace</strong>
+                <span>Code, research, documents, and local automation with the model you choose.</span>
+                <em>Start privately →</em>
+              </button>
+              <button id="demoModeButton" class="start-mode-card featured" type="button">
+                <span class="start-mode-kicker">LIVE SAMPLE COMPANY</span>
+                <strong>Northwind demo</strong>
+                <span>Use real AMOS tools, approvals, receipts, and sample company data.</span>
+                <em>Explore AMOS →</em>
+              </button>
+              <button id="connectButton" class="start-mode-card" type="button">
+                <span class="start-mode-kicker">YOUR ORGANIZATION</span>
+                <strong>My company</strong>
+                <span>Connect durable memory, applications, policy, approvals, and proof.</span>
+                <em>Sign in or create account →</em>
+              </button>
             </div>
-            <div class="setup-step">
-              <div class="step-number">03</div>
-              <div class="step-content">
-                <h2>Grant a local workspace</h2>
-                <p>AMOS only sees files inside the folder you explicitly select.</p>
-                <button id="onboardingWorkspaceButton" class="button secondary">Choose workspace</button>
+            <div class="setup-readiness">
+              <div>
+                <span id="connectCheck" class="step-check">—</span>
+                <span id="boundaryReadinessText">Choose a starting point</span>
               </div>
-              <span id="workspaceCheck" class="step-check">—</span>
+              <div>
+                <span id="providerCheck" class="step-check">—</span>
+                <button class="text-button" data-open-settings>
+                  <span id="onboardingProviderText">Choose intelligence</span>
+                </button>
+              </div>
+              <div>
+                <span id="workspaceCheck" class="step-check">—</span>
+                <button id="onboardingWorkspaceButton" class="text-button">Choose workspace</button>
+              </div>
             </div>
             <button id="enterButton" class="button primary wide" disabled>Enter AMOS Desktop</button>
           </div>
         </section>
 
         <section id="operatorView" class="view operator">
+          <div id="demoBanner" class="demo-banner hidden">
+            <div>
+              <strong>Northwind Labs demo</strong>
+              <span id="demoExpiry">Sample data in a short-lived company.</span>
+            </div>
+            <button id="demoConnectButton" class="button secondary" type="button">Use my company</button>
+          </div>
           <div class="operator-grid">
             <div class="conversation">
               <div class="conversation-heading">
                 <div>
-                  <span class="eyebrow">OPERATE THE COMPANY</span>
-                  <h1>What should move forward?</h1>
+                  <span id="operatorEyebrow" class="eyebrow">OPERATE THE COMPANY</span>
+                  <h1 id="operatorTitle">What should move forward?</h1>
                 </div>
                 <button id="clearButton" class="text-button">Clear session</button>
               </div>
@@ -142,13 +163,14 @@
                 <div class="welcome-message">
                   <div class="agent-avatar">A</div>
                   <div>
-                    <strong>AMOS is ready.</strong>
-                    <p>
+                    <strong id="readyTitle">AMOS is ready.</strong>
+                    <p id="readyDescription">
                       Ask about the company, create something new, or make a change.
                       Consequential actions still wait for the right approval.
                     </p>
                   </div>
                 </div>
+                <div id="starterActions" class="starter-actions"></div>
               </div>
 
               <form id="promptForm" class="composer">
@@ -371,9 +393,10 @@
                 <label for="operatingModeInput">Operating boundary</label>
                 <select id="operatingModeInput" name="operatingMode">
                   <option value="online">Online company — AMOS tools, governance, and proof</option>
+                  <option value="personal">Personal workspace — local files and allowed web, no company</option>
                   <option value="offline">Local-only — no company or public-network tools</option>
                 </select>
-                <small>Local-only mode never uses cached credentials or silently executes queued work when you reconnect.</small>
+                <small>Personal mode can use your chosen cloud model without company access. Local-only never uses network tools.</small>
               </div>
               <div class="field">
                 <label for="modelInput">Model</label>
@@ -393,9 +416,9 @@
                 <div class="field">
                   <label for="reasoningInput">Reasoning</label>
                   <select id="reasoningInput" name="reasoningEffort">
+                    <option value="medium">Balanced (recommended)</option>
                     <option value="max">Maximum</option>
                     <option value="high">High</option>
-                    <option value="medium">Medium</option>
                     <option value="low">Low</option>
                     <option value="none">None</option>
                   </select>

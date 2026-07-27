@@ -15,6 +15,22 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   assert.ok(providers.some((provider) => provider.id === "ollama" && provider.deployment === "local"));
 });
 
+test("Kimi K3 stays on its currently supported max effort while other routes stay flexible", () => {
+  const kimi = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "kimi",
+    AMOS_MODEL_API_KEY: "test-key",
+    AMOS_MODEL_REASONING_EFFORT: "medium"
+  });
+  assert.equal(kimi.reasoningEffort, "max");
+
+  const hosted = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "amos-hosted",
+    AMOS_MCP_URL: "https://app.amoslabs.com/mcp",
+    AMOS_MODEL_REASONING_EFFORT: "medium"
+  });
+  assert.equal(hosted.reasoningEffort, "medium");
+});
+
 test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", () => {
   const config = resolveModelConfig({
     AMOS_MODEL_PROVIDER: "amos-hosted",

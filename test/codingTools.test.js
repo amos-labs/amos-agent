@@ -43,3 +43,36 @@ test("coding tools search and atomically apply a reviewed patch", async () => {
   assert.equal(applied.ok, true);
   assert.equal(await readFile(join(root, "app.js"), "utf8"), "const answer = 42;\n");
 });
+
+test("project inspection produces a bounded briefing without reading secrets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-project-brief-"));
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify({
+      name: "brief-me",
+      scripts: { test: "node --test", lint: "eslint ." },
+      dependencies: { electron: "1.0.0" }
+    })
+  );
+  await writeFile(join(root, "README.md"), "# Brief Me\nA useful project.\n");
+  await writeFile(join(root, ".env"), "TOP_SECRET=never-return-this\n");
+  const tools = new Map(createCodingTools().map((tool) => [tool.name, tool]));
+  const context = {
+    config: {
+      safety: {
+        workspaceRoot: root,
+        allowOutsideWorkspace: false,
+        autoApproveWrites: true,
+        maxOutputBytes: 24_000
+      }
+    },
+    approvals: { confirm: async () => true }
+  };
+
+  const briefing = await tools.get("desktop_inspect_project").handler({}, context);
+  assert.equal(briefing.project, "brief-me");
+  assert.ok(briefing.stack.includes("Electron"));
+  assert.ok(briefing.verification.includes("npm run test"));
+  assert.match(briefing.readme.excerpt, /useful project/);
+  assert.equal(JSON.stringify(briefing).includes("never-return-this"), false);
+});

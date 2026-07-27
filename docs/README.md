@@ -3,6 +3,7 @@
 ## Start here
 
 - [Desktop product, installation, and releases](DESKTOP.md)
+- [First run and operating boundaries](FIRST_RUN.md)
 - [Architecture and trust boundaries](ARCHITECTURE.md)
 - [Authentication and identity](AUTHENTICATION.md)
 - [Intelligence and infrastructure profiles](INTELLIGENCE_PROVIDERS.md)

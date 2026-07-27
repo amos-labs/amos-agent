@@ -56,8 +56,10 @@ const elements = Object.fromEntries(
     "decisionsView", "memoryView", "canvasView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge",
+    "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
-    "connectButton", "connectCheck", "providerCheck", "workspaceCheck", "enterButton",
+    "connectButton", "localModeButton", "demoModeButton", "connectCheck",
+    "providerCheck", "onboardingProviderText", "workspaceCheck", "enterButton", "boundaryReadinessText",
     "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
@@ -77,7 +79,8 @@ const elements = Object.fromEntries(
     "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton",
     "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasBlocks",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
-    "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest"
+    "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
+    "demoBanner", "demoExpiry", "demoConnectButton", "starterActions"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -104,6 +107,9 @@ function bindActions() {
     button.addEventListener("click", () => showView("settings"));
   }
   elements.connectButton.addEventListener("click", connectAmos);
+  elements.localModeButton.addEventListener("click", startPersonal);
+  elements.demoModeButton.addEventListener("click", startDemo);
+  elements.demoConnectButton.addEventListener("click", connectAmos);
   elements.workspaceButton.addEventListener("click", chooseWorkspace);
   elements.onboardingWorkspaceButton.addEventListener("click", chooseWorkspace);
   elements.enterButton.addEventListener("click", () => {
@@ -227,7 +233,9 @@ function render() {
   applyAppearance(state.settings.appearance || "system");
   const needsOnboarding =
     !sessionStorage.getItem("amos-onboarding-complete") &&
-    ((!state.connected && !state.mode?.offline) || !state.configured || !state.settings.workspace);
+    ((!state.connected && !state.mode?.personal && !state.mode?.offline) ||
+      !state.configured ||
+      !state.settings.workspace);
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
@@ -245,33 +253,114 @@ function render() {
   elements.runtimeBadge.textContent = state.configured
     ? `${state.provider.displayName} · ${state.provider.model}`
     : "Intelligence not configured";
-  elements.modeBadge.textContent = state.mode?.offline ? "LOCAL-ONLY" : "ONLINE COMPANY";
+  const demo = state.connectionMode === "demo";
+  elements.modeBadge.textContent = demo
+    ? "NORTHWIND DEMO"
+    : state.mode?.offline
+      ? "LOCAL-ONLY"
+      : state.mode?.personal
+        ? "PERSONAL WORKSPACE"
+        : "ONLINE COMPANY";
   elements.modeBadge.classList.toggle("offline", Boolean(state.mode?.offline));
+  elements.demoBanner.classList.toggle("hidden", !demo);
+  if (demo) {
+    elements.demoExpiry.textContent =
+      `Sample data only · expires ${new Date(state.demo.expiresAt).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit"
+      })}`;
+  }
+  if (state.mode?.offline) {
+    elements.operatorEyebrow.textContent = "WORK OFFLINE";
+    elements.readyTitle.textContent = "Local-only is ready.";
+    elements.readyDescription.textContent =
+      "Work with local code, files, private memory, and any signed company context stored on this computer.";
+    elements.promptInput.placeholder =
+      "Ask about this project, attach a document, paste a screenshot, or describe offline work…";
+  } else if (state.mode?.personal) {
+    elements.operatorEyebrow.textContent = "WORK FROM THIS COMPUTER";
+    elements.readyTitle.textContent = "Your workspace is ready.";
+    elements.readyDescription.textContent =
+      "Understand code, research, create, and automate locally. Nothing here receives company authority.";
+    elements.promptInput.placeholder =
+      "Ask about this project, attach a document, paste a screenshot, or describe work to move forward…";
+  } else if (demo) {
+    elements.operatorEyebrow.textContent = "OPERATE THE SAMPLE COMPANY";
+    elements.readyTitle.textContent = "Northwind Labs is ready.";
+    elements.readyDescription.textContent =
+      "Explore a live sample company with real AMOS tools, approvals, receipts, and governed actions.";
+    elements.promptInput.placeholder =
+      "Ask about Northwind, create something, or make a governed sample-company change…";
+  } else {
+    elements.operatorEyebrow.textContent = "OPERATE THE COMPANY";
+    elements.readyTitle.textContent = "AMOS is ready.";
+    elements.readyDescription.textContent =
+      "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
+    elements.promptInput.placeholder =
+      "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
+  }
+  elements.operatorTitle.textContent = "What should move forward?";
   elements.workspaceLabel.textContent = state.settings.workspace || "Choose a folder";
-  elements.connectButton.textContent = state.connected ? "Reconnect AMOS" : "Connect AMOS";
-  renderStep(elements.connectCheck, state.connected || state.mode?.offline);
+  elements.localModeButton.classList.toggle(
+    "selected",
+    Boolean((state.mode?.personal || state.mode?.offline) && !demo)
+  );
+  elements.demoModeButton.classList.toggle("selected", demo);
+  elements.connectButton.classList.toggle(
+    "selected",
+    Boolean(state.connected && !demo && !state.mode?.personal && !state.mode?.offline)
+  );
+  elements.connectButton.querySelector("strong").textContent =
+    state.connected && !demo ? "Reconnect my company" : "My company";
+  elements.boundaryReadinessText.textContent = demo
+    ? "Northwind demo"
+    : state.connected
+      ? "Company connected"
+      : state.mode?.offline
+        ? "Local-only"
+        : state.mode?.personal
+          ? "Personal workspace"
+          : "Choose a starting point";
+  renderStep(elements.connectCheck, state.connected || state.mode?.personal || state.mode?.offline);
   renderStep(elements.providerCheck, state.configured);
   renderStep(elements.workspaceCheck, Boolean(state.settings.workspace));
+  elements.onboardingProviderText.textContent = state.configured
+    ? `${state.provider.displayName} · ${state.provider.model}`
+    : state.mode?.personal
+      ? "Choose your model"
+      : "Choose intelligence";
   elements.enterButton.disabled = !(
-    (state.connected || state.mode?.offline) &&
+    (state.connected || state.mode?.personal || state.mode?.offline) &&
     state.configured &&
     state.settings.workspace &&
     state.mode?.valid !== false
   );
   elements.disconnectButton.classList.toggle("hidden", !state.connected);
-  elements.approvalsButton.disabled = Boolean(state.mode?.offline);
+  elements.approvalsButton.disabled = Boolean(state.mode?.offline || state.mode?.personal || demo);
   elements.runButton.replaceChildren(
-    document.createTextNode(state.mode?.offline ? "Run locally " : "Run with AMOS "),
+    document.createTextNode(
+      state.mode?.offline
+        ? "Run locally "
+        : state.mode?.personal
+          ? "Run privately "
+          : demo
+            ? "Run in demo "
+            : "Run with AMOS "
+    ),
     text("→")
   );
   const scopeDot = elements.scopeNote.querySelector(".status-dot");
   const scopeText = elements.scopeNote.querySelector("span:last-child");
-  scopeDot.classList.toggle("green", !state.mode?.offline);
+  scopeDot.classList.toggle("green", !state.mode?.offline && !state.mode?.personal);
   scopeText.textContent = state.mode?.offline
     ? state.companyCache?.available
       ? "Local-only · signed company context · no live network"
       : "Local-only · no company or public-network tools"
-    : "AMOS policy and proof are active";
+    : state.mode?.personal
+      ? "Personal workspace · local approvals active · no company access"
+      : demo
+        ? "Northwind sample data · AMOS policy and proof are active"
+        : "AMOS policy and proof are active";
   renderUpdate();
 
   const boundary = {
@@ -285,7 +374,9 @@ function render() {
     ? state.companyCache?.available
       ? "Local-only mode: a server-signed, read-only company briefing is available; live AMOS actions and public-network tools remain absent."
       : "Local-only mode: no live AMOS or public-network tools are exposed to this session."
-    : boundary[state.provider.deployment] || boundary.custom;
+    : state.mode?.personal
+      ? "Personal workspace mode: local tools and allowed web access are active; no AMOS company data or authority is exposed."
+      : boundary[state.provider.deployment] || boundary.custom;
 
   renderSettings();
   renderOfflineModels();
@@ -296,6 +387,7 @@ function render() {
   renderCompanyCache();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
+  renderStarterActions();
 }
 
 function showView(view) {
@@ -1018,12 +1110,21 @@ function renderIdentity() {
   const role = identity?.role || "";
 
   elements.connectionDot.classList.toggle("connected", state.connected && !state.mode?.offline);
-  elements.connectionLabel.textContent = state.mode?.offline
-    ? "Local-only mode"
-    : person || (state.connected ? "AMOS connected" : "AMOS not connected");
+  const demo = state.connectionMode === "demo";
+  elements.connectionLabel.textContent = demo
+    ? "Northwind Labs demo"
+    : state.mode?.offline
+      ? "Local-only mode"
+      : state.mode?.personal
+        ? "Personal workspace"
+        : person || (state.connected ? "AMOS connected" : "AMOS not connected");
   elements.connectionDetail.textContent = state.mode?.offline
     ? "Live company access paused"
-    : state.connected
+    : state.mode?.personal
+      ? "No company data or authority"
+      : demo
+        ? "Short-lived sample company"
+        : state.connected
       ? [company, role].filter(Boolean).join(" · ") || "Company governance active"
       : "Connect your company";
   elements.identityDetail.textContent =
@@ -1032,10 +1133,48 @@ function renderIdentity() {
       : state.connectionMode === "api_key"
         ? "Machine credential · reconnect for personal decisions"
         : "";
-  elements.identityBadge.textContent = person
+  elements.identityBadge.textContent = demo
+    ? "Northwind · demo"
+    : person
     ? `${person}${role ? ` · ${role}` : ""}`
     : "";
-  elements.identityBadge.classList.toggle("hidden", !person);
+  elements.identityBadge.classList.toggle("hidden", !person && !demo);
+}
+
+function renderStarterActions() {
+  if (!state || !elements.starterActions) return;
+  const actions = state.connectionMode === "demo"
+    ? [
+        ["Brief me on Northwind", "Give me an executive briefing on Northwind Labs: what matters, what needs attention, and what I can safely do next."],
+        ["Find a growth opportunity", "Inspect Northwind's current growth signals and propose one useful, governed experiment."],
+        ["Create with approval", "Create a useful customer-facing asset for Northwind and walk me through the approval and receipt flow."],
+        ["Show the proof trail", "Show me recent Northwind activity and explain how AMOS proves what changed and why."]
+      ]
+    : state.mode?.personal || state.mode?.offline
+      ? [
+          ["Brief this project", "Inspect this workspace and give me a concise project briefing: architecture, current state, risks, and the best next task."],
+          ["Explain the architecture", "Inspect this workspace and explain how the main components fit together, citing the files you used."],
+          ["Find the riskiest code", "Inspect this project for the highest-leverage reliability, security, and maintainability risks. Do not change anything yet."],
+          ["Improve something small", "Inspect this workspace, propose one small high-value improvement, and wait for my approval before changing files."]
+        ]
+      : [
+          ["Resume the company", "Resume my company context and tell me what most needs attention right now."],
+          ["Show key decisions", "Show me the consequential work waiting for approval and explain the business impact."],
+          ["Find an automation", "Inspect the company and propose one repetitive workflow AMOS could safely automate."],
+          ["Show recent proof", "Summarize recent company actions, receipts, and what the organization learned from them."]
+        ];
+  elements.starterActions.replaceChildren();
+  for (const [label, prompt] of actions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "starter-action";
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      elements.promptInput.value = prompt;
+      elements.promptInput.focus();
+    });
+    elements.starterActions.append(button);
+  }
 }
 
 function renderDecisions() {
@@ -1617,6 +1756,35 @@ async function connectAmos() {
   }
 }
 
+async function startPersonal() {
+  setButtonBusy(elements.localModeButton, true, "Preparing…");
+  try {
+    state = await api.startPersonal();
+    toast("Personal workspace selected. Choose a model and workspace to begin.");
+    render();
+    if (!state.configured || state.settings.provider === "amos-hosted") showView("settings");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.localModeButton, false, "My workspace");
+  }
+}
+
+async function startDemo() {
+  setButtonBusy(elements.demoModeButton, true, "Opening demo…");
+  try {
+    state = await api.startDemo();
+    sessionStorage.setItem("amos-onboarding-complete", "true");
+    toast("Northwind Labs is ready. Everything you see is sample data.");
+    render();
+    showView("operator");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.demoModeButton, false, "Northwind demo");
+  }
+}
+
 async function disconnectAmos() {
   try {
     state = await api.logout();
@@ -1933,8 +2101,10 @@ async function runTask(event) {
       const latest = await api.state();
       state.privateMemory = latest.privateMemory || [];
       state.offlineProposals = latest.offlineProposals || [];
+      state.localReceipts = latest.localReceipts || [];
       renderPrivateMemory();
       renderDecisions();
+      renderActivity();
     } catch {
       // Task completion must not be masked if a local memory refresh fails.
     }
@@ -1962,10 +2132,13 @@ async function clearSession() {
   activeCanvasId = null;
   updateAttachments([]);
   const welcome = elements.messages.querySelector(".welcome-message");
+  const starters = elements.messages.querySelector(".starter-actions");
   elements.messages.replaceChildren();
   if (welcome) elements.messages.append(welcome);
+  if (starters) elements.messages.append(starters);
   elements.liveEvents.replaceChildren(emptyLiveState());
   renderCanvas();
+  renderStarterActions();
 }
 
 function addMessage(role, content) {
@@ -2147,12 +2320,33 @@ function renderLiveEvent(event) {
 function renderActivity() {
   if (!state) return;
   elements.activityList.replaceChildren();
-  if (!state.activity?.length) {
+  const receipts = Array.isArray(state.localReceipts) ? state.localReceipts : [];
+  if (!state.activity?.length && receipts.length === 0) {
     const empty = document.createElement("div");
     empty.className = "activity-empty";
     empty.textContent = "Activity and proof will appear after AMOS begins working.";
     elements.activityList.append(empty);
     return;
+  }
+  for (const receipt of receipts.slice(0, 25)) {
+    const row = document.createElement("div");
+    row.className = "activity-item local-receipt";
+    const type = document.createElement("span");
+    type.className = "activity-type";
+    type.textContent = "receipt";
+    const summary = document.createElement("span");
+    summary.className = "activity-summary";
+    summary.textContent =
+      `${receipt.status} · ${receipt.objective || "local task"} · sha256:${receipt.digest.slice(0, 12)}`;
+    const time = document.createElement("time");
+    time.className = "activity-time";
+    time.dateTime = receipt.recordedAt;
+    time.textContent = new Date(receipt.recordedAt).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+    row.append(type, summary, time);
+    elements.activityList.append(row);
   }
   for (const item of [...state.activity].reverse()) {
     const row = document.createElement("div");
@@ -2233,6 +2427,11 @@ async function resolveApproval(approved) {
 
 function setButtonBusy(button, busy, label) {
   button.disabled = busy;
+  if (button.classList.contains("start-mode-card")) {
+    button.classList.toggle("busy", busy);
+    button.setAttribute("aria-busy", String(busy));
+    return;
+  }
   button.textContent = label;
 }
 

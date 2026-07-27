@@ -15,7 +15,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   provider: "amos-hosted",
   model: "auto",
   baseUrl: "",
-  reasoningEffort: "max",
+  reasoningEffort: "medium",
   operatingMode: "online",
   appearance: "system",
   workspace: "",
@@ -93,7 +93,9 @@ export class DesktopSettingsStore {
 export function sanitizeSettings(input = {}) {
   const provider = clean(input.provider, 64) || DEFAULT_DESKTOP_SETTINGS.provider;
   if (!PROVIDER_IDS.has(provider)) throw new Error(`Unsupported intelligence provider: ${provider}`);
-  const operatingMode = input.operatingMode === "offline" ? "offline" : "online";
+  const operatingMode = ["online", "personal", "offline"].includes(input.operatingMode)
+    ? input.operatingMode
+    : "online";
   if (operatingMode === "offline" && !["ollama", "llama-cpp"].includes(provider)) {
     throw new Error("Local-only mode requires an Ollama or llama.cpp intelligence profile");
   }
@@ -103,7 +105,7 @@ export function sanitizeSettings(input = {}) {
     baseUrl: validateEndpoint(input.baseUrl),
     reasoningEffort: ["none", "low", "medium", "high", "max"].includes(input.reasoningEffort)
       ? input.reasoningEffort
-      : "max",
+      : "medium",
     operatingMode,
     appearance: ["system", "light", "dark"].includes(input.appearance)
       ? input.appearance
