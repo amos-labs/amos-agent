@@ -63,6 +63,33 @@ test("expired demo credentials never keep AMOS Desktop connected", () => {
   );
 });
 
+test("active AMOS members cannot replace their company with the Northwind demo", async () => {
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-active-account",
+    settingsStore: {
+      read: async () => ({
+        operatingMode: "online",
+        amosMcpUrl: "https://app.amoslabs.com/mcp"
+      })
+    },
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = () => ({
+    status: async () => ({ access_token: "active-member-token", demo: false })
+  });
+  controller.accountStatusFor = async () => ({
+    subscriptionStatus: "trialing",
+    billingExempt: false,
+    workspaceActive: true
+  });
+
+  await assert.rejects(
+    controller.startDemo(),
+    /workspace is already active.*connect data, applications, memory, and policy/i
+  );
+});
+
 test("desktop explicitly promotes selected document attachments into governed company memory", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-controller-attachments-"));
   const path = join(root, "brief.md");

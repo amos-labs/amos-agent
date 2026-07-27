@@ -70,6 +70,33 @@ export class DesktopRemoteStateClient {
     };
   }
 
+  async intelligenceStatus({ signal = null } = {}) {
+    let token = await this.oauth.getAccessToken();
+    let response = await this.fetchIntelligenceStatus(token, { signal });
+    if (response.status === 401) {
+      token = await this.oauth.getAccessToken({ forceRefresh: true });
+      response = await this.fetchIntelligenceStatus(token, { signal });
+    }
+
+    const payload = await parseJsonResponse(response, "AMOS account status");
+    if (!response.ok) {
+      throw new Error(
+        payload?.error?.message ||
+          payload?.message ||
+          `AMOS account status request failed with ${response.status}`
+      );
+    }
+    const subscriptionStatus = String(payload?.billing?.subscription_status || "none");
+    const billingExempt = payload?.billing?.billing_exempt === true;
+    return {
+      ready: payload?.ready === true,
+      subscriptionStatus,
+      billingExempt,
+      workspaceActive:
+        billingExempt || subscriptionStatus === "active" || subscriptionStatus === "trialing"
+    };
+  }
+
   async companyCache({
     identity,
     ttlSeconds = DEFAULT_COMPANY_CACHE_TTL_SECONDS
@@ -164,6 +191,29 @@ export class DesktopRemoteStateClient {
     } catch (error) {
       if (signal?.aborted) throw createAbortError();
       if (error.name === "AbortError") throw new Error("AMOS approvals request timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      unlink();
+    }
+  }
+
+  async fetchIntelligenceStatus(token, { signal = null } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const unlink = linkAbortSignal(signal, controller);
+    try {
+      return await this.fetch(`${amosOrigin(this.mcpUrl)}/v1/intelligence/status`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json"
+        },
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (signal?.aborted) throw createAbortError();
+      if (error.name === "AbortError") throw new Error("AMOS account status request timed out");
       throw error;
     } finally {
       clearTimeout(timer);

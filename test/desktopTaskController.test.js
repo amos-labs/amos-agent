@@ -104,3 +104,48 @@ test("desktop cancellation aborts the active task signal and pending local appro
   assert.equal(result.canceled, true);
   assert.equal(abortController.signal.aborted, true);
 });
+
+test("desktop demo skips user-bound restart checkpoints without blocking the task", async () => {
+  const taskStore = await checkpointStore();
+  const emitted = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-demo-task",
+    settingsStore: settingsStore(),
+    taskCheckpointStore: taskStore,
+    openBrowser: async () => {},
+    emit: (channel, payload) => emitted.push({ channel, payload })
+  });
+  controller.oauthFor = () => ({
+    status: async () => ({
+      access_token: "demo-token",
+      demo: true,
+      expires_at: Date.now() + 60_000
+    })
+  });
+  controller.activeTask = {
+    id: "demo-task-1",
+    abortController: new AbortController(),
+    checkpointed: false,
+    phase: "starting",
+    summary: "Preparing the task"
+  };
+
+  const result = await controller.startOnlineTaskCheckpoint({
+    id: "demo-task-1",
+    prompt: "Brief me on Northwind",
+    references: [],
+    settings: await settingsStore().read()
+  });
+
+  assert.equal(result, null);
+  assert.equal(controller.activeTask.checkpointed, false);
+  assert.deepEqual(await taskStore.list(), []);
+  assert.ok(
+    emitted.some(
+      (event) =>
+        event.channel === "agent:event" &&
+        event.payload.phase === "checkpoint_unavailable" &&
+        /Short-lived demo tasks/.test(event.payload.summary)
+    )
+  );
+});

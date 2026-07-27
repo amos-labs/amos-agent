@@ -254,6 +254,8 @@ function render() {
     ? `${state.provider.displayName} · ${state.provider.model}`
     : "Intelligence not configured";
   const demo = state.connectionMode === "demo";
+  const activeAccount =
+    state.connectionMode === "user" && state.accountStatus?.workspaceActive === true;
   elements.modeBadge.textContent = demo
     ? "NORTHWIND DEMO"
     : state.mode?.offline
@@ -306,12 +308,25 @@ function render() {
     Boolean((state.mode?.personal || state.mode?.offline) && !demo)
   );
   elements.demoModeButton.classList.toggle("selected", demo);
+  elements.demoModeButton.classList.toggle("hidden", activeAccount);
   elements.connectButton.classList.toggle(
     "selected",
     Boolean(state.connected && !demo && !state.mode?.personal && !state.mode?.offline)
   );
-  elements.connectButton.querySelector("strong").textContent =
-    state.connected && !demo ? "Reconnect my company" : "My company";
+  const connectKicker = elements.connectButton.querySelector(".start-mode-kicker");
+  const connectTitle = elements.connectButton.querySelector("strong");
+  const connectDescription = elements.connectButton.querySelector("strong + span");
+  const connectAction = elements.connectButton.querySelector("em");
+  connectKicker.textContent = activeAccount ? "YOUR ACTIVE AMOS COMPANY" : "YOUR ORGANIZATION";
+  connectTitle.textContent = activeAccount
+    ? "Build my company brain"
+    : state.connected && !demo
+      ? "Reconnect my company"
+      : "My company";
+  connectDescription.textContent = activeAccount
+    ? "Connect data, applications, durable memory, authority, and proof for your real organization."
+    : "Connect durable memory, applications, policy, approvals, and proof.";
+  connectAction.textContent = activeAccount ? "Continue setup →" : "Sign in or create account →";
   elements.boundaryReadinessText.textContent = demo
     ? "Northwind demo"
     : state.connected

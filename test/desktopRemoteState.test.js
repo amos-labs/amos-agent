@@ -99,6 +99,39 @@ test("Desktop treats a non-approver role as a bounded unavailable inbox", async 
   assert.deepEqual(approvals.pending_operations, []);
 });
 
+test("Desktop derives active workspace eligibility from live AMOS billing state", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "member-token"; } }
+    },
+    async (url, options) => {
+      requests.push({ url: String(url), options });
+      return response(200, {
+        provider: "amos-hosted",
+        model: "auto",
+        ready: true,
+        billing: {
+          subscription_status: "trialing",
+          billing_exempt: false,
+          included_credit_remaining_usd: "20.00"
+        }
+      });
+    }
+  );
+
+  const status = await client.intelligenceStatus();
+  assert.deepEqual(status, {
+    ready: true,
+    subscriptionStatus: "trialing",
+    billingExempt: false,
+    workspaceActive: true
+  });
+  assert.equal(requests[0].url, "https://app.amoslabs.com/v1/intelligence/status");
+  assert.equal(requests[0].options.headers.Authorization, "Bearer member-token");
+});
+
 test("approval links are pinned to the connected AMOS origin", () => {
   const id = "22222222-2222-2222-2222-222222222222";
   assert.equal(
