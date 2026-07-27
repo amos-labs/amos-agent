@@ -33,3 +33,17 @@ test("every renderer element reference is registered and present in the HTML she
     "all registered renderer elements must exist in index.html"
   );
 });
+
+test("the running-task composer stays available for steering through the allowlisted IPC bridge", async () => {
+  const [javascript, preload, main] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(javascript, /await steerTask\(prompt\)/);
+  assert.match(javascript, /Working · steer or stop/);
+  assert.doesNotMatch(javascript, /elements\.promptInput\.disabled = value/);
+  assert.match(preload, /desktop:steer-task/);
+  assert.match(main, /controller\.steerTask/);
+});

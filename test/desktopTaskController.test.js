@@ -97,12 +97,55 @@ test("desktop cancellation aborts the active task signal and pending local appro
     id: "task-2",
     abortController,
     checkpointed: false,
+    acceptingSteering: true,
     phase: "acting",
     summary: "Running work"
   };
   const result = await controller.cancelTask("task-2");
   assert.equal(result.canceled, true);
   assert.equal(abortController.signal.aborted, true);
+});
+
+test("desktop queues user steering on the active task and records the direction", async () => {
+  const emitted = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-steer",
+    settingsStore: settingsStore(),
+    openBrowser: async () => {},
+    emit: (channel, payload) => emitted.push({ channel, payload })
+  });
+  controller.activeTask = {
+    id: "task-steer",
+    abortController: new AbortController(),
+    checkpointed: false,
+    acceptingSteering: true,
+    objective: "Inspect issue 312",
+    steeringQueue: [],
+    steeringCount: 0,
+    receiptEvents: [],
+    phase: "acting",
+    summary: "Inspecting the issue"
+  };
+
+  const result = await controller.steerTask(
+    "task-steer",
+    "Also compare the Plumbline release."
+  );
+
+  assert.equal(result.queued, true);
+  assert.equal(controller.activeTask.steeringQueue.length, 1);
+  assert.equal(
+    controller.activeTask.steeringQueue[0].content,
+    "Also compare the Plumbline release."
+  );
+  assert.match(controller.activeTask.objective, /User steering/);
+  assert.ok(
+    emitted.some(
+      (event) =>
+        event.channel === "agent:event" &&
+        event.payload.phase === "steering_queued"
+    )
+  );
 });
 
 test("desktop demo skips user-bound restart checkpoints without blocking the task", async () => {

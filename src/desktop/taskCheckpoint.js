@@ -108,6 +108,10 @@ export class TaskCheckpointStore {
     const checkpoint = normalizeCheckpoint({
       ...current,
       status: input.status || current.status,
+      objective:
+        input.objective === undefined
+          ? current.objective
+          : input.objective,
       progress: {
         ...current.progress,
         phase: input.phase || current.progress.phase,

@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   removeOfflineModel: (id) => ipcRenderer.invoke("desktop:remove-offline-model", id),
   activateOfflineModel: (id) => ipcRenderer.invoke("desktop:activate-offline-model", id),
   run: (input) => ipcRenderer.invoke("desktop:run", input),
+  steerTask: (id, content) =>
+    ipcRenderer.invoke("desktop:steer-task", { id, content }),
   cancelTask: (id) => ipcRenderer.invoke("desktop:cancel-task", id),
   clear: () => ipcRenderer.invoke("desktop:clear"),
   removeCanvas: (id) => ipcRenderer.invoke("desktop:remove-canvas", id),

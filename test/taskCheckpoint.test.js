@@ -79,6 +79,7 @@ test("resuming revalidates identity, company drift, and pending approvals withou
     status: "interrupted",
     phase: "acting",
     summary: "Drafted a landing page",
+    objective: "Improve campaign conversion\n\nUser steering: prioritize mobile traffic",
     completedStep: "Completed create_landing_page"
   });
   const current = await store.get(checkpoint.id);
@@ -97,6 +98,7 @@ test("resuming revalidates identity, company drift, and pending approvals withou
   assert.match(prompt, /Do not repeat an action unless current receipts prove it did not already complete/i);
   assert.match(prompt, /Company_state/i);
   assert.match(prompt, /Completed create_landing_page/);
+  assert.match(prompt, /prioritize mobile traffic/);
   assert.equal(reconciliation.replayAllowed, false);
 
   assert.throws(
