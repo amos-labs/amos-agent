@@ -10,6 +10,7 @@ const PROVIDERS = {
     defaultModel: "kimi-k3",
     apiKeyEnv: ["MOONSHOT_API_KEY", "KIMI_API_KEY"],
     apiKeyRequired: true,
+    supportedReasoningEfforts: ["max"],
     capabilities: { tools: true, vision: true, reasoning: true }
   },
   "amos-hosted": {
@@ -96,6 +97,10 @@ export function resolveModelConfig(env = process.env) {
       provider.defaultApiKey ||
       "";
 
+  const model = hosted ? "auto" : env.AMOS_MODEL || env.KIMI_MODEL || provider.defaultModel;
+  const requestedReasoningEffort =
+    env.AMOS_MODEL_REASONING_EFFORT || env.KIMI_REASONING_EFFORT || "max";
+
   return {
     provider: provider.id,
     displayName: provider.displayName,
@@ -111,8 +116,12 @@ export function resolveModelConfig(env = process.env) {
         env.MOONSHOT_BASE_URL ||
         env.KIMI_BASE_URL ||
         (provider.id === "bedrock" ? bedrockBaseUrl : provider.defaultBaseUrl),
-    model: hosted ? "auto" : env.AMOS_MODEL || env.KIMI_MODEL || provider.defaultModel,
-    reasoningEffort: env.AMOS_MODEL_REASONING_EFFORT || env.KIMI_REASONING_EFFORT || "max",
+    model,
+    reasoningEffort: normalizeReasoningEffort(
+      provider,
+      model,
+      requestedReasoningEffort
+    ),
     maxCompletionTokens: boundedInt(
       env.AMOS_MODEL_MAX_COMPLETION_TOKENS || env.KIMI_MAX_COMPLETION_TOKENS,
       8192,
@@ -134,6 +143,17 @@ export function resolveModelConfig(env = process.env) {
         : booleanValue(env.AMOS_MODEL_SUPPORTS_TOOLS)
     }
   };
+}
+
+function normalizeReasoningEffort(provider, model, requested) {
+  if (
+    provider.id === "kimi" &&
+    /^kimi-k3(?:$|[-:])/i.test(model) &&
+    !provider.supportedReasoningEfforts.includes(requested)
+  ) {
+    return "max";
+  }
+  return requested;
 }
 
 export function hostedInferenceBaseUrl(mcpUrl = "https://app.amoslabs.com/mcp") {
