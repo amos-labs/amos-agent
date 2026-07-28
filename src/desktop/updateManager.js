@@ -38,6 +38,7 @@ export class DesktopUpdateManager {
     this.initialTimer = null;
     this.intervalTimer = null;
     this.started = false;
+    this.installRequested = false;
     this.lastNotifiedVersion = null;
     this.listeners = [];
     this.snapshot = {
@@ -62,7 +63,12 @@ export class DesktopUpdateManager {
     }
     this.started = true;
     this.updater.autoDownload = false;
-    this.updater.autoInstallOnAppQuit = false;
+    // On macOS electron-updater first hands the downloaded ZIP to
+    // Squirrel.Mac, which stages it with ShipIt. Keeping install-on-quit
+    // enabled lets that native handoff finish before an explicit restart and
+    // also guarantees the signed update is applied on the next clean quit.
+    this.updater.autoInstallOnAppQuit = true;
+    this.updater.autoRunAppAfterInstall = true;
     this.updater.allowPrerelease = false;
     this.updater.allowDowngrade = false;
     this.bind("checking-for-update", () => {
@@ -192,7 +198,18 @@ export class DesktopUpdateManager {
     if (this.snapshot.status !== "downloaded") {
       throw new Error("Download the AMOS Desktop update before installing it");
     }
+    this.installRequested = true;
+    this.publish({
+      status: "installing",
+      progress: 100,
+      message: "Restarting AMOS Desktop to install the signed update…"
+    });
     this.updater.quitAndInstall(false, true);
+    return this.state();
+  }
+
+  isInstalling() {
+    return this.installRequested;
   }
 
   stop() {

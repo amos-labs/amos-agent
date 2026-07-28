@@ -10,6 +10,7 @@ import {
   shell,
   Tray
 } from "electron";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
@@ -159,6 +160,9 @@ function trayUpdateItem() {
       click: () => installUpdate()
     };
   }
+  if (updateState.status === "installing") {
+    return { label: "Restarting to install update…", enabled: false };
+  }
   if (updateState.status === "checking") {
     return { label: "Checking for updates…", enabled: false };
   }
@@ -190,6 +194,32 @@ function notifyUpdate({ title, body }) {
   notification.on("click", showWindow);
   notification.show();
   return true;
+}
+
+function createUpdaterLogger(logPath) {
+  mkdirSync(dirname(logPath), { recursive: true });
+  const write = (level, value) => {
+    const detail = value instanceof Error
+      ? value.stack || value.message
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value);
+    try {
+      appendFileSync(logPath, `${new Date().toISOString()} [${level}] ${detail}\n`, {
+        encoding: "utf8",
+        mode: 0o600
+      });
+    } catch {
+      // An update must not break app startup merely because diagnostics cannot
+      // be written. The updater will still surface its user-facing state.
+    }
+  };
+  return {
+    debug: (value) => write("debug", value),
+    info: (value) => write("info", value),
+    warn: (value) => write("warn", value),
+    error: (value) => write("error", value)
+  };
 }
 
 function installUpdate() {
@@ -432,6 +462,7 @@ app.whenReady().then(async () => {
   registerIpc();
   createWindow();
   createTray();
+  autoUpdater.logger = createUpdaterLogger(join(app.getPath("logs"), "amos-updater.log"));
   updateManager = new DesktopUpdateManager({
     updater: autoUpdater,
     currentVersion: app.getVersion(),
@@ -459,8 +490,11 @@ app.on("window-all-closed", () => {
 app.on("before-quit", () => {
   quitting = true;
   clearInterval(remoteSyncTimer);
-  updateManager?.stop();
   controller?.interruptActiveTask().catch(() => {});
   controller?.resetRuntime();
   offlineManager?.shutdown().catch(() => {});
+});
+
+app.on("will-quit", () => {
+  updateManager?.stop();
 });
