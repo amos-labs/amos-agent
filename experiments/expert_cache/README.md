@@ -101,6 +101,7 @@ npm run experiment:expert-cache -- \
   --range-latency-ms MEASURED_RANGE_LATENCY_MS \
   --upload-gib-s MEASURED_METAL_UPLOAD_GIB_PER_SECOND \
   --slot-remap-ms MEASURED_SLOT_REMAP_MS \
+  --output experiments/expert_cache/output/simulation.json \
   --json
 ```
 

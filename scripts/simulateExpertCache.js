@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   EXPERT_CACHE_POLICIES,
   parseExpertTrace,
@@ -10,6 +11,7 @@ import {
 const args = process.argv.slice(2);
 const tracePath = readOption(args, "--trace");
 const profileTracePath = readOption(args, "--profile-trace");
+const outputPath = readOption(args, "--output");
 const policies = listOption(args, "--policies", EXPERT_CACHE_POLICIES);
 const slots = listOption(args, "--slots", [4, 8, 16, 32, 64, 96], Number);
 const budgetsGiB = listOption(args, "--budgets-gib", [], Number);
@@ -52,7 +54,7 @@ if (!tracePath) {
     "[--acceptance-rates 0.5,0.75,1] [--concurrency 1,2] " +
     "[--profile-trace TRAINING_TRACE.jsonl] " +
     "[--read-gib-s N --range-latency-ms N --upload-gib-s N " +
-    "--slot-remap-ms N] [--json]"
+    "--slot-remap-ms N] [--output RESULTS.json] [--json]"
   );
   process.exit(2);
 }
@@ -78,27 +80,30 @@ const results = sweepExpertCache(trace, {
 const rejectedBudgets = budgetsBytes.filter(
   (budget) => slotsForBudget(trace.metadata, budget) < 1
 );
+const report = {
+  metadata: trace.metadata,
+  profileMetadata: profileTrace
+    ? {
+        model: profileTrace.metadata.model,
+        captureMode: profileTrace.metadata.captureMode,
+        tokenCount: profileTrace.tokens.length
+      }
+    : null,
+  rejectedBudgets,
+  results
+};
+
+if (outputPath) {
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+}
 
 if (json) {
-  console.log(
-    JSON.stringify(
-      {
-        metadata: trace.metadata,
-        profileMetadata: profileTrace
-          ? {
-              model: profileTrace.metadata.model,
-              captureMode: profileTrace.metadata.captureMode,
-              tokenCount: profileTrace.tokens.length
-            }
-          : null,
-        rejectedBudgets,
-        results
-      },
-      null,
-      2
-    )
-  );
+  console.log(JSON.stringify(report, null, 2));
   process.exit(0);
+}
+if (outputPath) {
+  console.log(`Wrote ${outputPath}`);
 }
 
 console.log(
