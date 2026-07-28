@@ -359,6 +359,13 @@ def main() -> int:
 
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers.utils import is_kernels_available
+
+    if not is_kernels_available():
+        raise RuntimeError(
+            "Pinned Transformers requires kernels>=0.15.2,<0.16 for native "
+            "MXFP4. Refusing the silent BF16 dequantization fallback."
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.model,
@@ -376,6 +383,16 @@ def main() -> int:
     )
     model.eval()
     config = model.config
+    expert_classes = {
+        module.__class__.__name__
+        for name, module in model.named_modules()
+        if name.endswith(".mlp.experts")
+    }
+    if expert_classes != {"Mxfp4GptOssExperts"}:
+        raise RuntimeError(
+            "Expected the native MXFP4 expert runtime, found "
+            f"{sorted(expert_classes)}. Refusing a numerically different trace."
+        )
     layers = int(config.num_hidden_layers)
     experts_per_layer = int(config.num_local_experts)
     active_experts = int(config.num_experts_per_tok)
@@ -393,6 +410,8 @@ def main() -> int:
             f"model:{args.revision};transformers:{TRANSFORMERS_REVISION}"
         ),
         "capture_mode": args.capture_mode,
+        "expert_runtime": "Mxfp4GptOssExperts",
+        "weight_quantization": "mxfp4",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     if args.capture_mode == "sampled":

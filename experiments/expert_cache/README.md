@@ -12,6 +12,10 @@ enter the trace.
 - a hardware-appropriate PyTorch build; and
 - the pinned Transformers revision in `requirements-reference.txt`.
 
+The requirements also pin the narrow `kernels` version accepted by that
+Transformers revision. The capture fails closed rather than silently
+dequantizing the official MXFP4 weights to BF16.
+
 Create an isolated environment on the reference host:
 
 ```bash

@@ -57,6 +57,7 @@ def inspect_checkpoint(args: argparse.Namespace) -> dict[str, Any]:
             revision=args.revision,
             cache_dir=str(args.cache_dir) if args.cache_dir else None,
             allow_patterns=["*.json", "*.safetensors", "*.model"],
+            ignore_patterns=["original/*"],
         )
     )
     config = json.loads((snapshot / "config.json").read_text(encoding="utf-8"))

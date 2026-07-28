@@ -100,7 +100,6 @@ source "${ROOT}/venv/bin/activate"
 python -m pip install --upgrade pip wheel
 python -m pip install torch --index-url https://download.pytorch.org/whl/cu128
 python -m pip install -r experiments/expert_cache/requirements-reference.txt
-python -m pip install kernels
 python -m pip freeze > "${RESULTS}/python-freeze.txt"
 nvidia-smi > "${RESULTS}/nvidia-smi-start.txt"
 
