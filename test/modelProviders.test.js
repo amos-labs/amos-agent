@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  AMOS_INTELLIGENCE_PROFILES,
   createModelClient,
   hostedInferenceBaseUrl,
+  intelligenceProfileForReasoning,
   listModelProviders,
   resolveModelConfig,
   validateModelConfig
@@ -13,6 +15,25 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   assert.ok(providers.some((provider) => provider.id === "amos-hosted" && provider.deployment === "amos"));
   assert.ok(providers.some((provider) => provider.id === "bedrock" && provider.deployment === "customer-cloud"));
   assert.ok(providers.some((provider) => provider.id === "ollama" && provider.deployment === "local"));
+  const bedrock = providers.find((provider) => provider.id === "bedrock");
+  assert.deepEqual(
+    bedrock.models.map((model) => model.id),
+    ["openai.gpt-oss-20b-1:0", "openai.gpt-oss-120b-1:0"]
+  );
+});
+
+test("AMOS Intelligence exposes capability profiles without exposing routed models", () => {
+  assert.deepEqual(
+    AMOS_INTELLIGENCE_PROFILES.map((profile) => profile.id),
+    ["efficient", "balanced", "deep", "frontier"]
+  );
+  assert.equal(intelligenceProfileForReasoning("low").id, "efficient");
+  assert.equal(intelligenceProfileForReasoning("medium").id, "balanced");
+  assert.equal(intelligenceProfileForReasoning("high").id, "deep");
+  assert.equal(intelligenceProfileForReasoning("max").id, "frontier");
+  const managed = listModelProviders().find((provider) => provider.id === "amos-hosted");
+  assert.equal(managed.displayName, "AMOS Intelligence");
+  assert.equal(managed.models, undefined);
 });
 
 test("Kimi K3 stays on its currently supported max effort while other routes stay flexible", () => {

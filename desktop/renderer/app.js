@@ -36,6 +36,29 @@ const providerDefaults = {
   }
 };
 
+const intelligenceProfiles = {
+  efficient: {
+    label: "Efficient",
+    reasoningEffort: "low",
+    description: "Fast, economical routing for routine drafting, extraction, and summaries."
+  },
+  balanced: {
+    label: "Balanced",
+    reasoningEffort: "medium",
+    description: "The default blend of speed, cost, and capability for everyday company work."
+  },
+  deep: {
+    label: "Deep",
+    reasoningEffort: "high",
+    description: "Stronger reasoning for research, coding, planning, and complex operating work."
+  },
+  frontier: {
+    label: "Frontier",
+    reasoningEffort: "max",
+    description: "Highest-capability routing for the hardest work; use when quality matters most."
+  }
+};
+
 let state = null;
 let currentView = "operator";
 let selectedProvider = "amos-hosted";
@@ -64,7 +87,10 @@ const elements = Object.fromEntries(
     "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
-    "modelInput", "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
+    "managedProfileField", "intelligenceProfileInput", "intelligenceProfileHelp",
+    "localSetupField", "localSetupButton", "offlineIntelligenceCard",
+    "modelSelectField", "modelInput", "customModelField", "customModelInput",
+    "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
@@ -81,6 +107,7 @@ const elements = Object.fromEntries(
     "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasBlocks",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
+    "offlineSetupSteps", "offlineSetupRuntime", "offlineSetupModel", "offlineSetupActivate",
     "demoBanner", "demoExpiry", "demoConnectButton", "starterActions"
   ].map((id) => [id, document.getElementById(id)])
 );
@@ -156,6 +183,10 @@ function bindActions() {
   elements.denyButton.addEventListener("click", () => resolveApproval(false));
   elements.updateButton.addEventListener("click", handleUpdate);
   elements.appearanceToggle.addEventListener("change", toggleAppearance);
+  elements.intelligenceProfileInput.addEventListener("change", renderManagedProfileHelp);
+  elements.localSetupButton.addEventListener("click", () =>
+    elements.offlineIntelligenceCard.scrollIntoView({ behavior: "smooth", block: "start" })
+  );
   elements.canvasStartButton.addEventListener("click", () => {
     showView("operator");
     elements.promptInput.value = "Show me the most important company metrics and decisions right now.";
@@ -252,7 +283,7 @@ function render() {
   elements.connectionDot.classList.toggle("connected", state.connected);
   renderIdentity();
   elements.runtimeBadge.textContent = state.configured
-    ? `${state.provider.displayName} · ${state.provider.model}`
+    ? providerStatusLabel()
     : "Intelligence not configured";
   const demo = state.connectionMode === "demo";
   const activeAccount =
@@ -341,7 +372,7 @@ function render() {
   renderStep(elements.providerCheck, state.configured);
   renderStep(elements.workspaceCheck, Boolean(state.settings.workspace));
   elements.onboardingProviderText.textContent = state.configured
-    ? `${state.provider.displayName} · ${state.provider.model}`
+    ? providerStatusLabel()
     : state.mode?.personal
       ? "Choose your model"
       : "Choose intelligence";
@@ -1604,6 +1635,50 @@ function renderStep(element, complete) {
   element.classList.toggle("done", complete);
 }
 
+function providerStatusLabel() {
+  if (state.provider.id === "amos-hosted") {
+    return `AMOS Intelligence · ${state.provider.profileLabel || "Balanced"}`;
+  }
+  if (state.provider.deployment === "local") {
+    return `Local · ${state.provider.model}`;
+  }
+  return `${state.provider.displayName} · ${state.provider.model}`;
+}
+
+function renderManagedProfileHelp() {
+  const profile = intelligenceProfiles[elements.intelligenceProfileInput.value] ||
+    intelligenceProfiles.balanced;
+  elements.intelligenceProfileHelp.textContent =
+    `${profile.description} AMOS chooses and can change the underlying model without reconnecting your company.`;
+}
+
+function modelCatalog(provider) {
+  if (!provider) return [];
+  if (provider.id === "ollama") {
+    const curated = state.offline?.models || [];
+    return curated.map((model) => ({ id: model.id, label: model.name }));
+  }
+  return Array.isArray(provider.models) ? provider.models : [];
+}
+
+function populateModelOptions(catalog, selectedModel) {
+  elements.modelInput.replaceChildren();
+  const known = new Set(catalog.map((model) => model.id));
+  if (selectedModel && !known.has(selectedModel)) {
+    const current = document.createElement("option");
+    current.value = selectedModel;
+    current.textContent = `Current · ${selectedModel}`;
+    elements.modelInput.append(current);
+  }
+  for (const model of catalog) {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.label;
+    elements.modelInput.append(option);
+  }
+  elements.modelInput.value = selectedModel || catalog[0]?.id || "";
+}
+
 function renderSettings() {
   const settings = state.settings;
   selectedProvider = selectedProvider || settings.provider;
@@ -1613,6 +1688,7 @@ function renderSettings() {
     const card = document.createElement("button");
     card.type = "button";
     card.className = `provider-card${selectedProvider === provider.id ? " selected" : ""}`;
+    card.dataset.providerId = provider.id;
     const location = document.createElement("span");
     location.textContent = provider.deployment.replace("-", " ");
     const name = document.createElement("strong");
@@ -1624,7 +1700,11 @@ function renderSettings() {
     elements.providerCards.append(card);
   }
 
-  if (document.activeElement !== elements.modelInput) elements.modelInput.value = settings.model || "";
+  elements.intelligenceProfileInput.value = settings.intelligenceProfile || "balanced";
+  renderManagedProfileHelp();
+  if (document.activeElement !== elements.customModelInput) {
+    elements.customModelInput.value = settings.model || "";
+  }
   if (document.activeElement !== elements.baseUrlInput) elements.baseUrlInput.value = settings.baseUrl || "";
   elements.reasoningInput.value = settings.reasoningEffort || "max";
   elements.operatingModeInput.value = settings.operatingMode || "online";
@@ -1633,7 +1713,7 @@ function renderSettings() {
   elements.apiKeyHelp.textContent = settings.hasApiKey
     ? "A credential is stored securely. Leave blank to keep it."
     : (providerDefaults[selectedProvider]?.credential || "Provider credential");
-  renderProviderFields();
+  renderProviderFields(settings.model);
   elements.systemCard.replaceChildren(
     strong(`${state.system.arch.toUpperCase()} · ${state.system.memoryGb} GB memory`),
     text(state.system.localRecommendation)
@@ -1644,11 +1724,21 @@ function renderOfflineModels() {
   if (!state?.offline) return;
   const offline = state.offline;
   const runtime = offline.runtime || {};
+  const installedCount = (offline.models || []).filter((model) => model.installed).length;
   elements.offlineRuntimeStatus.textContent = runtime.available
-    ? `Ollama ${runtime.version || ""} is ready on this computer`
-    : runtime.error || "Ollama is not running on this computer";
+    ? installedCount > 0
+      ? `Ready · ${installedCount} local ${installedCount === 1 ? "profile" : "profiles"} installed`
+      : "Ollama is running · choose a profile to download"
+    : "Step 1: install and launch Ollama, then check again";
   elements.offlineRuntimeStatus.classList.toggle("ready", Boolean(runtime.available));
   elements.offlineRuntimeStatus.classList.toggle("error", !runtime.available);
+  elements.offlineInstallRuntimeButton.classList.toggle("hidden", Boolean(runtime.available));
+  elements.offlineRefreshButton.textContent = runtime.available ? "Refresh" : "2 · Check again";
+  elements.offlineSetupRuntime.classList.toggle("complete", Boolean(runtime.available));
+  elements.offlineSetupRuntime.classList.toggle("active", !runtime.available);
+  elements.offlineSetupModel.classList.toggle("complete", installedCount > 0);
+  elements.offlineSetupModel.classList.toggle("active", runtime.available && installedCount === 0);
+  elements.offlineSetupActivate.classList.toggle("active", installedCount > 0);
   elements.offlineManifestDigest.textContent = offline.manifest?.digest
     ? `sha256:${offline.manifest.digest}`
     : "";
@@ -1713,17 +1803,38 @@ function renderOfflineModels() {
         state.system.memoryGb < model.minimumMemoryGb;
       download.title = state.system.memoryGb < model.minimumMemoryGb
         ? `This profile needs at least ${model.minimumMemoryGb} GB memory`
-        : "";
+        : !runtime.available
+          ? "Install and launch Ollama first"
+          : "";
       download.addEventListener("click", () => installOfflineModel(model.id));
       actions.append(download);
     } else {
-      const activate = actionButton(active ? "Active offline" : "Use offline", "primary");
-      activate.disabled = active;
-      activate.addEventListener("click", () => activateOfflineModel(model.id));
+      const currentBoundary = state.mode?.offline
+        ? "offline"
+        : state.mode?.personal || !state.connected
+          ? "personal"
+          : "online";
+      const useNowActive =
+        state.settings.provider === "ollama" &&
+        state.settings.model === model.id &&
+        state.settings.operatingMode === currentBoundary;
+      const activate = actionButton(
+        useNowActive
+          ? "Active"
+          : currentBoundary === "online"
+            ? "Use with AMOS"
+            : "Use on this computer",
+        "primary"
+      );
+      activate.disabled = useNowActive;
+      activate.addEventListener("click", () => activateLocalModel(model.id, currentBoundary));
+      const offline = actionButton(active ? "Active offline" : "Use offline", "secondary");
+      offline.disabled = active;
+      offline.addEventListener("click", () => activateLocalModel(model.id, "offline"));
       const remove = actionButton("Remove", "danger");
       remove.disabled = active;
       remove.addEventListener("click", () => removeOfflineModel(model.id));
-      actions.append(activate, remove);
+      actions.append(activate, offline, remove);
     }
     card.append(actions);
     elements.offlineModelList.append(card);
@@ -1735,27 +1846,42 @@ function selectProvider(providerId) {
   selectedProvider = providerId;
   const defaults = providerDefaults[providerId] || {};
   if (changed) {
-    elements.modelInput.value = defaults.model || "";
+    elements.customModelInput.value = defaults.model || "";
     elements.baseUrlInput.value = defaults.baseUrl || "";
     elements.apiKeyInput.value = "";
+    if (providerId === "amos-hosted") {
+      elements.intelligenceProfileInput.value = "balanced";
+      renderManagedProfileHelp();
+    }
   }
   renderProviderSelection();
   elements.apiKeyHelp.textContent = defaults.credential || "Provider credential";
-  renderProviderFields();
+  renderProviderFields(defaults.model || "");
 }
 
-function renderProviderFields() {
+function renderProviderFields(modelValue = "") {
   const managed = selectedProvider === "amos-hosted";
-  elements.modelInput.closest(".field")?.classList.toggle("hidden", managed);
+  const provider = state.providers.find((item) => item.id === selectedProvider);
+  const catalog = modelCatalog(provider);
+  const catalogModel = !managed && catalog.length > 0;
+  const local = provider?.deployment === "local";
+  elements.managedProfileField.classList.toggle("hidden", !managed);
+  elements.localSetupField.classList.toggle("hidden", selectedProvider !== "ollama");
+  elements.modelSelectField.classList.toggle("hidden", !catalogModel);
+  elements.customModelField.classList.toggle("hidden", managed || catalogModel);
   elements.baseUrlInput.closest(".field")?.classList.toggle("hidden", managed);
-  elements.apiKeyInput.closest(".field")?.classList.toggle("hidden", managed);
+  elements.apiKeyInput.closest(".field")?.classList.toggle("hidden", managed || local);
+  elements.reasoningInput.closest(".field")?.classList.toggle("hidden", managed);
+  if (catalogModel) {
+    populateModelOptions(catalog, modelValue || provider?.defaultModel || "");
+  } else if (!managed && document.activeElement !== elements.customModelInput) {
+    elements.customModelInput.value = modelValue || provider?.defaultModel || "";
+  }
 }
 
 function renderProviderSelection() {
   for (const card of elements.providerCards.children) {
-    const providerName = card.querySelector("strong")?.textContent;
-    const provider = state.providers.find((item) => item.displayName === providerName);
-    card.classList.toggle("selected", provider?.id === selectedProvider);
+    card.classList.toggle("selected", card.dataset.providerId === selectedProvider);
   }
 }
 
@@ -1835,11 +1961,28 @@ async function saveSettings(event) {
 }
 
 async function persistSettings() {
+  const managed = selectedProvider === "amos-hosted";
+  const profile = elements.intelligenceProfileInput.value || "balanced";
+  const catalogModel = !elements.modelSelectField.classList.contains("hidden");
+  const selectedModel = catalogModel ? elements.modelInput.value : elements.customModelInput.value;
+  if (selectedProvider === "ollama") {
+    const localModel = state.offline?.models?.find((model) => model.id === selectedModel);
+    if (!state.offline?.runtime?.available || !localModel?.installed) {
+      throw new Error(
+        "Finish the guided local setup below: install and launch Ollama, then download this profile."
+      );
+    }
+  }
   const payload = {
     provider: selectedProvider,
-    model: elements.modelInput.value,
-    baseUrl: elements.baseUrlInput.value,
-    reasoningEffort: elements.reasoningInput.value,
+    model: managed
+      ? "auto"
+      : selectedModel,
+    baseUrl: managed ? "" : elements.baseUrlInput.value,
+    intelligenceProfile: profile,
+    reasoningEffort: managed
+      ? intelligenceProfiles[profile]?.reasoningEffort || "medium"
+      : elements.reasoningInput.value,
     operatingMode: elements.operatingModeInput.value,
     appearance: elements.appearanceInput.value,
     amosMcpUrl: elements.mcpInput.value
@@ -1911,10 +2054,16 @@ async function installOfflineModel(modelId) {
 }
 
 async function activateOfflineModel(modelId) {
+  return activateLocalModel(modelId, "offline");
+}
+
+async function activateLocalModel(modelId, operatingMode) {
   try {
-    state = await api.activateOfflineModel(modelId);
+    state = await api.activateLocalModel(modelId, operatingMode);
     selectedProvider = state.settings.provider;
-    toast("Local-only mode is active.");
+    toast(operatingMode === "offline"
+      ? "Local-only mode is active."
+      : "Local intelligence is active.");
     render();
   } catch (error) {
     toast(error.message, true);

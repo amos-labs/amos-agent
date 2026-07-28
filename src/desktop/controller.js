@@ -6,7 +6,10 @@ import { loadConfig, validateConfig } from "../config.js";
 import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore } from "../auth/tokenStore.js";
-import { listModelProviders } from "../model/providers.js";
+import {
+  intelligenceProfileForReasoning,
+  listModelProviders
+} from "../model/providers.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
@@ -138,7 +141,7 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       remoteStatus: { ...this.remoteStatus },
-      provider: publicProvider(config.model),
+      provider: publicProvider(config.model, settings),
       providers: listModelProviders(),
       settings: redactSettings(settings),
       system,
@@ -173,9 +176,12 @@ export class DesktopController {
     });
     if (runtimeSettingsChanged(current, saved)) {
       this.resetRuntime();
+      const intelligence = saved.provider === "amos-hosted"
+        ? `AMOS Intelligence · ${profileLabel(saved.intelligenceProfile)}`
+        : `${saved.provider} · ${saved.model}`;
       this.record(
         "settings",
-        `Intelligence set to ${saved.provider} · ${saved.model} · ${saved.operatingMode}`
+        `Intelligence set to ${intelligence} · ${saved.operatingMode}`
       );
     } else if (current.appearance !== saved.appearance) {
       this.record("settings", `Appearance set to ${saved.appearance}`);
@@ -210,8 +216,11 @@ export class DesktopController {
     return result;
   }
 
-  async activateOfflineModel(modelId) {
+  async activateLocalModel(modelId, operatingMode = "offline") {
     if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
+    if (!["online", "personal", "offline"].includes(operatingMode)) {
+      throw new Error("Choose online company, personal workspace, or local-only mode");
+    }
     const offline = await this.offlineManager.refresh(systemProfile());
     const model = offline.models.find((item) => item.id === modelId);
     if (!model?.installed) throw new Error("Download this model before activating it");
@@ -222,11 +231,18 @@ export class DesktopController {
       model: modelId,
       baseUrl: "http://127.0.0.1:11434/v1",
       apiKey: "",
-      operatingMode: "offline"
+      operatingMode
     });
     this.resetRuntime();
-    this.record("settings", `Local-only mode activated with ${modelId}`);
+    this.record(
+      "settings",
+      `${operatingMode === "offline" ? "Local-only mode" : "Local intelligence"} activated with ${modelId}`
+    );
     return this.state();
+  }
+
+  async activateOfflineModel(modelId) {
+    return this.activateLocalModel(modelId, "offline");
   }
 
   async refreshCompanyCache(ttlSeconds = DEFAULT_COMPANY_CACHE_TTL_SECONDS) {
@@ -474,6 +490,7 @@ export class DesktopController {
       provider: "amos-hosted",
       model: "auto",
       baseUrl: "",
+      intelligenceProfile: "balanced",
       reasoningEffort: "medium",
       operatingMode: "online",
       workspace: demoWorkspace
@@ -656,7 +673,9 @@ export class DesktopController {
       Object.assign(nextSettings, {
         provider: "amos-hosted",
         model: "auto",
-        baseUrl: ""
+        baseUrl: "",
+        intelligenceProfile: "balanced",
+        reasoningEffort: "medium"
       });
     }
     await this.settingsStore.write(nextSettings);
@@ -1756,14 +1775,28 @@ export function shouldUseDesktopOAuth(config, credentials, now = Date.now()) {
   return Number.isFinite(expiresAt) && expiresAt > now;
 }
 
-function publicProvider(config) {
+function publicProvider(config, settings) {
+  const managedProfile = config.provider === "amos-hosted"
+    ? intelligenceProfileForReasoning(config.reasoningEffort)
+    : null;
   return {
     id: config.provider,
     displayName: config.displayName,
     deployment: config.deployment,
-    model: config.model,
-    baseUrl: config.baseUrl
+    model: config.provider === "amos-hosted" ? "" : config.model,
+    baseUrl: config.provider === "amos-hosted" ? "" : config.baseUrl,
+    profile: managedProfile?.id || settings?.intelligenceProfile || null,
+    profileLabel: managedProfile?.label || ""
   };
+}
+
+function profileLabel(profile) {
+  return {
+    efficient: "Efficient",
+    balanced: "Balanced",
+    deep: "Deep",
+    frontier: "Frontier"
+  }[profile] || "Balanced";
 }
 
 function systemProfile() {
@@ -1800,6 +1833,7 @@ function runtimeSettingsChanged(previous, next) {
     "model",
     "baseUrl",
     "apiKey",
+    "intelligenceProfile",
     "reasoningEffort",
     "operatingMode",
     "workspace",

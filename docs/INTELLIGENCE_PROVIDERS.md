@@ -11,16 +11,16 @@ identity or authority.
 
 | Profile | Inference location | Credential | Best fit |
 | --- | --- | --- | --- |
-| AMOS Hosted | AMOS-managed AWS | AMOS-backed identity | Zero-config managed inference with included credits and metered overage |
+| AMOS Intelligence | AMOS-managed infrastructure | AMOS-backed identity | Zero-config routed intelligence with included credits and metered overage |
 | Amazon Bedrock | Customer or AMOS AWS | Bedrock credential adapter | AWS-standardized and sovereign deployments |
 | Compatible endpoint | Customer-selected HTTPS service | Endpoint credential | Existing model gateways or private serving |
 | Provider API | Provider cloud | Provider API key | Frontier capability without infrastructure |
 | Ollama | User computer | Usually none | Supported local development/offline work |
 | llama.cpp | User computer | Usually none | Direct GGUF/local serving |
 
-## AMOS Hosted
+## AMOS Intelligence
 
-AMOS-managed inference in AWS is for customers who want a managed model
+AMOS-managed intelligence is for customers who want a managed model
 deployment without reconnecting company systems or operating serving
 infrastructure. It is the default Desktop profile after AMOS sign-in.
 
@@ -42,6 +42,17 @@ platform—not the client—selects the actual provider and model. The exact mod
 provider, and hardware profile may therefore evolve independently from AMOS
 Desktop.
 
+Desktop presents four capability profiles rather than provider model names:
+
+- **Efficient** for fast, economical routine work;
+- **Balanced** for everyday company operation;
+- **Deep** for harder research, coding, and planning; and
+- **Frontier** for the highest-capability route available to AMOS.
+
+The profile is a routing and cost preference, not a promise that a particular
+vendor model will remain underneath it. The business remains connected to AMOS
+while the underlying intelligence changes.
+
 An explicit BYOK, compatible-endpoint, customer-cloud, or local profile always
 remains available. Connecting AMOS only migrates the legacy unconfigured Kimi
 default; it does not overwrite a working user-selected intelligence profile.
@@ -49,13 +60,17 @@ default; it does not overwrite a working user-selected intelligence profile.
 ## Amazon Bedrock
 
 Bedrock supports customer-controlled or AMOS-controlled AWS inference through
-its compatible endpoint.
+its compatible endpoint. The current Desktop adapter exposes Bedrock's
+Chat-Completions-compatible GPT OSS models as a verified dropdown. Anthropic
+Messages and OpenAI Responses models require their corresponding protocol
+adapters; AMOS should not imply that every Bedrock model shares one wire
+protocol.
 
 ```dotenv
 AMOS_MODEL_PROVIDER=bedrock
 AWS_REGION=us-east-1
 AWS_BEARER_TOKEN_BEDROCK=...
-AMOS_MODEL=your-bedrock-model
+AMOS_MODEL=openai.gpt-oss-120b-1:0
 ```
 
 The default compatible endpoint is:
@@ -112,7 +127,10 @@ AMOS_MODEL=your-local-model
 ```
 
 AMOS Desktop 0.7 can manage a small curated Ollama catalog directly from the
-Intelligence screen. The catalog is embedded inside the signed application
+Intelligence screen. The guided flow opens Ollama's official installer, checks
+that the runtime is running, recommends a model for the computer, downloads it,
+and lets the user activate it with an online AMOS company or in explicit
+local-only mode. The catalog is embedded inside the signed application
 bundle, displays a SHA-256 content identifier, and cannot be extended by model
 output. Ollama supplies digest-verified, resumable downloads and model removal.
 The first profiles are:

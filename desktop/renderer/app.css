@@ -1119,6 +1119,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .provider-card strong { display: block; font-size: 13px; }
 .provider-card p { margin: 7px 0 0; color: var(--muted-2); font-size: 10px; line-height: 1.5; }
 .configuration-card { padding: 25px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.local-setup-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid rgba(109,147,255,.3);
+  border-radius: 11px;
+  background: rgba(109,147,255,.06);
+}
+.local-setup-callout strong,
+.local-setup-callout span { display: block; }
+.local-setup-callout strong { font-size: 11px; }
+.local-setup-callout span { margin-top: 4px; color: var(--muted-2); font-size: 9px; line-height: 1.45; }
+.local-setup-callout .button { flex-shrink: 0; }
 .field { margin-bottom: 18px; }
 .field-row { display: grid; grid-template-columns: .7fr 1.3fr; gap: 14px; }
 .field label { display: block; margin-bottom: 8px; color: var(--muted); font-size: 11px; font-weight: 700; }
@@ -1157,6 +1173,52 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .offline-runtime-status.ready { color: var(--green); }
 .offline-runtime-status.error { color: var(--warning); }
+.offline-setup-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: local-setup;
+}
+.offline-setup-steps li {
+  position: relative;
+  min-height: 76px;
+  padding: 14px 14px 14px 46px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-soft);
+  color: var(--muted-2);
+  counter-increment: local-setup;
+}
+.offline-setup-steps li::before {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  content: counter(local-setup);
+  font-size: 9px;
+  font-weight: 900;
+}
+.offline-setup-steps li.active { border-color: rgba(109,147,255,.45); }
+.offline-setup-steps li.complete { border-color: rgba(59,213,143,.28); }
+.offline-setup-steps li.complete::before {
+  border-color: rgba(59,213,143,.32);
+  background: rgba(59,213,143,.1);
+  color: var(--green);
+  content: "✓";
+}
+.offline-setup-steps strong,
+.offline-setup-steps span { display: block; }
+.offline-setup-steps strong { color: var(--ink); font-size: 10px; }
+.offline-setup-steps span { margin-top: 5px; font-size: 8px; line-height: 1.5; }
 .offline-model-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
 .offline-model-card { display: flex; min-width: 0; min-height: 220px; flex-direction: column; padding: 18px; border: 1px solid var(--line); border-radius: 13px; background: var(--field); }
 .offline-model-card.recommended { border-color: rgba(109,147,255,.52); box-shadow: inset 0 0 0 1px rgba(109,147,255,.12); }
@@ -1171,7 +1233,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .offline-model-progress i { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
 .offline-model-progress-label { margin: 0 0 10px; color: var(--muted-2); font-size: 9px; }
 .offline-model-actions { display: flex; align-items: center; gap: 8px; margin-top: auto; }
-.offline-model-actions .button { flex: 1; padding: 9px 10px; font-size: 10px; }
+.offline-model-actions .button { flex: 1; min-width: 0; padding: 9px 8px; font-size: 9px; }
 .offline-trust-note { display: flex; justify-content: space-between; gap: 18px; margin-top: 18px; color: var(--muted-2); font-size: 8px; }
 .offline-trust-note code { max-width: 340px; overflow: hidden; color: var(--muted-2); text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1257,6 +1319,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .offline-actions { justify-content: flex-start; }
   .offline-runtime-status { text-align: left; }
   .offline-model-list { grid-template-columns: 1fr; }
+  .offline-setup-steps { grid-template-columns: 1fr; }
   .memory-heading { align-items: flex-start; flex-direction: column; }
   .company-cache-card { grid-template-columns: auto minmax(0, 1fr); }
   .company-cache-actions { grid-column: 2; flex-wrap: wrap; }

@@ -250,6 +250,9 @@ function registerIpc() {
   ipcMain.handle("desktop:activate-offline-model", (_event, id) =>
     controller.activateOfflineModel(id)
   );
+  ipcMain.handle("desktop:activate-local-model", (_event, input) =>
+    controller.activateLocalModel(input?.id, input?.operatingMode)
+  );
   ipcMain.handle("desktop:run", (_event, input) => controller.run(input));
   ipcMain.handle("desktop:steer-task", (_event, input) =>
     controller.steerTask(input?.id, input?.content)
