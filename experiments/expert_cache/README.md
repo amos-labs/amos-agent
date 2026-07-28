@@ -112,6 +112,7 @@ allocation and cost remain an explicit infrastructure decision.
 `run_reference_aws.sh` is the bounded worker used by the AMOS reference run. It:
 
 - derives exact checkpoint and per-expert storage from the pinned safetensors;
+- fails closed unless the fetched runner ref matches the expected Git commit;
 - captures separate training-greedy, evaluation-greedy, and
   evaluation-sampled traces;
 - uploads every completed stage and GPU telemetry to the configured private S3

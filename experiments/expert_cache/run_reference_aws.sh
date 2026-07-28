@@ -6,6 +6,7 @@ set -Eeuo pipefail
 : "${AMOS_RESULT_PREFIX:=runs/${AMOS_RUN_ID}}"
 : "${AWS_REGION:=us-east-1}"
 : "${AMOS_GIT_REF:=agent/expert-cache-reference-run}"
+: "${AMOS_GIT_COMMIT:?AMOS_GIT_COMMIT is required}"
 
 export DEBIAN_FRONTEND=noninteractive
 export HF_HOME=/opt/amos-expert-cache/huggingface
@@ -76,7 +77,12 @@ git clone \
   https://github.com/amos-labs/amos-agent.git \
   "${ROOT}/repo"
 cd "${ROOT}/repo"
-git rev-parse HEAD | tee "${RESULTS}/git-commit.txt"
+actual_commit=$(git rev-parse HEAD)
+if [[ "${actual_commit}" != "${AMOS_GIT_COMMIT}" ]]; then
+  echo "Ref ${AMOS_GIT_REF} resolved to ${actual_commit}, expected ${AMOS_GIT_COMMIT}" >&2
+  exit 1
+fi
+printf '%s\n' "${actual_commit}" | tee "${RESULTS}/git-commit.txt"
 
 python3 -m venv "${ROOT}/venv"
 source "${ROOT}/venv/bin/activate"
