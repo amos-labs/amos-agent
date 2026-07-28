@@ -107,6 +107,32 @@ npm run experiment:expert-cache -- \
 The reference run is intentionally not launched from a developer laptop. GPU
 allocation and cost remain an explicit infrastructure decision.
 
+## Reproducible AWS reference runner
+
+`run_reference_aws.sh` is the bounded worker used by the AMOS reference run. It:
+
+- derives exact checkpoint and per-expert storage from the pinned safetensors;
+- captures separate training-greedy, evaluation-greedy, and
+  evaluation-sampled traces;
+- uploads every completed stage and GPU telemetry to the configured private S3
+  prefix;
+- records its exact Git commit and Python dependency set; and
+- shuts down the instance on success or failure.
+
+The EC2 instance must additionally use instance-initiated shutdown behavior
+`terminate`, and the outer user-data command must impose a wall-clock timeout.
+The checked-in runner does not create infrastructure or choose a spending
+limit.
+
+On the target Mac, calibrate the latency model with:
+
+```bash
+npm run experiment:expert-calibrate-mac
+```
+
+The Metal slot-remap number is explicitly a small-table-copy proxy until the
+Phase 1 runtime can emit real remap telemetry.
+
 Run the same workflow corpus against GPT-OSS 20B. The 120B path must beat that
 control on the hard qualification floors and reduce managed-frontier
 escalations; a larger model name or a higher easy-task score is not sufficient.

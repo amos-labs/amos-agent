@@ -23,6 +23,7 @@
     "probe:local:context": "node scripts/probeLocalContext.js",
     "experiment:expert-cache": "node scripts/simulateExpertCache.js",
     "experiment:expert-compare": "node scripts/compareExpertTraces.js",
+    "experiment:expert-calibrate-mac": "xcrun swiftc -O -framework Metal experiments/expert_cache/calibrate_macos.swift -o /tmp/amos-expert-cache-calibrate && /tmp/amos-expert-cache-calibrate",
     "runtime:prepare": "node scripts/prepareOllamaRuntime.js",
     "desktop": "electron desktop/main.js",
     "desktop:build": "electron-builder --mac dmg zip",
