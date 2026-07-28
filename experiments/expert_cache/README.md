@@ -130,6 +130,11 @@ The EC2 instance must additionally use instance-initiated shutdown behavior
 The checked-in runner does not create infrastructure or choose a spending
 limit.
 
+If infrastructure setup completes but capture must be repaired or resumed,
+`resume_reference_capture.sh` restarts at checkpoint inspection, verifies the
+new exact Git commit, and holds the worker after uploading results by default
+so the evidence bundle can be inspected before termination.
+
 On the target Mac, calibrate the latency model with:
 
 ```bash
