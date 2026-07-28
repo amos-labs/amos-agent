@@ -411,7 +411,7 @@
               <div id="localSetupField" class="local-setup-callout hidden">
                 <div>
                   <strong>Finish local setup below</strong>
-                  <span>Install Ollama, download a recommended profile, then activate it with AMOS or offline.</span>
+                  <span>Choose a recommended model; AMOS handles the runtime, download, and activation.</span>
                 </div>
                 <button id="localSetupButton" class="button secondary" type="button">Open guided setup ↓</button>
               </div>
@@ -465,21 +465,22 @@
                 <span class="eyebrow accent">LOCAL INTELLIGENCE · OPTIONAL</span>
                 <h2>Run AMOS privately on this computer.</h2>
                 <p>
-                  Install Ollama once, download the profile AMOS recommends for this
-                  computer, then use it with your company or fully offline. Local-only
-                  work can use files, private memory, and canvases—but never pretends
-                  to have live company authority.
+                  AMOS Local is included with Desktop. Choose the model AMOS recommends,
+                  then use it with your company or fully offline. Model downloads are
+                  resumable and remain installed across app updates. Local-only work can
+                  use files, private memory, and canvases—but never pretends to have live
+                  company authority.
                 </p>
               </div>
               <div class="offline-actions">
                 <span id="offlineRuntimeStatus" class="offline-runtime-status">Checking local runtime…</span>
-                <button id="offlineInstallRuntimeButton" class="button primary" type="button">1 · Install Ollama</button>
-                <button id="offlineRefreshButton" class="button secondary" type="button">2 · Check again</button>
+                <button id="offlineInstallRuntimeButton" class="button primary hidden" type="button">Retry runtime</button>
+                <button id="offlineRefreshButton" class="button secondary" type="button">Refresh</button>
               </div>
             </div>
             <ol id="offlineSetupSteps" class="offline-setup-steps" aria-label="Local intelligence setup">
-              <li id="offlineSetupRuntime"><strong>Install and launch Ollama</strong><span>AMOS opens the official installer. Return here after Ollama is running.</span></li>
-              <li id="offlineSetupModel"><strong>Download a local profile</strong><span>Choose the recommended profile below; downloads are resumable.</span></li>
+              <li id="offlineSetupRuntime"><strong>AMOS Local runtime</strong><span>Included, verified, loopback-only, and managed by Desktop.</span></li>
+              <li id="offlineSetupModel"><strong>Install a local model</strong><span>Choose the recommended model below; downloads are resumable.</span></li>
               <li id="offlineSetupActivate"><strong>Choose how to use it</strong><span>Use the model with your AMOS company or switch to explicit local-only mode.</span></li>
             </ol>
             <div id="offlineModelList" class="offline-model-list"></div>

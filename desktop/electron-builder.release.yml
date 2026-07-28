@@ -9,6 +9,12 @@ files:
   - package.json
   - LICENSE
 
+extraResources:
+  - from: desktop/vendor/ollama
+    to: ollama
+    filter:
+      - "**/*"
+
 mac:
   category: public.app-category.business
   hardenedRuntime: true

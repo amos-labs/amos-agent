@@ -119,7 +119,8 @@ Supported profiles include:
 - **Amazon Bedrock** — customer- or AMOS-controlled AWS inference
 - **Compatible endpoint** — a customer-controlled HTTPS endpoint
 - **Provider API** — including the Moonshot/Kimi API
-- **Local runtime** — Ollama or llama.cpp on suitable hardware
+- **AMOS Local** — a bundled, managed local runtime with hardware-aware models
+- **Compatible local runtime** — an explicitly customer-managed Ollama or llama.cpp endpoint
 
 Changing the intelligence does not reconnect the company or change the user's
 AMOS authority. Models without reliable tool use should be limited to
@@ -134,11 +135,13 @@ shipping a new desktop build. Explicit provider
 keys, private compatible endpoints, customer Bedrock, and local models remain
 available and are never overwritten after the user selects them.
 
-AMOS Desktop 0.7 adds a guided offline path for Ollama: it assesses the
-computer, recommends one of three curated profiles, shows resumable download
-progress, supports explicit removal, and can activate a visibly separate
-local-only operating mode. In that mode AMOS and public-web tools are not
-exposed to the model. Desktop follows the operating system's light or dark appearance by
+AMOS Local assesses the computer, recommends one of three curated profiles,
+shows resumable model-download progress, supports explicit removal, and can
+activate a visibly separate local-only operating mode. Signed Desktop releases
+include and supervise the pinned runtime on loopback; users do not install or
+operate a second application, and model weights remain installed across AMOS
+updates. In local-only mode AMOS and public-web tools are not exposed to the
+model. Desktop follows the operating system's light or dark appearance by
 default, with an immediate header switch and persistent overrides.
 
 AMOS Desktop 0.9 adds an explicit offline company-context grant. While online,

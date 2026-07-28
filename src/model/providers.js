@@ -45,8 +45,8 @@ const PROVIDERS = {
   },
   ollama: {
     id: "ollama",
-    displayName: "Local model · Ollama",
-    description: "Private local intelligence with guided install, download, and activation below.",
+    displayName: "AMOS Local",
+    description: "Private intelligence on this computer with an AMOS-managed runtime and guided model setup.",
     deployment: "local",
     defaultBaseUrl: "http://127.0.0.1:11434/v1",
     defaultModel: "gpt-oss:20b",

@@ -263,15 +263,17 @@ No signing or notarization secret belongs in the repository.
 ### Set up curated offline intelligence
 
 1. Open **Intelligence**.
-2. Select **Install Ollama** to open the official installer, then launch Ollama.
-3. Return to Desktop and select **Check again**.
-4. Review the hardware-aware recommendation and download a curated model.
-5. Select **Use with AMOS** to keep live governed company tools, or **Use
+2. Confirm **AMOS Local** reports that its included runtime is ready.
+3. Review the hardware-aware recommendation and install a curated model.
+4. Select **Use with AMOS** to keep live governed company tools, or **Use
    offline** to remove company and public-network tools from the session.
-6. Confirm the top bar shows the intended operating boundary before starting.
+5. Confirm the top bar shows the intended operating boundary before starting.
 
-Downloads are resumable through Ollama, installed models can be removed from
-the same screen, and the catalog is part of the signed AMOS Desktop release.
+Desktop starts and stops the loopback-only runtime itself; no separate Ollama
+installation, login item, or updater is required. Downloads are resumable,
+installed models persist outside the application bundle and can be removed
+from the same screen, and the runtime plus catalog are pinned by the signed
+AMOS Desktop release. AMOS Local disables Ollama cloud features.
 Local-only mode exposes local workspace, private-memory attachment, and typed
 canvas tools. AMOS MCP, public web, company-memory promotion, live approvals,
 and proof are unavailable until the user explicitly returns online.

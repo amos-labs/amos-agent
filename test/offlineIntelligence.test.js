@@ -115,6 +115,62 @@ test("Ollama manager reports an unavailable runtime without leaking the request"
   assert.match(state.runtime.error, /not reachable/);
 });
 
+test("managed local runtime starts before probing and owns the inference endpoint", async () => {
+  let attempts = 0;
+  let markedReady = false;
+  const runtimeManager = {
+    baseUrl: "http://127.0.0.1:11435",
+    state: () => ({
+      managed: true,
+      installed: true,
+      source: "bundled",
+      status: "stopped",
+      version: "0.32.5",
+      error: null
+    }),
+    start: async () => ({
+      managed: true,
+      installed: true,
+      source: "bundled",
+      status: "starting",
+      version: "0.32.5",
+      error: null
+    }),
+    markReady: () => {
+      markedReady = true;
+      return {
+        managed: true,
+        installed: true,
+        source: "bundled",
+        status: "ready",
+        version: "0.32.5",
+        error: null
+      };
+    }
+  };
+  const manager = new OllamaModelManager({
+    runtimeManager,
+    startupTimeoutMs: 100,
+    retryMs: 10,
+    sleepImpl: async () => {},
+    fetchImpl: async (url) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("starting");
+      const path = new URL(url).pathname;
+      return jsonResponse(path === "/api/version" ? { version: "0.32.5" } : { models: [] });
+    }
+  });
+
+  const state = await manager.refresh();
+  assert.equal(state.runtime.available, true);
+  assert.equal(state.runtime.managed, true);
+  assert.equal(state.runtime.source, "bundled");
+  assert.equal(state.runtime.status, "ready");
+  assert.equal(markedReady, true);
+  assert.equal(manager.openAiBaseUrl(), "http://127.0.0.1:11435/v1");
+  assert.ok(attempts >= 3);
+});
+
 function jsonResponse(value) {
   return new Response(JSON.stringify(value), {
     headers: { "content-type": "application/json" }
