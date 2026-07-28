@@ -106,6 +106,42 @@ test("expert trace labels sampled routing arms without accepting partial setting
   );
 });
 
+test("expert trace accepts bounded runtime provenance without relaxing payload checks", () => {
+  const metadata = {
+    type: "metadata",
+    schema: "amos.expert-routing-trace",
+    version: 1,
+    model: "fixture",
+    layers: 1,
+    experts_per_layer: 4,
+    active_experts: 2,
+    expert_bytes: 1024,
+    expert_runtime: "Mxfp4GptOssExperts",
+    routing_capture_seam: "mxfp4_mlp_router_logits",
+    weight_quantization: "mxfp4"
+  };
+  const token = {
+    type: "token",
+    trace_id: "runtime-provenance",
+    token_index: 0,
+    phase: "decode",
+    workflow: "coding",
+    experts: [[0, 1]]
+  };
+  const trace = parseExpertTrace(
+    `${JSON.stringify(metadata)}\n${JSON.stringify(token)}`
+  );
+  assert.equal(trace.metadata.expertRuntime, "Mxfp4GptOssExperts");
+  assert.equal(trace.metadata.routingCaptureSeam, "mxfp4_mlp_router_logits");
+  assert.equal(trace.metadata.weightQuantization, "mxfp4");
+
+  metadata.request_payload = "must remain forbidden";
+  assert.throws(
+    () => parseExpertTrace(`${JSON.stringify(metadata)}\n${JSON.stringify(token)}`),
+    /unsupported field request_payload/
+  );
+});
+
 test("trace comparison quantifies top-k set agreement across runtimes", async () => {
   const reference = parseExpertTrace(await readFile(fixturePath, "utf8"));
   const candidate = structuredClone(reference);
@@ -146,6 +182,34 @@ test("LRU isolates streamed prefill and reports reproducible decode metrics", as
   assert.equal(result.phases.decode.accesses, 16);
   assert.equal(result.workflows["campaign-analysis"].hitRate, 0.25);
   assert.equal(result.decodePositions["000-031"].hitRate, 0.25);
+});
+
+test("large production traces summarize reuse without overflowing the call stack", () => {
+  const layers = 36;
+  const tokens = Array.from({ length: 1_100 }, (_, tokenIndex) => ({
+    traceId: "large-trace",
+    tokenIndex,
+    phase: "decode",
+    workflow: "coding",
+    experts: Array.from({ length: layers }, () => [0, 1, 2, 3])
+  }));
+  const result = simulateExpertCache({
+    metadata: {
+      model: "large-fixture",
+      layers,
+      expertsPerLayer: 128,
+      activeExperts: 4,
+      expertBytes: 1024,
+      sharedResidentBytes: 0
+    },
+    tokens
+  }, {
+    policy: "lru",
+    slotsPerLayer: 4
+  });
+  assert.equal(result.tokenCount, 1_100);
+  assert.equal(result.reuseTokenDistance.observations, (1_100 - 1) * layers * 4);
+  assert.equal(result.reuseTokenDistance.maximum, 1);
 });
 
 test("TinyLFU protects the recurring hot set from one-off workflow pollution", async () => {

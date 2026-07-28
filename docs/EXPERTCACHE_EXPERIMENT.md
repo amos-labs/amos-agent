@@ -158,6 +158,69 @@ extra input fields, requires an explicit safe-data acknowledgement, records no
 prompt or generated text, and fails the run if its bounded writer drops any
 routing record.
 
+## Phase 0 reference result — 2026-07-28
+
+The first complete reference run passes the routing-locality gate and supports
+proceeding to a selective-loader prototype. It does **not** yet pass the product
+gate.
+
+The run used:
+
+- model revision `b5c939de8f754692c1647ca79fbf85e8c1e70f8a`;
+- Transformers revision `ff24c90cdda4b620327e8b4168692729289ce477`;
+- native `Mxfp4GptOssExperts` execution and the
+  `mxfp4_mlp_router_logits` capture seam;
+- 36 layers, 128 experts per layer, and top-4 routing;
+- 13,236,480 bytes per layer expert, 4,255,115,904 shared resident
+  bytes, and 65,248,815,744 total stored tensor bytes; and
+- experiment commit `dae390e3f193faa6e5754d89d75cc2bab8673ea1`.
+
+The privacy-safe traces completed with zero dropped records:
+
+| Split | Mode | Cases | Routed tokens |
+|---|---|---:|---:|
+| Training | greedy | 14 | 3,382 |
+| Evaluation | greedy | 14 | 3,427 |
+| Evaluation | sampled, temperature 0.7 / top-p 0.95 | 28 | 6,854 |
+
+The simulator evaluated 720 valid configurations per evaluation arm. Latency
+used measurements from the target 64 GB M1 Max:
+
+- 11.58 GiB/s uncached sequential SSD reads;
+- 0.0015 ms p95 random-range latency;
+- 46.41 GiB/s conservative p05 Metal upload bandwidth; and
+- 0.00384 ms per-slot remap proxy.
+
+The table below reports conservative LRU replay with one-token verification,
+100% acceptance, and one stream. This avoids using idealized speculative
+batching to justify the result.
+
+| Resident budget | Slots/layer | Greedy hit | Greedy p95 cold / stall | Sampled hit | Sampled p95 cold / stall | Result |
+|---:|---:|---:|---:|---:|---:|---|
+| 32 GiB | 63 | 94.23% | 265.09 MiB / 28.05 ms | 94.19% | 277.71 MiB / 29.38 ms | Fail cold-read gate |
+| 40 GiB | 81 | 97.52% | 126.23 MiB / 13.36 ms | 97.57% | 126.23 MiB / 13.36 ms | Pass |
+| 46 GiB | 94 | 98.69% | 88.36 MiB / 9.35 ms | 98.82% | 75.74 MiB / 8.01 ms | Pass |
+
+At 46 GiB, every workflow stayed above 98.1% greedy hit rate and 98.2%
+sampled hit rate. Early decode also remained above 98.4% greedy and 98.6%
+sampled. The largest single-token modeled stalls were 33.39 ms greedy and
+48.09 ms sampled. Workflow prewarm was bounded but material: up to 3.69 seconds
+at a cold trace start. Product UX must expose this startup state rather than
+presenting it as token latency.
+
+Decision: **go to Phase 1** with 40 GiB as the safer initial 64 GB profile and
+46 GiB as the performance profile. Do not ship 32 GiB for GPT-OSS 120B.
+
+The remaining evidence is intentionally separate:
+
+- the Phase 0 trace records routing, not generated text, so it cannot claim a
+  120B qualification improvement over the 11/16 GPT-OSS 20B control;
+- the latency model must be validated against a real Metal selective loader;
+- reference multi-GPU throughput is not evidence of Mac throughput; and
+- bit equivalence, at least 6 generated tokens/second, first useful output,
+  memory pressure, thermals, cancellation, and escalation reduction remain
+  Phase 1/product gates.
+
 ## Phase 1 — selective loader
 
 Fork a pinned llama.cpp revision and:

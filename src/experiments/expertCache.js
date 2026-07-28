@@ -17,6 +17,9 @@ const METADATA_KEYS = new Set([
   "shared_resident_bytes",
   "source_revision",
   "capture_mode",
+  "expert_runtime",
+  "routing_capture_seam",
+  "weight_quantization",
   "sampling_temperature",
   "sampling_top_p",
   "sampling_seed",
@@ -225,19 +228,19 @@ export function simulateExpertCache(
       p50: percentile(coldBytesPerToken, 0.50),
       p95: percentile(coldBytesPerToken, 0.95),
       p99: percentile(coldBytesPerToken, 0.99),
-      maximum: Math.max(...coldBytesPerToken, 0)
+      maximum: maximum(coldBytesPerToken)
     },
     coldRangesPerToken: {
       mean: average(coldRangesPerToken),
       p95: percentile(coldRangesPerToken, 0.95),
-      maximum: Math.max(...coldRangesPerToken, 0)
+      maximum: maximum(coldRangesPerToken)
     },
     reuseTokenDistance: {
       observations: reuseTokenDistances.length,
       mean: average(reuseTokenDistances),
       p50: percentile(reuseTokenDistances, 0.50),
       p95: percentile(reuseTokenDistances, 0.95),
-      maximum: Math.max(...reuseTokenDistances, 0)
+      maximum: maximum(reuseTokenDistances)
     },
     stallMsPerToken: stall
       ? finishStallSeries(stall, normalizedLatency)
@@ -515,6 +518,9 @@ function normalizeMetadata(record) {
     sharedResidentBytes: nonNegativeInteger(record.shared_resident_bytes),
     sourceRevision: optionalText(record.source_revision, 240),
     captureMode: optionalEnum(record.capture_mode, ["greedy", "sampled"]),
+    expertRuntime: optionalText(record.expert_runtime, 160),
+    routingCaptureSeam: optionalText(record.routing_capture_seam, 160),
+    weightQuantization: optionalText(record.weight_quantization, 80),
     samplingTemperature: optionalBoundedNumber(
       record.sampling_temperature,
       Number.EPSILON,
@@ -1111,13 +1117,21 @@ function average(values) {
     : 0;
 }
 
+function maximum(values) {
+  let result = 0;
+  for (const value of values) {
+    if (value > result) result = value;
+  }
+  return result;
+}
+
 function summarizeSeries(values) {
   return {
     mean: average(values),
     p50: percentile(values, 0.50),
     p95: percentile(values, 0.95),
     p99: percentile(values, 0.99),
-    maximum: Math.max(...values, 0)
+    maximum: maximum(values)
   };
 }
 
