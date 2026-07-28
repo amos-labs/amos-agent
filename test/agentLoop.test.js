@@ -192,6 +192,50 @@ test("productive work continues beyond the former eight-cycle limit", async () =
   assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
 
+test("successful AMOS results receive a short-lived desktop canvas reference", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "amos_company_overview",
+    async handler() {
+      return { revenue: 125000 };
+    }
+  });
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    onToolResult({ name, result }) {
+      assert.equal(name, "amos_company_overview");
+      assert.equal(result.revenue, 125000);
+      return { result_ref: "result-1" };
+    },
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "call-1",
+                function: { name: "amos_company_overview", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        const toolResult = JSON.parse(messages.at(-1).content);
+        assert.equal(toolResult.desktop_result_ref, "result-1");
+        return { message: { role: "assistant", content: "Company view is ready." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Show the company"), "Company view is ready.");
+});
+
 test("queued steering is applied to the same task at a safe tool boundary", async () => {
   const registry = new ToolRegistry();
   const steering = [];

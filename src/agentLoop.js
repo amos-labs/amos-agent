@@ -15,7 +15,8 @@ export class AgentLoop {
     approvals,
     amosClient,
     systemPrompt = SYSTEM_PROMPT,
-    workflowSelector = selectTaskWorkflow
+    workflowSelector = selectTaskWorkflow,
+    onToolResult = null
   }) {
     this.config = config;
     this.modelClient = modelClient || kimiClient;
@@ -24,6 +25,7 @@ export class AgentLoop {
     this.amosClient = amosClient;
     this.systemPrompt = systemPrompt;
     this.workflowSelector = workflowSelector;
+    this.onToolResult = onToolResult;
     this.lastWorkflow = null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
@@ -158,6 +160,23 @@ export class AgentLoop {
           failed = true;
           result = { ok: false, error: error.message };
           onEvent({ type: "tool_error", name, error: error.message });
+        }
+
+        if (!failed && this.onToolResult) {
+          try {
+            const reference = await this.onToolResult({ name, args, result, failed });
+            if (reference?.result_ref) {
+              result = result && typeof result === "object" && !Array.isArray(result)
+                ? { ...result, desktop_result_ref: reference.result_ref }
+                : { result, desktop_result_ref: reference.result_ref };
+            }
+          } catch (error) {
+            onEvent({
+              type: "tool_context_error",
+              name,
+              error: error.message
+            });
+          }
         }
 
         this.messages.push({

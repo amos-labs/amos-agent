@@ -36,7 +36,8 @@ export function createRuntime({
   extraTools = [],
   includeAmos = true,
   includeWeb = true,
-  systemPrompt
+  systemPrompt,
+  onToolResult = null
 }) {
   const registry = createRegistry({ extraTools, includeAmos, includeWeb });
   const modelConfig = {
@@ -63,7 +64,8 @@ export function createRuntime({
     approvals,
     modelClient,
     amosClient,
-    systemPrompt
+    systemPrompt,
+    onToolResult
   });
   return { registry, loop, modelClient, amosClient };
 }

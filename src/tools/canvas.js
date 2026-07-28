@@ -14,6 +14,7 @@ export function createCanvasTool({ present }) {
         title: { type: "string" },
         subtitle: { type: "string" },
         generated_at: { type: "string", description: "ISO-8601 timestamp" },
+        state: stateSchema(),
         source: {
           type: "object",
           additionalProperties: false,
@@ -33,7 +34,7 @@ export function createCanvasTool({ present }) {
         },
         blocks: {
           type: "array",
-          minItems: 1,
+          minItems: 0,
           maxItems: 24,
           items: blockSchema()
         }
@@ -45,6 +46,114 @@ export function createCanvasTool({ present }) {
         ok: true,
         canvas_id: canvas.id,
         title: canvas.title,
+        block_count: canvas.blocks.length
+      };
+    }
+  };
+}
+
+export function createCompanyViewTool({ present }) {
+  if (typeof present !== "function") {
+    throw new Error("Company view tool requires a present handler");
+  }
+  return {
+    name: "desktop_present_company_view",
+    source: "desktop",
+    description:
+      "Turn a captured AMOS tool result into a safe deterministic company view. Pass the desktop_result_ref returned with the AMOS tool result and choose the business intent; Desktop selects and validates the representation.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["result_ref", "intent"],
+      properties: {
+        result_ref: {
+          type: "string",
+          description: "The desktop_result_ref attached to a completed AMOS tool result."
+        },
+        intent: {
+          type: "string",
+          enum: [
+            "auto",
+            "company_overview",
+            "kpi",
+            "funnel",
+            "cohort",
+            "timeline",
+            "comparison",
+            "approvals",
+            "receipts",
+            "live_work"
+          ]
+        },
+        title: { type: "string" }
+      }
+    },
+    handler: async (args) => {
+      const canvas = await present(args);
+      return {
+        ok: true,
+        canvas_id: canvas.id,
+        title: canvas.title,
+        state: canvas.state.kind,
+        block_count: canvas.blocks.length
+      };
+    }
+  };
+}
+
+export function createCanvasUpdateTool({ update }) {
+  if (typeof update !== "function") throw new Error("Canvas update tool requires an update handler");
+  return {
+    name: "desktop_update_canvas",
+    source: "desktop",
+    description:
+      "Incrementally update an existing canvas by block ID during long work. Unmentioned blocks remain unchanged. Use an explicit non-ready state when no blocks are available.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["canvas_id"],
+      properties: {
+        canvas_id: { type: "string" },
+        title: { type: "string" },
+        subtitle: { type: "string" },
+        generated_at: { type: "string", description: "ISO-8601 timestamp" },
+        state: stateSchema(),
+        source: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            kind: { type: "string", enum: ["live", "cached", "private", "local"] },
+            label: { type: "string" },
+            refreshed_at: { type: "string" },
+            stale_after: { type: "string" },
+            refresh_prompt: { type: "string" },
+            references: {
+              type: "array",
+              maxItems: 100,
+              items: referenceSchema()
+            }
+          }
+        },
+        blocks: {
+          type: "array",
+          maxItems: 24,
+          description: "New or replacement blocks. Every block must include a stable ID.",
+          items: blockSchema()
+        },
+        remove_block_ids: {
+          type: "array",
+          maxItems: 24,
+          items: { type: "string" }
+        }
+      }
+    },
+    handler: async (args) => {
+      const canvas = await update(args.canvas_id, args);
+      return {
+        ok: true,
+        canvas_id: canvas.id,
+        revision: canvas.revision,
+        state: canvas.state.kind,
         block_count: canvas.blocks.length
       };
     }
@@ -75,6 +184,7 @@ function blockSchema() {
     properties: {
       id: { type: "string" },
       title: { type: "string" },
+      provenance: provenanceSchema(),
       type: {
         type: "string",
         enum: ["metric", "table", "timeseries", "markdown", "sources", "decision"]
@@ -161,6 +271,46 @@ function blockSchema() {
             value: {}
           }
         }
+      }
+    }
+  };
+}
+
+function stateSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind"],
+    properties: {
+      kind: {
+        type: "string",
+        enum: ["loading", "ready", "empty", "partial", "stale", "error", "restricted"]
+      },
+      message: { type: "string" }
+    }
+  };
+}
+
+function provenanceSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      source_kind: { type: "string", enum: ["live", "cached", "private", "local"] },
+      source_label: { type: "string" },
+      tenant_id: { type: "string" },
+      observed_at: { type: "string" },
+      stale_after: { type: "string" },
+      uncertainty: {
+        type: "string",
+        enum: ["none", "estimated", "partial", "unknown"]
+      },
+      receipt_id: { type: "string" },
+      approval_id: { type: "string" },
+      references: {
+        type: "array",
+        maxItems: 100,
+        items: referenceSchema()
       }
     }
   };
