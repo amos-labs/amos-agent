@@ -92,6 +92,28 @@ The simulator reports hit rate, cold bytes per token, range count per token,
 reuse distance, and worst-case miss bursts. This is the cheapest point at which
 to kill a weak hypothesis.
 
+Phase 0 now includes the privacy-safe
+[routing trace contract](EXPERTCACHE_TRACE_FORMAT.md) and an executable policy
+sweep:
+
+```bash
+npm run experiment:expert-cache -- \
+  --trace test/fixtures/expert-cache-trace.jsonl \
+  --policies lru,lfu,slru,tinylfu \
+  --slots 4,8,16,32,64,96 \
+  --budgets-gib 32,40,48
+```
+
+The checked-in fixture proves parsing and cache accounting. It is not evidence
+about GPT-OSS expert locality; that requires reference-model traces.
+
+The reference capture harness is checked in at
+[`experiments/expert_cache`](../experiments/expert_cache/README.md). It pins the
+official GPT-OSS checkpoint revision and Transformers implementation, rejects
+extra input fields, requires an explicit safe-data acknowledgement, records no
+prompt or generated text, and fails the run if its bounded writer drops any
+routing record.
+
 ## Phase 1 — selective loader
 
 Fork a pinned llama.cpp revision and:
