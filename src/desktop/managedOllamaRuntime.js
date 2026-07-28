@@ -1,10 +1,13 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { totalmem } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { OLLAMA_RUNTIME_RELEASE, ollamaRuntimeAsset } from "./ollamaRuntimeManifest.js";
 
 export const AMOS_LOCAL_HOST = "127.0.0.1:11435";
+export const AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH = 32_768;
+export const AMOS_LOCAL_MAX_CONTEXT_LENGTH = 262_144;
 
 export class ManagedOllamaRuntime {
   constructor({
@@ -18,6 +21,7 @@ export class ManagedOllamaRuntime {
     existsImpl = existsSync,
     mkdirImpl = mkdir,
     environment = process.env,
+    totalMemoryBytes = totalmem(),
     emit = () => {}
   } = {}) {
     if (!resourcesPath) throw new Error("AMOS Local requires a resources path");
@@ -31,6 +35,7 @@ export class ManagedOllamaRuntime {
     this.exists = existsImpl;
     this.mkdir = mkdirImpl;
     this.environment = environment;
+    this.totalMemoryBytes = Math.max(0, Number(totalMemoryBytes) || 0);
     this.emit = emit;
     this.overrideBinaryPath = binaryPath ? resolve(binaryPath) : "";
     this.child = null;
@@ -75,6 +80,10 @@ export class ManagedOllamaRuntime {
       status: installed ? this.lifecycle : supported ? "missing" : "unsupported",
       version: installed ? OLLAMA_RUNTIME_RELEASE.version : null,
       baseUrl: this.baseUrl,
+      contextLength: contextLength(
+        this.environment.AMOS_LOCAL_CONTEXT_LENGTH,
+        this.totalMemoryBytes
+      ),
       error: this.error || (
         supported
           ? installed
@@ -104,6 +113,9 @@ export class ManagedOllamaRuntime {
         OLLAMA_HOST: this.host,
         OLLAMA_MODELS: this.modelsPath,
         OLLAMA_NO_CLOUD: "1",
+        OLLAMA_CONTEXT_LENGTH: String(
+          contextLength(this.environment.AMOS_LOCAL_CONTEXT_LENGTH, this.totalMemoryBytes)
+        ),
         HOME: this.runtimeHomePath,
         ...(this.platform === "win32" ? { USERPROFILE: this.runtimeHomePath } : {})
       },
@@ -188,4 +200,20 @@ function cleanHost(value) {
 
 function safeMessage(error) {
   return String(error?.message || error || "unknown error").replace(/\s+/g, " ").slice(0, 300);
+}
+
+export function contextLength(value, totalMemoryBytes = 0) {
+  const parsed = Number(value);
+  if (
+    Number.isInteger(parsed) &&
+    parsed >= 4_096 &&
+    parsed <= AMOS_LOCAL_MAX_CONTEXT_LENGTH
+  ) {
+    return parsed;
+  }
+  const memoryGb = Math.max(0, Number(totalMemoryBytes) || 0) / 1024 ** 3;
+  if (memoryGb >= 64) return 131_072;
+  if (memoryGb >= 32) return 65_536;
+  if (memoryGb >= 16) return AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH;
+  return 16_384;
 }

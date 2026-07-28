@@ -22,11 +22,33 @@ test("hardware assessment recommends a bounded curated profile", () => {
     platform: "darwin",
     release: "test",
     arch: "arm64",
-    memoryGb: 32,
-    freeMemoryGb: 20
+    memoryGb: 24,
+    freeMemoryGb: 12
   });
   assert.equal(capable.localTier, "capable");
   assert.equal(capable.recommendedModelId, "gpt-oss:20b");
+
+  const professional = assessHardware({
+    platform: "darwin",
+    release: "test",
+    arch: "arm64",
+    memoryGb: 32,
+    freeMemoryGb: 20
+  });
+  assert.equal(professional.localTier, "professional");
+  assert.equal(professional.recommendedModelId, "gpt-oss:20b");
+  assert.equal(professional.recommendedVisionModelId, "qwen3.6:27b-q4_K_M");
+
+  const professionalMax = assessHardware({
+    platform: "darwin",
+    release: "test",
+    arch: "arm64",
+    memoryGb: 64,
+    freeMemoryGb: 48
+  });
+  assert.equal(professionalMax.localTier, "professional-max");
+  assert.equal(professionalMax.recommendedModelId, "gpt-oss:20b");
+  assert.equal(professionalMax.recommendedVisionModelId, "qwen3.6:27b-q4_K_M");
 });
 
 test("curated model manifest is release-signed and content-addressed", () => {
@@ -35,7 +57,13 @@ test("curated model manifest is release-signed and content-addressed", () => {
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
     manifest.models.map((model) => model.id),
-    ["qwen3:4b", "qwen3:8b", "gpt-oss:20b"]
+    [
+      "qwen3:4b",
+      "qwen3:8b",
+      "gpt-oss:20b",
+      "qwen3.6:27b-q4_K_M",
+      "qwen3.6:27b-q8_0"
+    ]
   );
 });
 

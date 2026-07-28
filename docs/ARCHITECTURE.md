@@ -194,6 +194,12 @@ Local aliases expose the bootstrap as `amos_*` tools. Engine verbs are loaded
 only when the task needs them, preventing a growing company platform from
 consuming the entire model context on every turn.
 
+The next layer is a provenance-preserving
+[context compiler](CONTEXT_COMPILER.md): it assembles the smallest useful
+working set from current authority, task state, relevant company and local
+evidence, and progressively loaded capabilities while durable memory remains in
+AMOS.
+
 ## Authentication
 
 Desktop and interactive CLI users use OAuth authorization code + PKCE. The

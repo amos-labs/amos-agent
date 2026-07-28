@@ -9,10 +9,10 @@ const RUNTIME_RETRY_MS = 250;
 // integrity is therefore covered by the same Developer ID signature and
 // notarization gate as the executable that consumes it.
 export const OFFLINE_MODEL_MANIFEST = Object.freeze({
-  version: 1,
+  version: 3,
   trust: "release-signed",
   runtime: "ollama",
-  updatedAt: "2026-07-26T00:00:00.000Z",
+  updatedAt: "2026-07-28T00:00:00.000Z",
   models: Object.freeze([
     Object.freeze({
       id: "qwen3:4b",
@@ -35,11 +35,51 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     Object.freeze({
       id: "gpt-oss:20b",
       name: "AMOS Local · Capable",
-      description: "Agentic local work for higher-memory systems; managed intelligence still handles the hardest tasks.",
+      description: "Fast interactive text, coding, and tool work; managed intelligence still handles unqualified or consequential steps.",
       approximateSizeBytes: 14_000_000_000,
       minimumMemoryGb: 16,
       recommendedMemoryGb: 24,
-      capabilities: Object.freeze(["text", "tools", "code", "reasoning"])
+      capabilities: Object.freeze(["text", "tools", "code", "reasoning"]),
+      primary: true,
+      qualification: Object.freeze({
+        suite: "amos-local-qualification-v1",
+        score: 11,
+        maximum: 16,
+        status: "conditional"
+      })
+    }),
+    Object.freeze({
+      id: "qwen3.6:27b-q4_K_M",
+      name: "AMOS Local · Vision",
+      description: "Multimodal local work when a task contains images; optimized text work stays on the faster primary profile.",
+      approximateSizeBytes: 17_000_000_000,
+      minimumMemoryGb: 24,
+      recommendedMemoryGb: 32,
+      capabilities: Object.freeze(["text", "vision", "tools", "code", "reasoning"]),
+      primary: false,
+      qualification: Object.freeze({
+        suite: "amos-local-qualification-v1",
+        score: 11,
+        maximum: 16,
+        status: "conditional"
+      })
+    }),
+    Object.freeze({
+      id: "qwen3.6:27b-q8_0",
+      name: "AMOS Local · Vision Max",
+      description: "Optional higher-precision multimodal profile for 64 GB workstations; it is not the default interactive model.",
+      approximateSizeBytes: 30_000_000_000,
+      minimumMemoryGb: 48,
+      recommendedMemoryGb: 64,
+      capabilities: Object.freeze(["text", "vision", "tools", "code", "reasoning"]),
+      primary: false,
+      experimental: true,
+      qualification: Object.freeze({
+        suite: "amos-local-qualification-v1",
+        score: 11,
+        maximum: 16,
+        status: "experimental"
+      })
     })
   ])
 });
@@ -54,9 +94,13 @@ export function assessHardware({
   const total = finiteNumber(memoryGb);
   const free = finiteNumber(freeMemoryGb);
   const candidates = OFFLINE_MODEL_MANIFEST.models
-    .filter((model) => total >= model.minimumMemoryGb)
+    .filter((model) => model.primary !== false && total >= model.minimumMemoryGb)
     .sort((left, right) => right.recommendedMemoryGb - left.recommendedMemoryGb);
   const recommended = candidates.find((model) => total >= model.recommendedMemoryGb) || candidates.at(-1) || null;
+  const recommendedVision = OFFLINE_MODEL_MANIFEST.models
+    .filter((model) => model.capabilities.includes("vision") && total >= model.recommendedMemoryGb)
+    .sort((left, right) => left.approximateSizeBytes - right.approximateSizeBytes)
+    .at(0) || null;
 
   return {
     platform: String(platform || ""),
@@ -65,16 +109,23 @@ export function assessHardware({
     memoryGb: total,
     freeMemoryGb: free,
     localTier:
-      total >= 24
-        ? "capable"
-        : total >= 12
-          ? "balanced"
-          : total >= 8
-            ? "compact"
-            : "managed-recommended",
+      total >= 64
+        ? "professional-max"
+        : total >= 32
+          ? "professional"
+          : total >= 24
+            ? "capable"
+            : total >= 12
+              ? "balanced"
+              : total >= 8
+                ? "compact"
+                : "managed-recommended",
     recommendedModelId: recommended?.id || null,
+    recommendedVisionModelId: recommendedVision?.id || null,
     localRecommendation: recommended
-      ? `${recommended.name} is the recommended offline profile for this computer.`
+      ? recommendedVision
+        ? `${recommended.name} is the primary offline profile; ${recommendedVision.name} handles image tasks.`
+        : `${recommended.name} is the recommended offline profile for this computer.`
       : "Use AMOS-hosted or customer-cloud intelligence on this computer."
   };
 }
@@ -130,6 +181,12 @@ export class OllamaModelManager {
       models: manifest.models.map((model) => ({
         ...model,
         recommended: model.id === system?.recommendedModelId,
+        recommendedFor:
+          model.id === system?.recommendedModelId
+            ? "primary"
+            : model.id === system?.recommendedVisionModelId
+              ? "vision"
+              : null,
         installed: installedByName.has(model.id),
         installedSizeBytes: installedByName.get(model.id)?.size || null,
         download: this.downloads.get(model.id) || null

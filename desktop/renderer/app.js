@@ -1831,7 +1831,11 @@ function renderOfflineModels() {
     const labels = document.createElement("div");
     labels.className = "offline-model-labels";
     const profile = document.createElement("span");
-    profile.textContent = model.recommended ? "Recommended for this computer" : model.id;
+    profile.textContent = model.recommended
+      ? "Recommended primary model"
+      : model.recommendedFor === "vision"
+        ? "Recommended for image tasks"
+        : model.id;
     labels.append(profile);
     if (model.installed) {
       const installed = document.createElement("span");
