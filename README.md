@@ -135,7 +135,7 @@ shipping a new desktop build. Explicit provider
 keys, private compatible endpoints, customer Bedrock, and local models remain
 available and are never overwritten after the user selects them.
 
-AMOS Local assesses the computer, recommends one of three curated profiles,
+AMOS Local assesses the computer, recommends a curated profile,
 shows resumable model-download progress, supports explicit removal, and can
 activate a visibly separate local-only operating mode. Signed Desktop releases
 include and supervise the pinned runtime on loopback; users do not install or
@@ -154,7 +154,9 @@ contains:
 | --- | --- | ---: | ---: | --- |
 | Compact | `qwen3:4b` | 2.6 GB | 12 GB | Fast summaries, drafting, extraction, and lightweight workspace tasks |
 | Balanced | `qwen3:8b` | 5.2 GB | 16 GB | Stronger reasoning, coding, documents, and everyday local tool use |
-| Capable | `gpt-oss:20b` | 14 GB | 24 GB | Higher-quality agentic work on machines with more memory |
+| Capable | `gpt-oss:20b` | 14 GB | 24 GB | Primary interactive text, coding, retrieval, and tool work |
+| Vision | `qwen3.6:27b-q4_K_M` | 17 GB | 32 GB | Secondary multimodal profile for tasks that contain images |
+| Vision Max | `qwen3.6:27b-q8_0` | 30 GB | 64 GB | Experimental higher-precision multimodal profile |
 
 On first launch, Desktop starts the included, checksum-verified runtime on an
 AMOS-owned loopback port and disables its cloud features. The user chooses a
@@ -162,6 +164,19 @@ model and selects **Install**; Desktop handles the resumable download,
 activation, lifecycle, and persistent model directory. The model never receives
 AMOS company or public-web tools in local-only mode. A catalog change requires
 a new signed AMOS Desktop release—it cannot be introduced by model output.
+AMOS selects a default local context from installed memory: 16K below 16 GB,
+32K on 16 GB systems, 64K on 32 GB systems, and 128K on 64 GB systems. Advanced
+users can explicitly raise the bounded limit to 262K on a model and machine
+that have been measured at that window. The context compiler still targets a
+smaller information-dense working set for routine turns.
+
+The catalog's recommendation is evidence-driven rather than “largest model
+that fits.” On the 64 GB qualification machine, GPT-OSS 20B matched both Qwen
+27B quantizations on the hard AMOS suite while running more than five times
+faster. Qwen Q4 is recommended only when an image requires a multimodal model;
+Qwen Q8 remains available for experiments but showed no quality gain on the
+current suite. See the
+[qualification report](docs/LOCAL_MODEL_QUALIFICATION.md).
 
 For work beyond the laptop's dependable capabilities, the user can switch to
 AMOS Intelligence, Bedrock, a provider API, or a compatible private endpoint

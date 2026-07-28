@@ -142,10 +142,21 @@ extended by model output. The first profiles are:
 
 - `qwen3:4b` for compact systems;
 - `qwen3:8b` for a balanced local profile; and
-- `gpt-oss:20b` for higher-memory systems.
+- `gpt-oss:20b` as the primary interactive profile on higher-memory systems;
+- `qwen3.6:27b-q4_K_M` as the secondary image-capable profile; and
+- `qwen3.6:27b-q8_0` as an optional experimental multimodal profile.
 
 The recommendation leaves memory headroom for Desktop and normal applications;
 it is not a claim that the local model matches managed frontier intelligence.
+It also follows the measured
+[local capability contract](LOCAL_MODEL_QUALIFICATION.md), so a 64 GB system
+does not automatically prefer the largest model it can load.
+
+AMOS selects 16K, 32K, 64K, or 128K default context from the machine's total
+memory rather than blindly inheriting an upstream model's largest advertised
+window. Set `AMOS_LOCAL_CONTEXT_LENGTH` to an explicit value from 4096 through
+262144 when a controlled deployment needs more context and has measured the
+model-specific memory cost.
 Developers can set `AMOS_OLLAMA_BINARY` to test an explicit runtime binary;
 production builds fail closed when their packaged runtime component is absent.
 
@@ -175,6 +186,11 @@ Local HTTP is allowed only for loopback endpoints.
   size, quantization, context window, and disk space.
 - Model downloads should be checksum-verified, resumable, removable, and stored
   outside the application bundle.
+
+AMOS should select models through measured
+[capability contracts and evidence-driven routing](MODEL_ROUTING.md), including
+quality, governance behavior, latency, privacy, and cost. Model choice never
+changes the user's authority.
 
 ## Security invariants
 
