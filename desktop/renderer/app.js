@@ -88,6 +88,7 @@ const elements = Object.fromEntries(
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
     "managedProfileField", "intelligenceProfileInput", "intelligenceProfileHelp",
+    "managedConnectionCallout", "managedConnectButton",
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
     "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
@@ -182,6 +183,7 @@ function bindActions() {
   elements.clearButton.addEventListener("click", clearSession);
   elements.settingsForm.addEventListener("submit", saveSettings);
   elements.testButton.addEventListener("click", testModel);
+  elements.managedConnectButton.addEventListener("click", connectManagedIntelligence);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
   elements.approvalsButton.addEventListener("click", () => api.openApprovals());
   elements.allApprovalsButton.addEventListener("click", () => api.openApprovals());
@@ -1946,6 +1948,7 @@ function selectProvider(providerId) {
 
 function renderProviderFields(modelValue = "") {
   const managed = selectedProvider === "amos-hosted";
+  const managedConnectionRequired = managed && !state.connected;
   const provider = state.providers.find((item) => item.id === selectedProvider);
   const catalog = modelCatalog(provider);
   const catalogModel = !managed && catalog.length > 0;
@@ -1960,6 +1963,10 @@ function renderProviderFields(modelValue = "") {
   );
   elements.apiKeyInput.closest(".field")?.classList.toggle("hidden", managed || local);
   elements.reasoningInput.closest(".field")?.classList.toggle("hidden", managed);
+  elements.managedConnectionCallout.classList.toggle("hidden", !managedConnectionRequired);
+  elements.testButton.textContent = managedConnectionRequired
+    ? "Create or connect to test"
+    : "Test intelligence";
   if (catalogModel) {
     populateModelOptions(catalog, modelValue || provider?.defaultModel || "");
   } else if (!managed && document.activeElement !== elements.customModelInput) {
@@ -1983,6 +1990,23 @@ async function connectAmos() {
     toast(error.message, true);
   } finally {
     setButtonBusy(elements.connectButton, false, state?.connected ? "Reconnect AMOS" : "Connect AMOS");
+  }
+}
+
+async function connectManagedIntelligence() {
+  elements.settingsError.classList.add("hidden");
+  setButtonBusy(elements.managedConnectButton, true, "Waiting for browser…");
+  try {
+    state = await api.login();
+    selectedProvider = "amos-hosted";
+    toast("AMOS account connected. Managed intelligence is ready to test.");
+    render();
+  } catch (error) {
+    elements.settingsError.textContent =
+      `AMOS account connection did not finish. ${friendlyError(error)}`;
+    elements.settingsError.classList.remove("hidden");
+  } finally {
+    setButtonBusy(elements.managedConnectButton, false, "Create or connect");
   }
 }
 
@@ -2169,16 +2193,36 @@ async function removeOfflineModel(modelId) {
 }
 
 async function testModel() {
-  setButtonBusy(elements.testButton, true, "Testing…");
+  const needsManagedConnection = selectedProvider === "amos-hosted" && !state.connected;
+  setButtonBusy(
+    elements.testButton,
+    true,
+    needsManagedConnection ? "Waiting for browser…" : "Testing…"
+  );
+  elements.settingsError.classList.add("hidden");
   try {
+    if (needsManagedConnection) {
+      state = await api.login();
+      selectedProvider = "amos-hosted";
+      render();
+      setButtonBusy(elements.testButton, true, "Testing…");
+    }
     await persistSettings();
     const result = await api.testModel();
     toast(result.message || "Intelligence is ready.");
   } catch (error) {
-    elements.settingsError.textContent = error.message;
+    elements.settingsError.textContent = needsManagedConnection
+      ? `AMOS account connection did not finish. ${friendlyError(error)}`
+      : friendlyError(error);
     elements.settingsError.classList.remove("hidden");
   } finally {
-    setButtonBusy(elements.testButton, false, "Test intelligence");
+    const stillNeedsManagedConnection =
+      selectedProvider === "amos-hosted" && !state.connected;
+    setButtonBusy(
+      elements.testButton,
+      false,
+      stillNeedsManagedConnection ? "Create or connect to test" : "Test intelligence"
+    );
   }
 }
 
@@ -2678,10 +2722,11 @@ function setRunning(value) {
 
 function renderUpdate() {
   const status = updateState?.status;
-  const visible = ["available", "downloading", "downloaded"].includes(status);
+  const visible = ["available", "downloading", "downloaded", "installing"].includes(status);
   elements.updateButton.classList.toggle("hidden", !visible);
   elements.updateButton.classList.toggle("ready", status === "downloaded");
-  elements.updateButton.disabled = status === "downloading" || (status === "downloaded" && running);
+  elements.updateButton.disabled =
+    ["downloading", "installing"].includes(status) || (status === "downloaded" && running);
   if (status === "available") {
     elements.updateButton.textContent = updateState.availableVersion
       ? `Download v${updateState.availableVersion}`
@@ -2692,6 +2737,8 @@ function renderUpdate() {
       : "Downloading update…";
   } else if (status === "downloaded") {
     elements.updateButton.textContent = running ? "Update ready after task" : "Restart and install";
+  } else if (status === "installing") {
+    elements.updateButton.textContent = "Restarting to update…";
   }
   elements.updateButton.title = updateState?.message || "";
 }
@@ -2736,6 +2783,12 @@ function toast(message, error = false) {
   elements.toast.classList.remove("hidden");
   window.clearTimeout(toast.timer);
   toast.timer = window.setTimeout(() => elements.toast.classList.add("hidden"), 4200);
+}
+
+function friendlyError(error) {
+  return String(error?.message || error || "Something went wrong")
+    .replace(/^Error invoking remote method '[^']+': Error:\s*/i, "")
+    .trim();
 }
 
 function showFatal(error) {

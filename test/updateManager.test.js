@@ -61,7 +61,8 @@ test("signed packaged builds check periodically without downloading automaticall
 
   manager.start();
   assert.equal(updater.autoDownload, false);
-  assert.equal(updater.autoInstallOnAppQuit, false);
+  assert.equal(updater.autoInstallOnAppQuit, true);
+  assert.equal(updater.autoRunAppAfterInstall, true);
   assert.equal(updater.allowPrerelease, false);
   assert.equal(updater.allowDowngrade, false);
 
@@ -114,8 +115,11 @@ test("download progress ends in an explicit restart-and-install state", () => {
   assert.equal(manager.state().progress, 100);
   assert.equal(notifications.at(-1).stage, "downloaded");
 
-  manager.install();
+  const installing = manager.install();
   assert.deepEqual(updater.installArgs, [false, true]);
+  assert.equal(manager.isInstalling(), true);
+  assert.equal(installing.status, "installing");
+  assert.match(installing.message, /Restarting AMOS Desktop/);
 });
 
 test("development builds cannot contact or install from the production release feed", async () => {

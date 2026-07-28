@@ -47,3 +47,17 @@ test("the running-task composer stays available for steering through the allowli
   assert.match(preload, /desktop:steer-task/);
   assert.match(main, /controller\.steerTask/);
 });
+
+test("AMOS Hosted turns an unauthenticated intelligence test into account onboarding", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /Create or connect your AMOS account/);
+  assert.match(html, /return here automatically/);
+  assert.match(javascript, /needsManagedConnection/);
+  assert.match(javascript, /state = await api\.login\(\)/);
+  assert.match(javascript, /Create or connect to test/);
+  assert.match(javascript, /Error invoking remote method/);
+});
