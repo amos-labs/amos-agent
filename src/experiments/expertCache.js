@@ -16,6 +16,10 @@ const METADATA_KEYS = new Set([
   "weight_store_bytes",
   "shared_resident_bytes",
   "source_revision",
+  "capture_mode",
+  "sampling_temperature",
+  "sampling_top_p",
+  "sampling_seed",
   "created_at"
 ]);
 const TOKEN_KEYS = new Set([
@@ -56,57 +60,140 @@ export function simulateExpertCache(
   trace,
   {
     policy = "lru",
-    slotsPerLayer = 32
+    slotsPerLayer = 32,
+    latencyModel = null,
+    verifyBatchSize = 1,
+    verificationAcceptanceRate = 1,
+    concurrency = 1,
+    profileTrace = null
   } = {}
 ) {
   const metadata = normalizeNormalizedMetadata(trace?.metadata);
   const tokens = Array.isArray(trace?.tokens) ? trace.tokens : [];
   const normalizedPolicy = normalizePolicy(policy);
   const slots = boundedInteger(slotsPerLayer, 1, metadata.expertsPerLayer, "slotsPerLayer");
+  const batchSize = boundedInteger(
+    verifyBatchSize,
+    1,
+    256,
+    "verifyBatchSize"
+  );
+  const acceptedFraction = boundedNumber(
+    verificationAcceptanceRate,
+    Number.EPSILON,
+    1,
+    "verificationAcceptanceRate"
+  );
+  const streamCount = boundedInteger(concurrency, 1, 64, "concurrency");
+  const normalizedLatency = latencyModel
+    ? normalizeLatencyModel(latencyModel)
+    : null;
+  const normalizedTokens = addDecodePositions(
+    tokens.map((token) => normalizeNormalizedToken(token, metadata))
+  );
+  const prefillStreaming = summarizePrefillStreaming(normalizedTokens, metadata);
+  const decodeTokens = normalizedTokens.filter((token) => token.phase === "decode");
+  const verificationUnits = interleaveVerificationUnits(
+    buildVerificationUnits(decodeTokens, batchSize),
+    streamCount
+  );
+  const workflowProfiles = profileTrace
+    ? buildWorkflowProfiles(profileTrace, {
+        slotsPerLayer: slots,
+        expectedMetadata: metadata
+      })
+    : null;
   const caches = Array.from(
     { length: metadata.layers },
     () => createCache(normalizedPolicy, slots, metadata.activeExperts)
   );
   const totals = emptyCounter();
-  const byPhase = {
-    prefill: emptyCounter(),
-    decode: emptyCounter()
-  };
   const byWorkflow = new Map();
+  const byDecodePosition = new Map();
   const coldBytesPerToken = [];
   const coldRangesPerToken = [];
   const reuseTokenDistances = [];
   const lastSeenToken = new Map();
+  const stall = normalizedLatency ? emptyStallSeries() : null;
+  const prewarmedTraces = new Set();
+  const prewarm = {
+    enabled: Boolean(workflowProfiles),
+    traceStarts: 0,
+    profiledTraceStarts: 0,
+    misses: 0,
+    coldBytes: 0,
+    coldRanges: 0,
+    stallMs: []
+  };
 
-  for (let tokenOrdinal = 0; tokenOrdinal < tokens.length; tokenOrdinal += 1) {
-    const token = tokens[tokenOrdinal];
-    const normalizedToken = normalizeNormalizedToken(token, metadata);
-    const phaseCounter = byPhase[normalizedToken.phase];
-    const workflowCounter = byWorkflow.get(normalizedToken.workflow) || emptyCounter();
-    let tokenMisses = 0;
+  for (let unitOrdinal = 0; unitOrdinal < verificationUnits.length; unitOrdinal += 1) {
+    const unit = verificationUnits[unitOrdinal];
+    if (!prewarmedTraces.has(unit.traceId)) {
+      prewarmedTraces.add(unit.traceId);
+      prewarm.traceStarts += 1;
+      const profile = workflowProfiles?.workflows?.[unit.workflow];
+      if (profile) {
+        prewarm.profiledTraceStarts += 1;
+        const warmed = prewarmWorkflow(profile, caches, metadata);
+        prewarm.misses += warmed.misses;
+        prewarm.coldBytes += warmed.coldBytes;
+        prewarm.coldRanges += warmed.coldRanges;
+        if (normalizedLatency) {
+          prewarm.stallMs.push(
+            estimateStall(warmed, normalizedLatency, 1).total
+          );
+        }
+      }
+    }
+    const workflowCounter = byWorkflow.get(unit.workflow) || emptyCounter();
+    const positionCounter =
+      byDecodePosition.get(unit.positionBucket) || emptyCounter();
+    let unitMisses = 0;
     const missesByLayer = Array.from({ length: metadata.layers }, () => []);
 
     for (let layer = 0; layer < metadata.layers; layer += 1) {
-      for (const expertId of normalizedToken.experts[layer]) {
+      for (const expertId of unit.experts[layer]) {
         const reuseKey = `${layer}:${expertId}`;
         const lastSeen = lastSeenToken.get(reuseKey);
-        if (lastSeen !== undefined) reuseTokenDistances.push(tokenOrdinal - lastSeen);
-        lastSeenToken.set(reuseKey, tokenOrdinal);
+        if (lastSeen !== undefined) reuseTokenDistances.push(unitOrdinal - lastSeen);
+        lastSeenToken.set(reuseKey, unitOrdinal);
         const hit = caches[layer].access(expertId);
         incrementCounter(totals, hit);
-        incrementCounter(phaseCounter, hit);
         incrementCounter(workflowCounter, hit);
+        incrementCounter(positionCounter, hit);
         if (!hit) {
-          tokenMisses += 1;
+          unitMisses += 1;
           missesByLayer[layer].push(expertId);
         }
       }
     }
-    byWorkflow.set(normalizedToken.workflow, workflowCounter);
-    coldBytesPerToken.push(tokenMisses * metadata.expertBytes);
-    coldRangesPerToken.push(
-      missesByLayer.reduce((sum, ids) => sum + contiguousRangeCount(ids), 0)
+    byWorkflow.set(unit.workflow, workflowCounter);
+    byDecodePosition.set(unit.positionBucket, positionCounter);
+    const acceptedTokens = Math.max(
+      Number.EPSILON,
+      unit.tokenCount * acceptedFraction
     );
+    const coldBytes = unitMisses * metadata.expertBytes;
+    const coldRanges = missesByLayer.reduce(
+      (sum, ids) => sum + contiguousRangeCount(ids),
+      0
+    );
+    coldBytesPerToken.push(coldBytes / acceptedTokens);
+    coldRangesPerToken.push(coldRanges / acceptedTokens);
+    if (stall) {
+      appendStall(
+        stall,
+        estimateStall(
+          {
+            coldBytes,
+            coldRanges,
+            misses: unitMisses
+          },
+          normalizedLatency,
+          acceptedTokens
+        )
+      );
+    }
   }
 
   return {
@@ -116,7 +203,18 @@ export function simulateExpertCache(
     layers: metadata.layers,
     expertsPerLayer: metadata.expertsPerLayer,
     activeExperts: metadata.activeExperts,
-    tokenCount: tokens.length,
+    sourceTokenCount: normalizedTokens.length,
+    tokenCount: decodeTokens.length,
+    verificationUnits: verificationUnits.length,
+    verifyBatchSize: batchSize,
+    assumedAcceptanceRate: acceptedFraction,
+    concurrency: streamCount,
+    prefillStrategy: "sequential-layer-stream-bypass",
+    prefillStreaming,
+    workflowPrewarm: {
+      ...prewarm,
+      stallMs: summarizeSeries(prewarm.stallMs)
+    },
     cacheFootprintBytes: slots * metadata.layers * metadata.expertBytes,
     estimatedResidentBytes:
       metadata.sharedResidentBytes + slots * metadata.layers * metadata.expertBytes,
@@ -141,11 +239,25 @@ export function simulateExpertCache(
       p95: percentile(reuseTokenDistances, 0.95),
       maximum: Math.max(...reuseTokenDistances, 0)
     },
-    phases: Object.fromEntries(
-      Object.entries(byPhase).map(([name, counter]) => [name, finishCounter(counter)])
-    ),
+    stallMsPerToken: stall
+      ? finishStallSeries(stall, normalizedLatency)
+      : null,
+    phases: {
+      decode: finishCounter(totals),
+      prefill: {
+        strategy: "sequential-layer-stream-bypass",
+        tokenCount: prefillStreaming.tokenCount,
+        selectedExpertAccesses: prefillStreaming.selectedExpertAccesses,
+        streamedExperts: prefillStreaming.streamedExperts
+      }
+    },
     workflows: Object.fromEntries(
       [...byWorkflow.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([name, counter]) => [name, finishCounter(counter)])
+    ),
+    decodePositions: Object.fromEntries(
+      [...byDecodePosition.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([name, counter]) => [name, finishCounter(counter)])
     )
@@ -157,7 +269,12 @@ export function sweepExpertCache(
   {
     policies = EXPERT_CACHE_POLICIES,
     slots = [4, 8, 16, 32, 64, 96],
-    budgetsBytes = []
+    budgetsBytes = [],
+    latencyModel = null,
+    verifyBatchSizes = [1],
+    verificationAcceptanceRates = [1],
+    concurrencyLevels = [1],
+    profileTrace = null
   } = {}
 ) {
   const budgetConfigurations = budgetsBytes.map((requestedBudgetBytes) => ({
@@ -184,21 +301,166 @@ export function sweepExpertCache(
       ) {
         continue;
       }
-      results.push({
-        ...simulateExpertCache(trace, {
-          policy,
-          slotsPerLayer: configuration.slotsPerLayer
-        }),
-        requestedBudgetBytes: configuration.requestedBudgetBytes
-      });
+      for (const verifyBatchSize of verifyBatchSizes) {
+        const acceptanceRates = Number(verifyBatchSize) === 1
+          ? [1]
+          : verificationAcceptanceRates;
+        for (const verificationAcceptanceRate of acceptanceRates) {
+          for (const concurrency of concurrencyLevels) {
+            results.push({
+              ...simulateExpertCache(trace, {
+                policy,
+                slotsPerLayer: configuration.slotsPerLayer,
+                latencyModel,
+                verifyBatchSize,
+                verificationAcceptanceRate,
+                concurrency,
+                profileTrace
+              }),
+              requestedBudgetBytes: configuration.requestedBudgetBytes
+            });
+          }
+        }
+      }
     }
   }
-  return results.sort((left, right) =>
-    right.hitRate - left.hitRate ||
+  return results.sort((left, right) => {
+    const leftStall = left.stallMsPerToken?.total?.p95;
+    const rightStall = right.stallMsPerToken?.total?.p95;
+    if (Number.isFinite(leftStall) && Number.isFinite(rightStall)) {
+      const stallDifference = leftStall - rightStall;
+      if (stallDifference !== 0) return stallDifference;
+    }
+    return (
+      right.hitRate - left.hitRate ||
     left.coldBytesPerToken.p95 - right.coldBytesPerToken.p95 ||
     left.cacheFootprintBytes - right.cacheFootprintBytes ||
-    left.policy.localeCompare(right.policy)
+      left.policy.localeCompare(right.policy)
+    );
+  });
+}
+
+export function buildWorkflowProfiles(
+  trace,
+  {
+    slotsPerLayer = 32,
+    expectedMetadata = null
+  } = {}
+) {
+  const metadata = normalizeNormalizedMetadata(trace?.metadata);
+  if (expectedMetadata) assertCompatibleMetadata(metadata, expectedMetadata);
+  const slots = boundedInteger(
+    slotsPerLayer,
+    1,
+    metadata.expertsPerLayer,
+    "slotsPerLayer"
   );
+  const workflows = new Map();
+  for (const rawToken of Array.isArray(trace?.tokens) ? trace.tokens : []) {
+    const token = normalizeNormalizedToken(rawToken, metadata);
+    if (token.phase !== "decode") continue;
+    let layers = workflows.get(token.workflow);
+    if (!layers) {
+      layers = Array.from(
+        { length: metadata.layers },
+        () => new Map()
+      );
+      workflows.set(token.workflow, layers);
+    }
+    for (let layer = 0; layer < metadata.layers; layer += 1) {
+      for (const expertId of token.experts[layer]) {
+        layers[layer].set(expertId, (layers[layer].get(expertId) || 0) + 1);
+      }
+    }
+  }
+  return {
+    model: metadata.model,
+    slotsPerLayer: slots,
+    workflows: Object.fromEntries(
+      [...workflows.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([workflow, layers]) => [
+          workflow,
+          layers.map((frequencies) =>
+            [...frequencies.entries()]
+              .sort(
+                ([leftId, leftCount], [rightId, rightCount]) =>
+                  rightCount - leftCount || leftId - rightId
+              )
+              .slice(0, slots)
+              .map(([expertId]) => expertId)
+          )
+        ])
+    )
+  };
+}
+
+export function compareExpertTraces(referenceTrace, candidateTrace) {
+  const referenceMetadata = normalizeNormalizedMetadata(referenceTrace?.metadata);
+  const candidateMetadata = normalizeNormalizedMetadata(candidateTrace?.metadata);
+  assertCompatibleMetadata(candidateMetadata, referenceMetadata);
+  const referenceTokens = (referenceTrace?.tokens || []).map((token) =>
+    normalizeNormalizedToken(token, referenceMetadata)
+  );
+  const candidateTokens = new Map();
+  for (const rawToken of candidateTrace?.tokens || []) {
+    const token = normalizeNormalizedToken(rawToken, candidateMetadata);
+    const key = traceTokenKey(token);
+    if (candidateTokens.has(key)) {
+      throw new Error(`Candidate trace repeats token ${key}`);
+    }
+    candidateTokens.set(key, token);
+  }
+  if (candidateTokens.size !== referenceTokens.length) {
+    throw new Error(
+      "Reference and candidate traces must contain the same number of tokens"
+    );
+  }
+
+  let layerComparisons = 0;
+  let exactSetMatches = 0;
+  let overlappingExperts = 0;
+  const mismatches = [];
+  for (const reference of referenceTokens) {
+    const key = traceTokenKey(reference);
+    const candidate = candidateTokens.get(key);
+    if (!candidate) throw new Error(`Candidate trace is missing token ${key}`);
+    for (let layer = 0; layer < referenceMetadata.layers; layer += 1) {
+      layerComparisons += 1;
+      const expected = reference.experts[layer];
+      const actual = candidate.experts[layer];
+      const actualSet = new Set(actual);
+      const overlap = expected.filter((expertId) => actualSet.has(expertId)).length;
+      overlappingExperts += overlap;
+      if (overlap === referenceMetadata.activeExperts) {
+        exactSetMatches += 1;
+      } else if (mismatches.length < 20) {
+        mismatches.push({
+          traceId: reference.traceId,
+          tokenIndex: reference.tokenIndex,
+          phase: reference.phase,
+          workflow: reference.workflow,
+          layer,
+          reference: [...expected].sort((left, right) => left - right),
+          candidate: [...actual].sort((left, right) => left - right)
+        });
+      }
+    }
+  }
+  return {
+    model: referenceMetadata.model,
+    tokenCount: referenceTokens.length,
+    layerComparisons,
+    exactSetMatches,
+    exactSetAgreement:
+      layerComparisons > 0 ? exactSetMatches / layerComparisons : 0,
+    expertOverlapRate:
+      layerComparisons > 0
+        ? overlappingExperts /
+          (layerComparisons * referenceMetadata.activeExperts)
+        : 0,
+    mismatchSamples: mismatches
+  };
 }
 
 export function slotsForBudget(metadata, totalBudgetBytes) {
@@ -215,6 +477,10 @@ export function slotsForBudget(metadata, totalBudgetBytes) {
     normalized.expertsPerLayer,
     Math.floor(available / (normalized.layers * normalized.expertBytes))
   );
+}
+
+function traceTokenKey(token) {
+  return `${token.traceId}:${token.tokenIndex}:${token.phase}:${token.workflow}`;
 }
 
 function normalizeMetadata(record) {
@@ -248,11 +514,26 @@ function normalizeMetadata(record) {
     weightStoreBytes: optionalInteger(record.weight_store_bytes),
     sharedResidentBytes: nonNegativeInteger(record.shared_resident_bytes),
     sourceRevision: optionalText(record.source_revision, 240),
+    captureMode: optionalEnum(record.capture_mode, ["greedy", "sampled"]),
+    samplingTemperature: optionalBoundedNumber(
+      record.sampling_temperature,
+      Number.EPSILON,
+      Number.MAX_VALUE,
+      "sampling_temperature"
+    ),
+    samplingTopP: optionalBoundedNumber(
+      record.sampling_top_p,
+      Number.EPSILON,
+      1,
+      "sampling_top_p"
+    ),
+    samplingSeed: optionalNonNegativeInteger(record.sampling_seed),
     createdAt: optionalText(record.created_at, 80)
   };
   if (metadata.activeExperts > metadata.expertsPerLayer) {
     throw new Error("active_experts cannot exceed experts_per_layer");
   }
+  validateCaptureMetadata(metadata);
   return metadata;
 }
 
@@ -316,12 +597,47 @@ function normalizeNormalizedMetadata(metadata) {
       "expertBytes"
     ),
     weightStoreBytes: optionalInteger(metadata.weightStoreBytes),
-    sharedResidentBytes: nonNegativeInteger(metadata.sharedResidentBytes)
+    sharedResidentBytes: nonNegativeInteger(metadata.sharedResidentBytes),
+    captureMode: optionalEnum(metadata.captureMode, ["greedy", "sampled"]),
+    samplingTemperature: optionalBoundedNumber(
+      metadata.samplingTemperature,
+      Number.EPSILON,
+      Number.MAX_VALUE,
+      "samplingTemperature"
+    ),
+    samplingTopP: optionalBoundedNumber(
+      metadata.samplingTopP,
+      Number.EPSILON,
+      1,
+      "samplingTopP"
+    ),
+    samplingSeed: optionalNonNegativeInteger(metadata.samplingSeed)
   };
   if (normalized.activeExperts > normalized.expertsPerLayer) {
     throw new Error("activeExperts cannot exceed expertsPerLayer");
   }
+  validateCaptureMetadata(normalized);
   return normalized;
+}
+
+function validateCaptureMetadata(metadata) {
+  const samplingValues = [
+    metadata.samplingTemperature,
+    metadata.samplingTopP,
+    metadata.samplingSeed
+  ];
+  if (
+    metadata.captureMode === "sampled" &&
+    samplingValues.some((value) => value === null)
+  ) {
+    throw new Error("Sampled capture metadata requires temperature, top-p, and seed");
+  }
+  if (
+    metadata.captureMode === "greedy" &&
+    samplingValues.some((value) => value !== null)
+  ) {
+    throw new Error("Greedy capture metadata cannot contain sampling settings");
+  }
 }
 
 function normalizeNormalizedToken(token, metadata) {
@@ -343,9 +659,289 @@ function normalizeNormalizedToken(token, metadata) {
     return ids;
   });
   return {
+    traceId: boundedText(token.traceId, "traceId", 160),
+    tokenIndex: boundedInteger(
+      token.tokenIndex,
+      0,
+      Number.MAX_SAFE_INTEGER,
+      "tokenIndex"
+    ),
     phase: token.phase,
     workflow: boundedText(token.workflow || "unspecified", "workflow", 120),
     experts
+  };
+}
+
+function addDecodePositions(tokens) {
+  const counts = new Map();
+  return tokens.map((token) => {
+    if (token.phase !== "decode") return token;
+    const decodeIndex = counts.get(token.traceId) || 0;
+    counts.set(token.traceId, decodeIndex + 1);
+    return {
+      ...token,
+      decodeIndex
+    };
+  });
+}
+
+function summarizePrefillStreaming(tokens, metadata) {
+  const traces = new Map();
+  for (const token of tokens) {
+    if (token.phase !== "prefill") continue;
+    let trace = traces.get(token.traceId);
+    if (!trace) {
+      trace = {
+        workflow: token.workflow,
+        tokenCount: 0,
+        selectedExpertAccesses: 0,
+        experts: Array.from({ length: metadata.layers }, () => new Set())
+      };
+      traces.set(token.traceId, trace);
+    }
+    trace.tokenCount += 1;
+    for (let layer = 0; layer < metadata.layers; layer += 1) {
+      trace.selectedExpertAccesses += token.experts[layer].length;
+      for (const expertId of token.experts[layer]) {
+        trace.experts[layer].add(expertId);
+      }
+    }
+  }
+
+  const coldBytesPerToken = [];
+  const coldRangesPerToken = [];
+  const byWorkflow = new Map();
+  let tokenCount = 0;
+  let selectedExpertAccesses = 0;
+  let streamedExperts = 0;
+  let coldBytes = 0;
+  let coldRanges = 0;
+  let peakLayerBytes = 0;
+
+  for (const trace of traces.values()) {
+    const traceExperts = trace.experts.reduce((sum, experts) => sum + experts.size, 0);
+    const traceRanges = trace.experts.reduce(
+      (sum, experts) => sum + contiguousRangeCount([...experts]),
+      0
+    );
+    const traceBytes = traceExperts * metadata.expertBytes;
+    tokenCount += trace.tokenCount;
+    selectedExpertAccesses += trace.selectedExpertAccesses;
+    streamedExperts += traceExperts;
+    coldBytes += traceBytes;
+    coldRanges += traceRanges;
+    peakLayerBytes = Math.max(
+      peakLayerBytes,
+      ...trace.experts.map((experts) => experts.size * metadata.expertBytes)
+    );
+    coldBytesPerToken.push(traceBytes / trace.tokenCount);
+    coldRangesPerToken.push(traceRanges / trace.tokenCount);
+    const workflow = byWorkflow.get(trace.workflow) || {
+      traces: 0,
+      tokenCount: 0,
+      coldBytes: 0,
+      coldRanges: 0
+    };
+    workflow.traces += 1;
+    workflow.tokenCount += trace.tokenCount;
+    workflow.coldBytes += traceBytes;
+    workflow.coldRanges += traceRanges;
+    byWorkflow.set(trace.workflow, workflow);
+  }
+
+  return {
+    traceCount: traces.size,
+    tokenCount,
+    selectedExpertAccesses,
+    streamedExperts,
+    coldBytes,
+    coldRanges,
+    peakLayerBytes,
+    coldBytesPerToken: summarizeSeries(coldBytesPerToken),
+    coldRangesPerToken: summarizeSeries(coldRangesPerToken),
+    workflows: Object.fromEntries(
+      [...byWorkflow.entries()].sort(([left], [right]) => left.localeCompare(right))
+    )
+  };
+}
+
+function buildVerificationUnits(tokens, verifyBatchSize) {
+  const byTrace = new Map();
+  for (const token of tokens) {
+    const grouped = byTrace.get(token.traceId) || [];
+    grouped.push(token);
+    byTrace.set(token.traceId, grouped);
+  }
+
+  return [...byTrace.entries()].map(([traceId, traceTokens]) => {
+    const units = [];
+    for (let offset = 0; offset < traceTokens.length; offset += verifyBatchSize) {
+      const batch = traceTokens.slice(offset, offset + verifyBatchSize);
+      const first = batch[0];
+      units.push({
+        traceId,
+        workflow: first.workflow,
+        tokenCount: batch.length,
+        positionBucket: decodePositionBucket(first.decodeIndex),
+        experts: first.experts.map((_selected, layer) =>
+          [...new Set(batch.flatMap((token) => token.experts[layer]))]
+            .sort((left, right) => left - right)
+        )
+      });
+    }
+    return units;
+  });
+}
+
+function interleaveVerificationUnits(groups, concurrency) {
+  const result = [];
+  for (let offset = 0; offset < groups.length; offset += concurrency) {
+    const active = groups.slice(offset, offset + concurrency);
+    const indexes = active.map(() => 0);
+    let remaining = true;
+    while (remaining) {
+      remaining = false;
+      for (let stream = 0; stream < active.length; stream += 1) {
+        const unit = active[stream][indexes[stream]];
+        if (!unit) continue;
+        result.push(unit);
+        indexes[stream] += 1;
+        remaining = true;
+      }
+    }
+  }
+  return result;
+}
+
+function decodePositionBucket(index) {
+  if (index < 32) return "000-031";
+  if (index < 128) return "032-127";
+  return "128+";
+}
+
+function normalizeLatencyModel(model) {
+  requireObject(model, "latencyModel");
+  return {
+    readBandwidthBytesPerSecond: boundedNumber(
+      model.readBandwidthBytesPerSecond,
+      Number.EPSILON,
+      Number.MAX_VALUE,
+      "readBandwidthBytesPerSecond"
+    ),
+    rangeLatencyMs: boundedNumber(
+      model.rangeLatencyMs,
+      0,
+      Number.MAX_VALUE,
+      "rangeLatencyMs"
+    ),
+    uploadBandwidthBytesPerSecond: boundedNumber(
+      model.uploadBandwidthBytesPerSecond,
+      Number.EPSILON,
+      Number.MAX_VALUE,
+      "uploadBandwidthBytesPerSecond"
+    ),
+    slotRemapMs: boundedNumber(
+      model.slotRemapMs,
+      0,
+      Number.MAX_VALUE,
+      "slotRemapMs"
+    )
+  };
+}
+
+function assertCompatibleMetadata(profile, target) {
+  const fields = [
+    "model",
+    "layers",
+    "expertsPerLayer",
+    "activeExperts"
+  ];
+  const mismatch = fields.find((field) => profile[field] !== target[field]);
+  if (mismatch) {
+    throw new Error(
+      `Workflow profile trace ${mismatch} does not match the evaluation trace`
+    );
+  }
+}
+
+function prewarmWorkflow(profile, caches, metadata) {
+  if (!Array.isArray(profile) || profile.length !== metadata.layers) {
+    throw new Error("Workflow profile has an invalid layer count");
+  }
+  let misses = 0;
+  let coldRanges = 0;
+  for (let layer = 0; layer < metadata.layers; layer += 1) {
+    const experts = profile[layer];
+    if (!Array.isArray(experts)) {
+      throw new Error(`Workflow profile layer ${layer} must be an array`);
+    }
+    const missed = [];
+    for (const expertId of [...experts].reverse()) {
+      const normalized = boundedInteger(
+        expertId,
+        0,
+        metadata.expertsPerLayer - 1,
+        `workflow profile expert at layer ${layer}`
+      );
+      if (!caches[layer].access(normalized)) {
+        misses += 1;
+        missed.push(normalized);
+      }
+    }
+    coldRanges += contiguousRangeCount(missed);
+  }
+  return {
+    misses,
+    coldBytes: misses * metadata.expertBytes,
+    coldRanges
+  };
+}
+
+function emptyStallSeries() {
+  return {
+    readSeek: [],
+    readTransfer: [],
+    upload: [],
+    slotRemap: [],
+    total: []
+  };
+}
+
+function estimateStall(
+  { coldBytes, coldRanges, misses },
+  latencyModel,
+  acceptedTokens
+) {
+  const readSeek = coldRanges * latencyModel.rangeLatencyMs / acceptedTokens;
+  const readTransfer =
+    coldBytes / latencyModel.readBandwidthBytesPerSecond * 1_000 / acceptedTokens;
+  const upload =
+    coldBytes / latencyModel.uploadBandwidthBytesPerSecond * 1_000 / acceptedTokens;
+  const slotRemap = misses * latencyModel.slotRemapMs / acceptedTokens;
+  return {
+    readSeek,
+    readTransfer,
+    upload,
+    slotRemap,
+    total: readSeek + readTransfer + upload + slotRemap
+  };
+}
+
+function appendStall(series, values) {
+  for (const name of Object.keys(series)) series[name].push(values[name]);
+}
+
+function finishStallSeries(series, model) {
+  return {
+    model: {
+      ...model,
+      composition: "conservative-additive"
+    },
+    readSeek: summarizeSeries(series.readSeek),
+    readTransfer: summarizeSeries(series.readTransfer),
+    upload: summarizeSeries(series.upload),
+    slotRemap: summarizeSeries(series.slotRemap),
+    total: summarizeSeries(series.total)
   };
 }
 
@@ -515,6 +1111,16 @@ function average(values) {
     : 0;
 }
 
+function summarizeSeries(values) {
+  return {
+    mean: average(values),
+    p50: percentile(values, 0.50),
+    p95: percentile(values, 0.95),
+    p99: percentile(values, 0.99),
+    maximum: Math.max(...values, 0)
+  };
+}
+
 function percentile(values, fraction) {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((left, right) => left - right);
@@ -555,6 +1161,14 @@ function boundedInteger(value, minimum, maximum, label) {
   return number;
 }
 
+function boundedNumber(value, minimum, maximum, label) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < minimum || number > maximum) {
+    throw new Error(`${label} must be a number from ${minimum} through ${maximum}`);
+  }
+  return number;
+}
+
 function boundedText(value, label, maximum) {
   const text = String(value || "").trim();
   if (!text || text.length > maximum) {
@@ -573,6 +1187,25 @@ function optionalText(value, maximum) {
 function optionalInteger(value) {
   if (value === undefined || value === null || value === "") return null;
   return boundedInteger(value, 1, Number.MAX_SAFE_INTEGER, "optional integer");
+}
+
+function optionalBoundedNumber(value, minimum, maximum, label) {
+  if (value === undefined || value === null || value === "") return null;
+  return boundedNumber(value, minimum, maximum, label);
+}
+
+function optionalNonNegativeInteger(value) {
+  if (value === undefined || value === null || value === "") return null;
+  return boundedInteger(value, 0, Number.MAX_SAFE_INTEGER, "optional integer");
+}
+
+function optionalEnum(value, allowed) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (!allowed.includes(text)) {
+    throw new Error(`Optional value must be one of ${allowed.join(", ")}`);
+  }
+  return text;
 }
 
 function nonNegativeInteger(value) {

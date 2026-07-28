@@ -8,7 +8,7 @@ text.
 The file is UTF-8 JSON Lines. The first record is metadata:
 
 ```json
-{"type":"metadata","schema":"amos.expert-routing-trace","version":1,"model":"openai/gpt-oss-120b","layers":36,"experts_per_layer":128,"active_experts":4,"expert_bytes":12600000,"weight_store_bytes":65283502899,"shared_resident_bytes":7800000000,"source_revision":"pinned-runtime-sha","created_at":"2026-07-28T00:00:00Z"}
+{"type":"metadata","schema":"amos.expert-routing-trace","version":1,"model":"openai/gpt-oss-120b","layers":36,"experts_per_layer":128,"active_experts":4,"expert_bytes":12600000,"weight_store_bytes":65283502899,"shared_resident_bytes":7800000000,"source_revision":"pinned-runtime-sha","capture_mode":"sampled","sampling_temperature":0.7,"sampling_top_p":0.95,"sampling_seed":42,"created_at":"2026-07-28T00:00:00Z"}
 ```
 
 Each remaining record represents one token:
@@ -36,6 +36,9 @@ Each layer contains four unique IDs from 0 through 127.
 - `shared_resident_bytes`: optional resident embeddings, attention, routers,
   norms, output, KV/runtime baseline, and other non-cached bytes;
 - `source_revision`: pinned tracing runtime revision; and
+- `capture_mode`: optional `greedy` or `sampled` arm label;
+- `sampling_temperature`, `sampling_top_p`, and `sampling_seed`: present only
+  for sampled arms; and
 - `created_at`: trace creation time.
 
 ### Token
@@ -77,16 +80,38 @@ npm run experiment:expert-cache -- \
   --trace path/to/trace.jsonl \
   --policies lru,lfu,slru,tinylfu \
   --slots 4,8,16,32,64,96 \
-  --budgets-gib 32,40,48
+  --budgets-gib 32,40,46 \
+  --verify-batches 1,2,4,8 \
+  --acceptance-rates 0.5,0.75,1 \
+  --concurrency 1,2 \
+  --profile-trace path/to/separate-training.trace.jsonl \
+  --read-gib-s MEASURED_SSD_GIB_PER_SECOND \
+  --range-latency-ms MEASURED_RANGE_LATENCY_MS \
+  --upload-gib-s MEASURED_METAL_UPLOAD_GIB_PER_SECOND \
+  --slot-remap-ms MEASURED_SLOT_REMAP_MS
 ```
 
 Use `--json` for a machine-readable report. The simulator reports:
 
-- overall, prefill, decode, and workflow hit rates;
+- decode, workflow, and early/middle/long-sequence hit rates;
+- a separate sequential layer-streaming estimate for prefill that never warms
+  or pollutes the decode cache;
 - cold bytes and p50/p95/p99/max cold bytes per token;
+- p50/p95/p99 cache stall decomposed into seek, read, upload, and remap time
+  when calibrated target-host inputs are supplied;
 - cache and estimated shared-plus-cache resident footprint;
 - the per-layer slot count that fits each requested total memory budget; and
+- verification batch, assumed acceptance, and concurrency dimensions; and
 - every policy/slot combination in the requested sweep.
 
 The offline simulator has no model or GPU dependency, so large trace sweeps can
 run cheaply before a Metal implementation exists.
+
+Once the pinned llama.cpp/Metal runtime emits the same format, compare its
+selected expert sets with the Transformers reference:
+
+```bash
+npm run experiment:expert-compare -- \
+  --reference path/to/transformers.trace.jsonl \
+  --candidate path/to/llama-cpp.trace.jsonl
+```

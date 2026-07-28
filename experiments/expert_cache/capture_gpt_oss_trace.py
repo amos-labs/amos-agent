@@ -238,6 +238,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device-map", default="auto")
     parser.add_argument("--queue-size", type=int, default=8192)
     parser.add_argument(
+        "--capture-mode",
+        choices=("greedy", "sampled"),
+        default="greedy",
+        help="Greedy is reproducible; sampled captures production-like routing variance.",
+    )
+    parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--top-p", type=float, default=0.95)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--samples-per-case",
+        type=int,
+        default=1,
+        help="Independent sampled generations per corpus case.",
+    )
+    parser.add_argument(
         "--acknowledge-safe-input",
         action="store_true",
         help="Confirm the input is synthetic, public, or explicitly approved for benchmarking.",
@@ -310,6 +325,11 @@ def positive(value: int, name: str) -> int:
     return value
 
 
+def sampled_trace_id(base: str, sample_index: int) -> str:
+    suffix = f"-s{sample_index + 1:02d}"
+    return f"{base[: 64 - len(suffix)]}{suffix}"
+
+
 def main() -> int:
     args = parse_args()
     if not args.acknowledge_safe_input:
@@ -322,6 +342,15 @@ def main() -> int:
     positive(args.expert_bytes, "expert-bytes")
     positive(args.max_new_tokens, "max-new-tokens")
     positive(args.queue_size, "queue-size")
+    positive(args.samples_per_case, "samples-per-case")
+    if args.capture_mode == "greedy" and args.samples_per_case != 1:
+        raise ValueError("Greedy capture requires --samples-per-case 1")
+    if args.temperature <= 0:
+        raise ValueError("temperature must be positive")
+    if not 0 < args.top_p <= 1:
+        raise ValueError("top-p must be greater than 0 and at most 1")
+    if args.seed < 0:
+        raise ValueError("seed cannot be negative")
     if args.weight_store_bytes is not None:
         positive(args.weight_store_bytes, "weight-store-bytes")
     if args.shared_resident_bytes < 0:
@@ -363,8 +392,13 @@ def main() -> int:
         "source_revision": (
             f"model:{args.revision};transformers:{TRANSFORMERS_REVISION}"
         ),
+        "capture_mode": args.capture_mode,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if args.capture_mode == "sampled":
+        metadata["sampling_temperature"] = args.temperature
+        metadata["sampling_top_p"] = args.top_p
+        metadata["sampling_seed"] = args.seed
     if args.weight_store_bytes is not None:
         metadata["weight_store_bytes"] = args.weight_store_bytes
 
@@ -379,24 +413,38 @@ def main() -> int:
     try:
         input_device = model.get_input_embeddings().weight.device
         for case in cases:
-            capture.begin_case(case)
-            encoded = tokenizer.apply_chat_template(
-                case.messages,
-                add_generation_prompt=True,
-                tokenize=True,
-                return_tensors="pt",
-                return_dict=True,
-            )
-            encoded = {key: value.to(input_device) for key, value in encoded.items()}
-            with torch.inference_mode():
-                model.generate(
-                    **encoded,
-                    do_sample=False,
-                    max_new_tokens=args.max_new_tokens,
-                    pad_token_id=tokenizer.eos_token_id,
+            for sample_index in range(args.samples_per_case):
+                run_case = (
+                    case
+                    if args.capture_mode == "greedy"
+                    else PromptCase(
+                        sampled_trace_id(case.trace_id, sample_index),
+                        case.workflow,
+                        case.messages,
+                    )
                 )
-            capture.end_case()
-            completed_cases += 1
+                capture.begin_case(run_case)
+                encoded = tokenizer.apply_chat_template(
+                    run_case.messages,
+                    add_generation_prompt=True,
+                    tokenize=True,
+                    return_tensors="pt",
+                    return_dict=True,
+                )
+                encoded = {key: value.to(input_device) for key, value in encoded.items()}
+                torch.manual_seed(args.seed + completed_cases)
+                generation = {
+                    "do_sample": args.capture_mode == "sampled",
+                    "max_new_tokens": args.max_new_tokens,
+                    "pad_token_id": tokenizer.eos_token_id,
+                }
+                if args.capture_mode == "sampled":
+                    generation["temperature"] = args.temperature
+                    generation["top_p"] = args.top_p
+                with torch.inference_mode():
+                    model.generate(**encoded, **generation)
+                capture.end_case()
+                completed_cases += 1
         writer.close(
             completed_cases=completed_cases,
             captured_tokens=capture.captured_tokens,
