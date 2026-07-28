@@ -15,6 +15,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   provider: "amos-hosted",
   model: "auto",
   baseUrl: "",
+  intelligenceProfile: "balanced",
   reasoningEffort: "medium",
   operatingMode: "online",
   appearance: "system",
@@ -99,13 +100,22 @@ export function sanitizeSettings(input = {}) {
   if (operatingMode === "offline" && !["ollama", "llama-cpp"].includes(provider)) {
     throw new Error("Local-only mode requires an Ollama or llama.cpp intelligence profile");
   }
+  const intelligenceProfile = ["efficient", "balanced", "deep", "frontier"].includes(
+    input.intelligenceProfile
+  )
+    ? input.intelligenceProfile
+    : profileForReasoning(input.reasoningEffort);
+  const managed = provider === "amos-hosted";
   return {
     provider,
-    model: clean(input.model, 256),
-    baseUrl: validateEndpoint(input.baseUrl),
-    reasoningEffort: ["none", "low", "medium", "high", "max"].includes(input.reasoningEffort)
-      ? input.reasoningEffort
-      : "medium",
+    model: managed ? "auto" : clean(input.model, 256),
+    baseUrl: managed ? "" : validateEndpoint(input.baseUrl),
+    intelligenceProfile,
+    reasoningEffort: managed
+      ? reasoningForProfile(intelligenceProfile)
+      : ["none", "low", "medium", "high", "max"].includes(input.reasoningEffort)
+        ? input.reasoningEffort
+        : "medium",
     operatingMode,
     appearance: ["system", "light", "dark"].includes(input.appearance)
       ? input.appearance
@@ -120,8 +130,24 @@ export function sanitizeSettings(input = {}) {
           .filter(Boolean)
           .slice(-200)
       : [],
-    apiKey: clean(input.apiKey, 16_384)
+    apiKey: managed ? "" : clean(input.apiKey, 16_384)
   };
+}
+
+function profileForReasoning(reasoningEffort) {
+  if (reasoningEffort === "max") return "frontier";
+  if (reasoningEffort === "high") return "deep";
+  if (["none", "low"].includes(reasoningEffort)) return "efficient";
+  return "balanced";
+}
+
+function reasoningForProfile(profile) {
+  return {
+    efficient: "low",
+    balanced: "medium",
+    deep: "high",
+    frontier: "max"
+  }[profile] || "medium";
 }
 
 function validateEndpoint(value, { requireHttps = false } = {}) {

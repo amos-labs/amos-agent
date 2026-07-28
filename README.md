@@ -114,7 +114,7 @@ contract and tenant-extension safety model.
 AMOS Desktop uses a provider-neutral, OpenAI-compatible model boundary.
 Supported profiles include:
 
-- **AMOS Hosted (default)** — zero-config AMOS-managed inference in AWS;
+- **AMOS Intelligence (default)** — zero-config AMOS-managed, capability-routed inference;
   included plan credits apply first and additional usage is metered
 - **Amazon Bedrock** — customer- or AMOS-controlled AWS inference
 - **Compatible endpoint** — a customer-controlled HTTPS endpoint
@@ -125,10 +125,12 @@ Changing the intelligence does not reconnect the company or change the user's
 AMOS authority. Models without reliable tool use should be limited to
 observe-and-draft workflows.
 
-AMOS Hosted uses the same short-lived AMOS identity as the company connection.
+AMOS Intelligence uses the same short-lived AMOS identity as the company connection.
 Desktop requests the stable `auto` model alias, while the managed platform owns
-provider/model routing. That lets AMOS move from Bedrock to an AMOS-hosted model
-or route by workload without shipping a new desktop build. Explicit provider
+provider/model routing. Desktop exposes Efficient, Balanced, Deep, and Frontier
+capability profiles rather than leaking the current implementation model. That
+lets AMOS move from Bedrock to an AMOS-hosted model or route by workload without
+shipping a new desktop build. Explicit provider
 keys, private compatible endpoints, customer Bedrock, and local models remain
 available and are never overwritten after the user selects them.
 
@@ -163,19 +165,19 @@ exact user and tenant, fetches a fresh `resume_company` briefing and approval
 queue, and loads a no-replay continuation into Operator for explicit review.
 Completed tasks remove their checkpoint.
 
-AMOS Desktop 0.13 makes **AMOS Hosted** the zero-config intelligence path.
+AMOS Desktop 0.13 makes **AMOS Intelligence** the zero-config intelligence path.
 Signing into AMOS supplies short-lived inference authorization automatically;
 included plan credits apply first and additional usage is metered to the
 company. The client requests only the stable `auto` alias so provider/model
 routing can evolve server-side. Existing BYOK, private endpoint, Bedrock, and
 local profiles remain explicit alternatives.
 
-New installations default to balanced reasoning rather than maximum reasoning.
-AMOS Hosted accepts the stable `auto` alias and a reasoning-effort hint, while
-the managed platform owns the actual routine, balanced, or deep model route.
-Users can still explicitly request higher reasoning or choose any supported
-provider. This keeps routine coding, summarization, extraction, and tool work
-from paying frontier-max cost by default.
+New installations default to the Balanced profile rather than maximum
+reasoning. AMOS Intelligence accepts the stable `auto` alias and a capability
+hint, while the managed platform owns the actual routine, balanced, deep, or
+frontier route. Users can still choose an exact model through a customer
+Bedrock or provider-key profile. This keeps routine coding, summarization,
+extraction, and tool work from paying frontier cost by default.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
 

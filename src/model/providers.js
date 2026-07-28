@@ -3,11 +3,14 @@ import { OpenAICompatibleClient } from "./openAiCompatibleClient.js";
 const PROVIDERS = {
   kimi: {
     id: "kimi",
-    displayName: "Kimi API",
-    description: "Moonshot-hosted Kimi for immediate access.",
+    displayName: "Moonshot / Kimi API",
+    description: "Use your own Moonshot API key and choose a Kimi model directly.",
     deployment: "cloud",
     defaultBaseUrl: "https://api.moonshot.ai/v1",
     defaultModel: "kimi-k3",
+    models: [
+      { id: "kimi-k3", label: "Kimi K3" }
+    ],
     apiKeyEnv: ["MOONSHOT_API_KEY", "KIMI_API_KEY"],
     apiKeyRequired: true,
     supportedReasoningEfforts: ["max"],
@@ -15,8 +18,8 @@ const PROVIDERS = {
   },
   "amos-hosted": {
     id: "amos-hosted",
-    displayName: "AMOS Hosted",
-    description: "Ready with your AMOS sign-in. Included credits apply first; additional use is metered.",
+    displayName: "AMOS Intelligence",
+    description: "Choose the capability you need; AMOS routes the best available intelligence without model lock-in.",
     deployment: "amos",
     defaultBaseUrl: "",
     defaultModel: "auto",
@@ -31,7 +34,11 @@ const PROVIDERS = {
     description: "Customer or AMOS AWS inference through Bedrock's OpenAI-compatible API.",
     deployment: "customer-cloud",
     defaultBaseUrl: "",
-    defaultModel: "openai.gpt-oss-120b",
+    defaultModel: "openai.gpt-oss-120b-1:0",
+    models: [
+      { id: "openai.gpt-oss-20b-1:0", label: "GPT OSS 20B" },
+      { id: "openai.gpt-oss-120b-1:0", label: "GPT OSS 120B" }
+    ],
     apiKeyEnv: ["AWS_BEARER_TOKEN_BEDROCK", "BEDROCK_API_KEY"],
     apiKeyRequired: true,
     capabilities: { tools: true, vision: false, reasoning: true }
@@ -39,7 +46,7 @@ const PROVIDERS = {
   ollama: {
     id: "ollama",
     displayName: "Local model · Ollama",
-    description: "A smaller model running on the customer's computer.",
+    description: "Private local intelligence with guided install, download, and activation below.",
     deployment: "local",
     defaultBaseUrl: "http://127.0.0.1:11434/v1",
     defaultModel: "gpt-oss:20b",
@@ -177,6 +184,44 @@ export function validateModelConfig(config) {
 
 export function createModelClient(config, fetchImpl) {
   return new OpenAICompatibleClient(config, fetchImpl);
+}
+
+export const AMOS_INTELLIGENCE_PROFILES = Object.freeze([
+  Object.freeze({
+    id: "efficient",
+    label: "Efficient",
+    reasoningEffort: "low",
+    description: "Fast, economical routing for routine drafting, extraction, and summaries."
+  }),
+  Object.freeze({
+    id: "balanced",
+    label: "Balanced",
+    reasoningEffort: "medium",
+    description: "The default blend of speed, cost, and capability for everyday company work."
+  }),
+  Object.freeze({
+    id: "deep",
+    label: "Deep",
+    reasoningEffort: "high",
+    description: "Stronger reasoning for research, coding, planning, and complex operating work."
+  }),
+  Object.freeze({
+    id: "frontier",
+    label: "Frontier",
+    reasoningEffort: "max",
+    description: "Highest-capability routing for the hardest work; use when quality matters most."
+  })
+]);
+
+export function intelligenceProfile(id) {
+  return AMOS_INTELLIGENCE_PROFILES.find((profile) => profile.id === id) || null;
+}
+
+export function intelligenceProfileForReasoning(reasoningEffort) {
+  if (reasoningEffort === "max") return intelligenceProfile("frontier");
+  if (reasoningEffort === "high") return intelligenceProfile("deep");
+  if (["none", "low"].includes(reasoningEffort)) return intelligenceProfile("efficient");
+  return intelligenceProfile("balanced");
 }
 
 function booleanValue(value) {

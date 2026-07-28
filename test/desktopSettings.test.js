@@ -13,7 +13,36 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.provider, "amos-hosted");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.model, "auto");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.baseUrl, "");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.intelligenceProfile, "balanced");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.reasoningEffort, "medium");
+});
+
+test("AMOS Intelligence stores a capability profile and strips provider-specific routing", () => {
+  const settings = sanitizeSettings({
+    provider: "amos-hosted",
+    model: "kimi-k3",
+    baseUrl: "https://api.moonshot.ai/v1",
+    apiKey: "must-not-survive",
+    intelligenceProfile: "frontier",
+    reasoningEffort: "low",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+
+  assert.equal(settings.model, "auto");
+  assert.equal(settings.baseUrl, "");
+  assert.equal(settings.apiKey, "");
+  assert.equal(settings.intelligenceProfile, "frontier");
+  assert.equal(settings.reasoningEffort, "max");
+});
+
+test("legacy AMOS Intelligence reasoning migrates into the matching capability profile", () => {
+  const settings = sanitizeSettings({
+    provider: "amos-hosted",
+    reasoningEffort: "high",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(settings.intelligenceProfile, "deep");
+  assert.equal(settings.reasoningEffort, "high");
 });
 
 test("personal workspace mode allows a cloud model without AMOS company access", () => {

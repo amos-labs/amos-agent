@@ -398,9 +398,31 @@
                 </select>
                 <small>Personal mode can use your chosen cloud model without company access. Local-only never uses network tools.</small>
               </div>
-              <div class="field">
+              <div id="managedProfileField" class="field hidden">
+                <label for="intelligenceProfileInput">Capability</label>
+                <select id="intelligenceProfileInput" name="intelligenceProfile">
+                  <option value="efficient">Efficient — fastest and most economical</option>
+                  <option value="balanced">Balanced — recommended for everyday work</option>
+                  <option value="deep">Deep — stronger research, coding, and reasoning</option>
+                  <option value="frontier">Frontier — maximum capability for the hardest work</option>
+                </select>
+                <small id="intelligenceProfileHelp">AMOS selects and can change the underlying model without reconnecting your company.</small>
+              </div>
+              <div id="localSetupField" class="local-setup-callout hidden">
+                <div>
+                  <strong>Finish local setup below</strong>
+                  <span>Install Ollama, download a recommended profile, then activate it with AMOS or offline.</span>
+                </div>
+                <button id="localSetupButton" class="button secondary" type="button">Open guided setup ↓</button>
+              </div>
+              <div id="modelSelectField" class="field hidden">
                 <label for="modelInput">Model</label>
-                <input id="modelInput" name="model" autocomplete="off" placeholder="kimi-k3">
+                <select id="modelInput" name="model"></select>
+              </div>
+              <div id="customModelField" class="field hidden">
+                <label for="customModelInput">Model identifier</label>
+                <input id="customModelInput" name="customModel" autocomplete="off" placeholder="Provider model ID">
+                <small>Use the exact identifier exposed by your endpoint.</small>
               </div>
               <div class="field">
                 <label for="baseUrlInput">Inference endpoint</label>
@@ -437,23 +459,29 @@
             </div>
           </form>
 
-          <section class="offline-intelligence-card">
+          <section id="offlineIntelligenceCard" class="offline-intelligence-card">
             <div class="offline-heading">
               <div>
-                <span class="eyebrow accent">CURATED OFFLINE INTELLIGENCE</span>
-                <h2>Keep useful work moving without a network.</h2>
+                <span class="eyebrow accent">LOCAL INTELLIGENCE · OPTIONAL</span>
+                <h2>Run AMOS privately on this computer.</h2>
                 <p>
-                  AMOS uses a release-signed model catalog and Ollama's verified,
-                  resumable model downloads. Offline answers can use local files,
-                  private memory, and local canvases—but never pretend to have live company authority.
+                  Install Ollama once, download the profile AMOS recommends for this
+                  computer, then use it with your company or fully offline. Local-only
+                  work can use files, private memory, and canvases—but never pretends
+                  to have live company authority.
                 </p>
               </div>
               <div class="offline-actions">
                 <span id="offlineRuntimeStatus" class="offline-runtime-status">Checking local runtime…</span>
-                <button id="offlineInstallRuntimeButton" class="button ghost" type="button">Get Ollama</button>
-                <button id="offlineRefreshButton" class="button secondary" type="button">Refresh</button>
+                <button id="offlineInstallRuntimeButton" class="button primary" type="button">1 · Install Ollama</button>
+                <button id="offlineRefreshButton" class="button secondary" type="button">2 · Check again</button>
               </div>
             </div>
+            <ol id="offlineSetupSteps" class="offline-setup-steps" aria-label="Local intelligence setup">
+              <li id="offlineSetupRuntime"><strong>Install and launch Ollama</strong><span>AMOS opens the official installer. Return here after Ollama is running.</span></li>
+              <li id="offlineSetupModel"><strong>Download a local profile</strong><span>Choose the recommended profile below; downloads are resumable.</span></li>
+              <li id="offlineSetupActivate"><strong>Choose how to use it</strong><span>Use the model with your AMOS company or switch to explicit local-only mode.</span></li>
+            </ol>
             <div id="offlineModelList" class="offline-model-list"></div>
             <div class="offline-trust-note">
               <span>Release-signed catalog</span>
