@@ -118,6 +118,7 @@ class RouterCapture:
         *,
         expected_layers: int,
         active_experts: int,
+        expert_runtime: str,
     ):
         self.writer = writer
         self.expected_layers = expected_layers
@@ -130,20 +131,32 @@ class RouterCapture:
         self.token_index = 0
         self.captured_tokens = 0
 
-        routers = [
-            (name, module)
-            for name, module in model.named_modules()
-            if module.__class__.__name__ == "GptOssTopKRouter"
-        ]
-        if len(routers) != expected_layers:
+        if expert_runtime == "Mxfp4GptOssExperts":
+            routing_modules = [
+                (name, module)
+                for name, module in model.named_modules()
+                if module.__class__.__name__ == "GptOssMLP"
+                and getattr(module, "experts", None).__class__.__name__
+                == "Mxfp4GptOssExperts"
+            ]
+            hook = self._mxfp4_hook
+            self.capture_seam = "mxfp4_mlp_router_logits"
+        else:
+            routing_modules = [
+                (name, module)
+                for name, module in model.named_modules()
+                if module.__class__.__name__ == "GptOssTopKRouter"
+            ]
+            hook = self._router_hook
+            self.capture_seam = "router_module_indices"
+        if len(routing_modules) != expected_layers:
             raise RuntimeError(
-                f"Expected {expected_layers} GPT-OSS routers, discovered {len(routers)}. "
-                "The pinned tracing runtime or model architecture changed."
+                f"Expected {expected_layers} GPT-OSS routing modules, discovered "
+                f"{len(routing_modules)} for {expert_runtime}. The pinned tracing "
+                "runtime or model architecture changed."
             )
-        for layer_index, (name, module) in enumerate(routers):
-            self.handles.append(
-                module.register_forward_hook(self._hook(layer_index, name))
-            )
+        for layer_index, (name, module) in enumerate(routing_modules):
+            self.handles.append(module.register_forward_hook(hook(layer_index, name)))
 
     def begin_case(self, case: PromptCase) -> None:
         if self.pending:
@@ -165,7 +178,7 @@ class RouterCapture:
             handle.remove()
         self.handles.clear()
 
-    def _hook(self, layer_index: int, module_name: str):
+    def _router_hook(self, layer_index: int, module_name: str):
         def capture(_module: Any, _inputs: Any, output: Any) -> None:
             if not self.trace_id:
                 raise RuntimeError("Router executed outside an active trace case")
@@ -188,6 +201,44 @@ class RouterCapture:
             if any(len(experts) != self.active_experts for experts in selected):
                 raise RuntimeError(
                     f"Router {module_name} did not select top-{self.active_experts}"
+                )
+            self.pending[layer_index] = selected
+            if len(self.pending) == self.expected_layers:
+                self._flush_forward()
+
+        return capture
+
+    def _mxfp4_hook(self, layer_index: int, module_name: str):
+        def capture(_module: Any, _inputs: Any, output: Any) -> None:
+            if not self.trace_id:
+                raise RuntimeError("MXFP4 MLP executed outside an active trace case")
+            if layer_index in self.pending:
+                raise RuntimeError(
+                    f"MXFP4 MLP {module_name} executed twice before a forward completed"
+                )
+            if not isinstance(output, (tuple, list)) or len(output) < 2:
+                raise RuntimeError(
+                    f"MXFP4 MLP {module_name} did not expose routed output and logits"
+                )
+            router_logits = output[1]
+            if getattr(router_logits, "ndim", None) != 2:
+                raise RuntimeError(
+                    f"MXFP4 MLP {module_name} produced unexpected router-logit shape "
+                    f"{getattr(router_logits, 'shape', None)}"
+                )
+            # The pinned MXFP4 forward computes these logits once, passes them to
+            # its routing kernel, and returns them unchanged. Deriving top-k here
+            # observes the same model decision without replacing or mutating the
+            # quantized execution path.
+            selected = (
+                router_logits.detach()
+                .topk(self.active_experts, dim=-1)
+                .indices.to(device="cpu")
+                .tolist()
+            )
+            if any(len(experts) != self.active_experts for experts in selected):
+                raise RuntimeError(
+                    f"MXFP4 MLP {module_name} did not select top-{self.active_experts}"
                 )
             self.pending[layer_index] = selected
             if len(self.pending) == self.expected_layers:
@@ -393,6 +444,7 @@ def main() -> int:
             "Expected the native MXFP4 expert runtime, found "
             f"{sorted(expert_classes)}. Refusing a numerically different trace."
         )
+    expert_runtime = next(iter(expert_classes))
     layers = int(config.num_hidden_layers)
     experts_per_layer = int(config.num_local_experts)
     active_experts = int(config.num_experts_per_tok)
@@ -410,7 +462,8 @@ def main() -> int:
             f"model:{args.revision};transformers:{TRANSFORMERS_REVISION}"
         ),
         "capture_mode": args.capture_mode,
-        "expert_runtime": "Mxfp4GptOssExperts",
+        "expert_runtime": expert_runtime,
+        "routing_capture_seam": "mxfp4_mlp_router_logits",
         "weight_quantization": "mxfp4",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -427,6 +480,7 @@ def main() -> int:
         writer,
         expected_layers=layers,
         active_experts=active_experts,
+        expert_runtime=expert_runtime,
     )
     completed_cases = 0
     try:
@@ -464,6 +518,10 @@ def main() -> int:
                     model.generate(**encoded, **generation)
                 capture.end_case()
                 completed_cases += 1
+        if capture.captured_tokens == 0:
+            raise RuntimeError(
+                "Model completed cases without emitting any routing records"
+            )
         writer.close(
             completed_cases=completed_cases,
             captured_tokens=capture.captured_tokens,

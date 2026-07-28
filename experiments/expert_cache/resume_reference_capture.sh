@@ -16,6 +16,7 @@ RESULTS="${ROOT}/results"
 LOG="${RESULTS}/resume-runner.log"
 S3_URI="s3://${AMOS_RESULT_BUCKET}/${AMOS_RESULT_PREFIX}/"
 mkdir -p "${RESULTS}" "${HF_HOME}"
+rm -f "${RESULTS}/run-status.json"
 exec > >(tee -a "${LOG}") 2>&1
 
 telemetry_pid=""
