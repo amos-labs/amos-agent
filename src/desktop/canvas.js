@@ -9,6 +9,15 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "sources",
   "decision"
 ]);
+export const CANVAS_STATE_KINDS = Object.freeze([
+  "loading",
+  "ready",
+  "empty",
+  "partial",
+  "stale",
+  "error",
+  "restricted"
+]);
 
 const MAX_BLOCKS = 24;
 const MAX_TABLE_COLUMNS = 12;
@@ -37,16 +46,21 @@ export function normalizeCanvasSpec(input, { now = () => new Date().toISOString(
     throw new Error(`Unsupported canvas version: ${version}`);
   }
 
+  const normalizedSource = normalizeSource(source.source || {}, now);
+  const state = normalizeCanvasState(source.state || "ready");
   const blocks = array(source.blocks, "blocks", MAX_BLOCKS);
-  if (blocks.length === 0) throw new Error("Canvas must include at least one block");
+  if (blocks.length === 0 && state.kind === "ready") {
+    throw new Error("A ready canvas must include at least one block");
+  }
 
   return {
     version,
     title: text(source.title, "title", 160),
     subtitle: optionalText(source.subtitle, "subtitle", 500),
     generatedAt: isoDate(source.generated_at || source.generatedAt || now(), "generated_at"),
-    source: normalizeSource(source.source || {}, now),
-    blocks: blocks.map((block, index) => normalizeBlock(block, index))
+    state,
+    source: normalizedSource,
+    blocks: blocks.map((block, index) => normalizeBlock(block, index, normalizedSource))
   };
 }
 
@@ -63,12 +77,61 @@ export class DesktopCanvasManager {
     const canvas = {
       id: randomUUID(),
       ...spec,
-      presentedAt: this.now()
+      revision: 1,
+      presentedAt: this.now(),
+      updatedAt: this.now()
     };
     this.canvases.unshift(canvas);
     if (this.canvases.length > this.limit) this.canvases.length = this.limit;
     this.activeCanvasId = canvas.id;
     return structuredClone(canvas);
+  }
+
+  update(id, input = {}) {
+    const index = this.canvases.findIndex((canvas) => canvas.id === id);
+    if (index < 0) throw new Error("That canvas is no longer available");
+    const current = this.canvases[index];
+    const incoming = array(
+      input.blocks || input.upsert_blocks || input.upsertBlocks || [],
+      "blocks",
+      MAX_BLOCKS
+    );
+    const removeIds = new Set(
+      array(
+        input.remove_block_ids || input.removeBlockIds || [],
+        "remove_block_ids",
+        MAX_BLOCKS
+      ).map((blockId, blockIndex) => text(blockId, `remove_block_ids[${blockIndex}]`, 80))
+    );
+    const merged = new Map(
+      current.blocks
+        .filter((block) => !removeIds.has(block.id))
+        .map((block) => [block.id, block])
+    );
+    for (let blockIndex = 0; blockIndex < incoming.length; blockIndex += 1) {
+      const block = object(incoming[blockIndex], `blocks[${blockIndex}] must be an object`);
+      const blockId = text(block.id, `blocks[${blockIndex}].id`, 80);
+      merged.set(blockId, block);
+    }
+
+    const spec = normalizeCanvasSpec({
+      version: current.version,
+      title: input.title || current.title,
+      subtitle: input.subtitle === undefined ? current.subtitle : input.subtitle,
+      generated_at: input.generated_at || input.generatedAt || this.now(),
+      state: input.state || current.state,
+      source: input.source ? { ...current.source, ...input.source } : current.source,
+      blocks: [...merged.values()]
+    }, { now: this.now });
+    const updated = {
+      ...current,
+      ...spec,
+      revision: current.revision + 1,
+      updatedAt: this.now()
+    };
+    this.canvases[index] = updated;
+    this.activeCanvasId = updated.id;
+    return structuredClone(updated);
   }
 
   list() {
@@ -99,7 +162,7 @@ export class DesktopCanvasManager {
   }
 }
 
-function normalizeBlock(input, index) {
+function normalizeBlock(input, index, canvasSource) {
   const block = object(input, `blocks[${index}] must be an object`);
   const type = text(block.type, `blocks[${index}].type`, 32);
   if (!CANVAS_BLOCK_TYPES.includes(type)) {
@@ -109,7 +172,12 @@ function normalizeBlock(input, index) {
   const common = {
     id: optionalText(block.id, `blocks[${index}].id`, 80) || `block-${index + 1}`,
     type,
-    title: optionalText(block.title, `blocks[${index}].title`, 160)
+    title: optionalText(block.title, `blocks[${index}].title`, 160),
+    provenance: normalizeBlockProvenance(
+      block.provenance || {},
+      canvasSource,
+      `blocks[${index}].provenance`
+    )
   };
 
   if (type === "metric") {
@@ -241,6 +309,48 @@ function normalizeBlock(input, index) {
         value: primitive(value.value, `blocks[${index}].details[${detailIndex}].value`)
       };
     })
+  };
+}
+
+function normalizeCanvasState(input) {
+  const state = typeof input === "string" ? { kind: input } : object(input, "state must be an object");
+  return {
+    kind: enumValue(state.kind || "ready", [...CANVAS_STATE_KINDS], "state.kind"),
+    message: optionalText(state.message, "state.message", 500)
+  };
+}
+
+function normalizeBlockProvenance(input, canvasSource, path) {
+  const value = object(input, `${path} must be an object`);
+  const references = array(value.references || canvasSource.references || [], `${path}.references`, MAX_SOURCES);
+  return {
+    sourceKind: enumValue(
+      value.source_kind || value.sourceKind || canvasSource.kind,
+      [...SOURCE_KINDS],
+      `${path}.source_kind`
+    ),
+    sourceLabel:
+      optionalText(value.source_label || value.sourceLabel, `${path}.source_label`, 160) ||
+      canvasSource.label,
+    tenantId: optionalText(value.tenant_id || value.tenantId, `${path}.tenant_id`, 160),
+    observedAt: isoDate(
+      value.observed_at || value.observedAt || canvasSource.refreshedAt,
+      `${path}.observed_at`
+    ),
+    staleAfter: optionalIsoDate(
+      value.stale_after || value.staleAfter || canvasSource.staleAfter,
+      `${path}.stale_after`
+    ),
+    uncertainty: enumValue(
+      value.uncertainty || "none",
+      ["none", "estimated", "partial", "unknown"],
+      `${path}.uncertainty`
+    ),
+    receiptId: optionalText(value.receipt_id || value.receiptId, `${path}.receipt_id`, 120),
+    approvalId: optionalText(value.approval_id || value.approvalId, `${path}.approval_id`, 120),
+    references: references.map((reference, referenceIndex) =>
+      normalizeReference(reference, `${path}.references[${referenceIndex}]`)
+    )
   };
 }
 

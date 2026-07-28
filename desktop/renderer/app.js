@@ -78,7 +78,8 @@ const elements = Object.fromEntries(
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
     "capsulePreviewItems", "capsulePreviewWarning", "capsulePreviewCancelButton",
     "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton",
-    "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasBlocks",
+    "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasEmptyTitle",
+    "canvasEmptyMessage", "canvasBlocks",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
     "demoBanner", "demoExpiry", "demoConnectButton", "starterActions"
@@ -430,11 +431,12 @@ function renderCanvas() {
     activeCanvasId = state.activeCanvasId || canvases[0]?.id || null;
   }
   const canvas = canvases.find((item) => item.id === activeCanvasId) || null;
+  const hasBlocks = Boolean(canvas?.blocks?.length);
 
   elements.canvasBadge.textContent = String(canvases.length);
   elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
-  elements.canvasEmpty.classList.toggle("hidden", Boolean(canvas));
-  elements.canvasBlocks.classList.toggle("hidden", !canvas);
+  elements.canvasEmpty.classList.toggle("hidden", hasBlocks);
+  elements.canvasBlocks.classList.toggle("hidden", !hasBlocks);
   elements.canvasSourceBar.classList.toggle("hidden", !canvas);
   elements.canvasTabs.classList.toggle("hidden", canvases.length < 2);
   elements.canvasCloseButton.classList.toggle("hidden", !canvas);
@@ -461,12 +463,22 @@ function renderCanvas() {
     elements.canvasTitle.textContent = "A clearer view of the work.";
     elements.canvasSubtitle.textContent =
       "AMOS can turn current company context into a bounded, source-aware operating view.";
+    elements.canvasEmptyTitle.textContent = "No canvas open yet";
+    elements.canvasEmptyMessage.textContent =
+      "Ask AMOS to compare performance, chart a trend, show a decision, or organize company data into a table.";
+    elements.canvasStartButton.classList.remove("hidden");
     return;
   }
 
   elements.canvasTitle.textContent = canvas.title;
   elements.canvasSubtitle.textContent = canvas.subtitle || "A current operating view generated from the sources below.";
   renderCanvasSource(canvas);
+  if (!hasBlocks) {
+    const copy = canvasStateCopy(canvas.state);
+    elements.canvasEmptyTitle.textContent = copy.title;
+    elements.canvasEmptyMessage.textContent = copy.message;
+    elements.canvasStartButton.classList.toggle("hidden", canvas.state?.kind === "loading");
+  }
   for (const block of canvas.blocks) elements.canvasBlocks.append(renderCanvasBlock(block));
 
   elements.canvasRefreshButton.onclick = () => {
@@ -493,16 +505,78 @@ function renderCanvasSource(canvas) {
     live.classList.add("stale");
     live.textContent = "Refresh recommended";
   }
-  elements.canvasSourceBar.append(live, label, time, refs);
+  elements.canvasSourceBar.append(live);
+  if (canvas.state?.kind && canvas.state.kind !== "ready") {
+    const stateBadge = document.createElement("span");
+    stateBadge.className = `canvas-state-kind ${canvas.state.kind}`;
+    stateBadge.textContent = canvas.state.kind;
+    elements.canvasSourceBar.append(stateBadge);
+  }
+  elements.canvasSourceBar.append(label, time, refs);
 }
 
 function renderCanvasBlock(block) {
-  if (block.type === "metric") return renderCanvasMetric(block);
-  if (block.type === "table") return renderCanvasTable(block);
-  if (block.type === "timeseries") return renderCanvasTimeseries(block);
-  if (block.type === "markdown") return renderCanvasMarkdown(block);
-  if (block.type === "sources") return renderCanvasSources(block);
-  return renderCanvasDecision(block);
+  let card;
+  if (block.type === "metric") card = renderCanvasMetric(block);
+  else if (block.type === "table") card = renderCanvasTable(block);
+  else if (block.type === "timeseries") card = renderCanvasTimeseries(block);
+  else if (block.type === "markdown") card = renderCanvasMarkdown(block);
+  else if (block.type === "sources") card = renderCanvasSources(block);
+  else card = renderCanvasDecision(block);
+  card.classList.add(`canvas-source-${block.provenance?.sourceKind || "live"}`);
+  renderCanvasProvenance(card, block.provenance);
+  return card;
+}
+
+function renderCanvasProvenance(card, provenance) {
+  if (!provenance) return;
+  const footer = document.createElement("footer");
+  footer.className = "canvas-block-provenance";
+  const parts = [
+    provenance.sourceLabel,
+    provenance.tenantId ? `tenant ${shortId(provenance.tenantId)}` : "",
+    provenance.observedAt ? `observed ${relativeTime(provenance.observedAt)}` : "",
+    provenance.uncertainty && provenance.uncertainty !== "none"
+      ? `${provenance.uncertainty} evidence`
+      : "",
+    provenance.receiptId ? `receipt ${shortId(provenance.receiptId)}` : "",
+    provenance.approvalId ? `approval ${shortId(provenance.approvalId)}` : ""
+  ].filter(Boolean);
+  footer.textContent = parts.join(" · ");
+  card.append(footer);
+}
+
+function canvasStateCopy(state) {
+  const message = state?.message;
+  return {
+    loading: {
+      title: "Building this view…",
+      message: message || "AMOS is still collecting and adapting the current result."
+    },
+    empty: {
+      title: "No matching company data",
+      message: message || "Refresh the source or broaden the question."
+    },
+    partial: {
+      title: "Only part of this view is available",
+      message: message || "AMOS preserved the available evidence and marked what is incomplete."
+    },
+    stale: {
+      title: "This view needs a refresh",
+      message: message || "The displayed company data is older than its permitted freshness window."
+    },
+    error: {
+      title: "AMOS could not build this view",
+      message: message || "Refresh the source or inspect the underlying tool result."
+    },
+    restricted: {
+      title: "Your current role cannot see this view",
+      message: message || "AMOS preserved the company boundary instead of exposing unavailable data."
+    }
+  }[state?.kind] || {
+    title: "No displayable blocks",
+    message: message || "Ask AMOS to refresh or present this result differently."
+  };
 }
 
 function renderCanvasMetric(block) {

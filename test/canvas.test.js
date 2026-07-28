@@ -5,7 +5,11 @@ import {
   DesktopCanvasManager,
   normalizeCanvasSpec
 } from "../src/desktop/canvas.js";
-import { createCanvasTool } from "../src/tools/canvas.js";
+import {
+  createCanvasTool,
+  createCanvasUpdateTool,
+  createCompanyViewTool
+} from "../src/tools/canvas.js";
 import { createRegistry } from "../src/runtime.js";
 
 const timestamp = "2026-07-26T12:00:00.000Z";
@@ -96,6 +100,58 @@ test("desktop canvas manager keeps a bounded session-only history", () => {
   assert.deepEqual(manager.state(), { canvases: [], activeCanvasId: null });
 });
 
+test("canvas supports explicit empty and restricted states without pretending data exists", () => {
+  const empty = normalizeCanvasSpec({
+    version: "1",
+    title: "Approval queue",
+    state: { kind: "empty", message: "No approvals are waiting." },
+    source: { kind: "live", label: "AMOS governance", refreshed_at: timestamp, references: [] },
+    blocks: []
+  });
+  assert.equal(empty.state.kind, "empty");
+  assert.equal(empty.blocks.length, 0);
+  assert.throws(
+    () => normalizeCanvasSpec({
+      version: "1",
+      title: "Invalid ready view",
+      source: { kind: "live", label: "AMOS", refreshed_at: timestamp, references: [] },
+      blocks: []
+    }),
+    /ready canvas must include/
+  );
+});
+
+test("incremental canvas updates preserve unrelated blocks and provenance", () => {
+  const manager = new DesktopCanvasManager({ now: () => timestamp });
+  const canvas = manager.present({
+    version: "1",
+    title: "Live work",
+    state: { kind: "partial", message: "Still loading receipts." },
+    source: {
+      kind: "live",
+      label: "AMOS company",
+      refreshed_at: timestamp,
+      references: [{ type: "goal", id: "goal-1", label: "Growth goal" }]
+    },
+    blocks: [
+      { id: "metric", type: "metric", label: "Open work", value: 2 },
+      { id: "brief", type: "markdown", content: "Initial evidence." }
+    ]
+  });
+
+  const updated = manager.update(canvas.id, {
+    state: { kind: "ready" },
+    blocks: [{ id: "metric", type: "metric", label: "Open work", value: 3 }],
+    generated_at: timestamp
+  });
+
+  assert.equal(updated.revision, 2);
+  assert.equal(updated.state.kind, "ready");
+  assert.equal(updated.blocks.find((block) => block.id === "metric").value, 3);
+  assert.equal(updated.blocks.find((block) => block.id === "brief").content, "Initial evidence.");
+  assert.equal(updated.blocks[0].provenance.references[0].id, "goal-1");
+});
+
 test("desktop canvas tool presents through the validated desktop boundary", async () => {
   const manager = new DesktopCanvasManager({ now: () => timestamp });
   const tool = createCanvasTool({ present: (input) => manager.present(input) });
@@ -120,4 +176,34 @@ test("desktop runtime exposes the canvas tool only when the desktop supplies it"
     createRegistry({ extraTools: [tool] }).list().some((item) => item.name === tool.name),
     true
   );
+});
+
+test("company and incremental canvas tools expose narrow deterministic contracts", async () => {
+  const company = createCompanyViewTool({
+    present: ({ result_ref: resultRef, intent }) => ({
+      id: "canvas-company",
+      title: `${intent}:${resultRef}`,
+      state: { kind: "ready" },
+      blocks: [{ id: "metric" }]
+    })
+  });
+  const presented = await company.handler({
+    result_ref: "result-1",
+    intent: "company_overview"
+  });
+  assert.equal(presented.canvas_id, "canvas-company");
+
+  const update = createCanvasUpdateTool({
+    update: (id) => ({
+      id,
+      revision: 2,
+      state: { kind: "partial" },
+      blocks: [{ id: "metric" }]
+    })
+  });
+  const updated = await update.handler({ canvas_id: "canvas-company" });
+  assert.equal(updated.revision, 2);
+  assert.equal(updated.state, "partial");
+  assert.equal(JSON.stringify(company.parameters).includes("$ref"), false);
+  assert.equal(JSON.stringify(update.parameters).includes("$ref"), false);
 });

@@ -10,7 +10,9 @@ import { listModelProviders } from "../model/providers.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
+import { adaptCompanyResult } from "./canvasAdapters.js";
 import { DesktopCanvasManager } from "./canvas.js";
+import { DesktopCanvasResultStore } from "./canvasResults.js";
 import {
   DEFAULT_COMPANY_CACHE_TTL_SECONDS
 } from "./companyCache.js";
@@ -36,7 +38,11 @@ import {
   approvalReviewUrl,
   DesktopRemoteStateClient
 } from "./remoteState.js";
-import { createCanvasTool } from "../tools/canvas.js";
+import {
+  createCanvasTool,
+  createCanvasUpdateTool,
+  createCompanyViewTool
+} from "../tools/canvas.js";
 import { createCompanyCacheTool } from "../tools/companyCache.js";
 import { createOfflineProposalTool } from "../tools/offlineProposal.js";
 import {
@@ -81,6 +87,7 @@ export class DesktopController {
     this.remoteRefreshPromise = null;
     this.attachments = new AttachmentManager();
     this.canvases = new DesktopCanvasManager();
+    this.canvasResults = new DesktopCanvasResultStore();
     this.privateMemoryStore = privateMemoryStore;
     this.companyCacheStore = companyCacheStore;
     this.companyCacheRevalidatedFor = null;
@@ -1127,10 +1134,35 @@ export class DesktopController {
     return this.canvases.state();
   }
 
+  presentCanvas(spec) {
+    const canvas = this.canvases.present(spec);
+    this.record("canvas", `Presented ${canvas.title}`, {
+      canvasId: canvas.id,
+      blockCount: canvas.blocks.length,
+      state: canvas.state.kind,
+      source: canvas.source.label
+    });
+    this.send("canvas:changed", this.canvases.state());
+    return canvas;
+  }
+
+  updateCanvas(id, input) {
+    const canvas = this.canvases.update(id, input);
+    this.record("canvas", `Updated ${canvas.title}`, {
+      canvasId: canvas.id,
+      revision: canvas.revision,
+      blockCount: canvas.blocks.length,
+      state: canvas.state.kind
+    });
+    this.send("canvas:changed", this.canvases.state());
+    return canvas;
+  }
+
   async clear() {
     if (this.runtime) this.runtime.loop.clear();
     this.attachments.clear();
     this.canvases.clear();
+    this.canvasResults.clear();
     this.activity = [];
     this.send("activity:changed", []);
     this.send("canvas:changed", this.canvases.state());
@@ -1537,6 +1569,7 @@ export class DesktopController {
   resetRuntime() {
     this.approvals.cancelAll();
     this.runtime = null;
+    this.canvasResults.clear();
   }
 
   async getRuntime({ requireAmos, offline = false, boundary = null }) {
@@ -1562,18 +1595,31 @@ export class DesktopController {
     }
     const extraTools = [
       createCanvasTool({
-        present: (spec) => {
-          const canvas = this.canvases.present(spec);
-          this.record("canvas", `Presented ${canvas.title}`, {
-            canvasId: canvas.id,
-            blockCount: canvas.blocks.length,
-            source: canvas.source.label
-          });
-          this.send("canvas:changed", this.canvases.state());
-          return canvas;
-        }
+        present: (spec) => this.presentCanvas(spec)
+      }),
+      createCanvasUpdateTool({
+        update: (id, input) => this.updateCanvas(id, input)
       })
     ];
+    if (!isOffline && !isPersonal) {
+      extraTools.push(createCompanyViewTool({
+        present: ({ result_ref: resultRef, intent, title }) => {
+          const captured = this.canvasResults.get(resultRef);
+          if (!captured) {
+            throw new Error(
+              "That AMOS result is no longer available. Refresh the source data before presenting the view."
+            );
+          }
+          return this.presentCanvas(adaptCompanyResult({
+            intent,
+            title,
+            sourceTool: captured.tool,
+            result: captured.result,
+            observedAt: captured.observedAt
+          }));
+        }
+      }));
+    }
     if (isOffline && this.companyCacheStore) {
       try {
         const cached = await this.readCompanyCache(settings);
@@ -1614,7 +1660,8 @@ export class DesktopController {
             : credentials?.demo
               ? DEMO_SYSTEM_PROMPT
               : undefined,
-        extraTools
+        extraTools,
+        onToolResult: (outcome) => this.canvasResults.capture(outcome)
       })
     };
     return this.runtime;

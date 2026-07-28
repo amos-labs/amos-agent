@@ -713,6 +713,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   color: var(--blue-2);
 }
 .canvas-source-kind.stale { background: rgba(255,202,105,.1); color: var(--warning); }
+.canvas-state-kind {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(109,147,255,.1);
+  color: var(--blue-2);
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.canvas-state-kind.partial, .canvas-state-kind.stale {
+  background: rgba(255,202,105,.1);
+  color: var(--warning);
+}
+.canvas-state-kind.error, .canvas-state-kind.restricted {
+  background: rgba(255,117,87,.1);
+  color: #ff9c86;
+}
 .canvas-tabs {
   display: flex;
   gap: 7px;
@@ -759,8 +776,29 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   border-radius: 14px;
   background: var(--panel);
 }
+.canvas-block.canvas-source-private,
+.canvas-block.canvas-source-local {
+  border-color: rgba(109,147,255,.28);
+  background:
+    linear-gradient(145deg, rgba(109,147,255,.045), transparent 42%),
+    var(--panel);
+}
+.canvas-block.canvas-source-cached {
+  border-color: rgba(255,202,105,.22);
+  background:
+    linear-gradient(145deg, rgba(255,202,105,.035), transparent 42%),
+    var(--panel);
+}
 .canvas-block.wide { grid-column: 1 / -1; }
 .canvas-block h2 { margin: 0 0 15px; font-size: 15px; }
+.canvas-block-provenance {
+  margin-top: 18px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted-2);
+  font-size: 8px;
+  line-height: 1.5;
+}
 .canvas-metric { position: relative; min-height: 172px; overflow: hidden; }
 .canvas-metric::after {
   position: absolute;
@@ -1272,4 +1310,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .canvas-heading { align-items: flex-start; flex-direction: column; }
   .canvas-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .canvas-sources-block { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .canvas-view { padding: 28px 24px; }
+  .canvas-source-bar { align-items: flex-start; flex-wrap: wrap; }
+  .canvas-blocks { grid-template-columns: 1fr; }
+  .canvas-decision-block { grid-column: 1; }
 }
