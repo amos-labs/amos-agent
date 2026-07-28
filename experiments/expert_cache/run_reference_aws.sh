@@ -69,7 +69,18 @@ nvidia-smi \
 telemetry_pid=$!
 
 apt-get update
-apt-get install -y awscli git jq python3-venv
+apt-get install -y ca-certificates curl git jq python3-venv unzip
+if ! command -v aws >/dev/null 2>&1; then
+  curl \
+    --fail \
+    --location \
+    --retry 5 \
+    --retry-delay 5 \
+    https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip \
+    --output "${ROOT}/awscliv2.zip"
+  unzip -q "${ROOT}/awscliv2.zip" -d "${ROOT}/awscliv2"
+  "${ROOT}/awscliv2/aws/install"
+fi
 
 git clone \
   --depth 1 \
