@@ -144,6 +144,29 @@ updates. In local-only mode AMOS and public-web tools are not exposed to the
 model. Desktop follows the operating system's light or dark appearance by
 default, with an immediate header switch and persistent overrides.
 
+### AMOS Local models
+
+AMOS Local is the governed local-runtime experience, not a claim that AMOS
+trained the underlying open-weight models. The signed catalog currently
+contains:
+
+| AMOS profile | Underlying model | Approximate download | Recommended memory | Best fit |
+| --- | --- | ---: | ---: | --- |
+| Compact | `qwen3:4b` | 2.6 GB | 12 GB | Fast summaries, drafting, extraction, and lightweight workspace tasks |
+| Balanced | `qwen3:8b` | 5.2 GB | 16 GB | Stronger reasoning, coding, documents, and everyday local tool use |
+| Capable | `gpt-oss:20b` | 14 GB | 24 GB | Higher-quality agentic work on machines with more memory |
+
+On first launch, Desktop starts the included, checksum-verified runtime on an
+AMOS-owned loopback port and disables its cloud features. The user chooses a
+model and selects **Install**; Desktop handles the resumable download,
+activation, lifecycle, and persistent model directory. The model never receives
+AMOS company or public-web tools in local-only mode. A catalog change requires
+a new signed AMOS Desktop release—it cannot be introduced by model output.
+
+For work beyond the laptop's dependable capabilities, the user can switch to
+AMOS Intelligence, Bedrock, a provider API, or a compatible private endpoint
+without reconnecting the company.
+
 AMOS Desktop 0.9 adds an explicit offline company-context grant. While online,
 a signed-in user can ask AMOS for a short-lived, server-signed copy of the
 already bounded `resume_company` briefing. Desktop verifies the signature and
