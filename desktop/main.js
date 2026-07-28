@@ -18,6 +18,7 @@ import { DesktopController } from "../src/desktop/controller.js";
 import { CompanyCacheStore } from "../src/desktop/companyCache.js";
 import { OfflineProposalStore } from "../src/desktop/offlineProposal.js";
 import { OllamaModelManager } from "../src/desktop/offlineIntelligence.js";
+import { ManagedOllamaRuntime } from "../src/desktop/managedOllamaRuntime.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
@@ -28,6 +29,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const { autoUpdater } = electronUpdater;
 let window;
 let controller;
+let offlineManager;
 let updateManager;
 let tray;
 let remoteSyncTimer;
@@ -394,7 +396,14 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
-  const offlineManager = new OllamaModelManager({
+  const managedOllamaRuntime = new ManagedOllamaRuntime({
+    platform: process.platform,
+    arch: process.arch,
+    resourcesPath: app.isPackaged ? process.resourcesPath : join(here, "vendor"),
+    userDataPath: app.getPath("userData")
+  });
+  offlineManager = new OllamaModelManager({
+    runtimeManager: managedOllamaRuntime,
     emit: (payload) => send("offline:changed", payload)
   });
   const telemetry = new DesktopTelemetry({
@@ -453,4 +462,5 @@ app.on("before-quit", () => {
   updateManager?.stop();
   controller?.interruptActiveTask().catch(() => {});
   controller?.resetRuntime();
+  offlineManager?.shutdown().catch(() => {});
 });

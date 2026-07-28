@@ -7,3 +7,4 @@ coverage/
 dist/
 .DS_Store
 .amos-agent/
+desktop/vendor/ollama/

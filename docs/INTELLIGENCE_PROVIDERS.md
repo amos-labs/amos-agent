@@ -113,9 +113,10 @@ AMOS_MODEL_API_KEY=...
 Non-local endpoints must use HTTPS. Capability declarations should accurately
 identify tool use, vision, reasoning controls, and context limits.
 
-## Ollama
+## AMOS Local and Ollama
 
-Ollama defaults to:
+The command-line agent can still connect to a separately managed Ollama
+instance at:
 
 ```text
 http://127.0.0.1:11434/v1
@@ -126,14 +127,18 @@ AMOS_MODEL_PROVIDER=ollama
 AMOS_MODEL=your-local-model
 ```
 
-AMOS Desktop 0.7 can manage a small curated Ollama catalog directly from the
-Intelligence screen. The guided flow opens Ollama's official installer, checks
-that the runtime is running, recommends a model for the computer, downloads it,
-and lets the user activate it with an online AMOS company or in explicit
-local-only mode. The catalog is embedded inside the signed application
-bundle, displays a SHA-256 content identifier, and cannot be extended by model
-output. Ollama supplies digest-verified, resumable downloads and model removal.
-The first profiles are:
+Signed AMOS Desktop releases package a pinned, checksum-verified Ollama runtime
+as **AMOS Local**. Desktop launches and supervises that runtime on
+`127.0.0.1:11435`, keeps Ollama cloud features disabled, and stores model
+weights in the user's persistent application-data directory so an AMOS update
+does not download them again. The user does not install, launch, update, or
+configure a separate Ollama application.
+
+The Intelligence screen recommends a model for the computer, downloads it
+resumably, and lets the user activate it with an online AMOS company or in
+explicit local-only mode. The catalog is embedded inside the signed
+application bundle, displays a SHA-256 content identifier, and cannot be
+extended by model output. The first profiles are:
 
 - `qwen3:4b` for compact systems;
 - `qwen3:8b` for a balanced local profile; and
@@ -141,6 +146,8 @@ The first profiles are:
 
 The recommendation leaves memory headroom for Desktop and normal applications;
 it is not a claim that the local model matches managed frontier intelligence.
+Developers can set `AMOS_OLLAMA_BINARY` to test an explicit runtime binary;
+production builds fail closed when their packaged runtime component is absent.
 
 ## llama.cpp
 

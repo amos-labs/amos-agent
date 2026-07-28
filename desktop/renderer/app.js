@@ -21,7 +21,7 @@ const providerDefaults = {
   },
   ollama: {
     model: "gpt-oss:20b",
-    baseUrl: "http://127.0.0.1:11434/v1",
+    baseUrl: "http://127.0.0.1:11435/v1",
     credential: "No credential required"
   },
   "llama-cpp": {
@@ -124,7 +124,13 @@ async function initialize() {
   render();
   elements.loading.classList.add("hidden");
   elements.app.classList.remove("hidden");
-  api.refreshOffline().catch(() => {});
+  api.refreshOffline()
+    .then((offline) => {
+      if (!state) return;
+      state.offline = offline;
+      renderOfflineModels();
+    })
+    .catch(() => {});
   api.refreshRemote().catch(() => {});
 }
 
@@ -195,9 +201,7 @@ function bindActions() {
   });
   elements.canvasCloseButton.addEventListener("click", removeActiveCanvas);
   elements.offlineRefreshButton.addEventListener("click", refreshOfflineModels);
-  elements.offlineInstallRuntimeButton.addEventListener("click", () =>
-    api.openExternal("https://ollama.com/download")
-  );
+  elements.offlineInstallRuntimeButton.addEventListener("click", refreshOfflineModels);
   elements.memoryExportButton.addEventListener("click", () => openCapsuleFlow("export"));
   elements.memoryImportButton.addEventListener("click", () => openCapsuleFlow("import"));
   elements.companyCacheRefreshButton.addEventListener("click", refreshCompanyCache);
@@ -1802,12 +1806,15 @@ function renderOfflineModels() {
   elements.offlineRuntimeStatus.textContent = runtime.available
     ? installedCount > 0
       ? `Ready · ${installedCount} local ${installedCount === 1 ? "profile" : "profiles"} installed`
-      : "Ollama is running · choose a profile to download"
-    : "Step 1: install and launch Ollama, then check again";
+      : "AMOS Local is ready · choose a model to install"
+    : runtime.status === "starting"
+      ? "Preparing AMOS Local runtime…"
+      : runtime.error || "AMOS Local runtime is unavailable";
   elements.offlineRuntimeStatus.classList.toggle("ready", Boolean(runtime.available));
   elements.offlineRuntimeStatus.classList.toggle("error", !runtime.available);
   elements.offlineInstallRuntimeButton.classList.toggle("hidden", Boolean(runtime.available));
-  elements.offlineRefreshButton.textContent = runtime.available ? "Refresh" : "2 · Check again";
+  elements.offlineInstallRuntimeButton.textContent = "Retry runtime";
+  elements.offlineRefreshButton.textContent = runtime.available ? "Refresh" : "Check runtime";
   elements.offlineSetupRuntime.classList.toggle("complete", Boolean(runtime.available));
   elements.offlineSetupRuntime.classList.toggle("active", !runtime.available);
   elements.offlineSetupModel.classList.toggle("complete", installedCount > 0);
@@ -1870,7 +1877,7 @@ function renderOfflineModels() {
       state.settings.model === model.id &&
       state.settings.operatingMode === "offline";
     if (!model.installed) {
-      const download = actionButton("Download", "primary");
+      const download = actionButton("Install", "primary");
       download.disabled =
         !runtime.available ||
         Boolean(model.download && model.download.status !== "failed") ||
@@ -1878,7 +1885,7 @@ function renderOfflineModels() {
       download.title = state.system.memoryGb < model.minimumMemoryGb
         ? `This profile needs at least ${model.minimumMemoryGb} GB memory`
         : !runtime.available
-          ? "Install and launch Ollama first"
+          ? "AMOS Local is still preparing"
           : "";
       download.addEventListener("click", () => installOfflineModel(model.id));
       actions.append(download);
@@ -1943,7 +1950,10 @@ function renderProviderFields(modelValue = "") {
   elements.localSetupField.classList.toggle("hidden", selectedProvider !== "ollama");
   elements.modelSelectField.classList.toggle("hidden", !catalogModel);
   elements.customModelField.classList.toggle("hidden", managed || catalogModel);
-  elements.baseUrlInput.closest(".field")?.classList.toggle("hidden", managed);
+  elements.baseUrlInput.closest(".field")?.classList.toggle(
+    "hidden",
+    managed || selectedProvider === "ollama"
+  );
   elements.apiKeyInput.closest(".field")?.classList.toggle("hidden", managed || local);
   elements.reasoningInput.closest(".field")?.classList.toggle("hidden", managed);
   if (catalogModel) {
@@ -2043,7 +2053,7 @@ async function persistSettings() {
     const localModel = state.offline?.models?.find((model) => model.id === selectedModel);
     if (!state.offline?.runtime?.available || !localModel?.installed) {
       throw new Error(
-        "Finish the guided local setup below: install and launch Ollama, then download this profile."
+        "Finish the guided AMOS Local setup below, then install this model."
       );
     }
   }

@@ -236,7 +236,7 @@ export class DesktopController {
       ...settings,
       provider: "ollama",
       model: modelId,
-      baseUrl: "http://127.0.0.1:11434/v1",
+      baseUrl: this.offlineManager.openAiBaseUrl(),
       apiKey: "",
       operatingMode
     });

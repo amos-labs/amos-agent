@@ -264,6 +264,8 @@ enforce current identity, scope, expiry, and revocation.
 - [x] Hardware assessment and model recommendation.
 - [x] Release-signed curated catalog, resumable Ollama download manager,
   explicit storage removal, and local runner discovery.
+- [x] Pinned AMOS-managed local runtime, loopback-only lifecycle supervision,
+  persistent model storage, and no separate Ollama installation.
 - [x] Explicit local-only indicator and a physically reduced tool registry with
   no AMOS or public-web tools.
 - [x] Bounded company-cache retrieval with server-issued identity, scope,

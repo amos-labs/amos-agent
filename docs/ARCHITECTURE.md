@@ -240,6 +240,13 @@ these rules:
 - offline company actions remain proposals until reauthorized online; and
 - imports, exports, and forks never include credentials.
 
+Signed releases now carry the pinned Ollama runtime as the internal **AMOS
+Local** sidecar. Desktop binds it to an AMOS-owned loopback port, disables
+Ollama cloud features, supervises its lifecycle, and keeps model weights in
+persistent per-user application data. The runtime is an implementation detail:
+the renderer receives bounded status and model progress, never a process path
+or authority to spawn arbitrary binaries.
+
 See [CANVAS-OFFLINE-MEMORY-SPIKE.md](CANVAS-OFFLINE-MEMORY-SPIKE.md).
 
 ## Typed canvas boundary

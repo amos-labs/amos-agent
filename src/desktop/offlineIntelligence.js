@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 const REQUEST_TIMEOUT_MS = 5_000;
+const RUNTIME_STARTUP_TIMEOUT_MS = 10_000;
+const RUNTIME_RETRY_MS = 250;
 
 // This catalog ships inside the signed AMOS Desktop application bundle. Its
 // integrity is therefore covered by the same Developer ID signature and
@@ -89,16 +91,25 @@ export class OllamaModelManager {
   constructor({
     fetchImpl = globalThis.fetch,
     baseUrl = OLLAMA_BASE_URL,
-    emit = () => {}
+    emit = () => {},
+    runtimeManager = null,
+    startupTimeoutMs = RUNTIME_STARTUP_TIMEOUT_MS,
+    retryMs = RUNTIME_RETRY_MS,
+    sleepImpl = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
   } = {}) {
     this.fetch = fetchImpl;
-    this.baseUrl = String(baseUrl).replace(/\/$/, "");
+    this.runtimeManager = runtimeManager;
+    this.baseUrl = String(runtimeManager?.baseUrl || baseUrl).replace(/\/$/, "");
     this.emit = emit;
+    this.startupTimeoutMs = Math.max(0, Number(startupTimeoutMs) || 0);
+    this.retryMs = Math.max(10, Number(retryMs) || RUNTIME_RETRY_MS);
+    this.sleep = sleepImpl;
     this.runtime = {
       available: false,
       version: null,
       checkedAt: null,
-      error: null
+      error: null,
+      ...(runtimeManager?.state?.() || {})
     };
     this.installed = [];
     this.downloads = new Map();
@@ -127,13 +138,21 @@ export class OllamaModelManager {
   }
 
   async refresh(system = null) {
+    let managedState = null;
     try {
-      const [version, tags] = await Promise.all([
-        this.request("/api/version"),
-        this.request("/api/tags")
-      ]);
+      if (this.runtimeManager) {
+        managedState = await this.runtimeManager.start();
+        this.baseUrl = this.runtimeManager.baseUrl.replace(/\/$/, "");
+        if (!managedState.installed) {
+          throw new Error(managedState.error || "AMOS Local runtime is unavailable");
+        }
+      }
+      const [version, tags] = await this.probe();
+      managedState = this.runtimeManager?.markReady?.() || managedState;
       this.runtime = {
+        ...(managedState || {}),
         available: true,
+        status: "ready",
         version: clean(version?.version, 128) || null,
         checkedAt: new Date().toISOString(),
         error: null
@@ -146,11 +165,15 @@ export class OllamaModelManager {
           })).filter((model) => model.name)
         : [];
     } catch (error) {
+      managedState = this.runtimeManager?.state?.() || managedState;
       this.runtime = {
+        ...(managedState || {}),
         available: false,
-        version: null,
+        version: managedState?.version || null,
         checkedAt: new Date().toISOString(),
-        error: `Ollama is not reachable on this computer: ${error.message}`
+        error: this.runtimeManager
+          ? clean(error.message, 1_000)
+          : `Ollama is not reachable on this computer: ${error.message}`
       };
       this.installed = [];
     }
@@ -227,8 +250,16 @@ export class OllamaModelManager {
   async requireRuntime() {
     await this.refresh();
     if (!this.runtime.available) {
-      throw new Error("Install and launch Ollama before downloading an AMOS offline model");
+      throw new Error(this.runtime.error || "AMOS Local runtime is unavailable");
     }
+  }
+
+  openAiBaseUrl() {
+    return `${this.baseUrl}/v1`;
+  }
+
+  async shutdown() {
+    await this.runtimeManager?.stop?.();
   }
 
   publish(system = null) {
@@ -265,6 +296,24 @@ export class OllamaModelManager {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  async probe() {
+    const deadline = Date.now() + (this.runtimeManager ? this.startupTimeoutMs : 0);
+    let lastError = null;
+    do {
+      try {
+        return await Promise.all([
+          this.request("/api/version"),
+          this.request("/api/tags")
+        ]);
+      } catch (error) {
+        lastError = error;
+      }
+      if (Date.now() >= deadline) break;
+      await this.sleep(Math.min(this.retryMs, Math.max(0, deadline - Date.now())));
+    } while (Date.now() <= deadline);
+    throw lastError || new Error("AMOS Local did not become ready");
   }
 }
 
