@@ -38,6 +38,10 @@ const maxTokens = boundedInteger(
   4_096,
   768
 );
+const reasoningEffort = normalizeReasoningEffort(
+  readOption(args, "--reasoning-effort") ||
+    process.env.AMOS_LOCAL_BENCHMARK_REASONING_EFFORT
+);
 const onlyScenarios = new Set(
   (readOption(args, "--only") || process.env.AMOS_LOCAL_BENCHMARK_ONLY || "")
     .split(",")
@@ -50,6 +54,7 @@ if (models.length === 0) {
     "Usage: npm run benchmark:local -- <model> [model...] " +
     "[--suite smoke|qualification|all] [--url URL] [--context TOKENS] " +
     "[--request-timeout-seconds SECONDS] [--max-tokens TOKENS] " +
+    "[--reasoning-effort low|medium|high] " +
     "[--protocol ollama|openai] [--only SCENARIO,...] [--output REPORT.json]"
   );
   process.exit(2);
@@ -85,6 +90,7 @@ if (output) {
     suite,
     context_length: contextLength,
     max_tokens: maxTokens,
+    reasoning_effort: reasoningEffort,
     only_scenarios: onlyScenarios.size > 0 ? [...onlyScenarios] : null,
     results
   }, null, 2)}\n`);
@@ -589,7 +595,11 @@ async function chat(model, messages, tools = []) {
     tools: tools.length > 0 ? tools : undefined,
     stream: false,
     temperature: 0,
-    max_tokens: maxTokens
+    max_tokens: maxTokens,
+    reasoning_effort: reasoningEffort || undefined,
+    chat_template_kwargs: reasoningEffort
+      ? { reasoning_effort: reasoningEffort }
+      : undefined
   } : {
     model,
     messages,
@@ -672,6 +682,7 @@ function isOptionWithValue(value) {
     "--protocol",
     "--only",
     "--max-tokens",
+    "--reasoning-effort",
     "--request-timeout-seconds",
     "--output"
   ].includes(value);
@@ -740,6 +751,13 @@ function normalizeProtocol(value) {
   const normalized = String(value || "").trim().toLowerCase();
   if (["ollama", "openai"].includes(normalized)) return normalized;
   throw new Error(`Unknown benchmark protocol: ${value}`);
+}
+
+function normalizeReasoningEffort(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (["low", "medium", "high"].includes(normalized)) return normalized;
+  throw new Error(`Unsupported reasoning effort: ${value}`);
 }
 
 function normalizedText(value) {
