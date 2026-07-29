@@ -197,6 +197,46 @@ Two conclusions:
    ownership of the measured 27–30 GiB route window, and speculative
    verification batches that keep the routed working set warm.
 
+## Async routed-union prefetch result
+
+`GGML_METAL_EXPERT_CACHE_PREFETCH=N` (runner flag `--expert-cache-prefetch N`)
+starts N background threads that touch mapped expert pages so cold page-ins
+overlap GPU compute instead of serializing at command-buffer schedule time.
+At CPU staging time — when a layer's routing is known — the workers (1) race
+the Metal driver on this layer's routed ranges with parallel reads, and
+(2) prefetch the recent route union (`_WINDOW`, default 16 builds) for the
+next `_AHEAD` (default 3) expert tensors, wrapping so the last layer warms
+layer 0 for the next token. The prefetcher only reads a read-only file
+mapping: it can change latency, never bytes.
+
+Deterministic 32-token raw-prompt A/B/A on the 361-token prompt, grouped
+zero-copy runtime, batch 64 (decision-grade host, run order listed):
+
+| Arm | Prompt tok/s | Decode tok/s | Output |
+| --- | ---: | ---: | --- |
+| Grouped, no prefetch (coldest) | 16.6 | 2.73 | reference |
+| Grouped + prefetch 6 threads | **23.6** | **2.90** | bit-exact |
+| Grouped, no prefetch (warmest, ran last) | 18.6 | 2.62 | bit-exact |
+
+The prefetch arm beat the warmer-than-itself trailing control by 27% on
+prompt throughput (42% against the colder leading control) and was the only
+configuration to also lift decode. Twelve threads with lookahead 6 added ~3%
+prompt but regressed decode to 2.38; six threads with lookahead 3 is the
+default. The repetitive raw prompt routes more locally than the 99-token chat
+prompt (16.6 versus ~5 tok/s base), so gains must also be confirmed on the
+hidden coding gate before being quoted.
+
+The confirmation passed. The full hidden coding gate with grouped dispatch
+plus six prefetch threads scored **3/3** at batch 64 with the 1,536-token
+allowance, generating exactly the same 1,128-token trajectory as the
+no-prefetch grouped arm (bit-exactness held over the full generation, not
+only the 32-token probes). Prompt evaluation on the real coding prompt rose
+from 5.75 to **9.80 tok/s (+70%)**; decode was 3.24 versus 3.38 tok/s
+(within host drift); system swap did not grow during the run. Wall time was
+decode-dominated and therefore roughly flat — the prefetcher's value today
+is prefill and batched verification, which is exactly the speculative-decoding
+verifier profile.
+
 The grouped arm passed the full hidden coding gate at batch 64/micro-batch 64
 with a 1,536-token allowance: 3/3 (hidden optimum, tie-break, immutability),
 1,128 generated tokens, 358.5 seconds on the contaminated host, 5.75 prompt

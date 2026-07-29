@@ -622,26 +622,32 @@ index 9f350aad..0022941d 100644
  // RMS_NORM
  typedef struct {
 diff --git a/ggml/src/ggml-metal/ggml-metal-ops.cpp b/ggml/src/ggml-metal/ggml-metal-ops.cpp
-index 76626a45..d5473831 100644
+index 76626a45..81b265c6 100644
 --- a/ggml/src/ggml-metal/ggml-metal-ops.cpp
 +++ b/ggml/src/ggml-metal/ggml-metal-ops.cpp
-@@ -10,8 +10,14 @@
+@@ -10,8 +10,20 @@
  
  #include <cassert>
  #include <algorithm>
 -#include <limits>
 +#include <chrono>
  #include <cmath>
++#include <condition_variable>
 +#include <cstdlib>
 +#include <cstring>
++#include <deque>
 +#include <mutex>
 +#include <string>
++#include <thread>
 +#include <unordered_map>
 +#include <vector>
++
++#include <sys/mman.h>
++#include <unistd.h>
  
  static ggml_metal_buffer_id ggml_metal_get_buffer_id(const ggml_tensor * t) {
      if (!t) {
-@@ -172,6 +178,129 @@ static bool ggml_metal_op_concurrency_add(ggml_metal_op_t ctx, const ggml_tensor
+@@ -172,6 +184,282 @@ static bool ggml_metal_op_concurrency_add(ggml_metal_op_t ctx, const ggml_tensor
      return ggml_mem_ranges_add(ctx->mem_ranges, node);
  }
  
@@ -662,6 +668,159 @@ index 76626a45..d5473831 100644
 +    std::vector<int64_t> grouped_route_offsets;
 +    int64_t grouped_route_count = 0;
 +};
++
++// Async routed-union page prefetcher. Worker threads touch mapped expert
++// byte ranges so cold page-ins overlap GPU compute instead of serializing at
++// command-buffer schedule time. Read-only on a read-only file mapping: it can
++// change latency, never bytes.
++struct ggml_metal_expert_prefetcher {
++    struct prefetch_range {
++        const uint8_t * ptr;
++        size_t bytes;
++    };
++
++    struct tensor_entry {
++        const uint8_t * data;
++        size_t bytes_per_expert;
++        int64_t n_experts;
++        uint32_t build_counter = 0;
++        std::vector<uint32_t> last_seen; // build counter per expert, 0 = never
++    };
++
++    std::mutex mutex;
++    std::condition_variable cv;
++    std::deque<prefetch_range> queue;
++    std::vector<std::thread> workers;
++    std::vector<tensor_entry> registry; // first-seen (graph) order
++    std::unordered_map<const void *, size_t> registry_index;
++    size_t page_size;
++    size_t max_queue;
++
++    explicit ggml_metal_expert_prefetcher(int n_threads) {
++        page_size = (size_t) sysconf(_SC_PAGESIZE);
++        max_queue = 4096;
++        for (int i = 0; i < n_threads; ++i) {
++            workers.emplace_back([this] { run(); });
++            workers.back().detach();
++        }
++    }
++
++    void run() {
++        for (;;) {
++            prefetch_range range;
++            {
++                std::unique_lock<std::mutex> lock(mutex);
++                cv.wait(lock, [this] { return !queue.empty(); });
++                range = queue.front();
++                queue.pop_front();
++            }
++            touch(range);
++        }
++    }
++
++    void touch(const prefetch_range & range) {
++        const uintptr_t begin =
++            (uintptr_t) range.ptr & ~(uintptr_t) (page_size - 1);
++        const uintptr_t end = (uintptr_t) range.ptr + range.bytes;
++        madvise((void *) begin, end - begin, MADV_WILLNEED);
++        volatile uint8_t sink = 0;
++        for (uintptr_t page = begin; page < end; page += page_size) {
++            sink ^= *(const volatile uint8_t *) page;
++        }
++        (void) sink;
++    }
++
++    void enqueue(const uint8_t * ptr, size_t bytes) {
++        std::lock_guard<std::mutex> lock(mutex);
++        if (queue.size() >= max_queue) {
++            return; // saturated: dropping a hint is always safe
++        }
++        queue.push_back({ ptr, bytes });
++        cv.notify_one();
++    }
++
++    // Record this tensor's routed experts, race the GPU on their pages, and
++    // prefetch the recent route union for the next `ahead` expert tensors
++    // (wrapping so the last layer warms layer 0 for the next token).
++    void on_routes(
++            const void * tensor_key,
++            const uint8_t * data,
++            size_t bytes_per_expert,
++            int64_t n_experts,
++            const std::vector<int32_t> & routed,
++            uint32_t window,
++            size_t ahead) {
++        size_t idx;
++        {
++            std::lock_guard<std::mutex> lock(mutex);
++            auto it = registry_index.find(tensor_key);
++            if (it == registry_index.end()) {
++                idx = registry.size();
++                registry_index.emplace(tensor_key, idx);
++                registry.push_back(tensor_entry{});
++                tensor_entry & entry = registry.back();
++                entry.data = data;
++                entry.bytes_per_expert = bytes_per_expert;
++                entry.n_experts = n_experts;
++                entry.last_seen.assign((size_t) n_experts, 0);
++            } else {
++                idx = it->second;
++            }
++            tensor_entry & entry = registry[idx];
++            entry.build_counter++;
++            for (int32_t expert_id : routed) {
++                if (expert_id >= 0 && expert_id < entry.n_experts) {
++                    entry.last_seen[(size_t) expert_id] = entry.build_counter;
++                }
++            }
++        }
++
++        for (int32_t expert_id : routed) {
++            enqueue(data + (size_t) expert_id * bytes_per_expert,
++                    bytes_per_expert);
++        }
++
++        std::lock_guard<std::mutex> lock(mutex);
++        const size_t n_entries = registry.size();
++        if (n_entries < 2) {
++            return;
++        }
++        bool notified = false;
++        for (size_t k = 1; k <= ahead; ++k) {
++            const tensor_entry & next = registry[(idx + k) % n_entries];
++            const uint32_t floor =
++                next.build_counter > window ? next.build_counter - window : 1;
++            for (int64_t e = 0; e < next.n_experts; ++e) {
++                if (next.last_seen[(size_t) e] >= floor) {
++                    if (queue.size() >= max_queue) {
++                        break;
++                    }
++                    queue.push_back({
++                        next.data + (size_t) e * next.bytes_per_expert,
++                        next.bytes_per_expert });
++                    notified = true;
++                }
++            }
++        }
++        if (notified) {
++            cv.notify_all();
++        }
++    }
++};
++
++static ggml_metal_expert_prefetcher * ggml_metal_get_expert_prefetcher() {
++    static ggml_metal_expert_prefetcher * prefetcher = [] {
++        const char * env = getenv("GGML_METAL_EXPERT_CACHE_PREFETCH");
++        const int n_threads = env ? atoi(env) : 0;
++        if (n_threads <= 0) {
++            return (ggml_metal_expert_prefetcher *) nullptr;
++        }
++        // Intentionally leaked: detached workers must outlive static
++        // destruction order.
++        return new ggml_metal_expert_prefetcher(std::min(n_threads, 16));
++    }();
++    return prefetcher;
++}
 +
 +static int32_t ggml_metal_expert_cache_effective_id(
 +        const ggml_tensor * selected_ids,
@@ -771,7 +930,7 @@ index 76626a45..d5473831 100644
  static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
      struct ggml_tensor * node = ctx->node(idx);
  
-@@ -2341,6 +2470,238 @@ size_t ggml_metal_op_mul_mat_id_extra_ids(const ggml_tensor * op) {
+@@ -2341,6 +2629,271 @@ size_t ggml_metal_op_mul_mat_id_extra_ids(const ggml_tensor * op) {
      return ggml_type_size(GGML_TYPE_I32)*ne02*ne21;
  }
  
@@ -870,6 +1029,13 @@ index 76626a45..d5473831 100644
 +        const bool grouped =
 +            getenv("GGML_METAL_EXPERT_CACHE_GROUPED") != nullptr &&
 +            n_tokens > 1;
++        ggml_metal_expert_prefetcher * prefetcher =
++            ggml_metal_get_expert_prefetcher();
++        std::vector<int32_t> routed_unique;
++        std::vector<uint8_t> routed_seen;
++        if (prefetcher != nullptr) {
++            routed_seen.assign((size_t) n_experts, 0);
++        }
 +        std::vector<int32_t> expert_to_group;
 +        std::vector<int64_t> group_counts;
 +        if (grouped) {
@@ -891,6 +1057,10 @@ index 76626a45..d5473831 100644
 +                return false;
 +            }
 +            compact_ids[route] = 0;
++            if (prefetcher != nullptr && !routed_seen[(size_t) expert_id]) {
++                routed_seen[(size_t) expert_id] = 1;
++                routed_unique.push_back(expert_id);
++            }
 +            if (grouped) {
 +                int32_t group = expert_to_group[expert_id];
 +                if (group < 0) {
@@ -931,6 +1101,28 @@ index 76626a45..d5473831 100644
 +                    (int32_t) (route % experts_used); // expert-use slot
 +            }
 +            cache.grouped_route_count = route_count;
++        }
++        if (prefetcher != nullptr) {
++            static const uint32_t window = [] {
++                const char * env =
++                    getenv("GGML_METAL_EXPERT_CACHE_PREFETCH_WINDOW");
++                const int v = env ? atoi(env) : 16;
++                return (uint32_t) std::max(1, v);
++            }();
++            static const size_t ahead = [] {
++                const char * env =
++                    getenv("GGML_METAL_EXPERT_CACHE_PREFETCH_AHEAD");
++                const int v = env ? atoi(env) : 3;
++                return (size_t) std::max(1, v);
++            }();
++            prefetcher->on_routes(
++                op->src[0],
++                source,
++                bytes_per_expert,
++                n_experts,
++                routed_unique,
++                window,
++                ahead);
 +        }
 +        cache.active_slots = 0;
 +        cache.active_weight_bytes = 0;
@@ -1010,7 +1202,7 @@ index 76626a45..d5473831 100644
  int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
      ggml_tensor * op = ctx->node(idx);
  
-@@ -2367,11 +2728,100 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+@@ -2367,11 +2920,100 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
      GGML_ASSERT(ne03 == 1);
      GGML_ASSERT(ne13 == 1);
  
@@ -1112,7 +1304,7 @@ index 76626a45..d5473831 100644
      const uint32_t r2 = 1;
      const uint32_t r3 = 1;
  
-@@ -2381,7 +2831,10 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+@@ -2381,7 +3023,10 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
      // ne21 = n_rows (batch size)
      const int ne21_mm_id_min = 32;
  
@@ -1124,7 +1316,7 @@ index 76626a45..d5473831 100644
          // some Metal matrix data types require aligned pointers
          // ref: https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf (Table 2.5)
          //switch (op->src[0]->type) {
-@@ -2407,7 +2860,9 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+@@ -2407,7 +3052,9 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
                  nb12,
                  ne21, // n_tokens
                  ne20, // n_expert_used
@@ -1135,7 +1327,7 @@ index 76626a45..d5473831 100644
              };
  
              auto pipeline = ggml_metal_library_get_pipeline_mul_mm_id_map0(lib, ne02, ne20);
-@@ -2468,6 +2923,186 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+@@ -2468,6 +3115,186 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
  
              ggml_metal_encoder_dispatch_threadgroups(enc, (ne21 + 31)/32, (ne01 + 63)/64, ne02, 128, 1, 1);
          }
@@ -1322,7 +1514,7 @@ index 76626a45..d5473831 100644
      } else {
          auto pipeline = ggml_metal_library_get_pipeline_mul_mv_id(lib, op);
  
-@@ -2480,7 +3115,9 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+@@ -2480,7 +3307,9 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
          ggml_metal_kargs_mul_mv_id args = {
              /*.nei0 =*/ ne20,
              /*.nei1 =*/ ne21,
