@@ -25,6 +25,7 @@ const cpuMoe = args.includes("--cpu-moe");
 const noWarmup = args.includes("--no-warmup");
 const skipProbe = args.includes("--skip-probe");
 const serverVerbose = args.includes("--server-verbose");
+const skipChatParsing = args.includes("--skip-chat-parsing");
 const expertCacheSlots = boundedInteger(
   readOption(args, "--expert-cache-slots") ||
     process.env.GGML_METAL_EXPERT_CACHE_SLOTS,
@@ -41,6 +42,15 @@ const expertCacheTrace =
 const expertCacheZeroCopy =
   args.includes("--expert-cache-zero-copy") ||
   process.env.GGML_METAL_EXPERT_CACHE_ZERO_COPY !== undefined;
+const expertCacheHotCeiling =
+  args.includes("--expert-cache-hot-ceiling") ||
+  process.env.GGML_METAL_EXPERT_CACHE_HOT_CEILING !== undefined;
+if (expertCacheHotCeiling && !expertCacheZeroCopy) {
+  throw new Error(
+    "--expert-cache-hot-ceiling is a synthetic zero-copy ceiling and requires " +
+    "--expert-cache-zero-copy"
+  );
+}
 const port = boundedInteger(readOption(args, "--port"), 1_024, 65_535, 11_436);
 const suite = readOption(args, "--suite") || "qualification";
 const only = readOption(args, "--only");
@@ -55,6 +65,9 @@ const maxTokens = boundedInteger(
   32,
   4_096,
   768
+);
+const reasoningEffort = normalizeReasoningEffort(
+  readOption(args, "--reasoning-effort")
 );
 const modelAlias = readOption(args, "--model-alias") || "gpt-oss-120b";
 const sampleEveryMs = boundedInteger(
@@ -101,6 +114,7 @@ if (gpuLayers) serverArgs.push("--gpu-layers", gpuLayers);
 if (cpuMoe) serverArgs.push("--cpu-moe");
 if (noWarmup) serverArgs.push("--no-warmup");
 if (serverVerbose) serverArgs.push("--verbose");
+if (skipChatParsing) serverArgs.push("--skip-chat-parsing");
 const childEnv = { ...process.env };
 if (expertCacheSlots > 0) {
   childEnv.GGML_METAL_LAZY_TENSOR_MAP = "1";
@@ -113,6 +127,9 @@ if (expertCacheSlots > 0) {
   }
   if (expertCacheZeroCopy) {
     childEnv.GGML_METAL_EXPERT_CACHE_ZERO_COPY = "1";
+  }
+  if (expertCacheHotCeiling) {
+    childEnv.GGML_METAL_EXPERT_CACHE_HOT_CEILING = "1";
   }
 }
 const child = spawn(server, serverArgs, {
@@ -169,7 +186,8 @@ try {
     suite,
     only,
     requestTimeoutSeconds,
-    maxTokens
+    maxTokens,
+    reasoningEffort
   });
   serverMetrics = await readEndpointText(`${baseUrl}/metrics`);
 } catch (error) {
@@ -206,16 +224,18 @@ const report = {
   cpu_moe: cpuMoe,
   warmup: !noWarmup,
   server_verbose: serverVerbose,
+  skip_chat_parsing: skipChatParsing,
   streaming_probe_enabled: !skipProbe,
   expert_cache_slots: expertCacheSlots,
   expert_cache_cpu_fill: expertCacheSlots > 0 && expertCacheCpuFill,
   expert_cache_trace: expertCacheSlots > 0 && expertCacheTrace,
   expert_cache_zero_copy: expertCacheSlots > 0 && expertCacheZeroCopy,
-  expert_cache_trace: expertCacheSlots > 0 && expertCacheTrace,
+  expert_cache_hot_ceiling: expertCacheSlots > 0 && expertCacheHotCeiling,
   suite,
   only_scenarios: only || null,
   request_timeout_seconds: requestTimeoutSeconds,
   max_tokens: maxTokens,
+  reasoning_effort: reasoningEffort,
   readiness_seconds: readinessSeconds,
   streaming_probe: probe,
   qualification,
@@ -345,7 +365,8 @@ function runQualification({
   suite: selectedSuite,
   only: selectedScenarios,
   requestTimeoutSeconds: timeoutSeconds,
-  maxTokens: completionTokens
+  maxTokens: completionTokens,
+  reasoningEffort: selectedReasoningEffort
 }) {
   return new Promise((resolveRun) => {
     const qualificationArgs = [
@@ -360,6 +381,9 @@ function runQualification({
       "--output", output
     ];
     if (selectedScenarios) qualificationArgs.push("--only", selectedScenarios);
+    if (selectedReasoningEffort) {
+      qualificationArgs.push("--reasoning-effort", selectedReasoningEffort);
+    }
     const runner = spawn(process.execPath, qualificationArgs, {
       stdio: ["ignore", "pipe", "pipe"]
     });
@@ -491,10 +515,12 @@ function requiredOption(values, name) {
       "[--no-warmup] [--skip-probe] [--server-verbose] " +
       "[--expert-cache-slots N] [--expert-cache-cpu-fill] " +
       "[--expert-cache-trace] [--expert-cache-zero-copy] " +
+      "[--expert-cache-hot-ceiling] " +
       "[--suite smoke|qualification|all] " +
       "[--only SCENARIO,...] " +
       "[--request-timeout-seconds SECONDS] " +
       "[--max-tokens TOKENS] " +
+      "[--reasoning-effort low|medium|high] " +
       "[--output-dir DIR]"
     );
     process.exit(2);
@@ -511,6 +537,13 @@ function boundedInteger(value, minimum, maximum, fallback) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+function normalizeReasoningEffort(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (["low", "medium", "high"].includes(normalized)) return normalized;
+  throw new Error(`Unsupported reasoning effort: ${value}`);
 }
 
 function delay(milliseconds) {

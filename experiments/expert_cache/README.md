@@ -205,3 +205,21 @@ Read
 [`../../docs/EXPERT_CACHE_ZERO_COPY_RESULTS.md`](../../docs/EXPERT_CACHE_ZERO_COPY_RESULTS.md)
 for the exact result, rejected ablations, limitations, and the extraction plan
 for a standalone open-source runtime and reproducible research artifact.
+
+## Latency ceilings and real route windows
+
+The next milestone separates three limits that the direct-view result combined:
+storage faults, Metal compute/dispatch, and serial autoregressive decode. A
+corrected synthetic four-expert hot-working-set arm reached 24.84 prompt
+tokens/second at batch 64, while the same path with real routing reached 6.27
+tokens/second. A content-free live route trace showed that real 64-token
+windows use 61.8 unique experts per layer on average rather than all 128. The
+full corrected real-routing batch-64 arm passed the targeted 3/3 coding gate at
+5.77 prompt and 3.07 decode tokens/second. A corrected persistent-slot LRU was
+also tested and rejected because its owned pool was slower than zero-copy on
+the 64 GB host despite exact output equivalence.
+
+Read
+[`../../docs/EXPERT_CACHE_CEILING_RESULTS.md`](../../docs/EXPERT_CACHE_CEILING_RESULTS.md)
+for the full measurements, caveats, route-window analyzer, and the next live
+real-routing gate.

@@ -543,7 +543,7 @@ index 9f350aad..0022941d 100644
  // RMS_NORM
  typedef struct {
 diff --git a/ggml/src/ggml-metal/ggml-metal-ops.cpp b/ggml/src/ggml-metal/ggml-metal-ops.cpp
-index 76626a45..f704a573 100644
+index 76626a45..1a47aa98 100644
 --- a/ggml/src/ggml-metal/ggml-metal-ops.cpp
 +++ b/ggml/src/ggml-metal/ggml-metal-ops.cpp
 @@ -10,8 +10,15 @@
@@ -562,7 +562,7 @@ index 76626a45..f704a573 100644
  
  static ggml_metal_buffer_id ggml_metal_get_buffer_id(const ggml_tensor * t) {
      if (!t) {
-@@ -172,6 +179,53 @@ static bool ggml_metal_op_concurrency_add(ggml_metal_op_t ctx, const ggml_tensor
+@@ -172,6 +179,67 @@ static bool ggml_metal_op_concurrency_add(ggml_metal_op_t ctx, const ggml_tensor
      return ggml_mem_ranges_add(ctx->mem_ranges, node);
  }
  
@@ -575,6 +575,20 @@ index 76626a45..f704a573 100644
 +    size_t active_id_bytes = 0;
 +    int64_t active_slots = 0;
 +};
++
++static int32_t ggml_metal_expert_cache_effective_id(
++        const int32_t * selected_ids,
++        int64_t route,
++        int64_t n_experts) {
++    if (getenv("GGML_METAL_EXPERT_CACHE_HOT_CEILING") != nullptr) {
++        // Synthetic performance ceiling only: repeatedly bind the same four
++        // experts so their mapped pages can remain resident after warmup.
++        // This intentionally invalidates model quality and must never be
++        // enabled for normal inference.
++        return (int32_t) (route % std::min<int64_t>(4, n_experts));
++    }
++    return selected_ids[route];
++}
 +
 +static ggml_metal_expert_cache & ggml_metal_get_expert_cache(
 +        ggml_metal_device_t dev,
@@ -616,7 +630,7 @@ index 76626a45..f704a573 100644
  static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
      struct ggml_tensor * node = ctx->node(idx);
  
-@@ -2341,6 +2395,169 @@ size_t ggml_metal_op_mul_mat_id_extra_ids(const ggml_tensor * op) {
+@@ -2341,6 +2409,173 @@ size_t ggml_metal_op_mul_mat_id_extra_ids(const ggml_tensor * op) {
      return ggml_type_size(GGML_TYPE_I32)*ne02*ne21;
  }
  
@@ -698,7 +712,8 @@ index 76626a45..f704a573 100644
 +    const auto copy_started = std::chrono::steady_clock::now();
 +    if (zero_copy) {
 +        for (int64_t route = 0; route < route_count; ++route) {
-+            const int32_t expert_id = selected_ids[route];
++            const int32_t expert_id = ggml_metal_expert_cache_effective_id(
++                selected_ids, route, n_experts);
 +            if (expert_id < 0 || expert_id >= n_experts) {
 +                GGML_LOG_ERROR(
 +                    "%s: invalid routed expert id %d at route %lld (n_experts=%lld)\n",
@@ -715,7 +730,8 @@ index 76626a45..f704a573 100644
 +    } else {
 +        std::vector<int32_t> expert_to_slot(n_experts, -1);
 +        for (int64_t route = 0; route < route_count; ++route) {
-+            const int32_t expert_id = selected_ids[route];
++            const int32_t expert_id = ggml_metal_expert_cache_effective_id(
++                selected_ids, route, n_experts);
 +            if (expert_id < 0 || expert_id >= n_experts) {
 +                GGML_LOG_ERROR(
 +                    "%s: invalid routed expert id %d at route %lld (n_experts=%lld)\n",
@@ -764,7 +780,9 @@ index 76626a45..f704a573 100644
 +            if (!routed_experts.empty()) {
 +                routed_experts += ",";
 +            }
-+            routed_experts += std::to_string(selected_ids[route]);
++            routed_experts += std::to_string(
++                ggml_metal_expert_cache_effective_id(
++                    selected_ids, route, n_experts));
 +        }
 +        GGML_LOG_INFO(
 +            "ExpertCache stage tensor='%s' tokens=%lld routes=%lld unique=%lld "
@@ -786,7 +804,7 @@ index 76626a45..f704a573 100644
  int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
      ggml_tensor * op = ctx->node(idx);
  
-@@ -2367,11 +2584,101 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+@@ -2367,11 +2602,101 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
      GGML_ASSERT(ne03 == 1);
      GGML_ASSERT(ne13 == 1);
  
@@ -889,7 +907,7 @@ index 76626a45..f704a573 100644
      const uint32_t r2 = 1;
      const uint32_t r3 = 1;
  
-@@ -2468,6 +2775,90 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+@@ -2468,6 +2793,91 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
  
              ggml_metal_encoder_dispatch_threadgroups(enc, (ne21 + 31)/32, (ne01 + 63)/64, ne02, 128, 1, 1);
          }
@@ -935,7 +953,8 @@ index 76626a45..f704a573 100644
 +        }
 +
 +        for (int64_t route = 0; route < ne20; ++route) {
-+            const int32_t expert_id = selected_ids[route];
++            const int32_t expert_id = ggml_metal_expert_cache_effective_id(
++                selected_ids, route, ne02);
 +            GGML_ASSERT(expert_id >= 0 && expert_id < ne02);
 +
 +            ggml_metal_buffer_id bid_selected_expert =
