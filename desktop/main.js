@@ -253,6 +253,9 @@ function registerIpc() {
   ipcMain.handle("desktop:login", () => controller.login());
   ipcMain.handle("desktop:logout", () => controller.logout());
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
+  ipcMain.handle("desktop:connect-provider", (_event, provider) =>
+    controller.connectProvider(provider)
+  );
   ipcMain.handle("desktop:open-approval", (_event, id) => controller.openApproval(id));
   ipcMain.handle("desktop:review-company-approval", async (_event, id) => {
     const review = await controller.reviewCompanyApproval(id);

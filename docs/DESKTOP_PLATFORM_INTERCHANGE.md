@@ -143,7 +143,11 @@ requirement for using or approving AMOS work.
 ## Connections in Desktop
 
 The Connections surface is a projection of the platform connection catalog.
-Desktop calls `list_connections` and `list_oauth_providers` and renders:
+Desktop calls `list_connection_catalog` for canonical provider/service metadata
+and `list_connections` for tenant-visible state. During a rolling deployment it
+may fall back to the older platform-owned `list_oauth_providers` response when
+the new tool is unknown; it never falls back to a Desktop-bundled provider list.
+It renders:
 
 - connected, attention-needed, and available states;
 - ownership (user or shared service account);
@@ -155,10 +159,16 @@ Connect and reconnect launch a platform-issued hosted OAuth/link flow. Connector
 credentials remain in the platform. Data reads, synchronization, and connector
 writes continue through governed platform verbs and produce proof receipts.
 
+Customer names, demo priorities, provider availability, setup status, and
+service maturity must not be encoded in Desktop HTML or JavaScript. A provider
+appears only when the connected AMOS Platform advertises it. Desktop joins
+catalog and tenant state by the opaque provider key and renders the returned
+labels, grouping, descriptions, capabilities, setup mode, and availability.
+
 ## Microsoft 365 and Power BI
 
-The Desktop catalog groups these products under “Microsoft” for a simple setup
-experience, but the platform maintains separate connections and tokens:
+The platform catalog groups these products under “Microsoft” for a simple setup
+experience, while maintaining separate connections and tokens:
 
 - `microsoft_graph` covers Outlook mail, calendar, contacts, and related
   Microsoft 365 resources. Start with least-privilege delegated access.
@@ -182,9 +192,102 @@ Suggested demo read path:
 Calendar and mail writes, such as scheduling a coach, remain governed actions
 and use the normal approval policy.
 
+## Neighborly quarterly evidence and learning loop
+
+The Neighborly demo should accept the quarterly franchise report supplied by
+the customer contact as a governed evidence source. The initial path may use a
+user-attached report, followed by a repeatable platform ingestion adapter once
+its format is known. Before the report is used:
+
+- retain the original file as immutable evidence with tenant, uploader, time,
+  and content-hash provenance;
+- profile and map its franchise, brand, tier, period, revenue, growth, close
+  rate, lead-source, goal, and peer-benchmark fields;
+- preserve reported values separately from derived metrics and AI conclusions;
+- record the cohort and tier used for each top-quartile comparison;
+- make every briefing claim traceable to the report, Power BI result, or other
+  durable source; and
+- version the mapping so a later quarterly format cannot silently change prior
+  conclusions.
+
+Power BI can provide fresher operating measurements between quarterly reports.
+AMOS should reconcile source identity and period rather than overwriting the
+quarterly evidence. Conflicts and stale data are visible in the briefing.
+
+The target product loop is:
+
+1. AMOS continuously evaluates governed franchise metrics against goals and the
+   correct brand, tier, and peer cohort.
+2. It identifies a material gap and explains whether the likely driver is lead
+   quality, conversion, campaign mix, process, or another evidenced factor.
+3. It estimates business impact and proposes a measurable intervention.
+4. When learning is appropriate, AMOS searches the licensed Nuvola catalog for
+   relevant existing material before proposing new content.
+5. If a course should be created, AMOS drafts the audience, objectives,
+   evidence, outline, and success measures. A human approves any consequential
+   Nuvola write through normal platform policy.
+6. Nuvola returns an immutable course/version reference. AMOS assigns or
+   recommends it through a governed workflow and tracks completion.
+7. Later metrics are compared with the baseline and goal so AMOS can report
+   whether the training changed behavior and business results.
+
+This is a closed evidence-to-learning-to-outcome loop, not autonomous content
+generation from a weak correlation. The diagnosis, course proposal, approval,
+publication, assignment, and measured outcome each retain separate provenance.
+
+## Nuvola Learning MCP connection
+
+Nuvola is a live, production-ready MCP capability owned and operated alongside
+AMOS. It already exposes authenticated course discovery, grounded course
+authoring, review/build gates, publishing, enrollment, and outcome data. It is
+distinct from an ordinary OAuth API connection, but that distinction must not
+create a Desktop-only integration or a second governance plane.
+
+**Required canonical execution path:** every AMOS client calls AMOS Platform
+MCP. The production adapter must resolve the tenant-bound Nuvola connection,
+apply AMOS policy, invoke the allowlisted Nuvola MCP operation, write the AMOS
+receipt, and return a bounded result. Until that adapter passes its acceptance
+tests, the platform catalog reports `upstream_status: live` separately from
+`availability: adapter_required`. Desktop never holds a Nuvola token or calls
+Nuvola directly. Nuvola's own authorization and audit remain defense in depth,
+not a substitute for AMOS governance.
+
+The platform owns the tenant binding, endpoint allowlist, identity, credential
+material, policy, receipts, and durable course references. AMOS Desktop
+presents connection health and the best intervention workflow; Claude and
+Codex discover the same normalized Nuvola capabilities through AMOS MCP.
+
+The platform integration must define:
+
+- a tenant-scoped Nuvola MCP server registration with pinned HTTPS origin and
+  server identity;
+- a tool allowlist and normalized schemas for catalog search, course retrieval,
+  draft creation, publication, assignment, and completion/outcome reads;
+- separate read and write consequences, with human approval for course
+  creation, publication, assignment, or learner-impacting changes;
+- bounded inputs and outputs that prevent report data, credentials, or unrelated
+  company context from being forwarded;
+- installation health, last successful call, license state, and data freshness
+  in the platform connection catalog; and
+- receipts that link the AMOS diagnosis and approved proposal to the exact
+  Nuvola course/version without granting Nuvola general AMOS authority.
+
+Nuvola's present owner-level MCP identity makes the AMOS tenant-to-Nuvola
+corporation binding especially important. Callers may never select an arbitrary
+Nuvola corporation. The connection record pins that mapping, and the platform
+injects or validates it server-side. Longer term, Nuvola should issue
+organization-scoped service authorization so both systems independently enforce
+the same boundary.
+
+Desktop may show Nuvola only when the platform catalog advertises it. It must
+render upstream maturity, AMOS adapter availability, and tenant connection
+state as separate facts and may not promote `upstream_status: live` into an
+AMOS-supported or tenant-connected claim.
+
 ## AWS and data lakes
 
-The catalog must show two distinct concepts:
+When the platform implements and advertises these surfaces, the catalog must
+show two distinct concepts:
 
 - **AMOS Data Lake — Included.** Connected-system data ingested by AMOS is
   stored and queried by the platform. Desktop shows coverage, freshness, and
@@ -271,6 +374,8 @@ Connections slices.
 - Add curated Microsoft Graph and Power BI providers.
 - Implement typed, bounded Outlook/calendar reads and Power BI discovery/query.
 - Normalize franchise, source, goal, and peer-comparison data for briefings.
+- Inspect and map the customer-provided quarterly franchise report when it
+  arrives, preserving the original report and versioned mapping as evidence.
 
 ### Weekend
 
@@ -278,6 +383,8 @@ Connections slices.
 - Create the Daily company brief and Portfolio performance demo views.
 - Script the flow from appointment context to gap diagnosis to recommended
   coaching/LMS action.
+- Present Nuvola as a live learning service, while clearly showing whether the
+  tenant's governed AMOS Platform connection has been configured and tested.
 
 ### Monday
 
@@ -296,6 +403,8 @@ Connections slices.
   parent/child navigation.
 - Add cross-client contract tests proving Claude and Codex can create/read
   manifests and that authority-bearing state is never inherited.
+- Complete the governed AMOS Platform-to-Nuvola MCP adapter, course/version
+  references, and evidence-to-training-to-outcome measurement loop.
 
 ## Release acceptance criteria
 
@@ -310,3 +419,5 @@ For each Desktop feature, verify:
    connector credentials or bypassing policy.
 5. Equivalent proof receipts are produced regardless of client.
 6. The non-Desktop happy path is covered by a contract or integration test.
+7. Desktop contains no customer-specific roadmap, provider list, or provider
+   status; those facts come from the authenticated platform catalog.

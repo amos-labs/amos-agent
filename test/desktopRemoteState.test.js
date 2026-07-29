@@ -163,13 +163,29 @@ test("Desktop projects credential-free connection and provider metadata from AMO
             }]
           }
         : {
-            curated: [{ provider: "github", label: "GitHub", source: "platform", configured: true }],
-            tenant_defined: [{
-              provider: "field-service",
-              label: "Field Service",
-              source: "tenant",
-              credentials_registered: false,
+            catalog_version: 1,
+            providers: [{
+              provider: "microsoft_graph",
+              label: "Microsoft 365",
+              source: "platform",
+              connection_kind: "oauth",
+              group: "Microsoft",
+              description: "Outlook and calendar",
+              capabilities: ["mail", "calendar"],
+              setup_mode: "hosted_oauth",
+              configured: true,
+              availability: "available",
               token_url: "must-not-project"
+            }, {
+              provider: "nuvola_learning_mcp",
+              label: "Nuvola Learning",
+              source: "platform",
+              connection_kind: "upstream_mcp",
+              description: "Governed learning",
+              capabilities: ["course_authoring"],
+              configured: false,
+              availability: "adapter_required",
+              upstream_status: "live"
             }]
           };
       return response(200, {
@@ -181,12 +197,95 @@ test("Desktop projects credential-free connection and provider metadata from AMO
   );
 
   const catalog = await client.connectionsCatalog();
-  assert.deepEqual(tools.sort(), ["list_connections", "list_oauth_providers"]);
+  assert.deepEqual(tools.sort(), ["list_connection_catalog", "list_connections"]);
   assert.equal(catalog.connections[0].displayName, "Neighborly QBO");
   assert.equal(catalog.connections[0].credentials_encrypted, undefined);
-  assert.equal(catalog.curated[0].configured, true);
-  assert.equal(catalog.tenantDefined[0].configured, false);
-  assert.equal(catalog.tenantDefined[0].token_url, undefined);
+  assert.equal(catalog.catalogVersion, 1);
+  assert.equal(catalog.providers[0].group, "Microsoft");
+  assert.deepEqual(catalog.providers[0].capabilities, ["mail", "calendar"]);
+  assert.equal(catalog.providers[0].token_url, undefined);
+  assert.equal(catalog.providers[1].availability, "adapter_required");
+  assert.equal(catalog.providers[1].upstreamStatus, "live");
+});
+
+test("Desktop falls back only to the older platform catalog, never a bundled provider list", async () => {
+  const tools = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://older.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      const name = request.params.name;
+      tools.push(name);
+      if (name === "list_connection_catalog") {
+        return response(200, {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: "unknown tool 'list_connection_catalog'" }
+        });
+      }
+      const payload = name === "list_connections"
+        ? { connections: [] }
+        : {
+            curated: [{
+              provider: "github",
+              label: "GitHub",
+              source: "platform",
+              configured: true
+            }],
+            tenant_defined: []
+          };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const catalog = await client.connectionsCatalog();
+  assert.deepEqual(tools.sort(), [
+    "list_connection_catalog",
+    "list_connections",
+    "list_oauth_providers"
+  ]);
+  assert.equal(catalog.providers.length, 1);
+  assert.equal(catalog.providers[0].provider, "github");
+});
+
+test("Desktop asks AMOS Platform for a hosted connection link", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              provider: "power_bi",
+              url: "https://login.microsoftonline.com/authorize?state=opaque",
+              expires_in: 600
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const link = await client.connectLink("power_bi");
+  assert.equal(requests[0].params.name, "connect_link");
+  assert.deepEqual(requests[0].params.arguments, { provider: "power_bi" });
+  assert.equal(link.expiresIn, 600);
 });
 
 test("Desktop treats a non-approver role as a bounded unavailable inbox", async () => {
