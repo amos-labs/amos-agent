@@ -51,6 +51,19 @@ if (expertCacheGrouped && !expertCacheZeroCopy) {
     "--expert-cache-zero-copy"
   );
 }
+const expertCachePrefetch = boundedInteger(
+  readOption(args, "--expert-cache-prefetch") ||
+    process.env.GGML_METAL_EXPERT_CACHE_PREFETCH,
+  0,
+  16,
+  0
+);
+if (expertCachePrefetch > 0 && !expertCacheZeroCopy) {
+  throw new Error(
+    "--expert-cache-prefetch extends the zero-copy dispatch path and requires " +
+    "--expert-cache-zero-copy"
+  );
+}
 const expertCacheHotCeiling =
   args.includes("--expert-cache-hot-ceiling") ||
   process.env.GGML_METAL_EXPERT_CACHE_HOT_CEILING !== undefined;
@@ -139,6 +152,9 @@ if (expertCacheSlots > 0) {
   }
   if (expertCacheGrouped) {
     childEnv.GGML_METAL_EXPERT_CACHE_GROUPED = "1";
+  }
+  if (expertCachePrefetch > 0) {
+    childEnv.GGML_METAL_EXPERT_CACHE_PREFETCH = String(expertCachePrefetch);
   }
   if (expertCacheHotCeiling) {
     childEnv.GGML_METAL_EXPERT_CACHE_HOT_CEILING = "1";
@@ -243,6 +259,8 @@ const report = {
   expert_cache_trace: expertCacheSlots > 0 && expertCacheTrace,
   expert_cache_zero_copy: expertCacheSlots > 0 && expertCacheZeroCopy,
   expert_cache_grouped: expertCacheSlots > 0 && expertCacheGrouped,
+  expert_cache_prefetch_threads:
+    expertCacheSlots > 0 ? expertCachePrefetch : 0,
   expert_cache_hot_ceiling: expertCacheSlots > 0 && expertCacheHotCeiling,
   suite,
   only_scenarios: only || null,
@@ -528,7 +546,8 @@ function requiredOption(values, name) {
       "[--no-warmup] [--skip-probe] [--server-verbose] " +
       "[--expert-cache-slots N] [--expert-cache-cpu-fill] " +
       "[--expert-cache-trace] [--expert-cache-zero-copy] " +
-      "[--expert-cache-grouped] [--expert-cache-hot-ceiling] " +
+      "[--expert-cache-grouped] [--expert-cache-prefetch THREADS] " +
+      "[--expert-cache-hot-ceiling] " +
       "[--suite smoke|qualification|all] " +
       "[--only SCENARIO,...] " +
       "[--request-timeout-seconds SECONDS] " +
