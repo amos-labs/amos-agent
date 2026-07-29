@@ -92,7 +92,8 @@ export class AmosOAuthSession {
     openBrowser = true,
     timeoutMs = 300_000,
     scopes = [],
-    desktopInstallId = ""
+    desktopInstallId = "",
+    desktopApprovalKey = null
   } = {}) {
     const metadata = await this.discover();
     const state = randomToken();
@@ -123,6 +124,16 @@ export class AmosOAuthSession {
       if (scopes.length > 0) authorizationUrl.searchParams.set("scope", scopes.join(" "));
       if (/^[0-9a-f-]{36}$/i.test(desktopInstallId)) {
         authorizationUrl.searchParams.set("desktop_install_id", desktopInstallId);
+      }
+      if (
+        /^[0-9a-f-]{36}$/i.test(desktopApprovalKey?.id || "") &&
+        /^[A-Za-z0-9_-]{43}$/.test(desktopApprovalKey?.publicKey || "")
+      ) {
+        authorizationUrl.searchParams.set("desktop_approval_key_id", desktopApprovalKey.id);
+        authorizationUrl.searchParams.set(
+          "desktop_approval_public_key",
+          desktopApprovalKey.publicKey
+        );
       }
 
       const url = authorizationUrl.toString();

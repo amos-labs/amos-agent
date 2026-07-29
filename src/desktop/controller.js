@@ -65,6 +65,8 @@ export class DesktopController {
     offlineProposalStore = null,
     taskCheckpointStore = null,
     localReceiptStore = null,
+    savedViewStore = null,
+    decisionKeyStore = null,
     offlineManager = null,
     telemetry = null,
     openBrowser,
@@ -81,6 +83,8 @@ export class DesktopController {
     this.identity = null;
     this.accountStatus = null;
     this.approvalsAvailable = true;
+    this.approvalDecisionMode = "hosted";
+    this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: null,
@@ -97,6 +101,8 @@ export class DesktopController {
     this.offlineProposalStore = offlineProposalStore;
     this.taskCheckpointStore = taskCheckpointStore;
     this.localReceiptStore = localReceiptStore;
+    this.savedViewStore = savedViewStore;
+    this.decisionKeyStore = decisionKeyStore;
     this.activeTask = null;
     this.checkpointWrites = Promise.resolve();
     this.capsulePreviews = new Map();
@@ -147,6 +153,8 @@ export class DesktopController {
       accountStatus: this.accountStatus,
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
+      approvalDecisionMode: this.approvalDecisionMode,
+      connectionsCatalog: this.connectionsCatalog,
       remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model, settings),
       providers: listModelProviders(),
@@ -157,6 +165,7 @@ export class DesktopController {
       activity: this.activity.slice(-100),
       attachments: this.attachments.list(),
       ...this.canvases.state(),
+      savedViews: this.savedViewStore ? await this.savedViewStore.list(this.identity) : [],
       memoryClasses: Object.values(MEMORY_CLASSES),
       privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
       companyCache: await this.companyCacheState(),
@@ -667,6 +676,9 @@ export class DesktopController {
     await oauth.login({
       openBrowser: true,
       desktopInstallId: await this.desktopInstallId(),
+      desktopApprovalKey: this.decisionKeyStore
+        ? await this.decisionKeyStore.getOrCreate()
+        : null,
       onAuthorize: ({ url }) => this.send("auth:browser", { url })
     });
     const nextSettings = {
@@ -703,6 +715,7 @@ export class DesktopController {
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     await oauth.logout();
+    if (this.decisionKeyStore) await this.decisionKeyStore.clear();
     if (this.companyCacheStore) await this.companyCacheStore.clear();
     this.companyCacheRevalidatedFor = null;
     await this.settingsStore.write({
@@ -752,6 +765,8 @@ export class DesktopController {
       this.accountStatus = null;
       this.companyApprovals = [];
       this.approvalsAvailable = true;
+      this.approvalDecisionMode = "hosted";
+      this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
       await this.sendRemoteState();
       return this.state();
@@ -764,10 +779,11 @@ export class DesktopController {
       oauth,
       requestTimeoutMs: config.amos.requestTimeoutMs
     });
-    const [identityResult, approvalsResult, accountStatusResult] = await Promise.allSettled([
+    const [identityResult, approvalsResult, accountStatusResult, connectionsResult] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
-      remote.intelligenceStatus()
+      remote.intelligenceStatus(),
+      remote.connectionsCatalog()
     ]);
 
     const errors = [];
@@ -784,6 +800,7 @@ export class DesktopController {
 
     if (approvalsResult.status === "fulfilled") {
       this.approvalsAvailable = approvalsResult.value.available;
+      this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
       this.companyApprovals = approvalsResult.value.pending_operations;
       if (notify && approvalsResult.value.available) {
         await this.notifyNewCompanyApprovals(settings);
@@ -797,6 +814,12 @@ export class DesktopController {
     } else {
       this.accountStatus = null;
       errors.push(accountStatusResult.reason?.message || "Could not load AMOS account status");
+    }
+
+    if (connectionsResult.status === "fulfilled") {
+      this.connectionsCatalog = connectionsResult.value;
+    } else {
+      errors.push(connectionsResult.reason?.message || "Could not load AMOS connections");
     }
 
     this.remoteStatus = {
@@ -848,6 +871,50 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     await this.openBrowser(approvalReviewUrl(settings.amosMcpUrl, approval));
     return { opened: true };
+  }
+
+  async reviewCompanyApproval(id) {
+    const approval = this.companyApprovals.find((item) => item.id === id);
+    if (!approval) throw new Error("That approval is no longer available");
+    if (this.approvalDecisionMode !== "desktop") {
+      await this.openApproval(id);
+      return { mode: "hosted", opened: true };
+    }
+    return {
+      mode: "desktop",
+      approval: {
+        id: approval.id,
+        verb: approval.verb,
+        summary: approval.review_summary || approval.verb,
+        args: approval.args || {},
+        agencyOrigin: approval.agency_origin || "human_directed",
+        requestedAt: approval.requested_at || null
+      }
+    };
+  }
+
+  async decideCompanyApproval(id, decision) {
+    if (this.approvalDecisionMode !== "desktop") {
+      throw new Error("This AMOS server requires its hosted approval ceremony");
+    }
+    const settings = await this.settingsStore.read();
+    const config = this.configFrom(settings);
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth: this.oauthFor(settings),
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    if (!this.decisionKeyStore) {
+      throw new Error("Desktop approval signing is unavailable");
+    }
+    const result = await remote.decideApproval(id, decision, {
+      sign: (message) => this.decisionKeyStore.sign(message)
+    });
+    this.record("decision", `${decision === "approve" ? "Approved" : "Denied"} governed company work`, {
+      approvalId: id
+    });
+    await this.refreshRemote({ notify: false });
+    return result;
   }
 
   async openApprovals() {
@@ -1151,6 +1218,31 @@ export class DesktopController {
     const removed = this.canvases.remove(id);
     if (removed) this.send("canvas:changed", this.canvases.state());
     return this.canvases.state();
+  }
+
+  async saveCanvasView(id) {
+    if (!this.savedViewStore) throw new Error("Saved briefings are unavailable");
+    const canvas = this.canvases.list().find((item) => item.id === id);
+    if (!canvas) throw new Error("That briefing is no longer open");
+    if (!canvas.source.refreshPrompt) {
+      throw new Error("This briefing does not include a safe refresh instruction");
+    }
+    const view = await this.savedViewStore.save({
+      title: canvas.title,
+      prompt: canvas.source.refreshPrompt,
+      sourceKind: canvas.source.kind
+    }, this.identity);
+    this.record("canvas", `Saved briefing ${view.title}`, { savedViewId: view.id });
+    return {
+      savedView: view,
+      savedViews: await this.savedViewStore.list(this.identity)
+    };
+  }
+
+  async removeSavedView(id) {
+    if (!this.savedViewStore) throw new Error("Saved briefings are unavailable");
+    await this.savedViewStore.remove(id, this.identity);
+    return { savedViews: await this.savedViewStore.list(this.identity) };
   }
 
   presentCanvas(spec) {

@@ -73,13 +73,35 @@ let currentTaskId = null;
 let streamingMessage = null;
 const transientTaskMessages = new Set();
 let resumingCheckpointId = null;
+const briefingTemplates = Object.freeze([
+  {
+    title: "Daily company brief",
+    description: "The material changes, risks, decisions, and opportunities that need attention today.",
+    prompt: "Create today's company operating brief. Prioritize material changes, risks, decisions, and opportunities, cite every live source, and show the result as a briefing."
+  },
+  {
+    title: "Portfolio performance",
+    description: "Compare locations or business units with relevant peers and show the gap to top quartile.",
+    prompt: "Create a portfolio performance briefing. Compare each business unit with its relevant peer group, show revenue, growth, conversion, and the gap to top quartile, then identify the three highest-impact opportunities."
+  },
+  {
+    title: "Lead-source ROI",
+    description: "Find acquisition sources that are creating or destroying value.",
+    prompt: "Create a lead-source ROI briefing. Compare spend, leads, conversions, revenue, and return by source, explain material outliers, and cite the underlying company data."
+  },
+  {
+    title: "Goals and coaching",
+    description: "Track goals, leading indicators, blockers, and the next intervention.",
+    prompt: "Create a goals and coaching briefing. Show each active goal, baseline, target, progress, leading indicators, blockers, owner, and the most relevant coaching or learning intervention."
+  }
+]);
 
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
-    "decisionsView", "memoryView", "canvasView",
+    "decisionsView", "memoryView", "canvasView", "connectionsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
-    "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge",
+    "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
@@ -104,13 +126,14 @@ const elements = Object.fromEntries(
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
     "capsulePreviewItems", "capsulePreviewWarning", "capsulePreviewCancelButton",
-    "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton",
+    "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton", "canvasSaveButton",
     "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasEmptyTitle",
-    "canvasEmptyMessage", "canvasBlocks",
+    "canvasEmptyMessage", "canvasBlocks", "briefingLibrary", "savedViewList", "briefingTemplateList",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
     "offlineSetupSteps", "offlineSetupRuntime", "offlineSetupModel", "offlineSetupActivate",
-    "demoBanner", "demoExpiry", "demoConnectButton", "starterActions"
+    "demoBanner", "demoExpiry", "demoConnectButton", "starterActions",
+    "connectionCatalogSummary", "connectedSystemList", "availableProviderList"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -185,7 +208,7 @@ function bindActions() {
   elements.testButton.addEventListener("click", testModel);
   elements.managedConnectButton.addEventListener("click", connectManagedIntelligence);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
-  elements.approvalsButton.addEventListener("click", () => api.openApprovals());
+  elements.approvalsButton.addEventListener("click", () => showView("decisions"));
   elements.allApprovalsButton.addEventListener("click", () => api.openApprovals());
   elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
@@ -202,6 +225,7 @@ function bindActions() {
     elements.promptInput.focus();
   });
   elements.canvasCloseButton.addEventListener("click", removeActiveCanvas);
+  elements.canvasSaveButton.addEventListener("click", saveActiveBriefing);
   elements.offlineRefreshButton.addEventListener("click", refreshOfflineModels);
   elements.offlineInstallRuntimeButton.addEventListener("click", refreshOfflineModels);
   elements.memoryExportButton.addEventListener("click", () => openCapsuleFlow("export"));
@@ -391,6 +415,11 @@ function render() {
   );
   elements.disconnectButton.classList.toggle("hidden", !state.connected);
   elements.approvalsButton.disabled = Boolean(state.mode?.offline || state.mode?.personal || demo);
+  elements.approvalsButton.textContent = "Review decisions";
+  elements.allApprovalsButton.classList.toggle(
+    "hidden",
+    state.approvalDecisionMode === "desktop"
+  );
   elements.runButton.replaceChildren(
     document.createTextNode(
       state.mode?.offline
@@ -439,6 +468,7 @@ function render() {
   renderAttachments();
   renderPrivateMemory();
   renderCompanyCache();
+  renderConnections();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
   renderStarterActions();
@@ -450,6 +480,7 @@ function showView(view) {
     operator: elements.operatorView,
     canvas: elements.canvasView,
     memory: elements.memoryView,
+    connections: elements.connectionsView,
     decisions: elements.decisionsView,
     activity: elements.activityView,
     settings: elements.settingsView
@@ -461,6 +492,101 @@ function showView(view) {
   }
 }
 
+function renderConnections() {
+  const catalog = state?.connectionsCatalog || {};
+  const connections = Array.isArray(catalog.connections) ? catalog.connections : [];
+  const providers = [
+    ...(Array.isArray(catalog.curated) ? catalog.curated : []),
+    ...(Array.isArray(catalog.tenantDefined) ? catalog.tenantDefined : [])
+  ];
+  elements.connectionBadge.textContent = String(connections.length);
+  elements.connectionBadge.classList.toggle("hidden", connections.length === 0);
+  elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
+    ? `${connections.length} connected system${connections.length === 1 ? "" : "s"} · ${providers.length} provider definition${providers.length === 1 ? "" : "s"} advertised by AMOS`
+    : "Connect your AMOS company to load its credential-free connection catalog.";
+
+  elements.connectedSystemList.replaceChildren();
+  if (connections.length === 0) {
+    elements.connectedSystemList.append(connectionCatalogEmpty(
+      state?.connectionMode === "user"
+        ? "No platform connections are visible to this identity yet."
+        : "The live catalog appears after company sign-in."
+    ));
+  } else {
+    for (const connection of connections) {
+      const card = document.createElement("article");
+      card.className = "connection-provider-card";
+      const top = document.createElement("div");
+      const icon = document.createElement("span");
+      icon.className = "connection-provider-icon";
+      icon.textContent = providerMonogram(connection.provider);
+      const status = document.createElement("span");
+      status.className = `status-pill ${connection.status === "connected" ? "connected" : "attention"}`;
+      status.textContent = connection.status.replaceAll("_", " ").toUpperCase();
+      top.append(icon, status);
+      const title = document.createElement("strong");
+      title.textContent = connection.displayName;
+      const detail = document.createElement("p");
+      detail.textContent = `${humanizeProvider(connection.provider)} · ${connection.kind.replaceAll("_", " ")} · ${connection.ownership.replaceAll("_", " ")}`;
+      const boundary = document.createElement("small");
+      boundary.textContent = connection.usable
+        ? "Available to this signed-in user through governed platform calls"
+        : "Metadata only; this identity cannot use the connection";
+      card.append(top, title, detail, boundary);
+      elements.connectedSystemList.append(card);
+    }
+  }
+
+  elements.availableProviderList.replaceChildren();
+  if (providers.length === 0) {
+    elements.availableProviderList.append(connectionCatalogEmpty(
+      "No provider definitions were advertised by this AMOS server."
+    ));
+  } else {
+    for (const provider of providers) {
+      const card = document.createElement("article");
+      card.className = "connection-provider-card";
+      const top = document.createElement("div");
+      const icon = document.createElement("span");
+      icon.className = "connection-provider-icon";
+      icon.textContent = providerMonogram(provider.provider);
+      const status = document.createElement("span");
+      status.className = `status-pill ${provider.configured ? "available" : "attention"}`;
+      status.textContent = provider.configured ? "AVAILABLE" : "SETUP NEEDED";
+      top.append(icon, status);
+      const title = document.createElement("strong");
+      title.textContent = provider.label;
+      const detail = document.createElement("p");
+      detail.textContent = provider.source === "platform"
+        ? "Curated and governed by the AMOS platform."
+        : "Defined for this tenant; credentials remain platform-vaulted.";
+      const boundary = document.createElement("small");
+      boundary.textContent = `Provider key: ${provider.provider}`;
+      card.append(top, title, detail, boundary);
+      elements.availableProviderList.append(card);
+    }
+  }
+}
+
+function connectionCatalogEmpty(message) {
+  const empty = document.createElement("p");
+  empty.className = "connection-catalog-empty";
+  empty.textContent = message;
+  return empty;
+}
+
+function providerMonogram(provider) {
+  const value = String(provider || "").replaceAll("_", " ").trim();
+  const words = value.split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join("") || "↗";
+}
+
+function humanizeProvider(provider) {
+  return String(provider || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
 function renderCanvas() {
   if (!state) return;
   const canvases = Array.isArray(state.canvases) ? state.canvases : [];
@@ -469,6 +595,7 @@ function renderCanvas() {
   }
   const canvas = canvases.find((item) => item.id === activeCanvasId) || null;
   const hasBlocks = Boolean(canvas?.blocks?.length);
+  renderBriefingLibrary();
 
   elements.canvasBadge.textContent = String(canvases.length);
   elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
@@ -477,6 +604,7 @@ function renderCanvas() {
   elements.canvasSourceBar.classList.toggle("hidden", !canvas);
   elements.canvasTabs.classList.toggle("hidden", canvases.length < 2);
   elements.canvasCloseButton.classList.toggle("hidden", !canvas);
+  elements.canvasSaveButton.classList.toggle("hidden", !canvas?.source?.refreshPrompt);
   elements.canvasRefreshButton.classList.toggle("hidden", !canvas?.source?.refreshPrompt);
   elements.canvasTabs.replaceChildren();
   elements.canvasBlocks.replaceChildren();
@@ -497,12 +625,12 @@ function renderCanvas() {
   }
 
   if (!canvas) {
-    elements.canvasTitle.textContent = "A clearer view of the work.";
+    elements.canvasTitle.textContent = "Briefings that stay useful.";
     elements.canvasSubtitle.textContent =
-      "AMOS can turn current company context into a bounded, source-aware operating view.";
-    elements.canvasEmptyTitle.textContent = "No canvas open yet";
+      "Generate a live operating view, then save its definition so AMOS can refresh it whenever you need it.";
+    elements.canvasEmptyTitle.textContent = "Choose a briefing or ask AMOS";
     elements.canvasEmptyMessage.textContent =
-      "Ask AMOS to compare performance, chart a trend, show a decision, or organize company data into a table.";
+      "Start with a template, reopen a saved view, or ask for any company comparison, trend, decision, or operating brief.";
     elements.canvasStartButton.classList.remove("hidden");
     return;
   }
@@ -523,6 +651,99 @@ function renderCanvas() {
     elements.promptInput.value = canvas.source.refreshPrompt;
     elements.promptInput.focus();
   };
+}
+
+function renderBriefingLibrary() {
+  const savedViews = Array.isArray(state.savedViews) ? state.savedViews : [];
+  elements.savedViewList.replaceChildren();
+  elements.briefingTemplateList.replaceChildren();
+
+  if (savedViews.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "briefing-library-empty";
+    empty.textContent = state.connectionMode === "user"
+      ? "Save any live briefing to reopen and refresh it here."
+      : "Connect your company to save identity-pinned live briefings.";
+    elements.savedViewList.append(empty);
+  } else {
+    for (const view of savedViews) {
+      elements.savedViewList.append(briefingCard({
+        title: view.title,
+        description: `Definition updated ${relativeTime(view.updatedAt)} · live data refreshes when opened`,
+        actionLabel: "Run",
+        onAction: () => stageBriefingPrompt(view.prompt),
+        onRemove: () => removeSavedBriefing(view.id)
+      }));
+    }
+  }
+
+  for (const template of briefingTemplates) {
+    elements.briefingTemplateList.append(briefingCard({
+      ...template,
+      actionLabel: "Create",
+      onAction: () => stageBriefingPrompt(template.prompt)
+    }));
+  }
+}
+
+function briefingCard({ title, description, actionLabel, onAction, onRemove = null }) {
+  const card = document.createElement("article");
+  card.className = "briefing-library-card";
+  const copy = document.createElement("div");
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const detail = document.createElement("p");
+  detail.textContent = description;
+  copy.append(heading, detail);
+  const actions = document.createElement("div");
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "text-button";
+  action.textContent = `${actionLabel} →`;
+  action.addEventListener("click", onAction);
+  actions.append(action);
+  if (onRemove) {
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "text-button danger-text";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", onRemove);
+    actions.append(remove);
+  }
+  card.append(copy, actions);
+  return card;
+}
+
+function stageBriefingPrompt(prompt) {
+  showView("operator");
+  elements.promptInput.value = prompt;
+  elements.promptInput.focus();
+}
+
+async function saveActiveBriefing() {
+  if (!activeCanvasId) return;
+  setButtonBusy(elements.canvasSaveButton, true, "Saving…");
+  try {
+    const result = await api.saveCanvasView(activeCanvasId);
+    state.savedViews = result.savedViews || [];
+    renderBriefingLibrary();
+    toast(`Saved “${result.savedView.title}”.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.canvasSaveButton, false, "Save briefing");
+  }
+}
+
+async function removeSavedBriefing(id) {
+  try {
+    const result = await api.removeSavedView(id);
+    state.savedViews = result.savedViews || [];
+    renderBriefingLibrary();
+    toast("Saved briefing removed.");
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 function renderCanvasSource(canvas) {
@@ -813,7 +1034,7 @@ function renderCanvasDecision(block) {
     review.className = "button primary";
     review.textContent = "Review securely →";
     review.addEventListener("click", () =>
-      api.openApproval(block.pendingId).catch((error) => toast(error.message, true))
+      api.reviewApproval(block.pendingId).catch((error) => toast(error.message, true))
     );
     card.append(review);
   }
@@ -1663,7 +1884,7 @@ function decisionCard(approval, actionable) {
     review.addEventListener("click", async () => {
       setButtonBusy(review, true, "Opening…");
       try {
-        await api.openApproval(approval.id);
+        await api.reviewApproval(approval.id);
       } catch (error) {
         toast(error.message, true);
       } finally {

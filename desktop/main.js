@@ -23,6 +23,8 @@ import { ManagedOllamaRuntime } from "../src/desktop/managedOllamaRuntime.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
+import { SavedViewStore } from "../src/desktop/savedViewStore.js";
+import { DecisionKeyStore } from "../src/desktop/decisionKeyStore.js";
 import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
 
@@ -252,6 +254,35 @@ function registerIpc() {
   ipcMain.handle("desktop:logout", () => controller.logout());
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
   ipcMain.handle("desktop:open-approval", (_event, id) => controller.openApproval(id));
+  ipcMain.handle("desktop:review-company-approval", async (_event, id) => {
+    const review = await controller.reviewCompanyApproval(id);
+    if (review.mode !== "desktop") return review;
+    const approval = review.approval;
+    const result = await dialog.showMessageBox(window, {
+      type: "question",
+      title: "Governed AMOS approval",
+      message: approval.summary,
+      detail: [
+        `Operation: ${approval.verb}`,
+        `Origin: ${String(approval.agencyOrigin).replaceAll("_", " ")}`,
+        approval.requestedAt ? `Requested: ${new Date(approval.requestedAt).toLocaleString()}` : "",
+        "",
+        "Exact request:",
+        JSON.stringify(approval.args, null, 2).slice(0, 4_000)
+      ].filter((line) => line !== "").join("\n"),
+      buttons: ["Approve once", "Deny", "Cancel"],
+      defaultId: 2,
+      cancelId: 2,
+      noLink: true
+    });
+    if (result.response === 2) return { mode: "desktop", canceled: true };
+    const decision = result.response === 0 ? "approve" : "deny";
+    return {
+      mode: "desktop",
+      decision,
+      result: await controller.decideCompanyApproval(id, decision)
+    };
+  });
   ipcMain.handle("desktop:test-model", () => controller.testModel());
   ipcMain.handle("desktop:refresh-offline", () => controller.refreshOffline());
   ipcMain.handle("desktop:refresh-company-cache", (_event, ttlSeconds) =>
@@ -292,6 +323,8 @@ function registerIpc() {
   ipcMain.handle("desktop:cancel-task", (_event, id) => controller.cancelTask(id));
   ipcMain.handle("desktop:clear", () => controller.clear());
   ipcMain.handle("desktop:remove-canvas", (_event, id) => controller.removeCanvas(id));
+  ipcMain.handle("desktop:save-canvas-view", (_event, id) => controller.saveCanvasView(id));
+  ipcMain.handle("desktop:remove-saved-view", (_event, id) => controller.removeSavedView(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({
     name: input?.name,
@@ -426,6 +459,16 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
+  const savedViewStore = new SavedViewStore({
+    filePath: join(app.getPath("userData"), "saved-views.json"),
+    encrypt,
+    decrypt
+  });
+  const decisionKeyStore = new DecisionKeyStore({
+    filePath: join(app.getPath("userData"), "desktop-approval-key.json"),
+    encrypt,
+    decrypt
+  });
   const managedOllamaRuntime = new ManagedOllamaRuntime({
     platform: process.platform,
     arch: process.arch,
@@ -452,6 +495,8 @@ app.whenReady().then(async () => {
     offlineProposalStore,
     taskCheckpointStore,
     localReceiptStore,
+    savedViewStore,
+    decisionKeyStore,
     offlineManager,
     telemetry,
     openBrowser: (url) => shell.openExternal(url),

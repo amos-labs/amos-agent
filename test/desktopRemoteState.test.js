@@ -59,6 +59,7 @@ test("Desktop remote state resolves the signed-in user and their approvals", asy
         });
       }
       return response(200, {
+        decision_mode: "desktop",
         pending_operations: [
           {
             id: "22222222-2222-2222-2222-222222222222",
@@ -80,9 +81,112 @@ test("Desktop remote state resolves the signed-in user and their approvals", asy
   assert.equal(identity.user.email, "rick@amoslabs.com");
   assert.equal(identity.principal_type, "user");
   assert.equal(approvals.available, true);
+  assert.equal(approvals.decision_mode, "desktop");
   assert.equal(approvals.pending_operations[0].review_summary, "Create Ad: launch the governed campaign");
   assert.equal(requests[1].url, "https://app.amoslabs.com/api/v1/approvals");
   assert.equal(requests[1].options.headers.Authorization, "Bearer user-access-token");
+});
+
+test("Desktop sends native human decisions only through the dedicated approval endpoint", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "desktop-user-token"; } }
+    },
+    async (url, options) => {
+      requests.push({ url, options });
+      if (url.endsWith("/challenge")) {
+        return response(200, {
+          challenge_id: "33333333-3333-3333-3333-333333333333",
+          message: "AMOS-DESKTOP-APPROVAL-V1\nchallenge"
+        });
+      }
+      return response(200, { status: "approved", verb: "create_ad" });
+    }
+  );
+
+  const signed = [];
+  const result = await client.decideApproval(
+    "22222222-2222-2222-2222-222222222222",
+    "approve",
+    {
+      async sign(message) {
+        signed.push(message);
+        return "signed-challenge";
+      }
+    }
+  );
+
+  assert.equal(result.status, "approved");
+  assert.equal(
+    requests[0].url,
+    "https://app.amoslabs.com/api/v1/approvals/22222222-2222-2222-2222-222222222222/challenge"
+  );
+  assert.deepEqual(JSON.parse(requests[0].options.body), { decision: "approve" });
+  assert.equal(
+    requests[1].url,
+    "https://app.amoslabs.com/api/v1/approvals/22222222-2222-2222-2222-222222222222/approve"
+  );
+  assert.equal(requests[1].options.method, "POST");
+  assert.equal(requests[1].options.headers.Authorization, "Bearer desktop-user-token");
+  assert.equal(requests[1].options.headers["X-AMOS-Client"], undefined);
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    challenge_id: "33333333-3333-3333-3333-333333333333",
+    signature: "signed-challenge"
+  });
+  assert.deepEqual(signed, ["AMOS-DESKTOP-APPROVAL-V1\nchallenge"]);
+});
+
+test("Desktop projects credential-free connection and provider metadata from AMOS", async () => {
+  const tools = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      const name = request.params.name;
+      tools.push(name);
+      const payload = name === "list_connections"
+        ? {
+            connections: [{
+              id: "44444444-4444-4444-4444-444444444444",
+              provider: "quickbooks",
+              display_name: "Neighborly QBO",
+              kind: "oauth",
+              status: "connected",
+              ownership: "service_account",
+              usable: true,
+              credentials_encrypted: "must-not-project"
+            }]
+          }
+        : {
+            curated: [{ provider: "github", label: "GitHub", source: "platform", configured: true }],
+            tenant_defined: [{
+              provider: "field-service",
+              label: "Field Service",
+              source: "tenant",
+              credentials_registered: false,
+              token_url: "must-not-project"
+            }]
+          };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const catalog = await client.connectionsCatalog();
+  assert.deepEqual(tools.sort(), ["list_connections", "list_oauth_providers"]);
+  assert.equal(catalog.connections[0].displayName, "Neighborly QBO");
+  assert.equal(catalog.connections[0].credentials_encrypted, undefined);
+  assert.equal(catalog.curated[0].configured, true);
+  assert.equal(catalog.tenantDefined[0].configured, false);
+  assert.equal(catalog.tenantDefined[0].token_url, undefined);
 });
 
 test("Desktop treats a non-approver role as a bounded unavailable inbox", async () => {

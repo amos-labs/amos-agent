@@ -14,6 +14,7 @@
 - [Signed offline company context](OFFLINE_COMPANY_CONTEXT.md)
 - [Offline draft reconciliation](OFFLINE_RECONCILIATION.md)
 - [Typed company canvas](CANVAS.md)
+- [Desktop and platform interchange](DESKTOP_PLATFORM_INTERCHANGE.md)
 
 ## Product direction
 
