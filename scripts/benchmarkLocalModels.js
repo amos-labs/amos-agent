@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { writeFile } from "node:fs/promises";
+import http from "node:http";
+import https from "node:https";
 import vm from "node:vm";
 import { performance } from "node:perf_hooks";
 
@@ -16,11 +19,38 @@ const contextLength = boundedInteger(
   131_072,
   32_768
 );
+const protocol = normalizeProtocol(
+  readOption(args, "--protocol") ||
+    process.env.AMOS_LOCAL_BENCHMARK_PROTOCOL ||
+    "ollama"
+);
+const output = readOption(args, "--output");
+const requestTimeoutSeconds = boundedInteger(
+  readOption(args, "--request-timeout-seconds") ||
+    process.env.AMOS_LOCAL_BENCHMARK_REQUEST_TIMEOUT_SECONDS,
+  60,
+  7_200,
+  600
+);
+const maxTokens = boundedInteger(
+  readOption(args, "--max-tokens") || process.env.AMOS_LOCAL_BENCHMARK_MAX_TOKENS,
+  32,
+  4_096,
+  768
+);
+const onlyScenarios = new Set(
+  (readOption(args, "--only") || process.env.AMOS_LOCAL_BENCHMARK_ONLY || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+);
 
 if (models.length === 0) {
   console.error(
     "Usage: npm run benchmark:local -- <model> [model...] " +
-    "[--suite smoke|qualification|all] [--url URL] [--context TOKENS]"
+    "[--suite smoke|qualification|all] [--url URL] [--context TOKENS] " +
+    "[--request-timeout-seconds SECONDS] [--max-tokens TOKENS] " +
+    "[--protocol ollama|openai] [--only SCENARIO,...] [--output REPORT.json]"
   );
   process.exit(2);
 }
@@ -39,8 +69,25 @@ for (const result of results) {
     `${result.wallSeconds.toFixed(1)}s · ${result.tokensPerSecond.toFixed(1)} tok/s`
   );
   for (const scenario of result.scenarios) {
-    console.log(`  ${scenario.passed ? "✓" : "✗"} ${scenario.name}: ${scenario.detail}`);
+    console.log(
+      `  ${scenario.passed ? "✓" : "✗"} ${scenario.name} ` +
+      `(${scenario.wallSeconds.toFixed(1)}s): ${scenario.detail}`
+    );
   }
+}
+if (output) {
+  await writeFile(output, `${JSON.stringify({
+    schema: "amos.local-model-qualification",
+    version: 1,
+    created_at: new Date().toISOString(),
+    endpoint: baseUrl,
+    protocol,
+    suite,
+    context_length: contextLength,
+    max_tokens: maxTokens,
+    only_scenarios: onlyScenarios.size > 0 ? [...onlyScenarios] : null,
+    results
+  }, null, 2)}\n`);
 }
 
 async function benchmarkModel(model) {
@@ -175,13 +222,27 @@ async function benchmarkModel(model) {
   }
 
   if (suite !== "smoke") {
-    scenarios.push(await qualificationPromptInjection(model, stats));
-    scenarios.push(await qualificationContradictoryEvidence(model, stats));
-    scenarios.push(await qualificationTenantBoundary(model, stats));
-    scenarios.push(await qualificationToolSequence(model, stats));
-    scenarios.push(await qualificationParkedApproval(model, stats));
-    scenarios.push(await qualificationDistractorRetrieval(model, stats));
-    scenarios.push(await qualificationCoding(model, stats));
+    if (shouldRunScenario("document prompt-injection resistance")) {
+      scenarios.push(await qualificationPromptInjection(model, stats));
+    }
+    if (shouldRunScenario("contradictory evidence")) {
+      scenarios.push(await qualificationContradictoryEvidence(model, stats));
+    }
+    if (shouldRunScenario("tenant-boundary trap")) {
+      scenarios.push(await qualificationTenantBoundary(model, stats));
+    }
+    if (shouldRunScenario("dependent multi-tool sequence")) {
+      scenarios.push(await qualificationToolSequence(model, stats));
+    }
+    if (shouldRunScenario("parked approval outcome")) {
+      scenarios.push(await qualificationParkedApproval(model, stats));
+    }
+    if (shouldRunScenario("distractor-heavy evidence retrieval")) {
+      scenarios.push(await qualificationDistractorRetrieval(model, stats));
+    }
+    if (shouldRunScenario("optimization coding")) {
+      scenarios.push(await qualificationCoding(model, stats));
+    }
   }
 
   const score = scenarios.reduce((sum, item) => sum + (item.passed ? item.weight : 0), 0);
@@ -483,19 +544,26 @@ async function qualificationCoding(model, stats) {
     stats.push(response);
     const code = extractCode(response.message?.content);
     const sandbox = { resultA: null, resultB: null, resultC: null };
-    vm.runInNewContext(
-      `"use strict";\n${code}\n` +
-      `const a = [{id:"A",dailySpend:6,expectedSignups:9},` +
-      `{id:"B",dailySpend:5,expectedSignups:7},{id:"C",dailySpend:5,expectedSignups:7}];\n` +
-      `const before = JSON.stringify(a);\n` +
-      `resultA = {ids: selectCampaigns(a, 10), unchanged: JSON.stringify(a) === before};\n` +
-      `resultB = selectCampaigns([{id:"D",dailySpend:4,expectedSignups:5},` +
-      `{id:"E",dailySpend:4,expectedSignups:5},{id:"F",dailySpend:8,expectedSignups:10}], 8);\n` +
-      `resultC = selectCampaigns([{id:"G",dailySpend:3,expectedSignups:4},` +
-      `{id:"H",dailySpend:2,expectedSignups:4}], 3);`,
-      sandbox,
-      { timeout: 2_000 }
-    );
+    try {
+      vm.runInNewContext(
+        `"use strict";\n${code}\n` +
+        `const a = [{id:"A",dailySpend:6,expectedSignups:9},` +
+        `{id:"B",dailySpend:5,expectedSignups:7},{id:"C",dailySpend:5,expectedSignups:7}];\n` +
+        `const before = JSON.stringify(a);\n` +
+        `resultA = {ids: selectCampaigns(a, 10), unchanged: JSON.stringify(a) === before};\n` +
+        `resultB = selectCampaigns([{id:"D",dailySpend:4,expectedSignups:5},` +
+        `{id:"E",dailySpend:4,expectedSignups:5},{id:"F",dailySpend:8,expectedSignups:10}], 8);\n` +
+        `resultC = selectCampaigns([{id:"G",dailySpend:3,expectedSignups:4},` +
+        `{id:"H",dailySpend:2,expectedSignups:4}], 3);`,
+        sandbox,
+        { timeout: 2_000 }
+      );
+    } catch (error) {
+      return [
+        false,
+        `${String(error?.message || error)}; code=${summarize(code)}`
+      ];
+    }
     const resultA = Array.from(sandbox.resultA?.ids || []);
     const resultB = Array.from(sandbox.resultB || []);
     const resultC = Array.from(sandbox.resultC || []);
@@ -513,54 +581,137 @@ async function qualificationCoding(model, stats) {
 }
 
 async function chat(model, messages, tools = []) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10 * 60_000);
-  try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/chat`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model,
-        messages,
-        tools: tools.length > 0 ? tools : undefined,
-        stream: false,
-        think: false,
-        options: {
-          temperature: 0,
-          num_ctx: contextLength,
-          num_predict: 768
-        }
-      })
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      throw new Error(payload?.error || `Ollama returned HTTP ${response.status}`);
+  const started = performance.now();
+  const endpoint = `${baseUrl.replace(/\/$/, "")}${protocol === "openai" ? "/v1/chat/completions" : "/api/chat"}`;
+  const payload = await postJson(endpoint, protocol === "openai" ? {
+    model,
+    messages,
+    tools: tools.length > 0 ? tools : undefined,
+    stream: false,
+    temperature: 0,
+    max_tokens: maxTokens
+  } : {
+    model,
+    messages,
+    tools: tools.length > 0 ? tools : undefined,
+    stream: false,
+    think: false,
+    options: {
+      temperature: 0,
+      num_ctx: contextLength,
+      num_predict: maxTokens
     }
-    return payload;
-  } finally {
-    clearTimeout(timeout);
+  }, requestTimeoutSeconds * 1_000);
+  if (protocol === "ollama") return payload;
+  const elapsedNanoseconds = (performance.now() - started) * 1_000_000;
+  const completionTokens = payload?.timings?.predicted_n ||
+    payload?.usage?.completion_tokens ||
+    0;
+  const generationNanoseconds = payload?.timings?.predicted_ms > 0
+    ? payload.timings.predicted_ms * 1_000_000
+    : elapsedNanoseconds;
+  return {
+    message: payload?.choices?.[0]?.message,
+    eval_count: completionTokens,
+    eval_duration: generationNanoseconds,
+    usage: payload?.usage,
+    timings: payload?.timings
+  };
+}
+
+async function postJson(url, body, timeoutMs) {
+  const target = new URL(url);
+  const serialized = JSON.stringify(body);
+  const transport = target.protocol === "https:" ? https : http;
+  return new Promise((resolveRequest, rejectRequest) => {
+    const request = transport.request(target, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": Buffer.byteLength(serialized)
+      }
+    }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.once("error", rejectRequest);
+      response.once("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        let payload;
+        try {
+          payload = text ? JSON.parse(text) : {};
+        } catch {
+          rejectRequest(new Error(`Endpoint returned invalid JSON (HTTP ${response.statusCode})`));
+          return;
+        }
+        if ((response.statusCode || 500) >= 400) {
+          const detail = payload?.error?.message || payload?.error;
+          rejectRequest(new Error(detail || `Endpoint returned HTTP ${response.statusCode}`));
+          return;
+        }
+        resolveRequest(payload);
+      });
+    });
+    const timeout = setTimeout(() => {
+      request.destroy(new Error(`Request exceeded ${Math.round(timeoutMs / 1_000)} seconds`));
+    }, timeoutMs);
+    request.once("close", () => clearTimeout(timeout));
+    request.once("error", rejectRequest);
+    request.end(serialized);
+  });
+}
+
+function shouldRunScenario(name) {
+  return onlyScenarios.size === 0 || onlyScenarios.has(name);
+}
+
+function isOptionWithValue(value) {
+  return [
+    "--url",
+    "--context",
+    "--suite",
+    "--protocol",
+    "--only",
+    "--max-tokens",
+    "--request-timeout-seconds",
+    "--output"
+  ].includes(value);
+}
+
+function skipOptionValue(values, index) {
+  if (isOptionWithValue(values[index])) {
+    return index + 1;
   }
+  return index;
 }
 
 async function scenario(name, weight, run) {
+  const started = performance.now();
   try {
     const [passed, detail] = await run();
-    return { name, weight, passed: Boolean(passed), detail };
+    return {
+      name,
+      weight,
+      passed: Boolean(passed),
+      detail,
+      wallSeconds: (performance.now() - started) / 1_000
+    };
   } catch (error) {
-    return { name, weight, passed: false, detail: String(error?.message || error).slice(0, 240) };
+    return {
+      name,
+      weight,
+      passed: false,
+      detail: String(error?.message || error).slice(0, 240),
+      wallSeconds: (performance.now() - started) / 1_000
+    };
   }
 }
 
 function readModels(values) {
   const models = [];
   for (let index = 0; index < values.length; index += 1) {
-    if (
-      values[index] === "--url" ||
-      values[index] === "--context" ||
-      values[index] === "--suite"
-    ) {
-      index += 1;
+    const skippedIndex = skipOptionValue(values, index);
+    if (skippedIndex !== index) {
+      index = skippedIndex;
       continue;
     }
     if (!values[index].startsWith("--")) models.push(values[index]);
@@ -583,6 +734,12 @@ function normalizeSuite(value) {
   const normalized = String(value || "").trim().toLowerCase();
   if (["smoke", "qualification", "all"].includes(normalized)) return normalized;
   throw new Error(`Unknown benchmark suite: ${value}`);
+}
+
+function normalizeProtocol(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["ollama", "openai"].includes(normalized)) return normalized;
+  throw new Error(`Unknown benchmark protocol: ${value}`);
 }
 
 function normalizedText(value) {

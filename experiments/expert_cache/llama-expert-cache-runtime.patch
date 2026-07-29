@@ -1,0 +1,774 @@
+diff --git a/ggml/src/ggml-metal/ggml-metal-context.m b/ggml/src/ggml-metal/ggml-metal-context.m
+index 32d97cd5..1313990b 100644
+--- a/ggml/src/ggml-metal/ggml-metal-context.m
++++ b/ggml/src/ggml-metal/ggml-metal-context.m
+@@ -435,12 +435,238 @@ bool ggml_metal_cpy_tensor_async(ggml_metal_t ctx_src, ggml_metal_t ctx_dst, con
+     }
+ }
+ 
++static enum ggml_status ggml_metal_expert_cache_compute_range(
++        ggml_metal_t ctx,
++        struct ggml_cgraph * gf,
++        int idx_start,
++        int idx_end) {
++    if (idx_start >= idx_end) {
++        return GGML_STATUS_SUCCESS;
++    }
++
++    id<MTLCommandQueue> queue = ggml_metal_device_get_queue(ctx->dev);
++    id<MTLCommandBuffer> cmd_buf =
++        [[queue commandBufferWithUnretainedReferences] retain];
++
++    ggml_metal_op_t ctx_op = ggml_metal_op_init(
++        ctx->dev,
++        cmd_buf,
++        gf,
++        idx_start,
++        idx_end,
++        false,
++        false,
++        false,
++        ctx->debug_graph,
++        ctx->debug_fusion);
++
++    for (int idx = 0; idx < ggml_metal_op_n_nodes(ctx_op); ++idx) {
++        const int res = ggml_metal_op_encode(ctx_op, idx);
++        if (res == 0) {
++            break;
++        }
++        idx += res - 1;
++    }
++
++    ggml_metal_op_free(ctx_op);
++    [cmd_buf commit];
++    [cmd_buf waitUntilCompleted];
++
++    const MTLCommandBufferStatus status = [cmd_buf status];
++    if (status != MTLCommandBufferStatusCompleted) {
++        GGML_LOG_ERROR(
++            "%s: ExpertCache command buffer [%d,%d) failed with status %d\n",
++            __func__,
++            idx_start,
++            idx_end,
++            (int) status);
++        if (status == MTLCommandBufferStatusError) {
++            GGML_LOG_ERROR(
++                "error: %s\n",
++                [[cmd_buf error].localizedDescription UTF8String]);
++        }
++        [cmd_buf release];
++        ctx->has_error = true;
++        return GGML_STATUS_FAILED;
++    }
++
++    [cmd_buf release];
++    return GGML_STATUS_SUCCESS;
++}
++
+ enum ggml_status ggml_metal_graph_compute(ggml_metal_t ctx, struct ggml_cgraph * gf) {
+     if (ctx->has_error) {
+         GGML_LOG_ERROR("%s: backend is in error state from a previous command buffer failure - recreate the backend to recover\n", __func__);
+         return GGML_STATUS_FAILED;
+     }
+ 
++    const char * expert_cache_env = getenv("GGML_METAL_EXPERT_CACHE_SLOTS");
++    if (expert_cache_env != NULL && atoi(expert_cache_env) > 0) {
++        const bool cpu_fill =
++            getenv("GGML_METAL_EXPERT_CACHE_CPU_FILL") != NULL;
++
++        if (cpu_fill) {
++            // Architectural proof path: run ordinary graph spans normally,
++            // synchronizing only before each routed expert projection so the
++            // selected IDs are visible to the CPU. The CPU copies just those
++            // selected byte ranges from the mmap-backed GGUF tensor into the
++            // shared Metal slots. Crucially, the full expert projection is
++            // never bound to a Metal command encoder in this mode.
++            if (ctx->cmd_buf_last) {
++                [ctx->cmd_buf_last waitUntilCompleted];
++                ctx->cmd_buf_last = nil;
++            }
++
++            int range_start = 0;
++            for (int node_index = 0; node_index < gf->n_nodes; ++node_index) {
++                struct ggml_tensor * node = gf->nodes[node_index];
++                if (!ggml_metal_op_mul_mat_id_uses_expert_cache(node)) {
++                    continue;
++                }
++
++                @autoreleasepool {
++                    enum ggml_status status =
++                        ggml_metal_expert_cache_compute_range(
++                            ctx, gf, range_start, node_index);
++                    if (status != GGML_STATUS_SUCCESS) {
++                        return status;
++                    }
++
++                    // All routed projections in one transformer layer share
++                    // the same selected-ID tensor. Give each projection its
++                    // own bounded slot buffer, stage them together after one
++                    // routing synchronization, then execute the complete
++                    // layer span in a single command buffer. This replaces
++                    // three CPU/GPU barriers per layer with one.
++                    const struct ggml_tensor * route_ids = node->src[2];
++                    int group_end = node_index;
++                    for (int scan = node_index; scan < gf->n_nodes; ++scan) {
++                        struct ggml_tensor * candidate = gf->nodes[scan];
++                        if (!ggml_metal_op_mul_mat_id_uses_expert_cache(candidate)) {
++                            continue;
++                        }
++                        if (candidate->src[2] != route_ids) {
++                            break;
++                        }
++                        if (!ggml_metal_op_expert_cache_prepare_cpu(
++                                ctx->dev, candidate)) {
++                            GGML_LOG_ERROR(
++                                "%s: ExpertCache CPU staging failed for node %d '%s'\n",
++                                __func__,
++                                scan,
++                                candidate->name);
++                            ctx->has_error = true;
++                            return GGML_STATUS_FAILED;
++                        }
++                        group_end = scan + 1;
++                    }
++
++                    status = ggml_metal_expert_cache_compute_range(
++                        ctx, gf, node_index, group_end);
++                    if (status != GGML_STATUS_SUCCESS) {
++                        return status;
++                    }
++
++                    range_start = group_end;
++                    node_index = group_end - 1;
++                }
++            }
++
++            @autoreleasepool {
++                enum ggml_status status =
++                    ggml_metal_expert_cache_compute_range(
++                        ctx, gf, range_start, gf->n_nodes);
++                if (status != GGML_STATUS_SUCCESS) {
++                    return status;
++                }
++            }
++
++            return GGML_STATUS_SUCCESS;
++        }
++
++        // A normal inference graph references every MoE projection in one or
++        // two command buffers. Metal accounts those complete mapped resources
++        // even when the ExpertCache kernel reads only four routed slices. Keep
++        // each command buffer's resource set bounded while proving the cache
++        // architecture. This deliberately synchronous baseline will be
++        // replaced by event-chained streaming once first-token correctness is
++        // established.
++        const char * nodes_env = getenv("GGML_METAL_EXPERT_CACHE_NODES_PER_CB");
++        const int nodes_per_cb = nodes_env ? MAX(1, atoi(nodes_env)) : 32;
++        id<MTLCommandQueue> queue = ggml_metal_device_get_queue(ctx->dev);
++
++        if (ctx->cmd_buf_last) {
++            [ctx->cmd_buf_last waitUntilCompleted];
++            ctx->cmd_buf_last = nil;
++        }
++
++        for (int idx_start = 0; idx_start < gf->n_nodes; idx_start += nodes_per_cb) {
++            const int idx_end = MIN(idx_start + nodes_per_cb, gf->n_nodes);
++            id<MTLCommandBuffer> cmd_buf =
++                [[queue commandBufferWithUnretainedReferences] retain];
++
++            ggml_metal_op_t ctx_op = ggml_metal_op_init(
++                ctx->dev,
++                cmd_buf,
++                gf,
++                idx_start,
++                idx_end,
++                ctx->use_fusion,
++                false,
++                false,
++                ctx->debug_graph,
++                ctx->debug_fusion);
++
++            for (int idx = 0; idx < ggml_metal_op_n_nodes(ctx_op); ++idx) {
++                const int res = ggml_metal_op_encode(ctx_op, idx);
++                if (res == 0) {
++                    break;
++                }
++                idx += res - 1;
++            }
++
++            ggml_metal_op_free(ctx_op);
++            [cmd_buf commit];
++            [cmd_buf waitUntilCompleted];
++
++            const MTLCommandBufferStatus status = [cmd_buf status];
++            if (status != MTLCommandBufferStatusCompleted) {
++                GGML_LOG_ERROR(
++                    "%s: ExpertCache command buffer [%d,%d) failed with status %d\n",
++                    __func__, idx_start, idx_end, (int) status);
++                for (int node_index = idx_start; node_index < idx_end; ++node_index) {
++                    const struct ggml_tensor * node = gf->nodes[node_index];
++                    const struct ggml_tensor * src0 = node->src[0];
++                    GGML_LOG_ERROR(
++                        "  node %d: op=%s name='%s' src0='%s' type=%s ne=[%lld,%lld,%lld,%lld]\n",
++                        node_index,
++                        ggml_op_name(node->op),
++                        node->name,
++                        src0 ? src0->name : "",
++                        src0 ? ggml_type_name(src0->type) : "none",
++                        src0 ? (long long) src0->ne[0] : 0,
++                        src0 ? (long long) src0->ne[1] : 0,
++                        src0 ? (long long) src0->ne[2] : 0,
++                        src0 ? (long long) src0->ne[3] : 0);
++                }
++                if (status == MTLCommandBufferStatusError) {
++                    GGML_LOG_ERROR("error: %s\n", [[cmd_buf error].localizedDescription UTF8String]);
++                }
++                [cmd_buf release];
++                ctx->has_error = true;
++                return GGML_STATUS_FAILED;
++            }
++
++            // Release every completed command buffer immediately. Holding the
++            // objects until an outer autorelease pool drains also holds their
++            // mapped expert resources, causing residency to accumulate one
++            // layer at a time despite the bounded slot cache.
++            [cmd_buf release];
++        }
++
++        return GGML_STATUS_SUCCESS;
++    }
++
+     // number of nodes encoded by the main thread (empirically determined)
+     const int n_main = MAX(64, 0.1*gf->n_nodes);
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal-device.h b/ggml/src/ggml-metal/ggml-metal-device.h
+index d0956df5..dd80fa92 100644
+--- a/ggml/src/ggml-metal/ggml-metal-device.h
++++ b/ggml/src/ggml-metal/ggml-metal-device.h
+@@ -321,6 +321,10 @@ void   ggml_metal_buffer_clear        (ggml_metal_buffer_t buf, uint8_t value);
+ // Metal buffer based on the host memory pointer
+ //
+ struct ggml_metal_buffer_id ggml_metal_buffer_get_id(ggml_metal_buffer_t buf, const struct ggml_tensor * t);
++struct ggml_metal_buffer_id ggml_metal_buffer_get_raw_id(
++        ggml_metal_buffer_t buf,
++        size_t offset,
++        size_t size);
+ 
+ #ifdef __cplusplus
+ }
+diff --git a/ggml/src/ggml-metal/ggml-metal-device.m b/ggml/src/ggml-metal/ggml-metal-device.m
+index 4edd77c6..64603e24 100644
+--- a/ggml/src/ggml-metal/ggml-metal-device.m
++++ b/ggml/src/ggml-metal/ggml-metal-device.m
+@@ -827,6 +827,13 @@ ggml_metal_device_t ggml_metal_device_init(int device) {
+             dev->props.use_residency_sets = true;
+ #if defined(GGML_METAL_HAS_RESIDENCY_SETS)
+             dev->props.use_residency_sets = getenv("GGML_METAL_NO_RESIDENCY") == nil;
++            if (getenv("GGML_METAL_EXPERT_CACHE_SLOTS") != NULL) {
++                // ExpertCache intentionally touches only the routed slices of the
++                // mapped MoE tensors. Requesting residency for the complete model
++                // defeats that contract and can poison the command buffer before
++                // the bounded slot cache has a chance to run.
++                dev->props.use_residency_sets = false;
++            }
+ #endif
+ 
+             dev->props.use_shared_buffers = dev->props.has_unified_memory;
+@@ -1610,9 +1617,32 @@ ggml_metal_buffer_t ggml_metal_buffer_map(ggml_metal_device_t dev, void * ptr, s
+     }
+ 
+     const struct ggml_metal_device_props * props_dev = ggml_metal_device_get_props(dev);
++    if (getenv("GGML_METAL_LAZY_TENSOR_MAP") != NULL) {
++        // Keep the mmap-backed model as CPU storage. Exact tensor-sized Metal
++        // views are created on demand in ggml_metal_buffer_get_id() and live
++        // only for the bounded command span that uses them. This avoids
++        // representing a 59 GiB GGUF as a handful of enormous Metal resources.
++        res->use_residency_sets = false;
++        GGML_LOG_INFO(
++            "%s: leaving %.2f MiB model mapping outside Metal; tensor views will be created lazily\n",
++            __func__,
++            size_aligned / 1024.0 / 1024.0);
++        return res;
++    }
++
++    size_t mapped_view_size = props_dev->max_buffer_size;
++    const char * mapped_view_mib_env = getenv("GGML_METAL_MAPPED_VIEW_MIB");
++    if (mapped_view_mib_env != NULL) {
++        const long long mapped_view_mib = atoll(mapped_view_mib_env);
++        if (mapped_view_mib > 0) {
++            const size_t requested =
++                (size_t) mapped_view_mib * 1024ULL * 1024ULL;
++            mapped_view_size = MIN(mapped_view_size, requested);
++        }
++    }
+ 
+     // the buffer fits into the max buffer size allowed by the device
+-    if (size_aligned <= props_dev->max_buffer_size) {
++    if (size_aligned <= mapped_view_size) {
+         res->buffers[res->n_buffers].data  = ptr;
+         res->buffers[res->n_buffers].size  = size;
+         res->buffers[res->n_buffers].metal = nil;
+@@ -1634,8 +1664,35 @@ ggml_metal_buffer_t ggml_metal_buffer_map(ggml_metal_device_t dev, void * ptr, s
+         // this overlap between the views will guarantee that the tensor with the maximum size will fully fit into
+         // one of the views
+         const size_t size_ovlp = ((max_tensor_size + size_page - 1) / size_page + 1) * size_page; // round-up 2 pages just in case
+-        const size_t size_step = props_dev->max_buffer_size - size_ovlp;
+-        const size_t size_view = props_dev->max_buffer_size;
++        if (mapped_view_size <= size_ovlp) {
++            GGML_LOG_ERROR(
++                "%s: mapped Metal view %.2f MiB must exceed maximum tensor overlap %.2f MiB\n",
++                __func__,
++                mapped_view_size / 1024.0 / 1024.0,
++                size_ovlp / 1024.0 / 1024.0);
++            free(res);
++            return NULL;
++        }
++        const size_t size_step = mapped_view_size - size_ovlp;
++        const size_t size_view = mapped_view_size;
++        const size_t n_views = (size + size_step - 1) / size_step;
++        if (n_views > GGML_METAL_MAX_BUFFERS) {
++            GGML_LOG_ERROR(
++                "%s: mapped Metal view %.2f MiB would require %zu buffers (limit %d); increase GGML_METAL_MAPPED_VIEW_MIB\n",
++                __func__,
++                mapped_view_size / 1024.0 / 1024.0,
++                n_views,
++                GGML_METAL_MAX_BUFFERS);
++            free(res);
++            return NULL;
++        }
++        GGML_LOG_INFO(
++            "%s: mapping %.2f MiB into %zu tensor-scale Metal views of at most %.2f MiB (overlap %.2f MiB)\n",
++            __func__,
++            size_aligned / 1024.0 / 1024.0,
++            n_views,
++            size_view / 1024.0 / 1024.0,
++            size_ovlp / 1024.0 / 1024.0);
+ 
+         for (size_t i = 0; i < size; i += size_step) {
+             const size_t size_step_aligned = (i + size_view <= size) ? size_view : (size_aligned - i);
+@@ -1895,6 +1952,36 @@ struct ggml_metal_buffer_id ggml_metal_buffer_get_id(ggml_metal_buffer_t buf, co
+ 
+     const int64_t tsize = ggml_nbytes(t);
+ 
++    if (buf->n_buffers == 0 &&
++        getenv("GGML_METAL_LAZY_TENSOR_MAP") != NULL) {
++        const size_t page_size = sysconf(_SC_PAGESIZE);
++        const uintptr_t tensor_addr = (uintptr_t) t->data;
++        const size_t page_offset = tensor_addr % page_size;
++        void * aligned_data = (void *) (tensor_addr - page_offset);
++        size_t mapped_size = page_offset + (size_t) tsize;
++        if (mapped_size % page_size != 0) {
++            mapped_size += page_size - (mapped_size % page_size);
++        }
++
++        id<MTLBuffer> tensor_buffer =
++            [buf->dev->mtl_device newBufferWithBytesNoCopy:aligned_data
++                                                    length:mapped_size
++                                                   options:MTLResourceStorageModeShared
++                                               deallocator:nil];
++        if (tensor_buffer == nil) {
++            GGML_LOG_ERROR(
++                "%s: failed to create lazy Metal view for tensor '%s', size %.2f MiB\n",
++                __func__,
++                t->name,
++                mapped_size / 1024.0 / 1024.0);
++            return res;
++        }
++
++        res.metal = [tensor_buffer autorelease];
++        res.offs = page_offset;
++        return res;
++    }
++
+     // find the view that contains the tensor fully
+     for (int i = 0; i < buf->n_buffers; ++i) {
+         const int64_t ioffs = (int64_t) t->data - (int64_t) buf->buffers[i].data;
+@@ -1914,3 +2001,20 @@ struct ggml_metal_buffer_id ggml_metal_buffer_get_id(ggml_metal_buffer_t buf, co
+ 
+     return res;
+ }
++
++struct ggml_metal_buffer_id ggml_metal_buffer_get_raw_id(
++        ggml_metal_buffer_t buf,
++        size_t offset,
++        size_t size) {
++    struct ggml_metal_buffer_id res = { nil, 0 };
++
++    if (buf == NULL || buf->n_buffers != 1 || offset + size > buf->buffers[0].size) {
++        GGML_LOG_ERROR("%s: invalid raw Metal buffer range: offset=%zu size=%zu\n",
++                __func__, offset, size);
++        return res;
++    }
++
++    res.metal = buf->buffers[0].metal;
++    res.offs  = offset;
++    return res;
++}
+diff --git a/ggml/src/ggml-metal/ggml-metal-impl.h b/ggml/src/ggml-metal/ggml-metal-impl.h
+index 9f350aad..0022941d 100644
+--- a/ggml/src/ggml-metal/ggml-metal-impl.h
++++ b/ggml/src/ggml-metal/ggml-metal-impl.h
+@@ -549,6 +549,13 @@ typedef struct {
+     int32_t  nr0;
+ } ggml_metal_kargs_mul_mv_id;
+ 
++typedef struct {
++    uint64_t bytes_per_expert;
++    uint64_t source_expert_stride;
++    uint32_t experts_used;
++    uint32_t reserved;
++} ggml_metal_kargs_expert_cache_fill;
++
+ // NORM
+ // RMS_NORM
+ typedef struct {
+diff --git a/ggml/src/ggml-metal/ggml-metal-ops.cpp b/ggml/src/ggml-metal/ggml-metal-ops.cpp
+index 76626a45..41e05364 100644
+--- a/ggml/src/ggml-metal/ggml-metal-ops.cpp
++++ b/ggml/src/ggml-metal/ggml-metal-ops.cpp
+@@ -10,8 +10,13 @@
+ 
+ #include <cassert>
+ #include <algorithm>
++#include <chrono>
+ #include <limits>
+ #include <cmath>
++#include <cstdlib>
++#include <cstring>
++#include <mutex>
++#include <unordered_map>
+ 
+ static ggml_metal_buffer_id ggml_metal_get_buffer_id(const ggml_tensor * t) {
+     if (!t) {
+@@ -172,6 +177,53 @@ static bool ggml_metal_op_concurrency_add(ggml_metal_op_t ctx, const ggml_tensor
+     return ggml_mem_ranges_add(ctx->mem_ranges, node);
+ }
+ 
++struct ggml_metal_expert_cache {
++    ggml_metal_buffer_t weights = nullptr;
++    ggml_metal_buffer_t ids = nullptr;
++    size_t weight_capacity = 0;
++    size_t id_capacity = 0;
++    size_t active_weight_bytes = 0;
++    size_t active_id_bytes = 0;
++    int64_t active_slots = 0;
++};
++
++static ggml_metal_expert_cache & ggml_metal_get_expert_cache(
++        ggml_metal_device_t dev,
++        const ggml_tensor * tensor,
++        size_t weight_bytes,
++        size_t id_bytes) {
++    static std::mutex mutex;
++    static std::unordered_map<
++        ggml_metal_device_t,
++        std::unordered_map<const ggml_tensor *, ggml_metal_expert_cache>
++    > caches;
++
++    std::lock_guard<std::mutex> lock(mutex);
++    ggml_metal_expert_cache & cache = caches[dev][tensor];
++
++    const bool cpu_fill = getenv("GGML_METAL_EXPERT_CACHE_CPU_FILL") != nullptr;
++
++    if (cache.weight_capacity < weight_bytes) {
++        if (cache.weights != nullptr) {
++            ggml_metal_buffer_free(cache.weights);
++        }
++        cache.weights = ggml_metal_buffer_init(dev, weight_bytes, cpu_fill);
++        GGML_ASSERT(cache.weights != nullptr);
++        cache.weight_capacity = weight_bytes;
++    }
++
++    if (cache.id_capacity < id_bytes) {
++        if (cache.ids != nullptr) {
++            ggml_metal_buffer_free(cache.ids);
++        }
++        cache.ids = ggml_metal_buffer_init(dev, id_bytes, cpu_fill);
++        GGML_ASSERT(cache.ids != nullptr);
++        cache.id_capacity = id_bytes;
++    }
++
++    return cache;
++}
++
+ static int ggml_metal_op_encode_impl(ggml_metal_op_t ctx, int idx) {
+     struct ggml_tensor * node = ctx->node(idx);
+ 
+@@ -2341,6 +2393,127 @@ size_t ggml_metal_op_mul_mat_id_extra_ids(const ggml_tensor * op) {
+     return ggml_type_size(GGML_TYPE_I32)*ne02*ne21;
+ }
+ 
++bool ggml_metal_op_mul_mat_id_uses_expert_cache(const ggml_tensor * op) {
++    if (op == nullptr || op->op != GGML_OP_MUL_MAT_ID) {
++        return false;
++    }
++
++    const char * expert_cache_env = getenv("GGML_METAL_EXPERT_CACHE_SLOTS");
++    const int expert_cache_slots = expert_cache_env ? atoi(expert_cache_env) : 0;
++
++    const int64_t n_experts = op->src[0] != nullptr ? op->src[0]->ne[2] : 0;
++    const int64_t experts_used =
++        op->src[2] != nullptr ? op->src[2]->ne[0] : 0;
++    const int64_t n_tokens =
++        op->src[2] != nullptr ? op->src[2]->ne[1] : 0;
++    const int64_t maximum_unique =
++        std::min(n_experts, experts_used * n_tokens);
++
++    return
++        expert_cache_slots > 0 &&
++        op->src[0] != nullptr &&
++        op->src[1] != nullptr &&
++        op->src[2] != nullptr &&
++        op->src[0]->type == GGML_TYPE_MXFP4 &&
++        op->src[2]->type == GGML_TYPE_I32 &&
++        n_experts > 0 &&
++        experts_used > 0 &&
++        n_tokens > 0 &&
++        maximum_unique <= expert_cache_slots &&
++        op->src[0]->nb[2] % 16 == 0;
++}
++
++bool ggml_metal_op_expert_cache_prepare_cpu(
++        ggml_metal_device_t dev,
++        const ggml_tensor * op) {
++    if (!ggml_metal_op_mul_mat_id_uses_expert_cache(op)) {
++        return false;
++    }
++
++    const int64_t n_experts = op->src[0]->ne[2];
++    const int64_t experts_used = op->src[2]->ne[0];
++    const int64_t n_tokens = op->src[2]->ne[1];
++    const int64_t route_count = experts_used * n_tokens;
++    const int64_t slot_limit = std::min<int64_t>(
++        n_experts,
++        std::atoi(getenv("GGML_METAL_EXPERT_CACHE_SLOTS")));
++    const size_t bytes_per_expert = op->src[0]->nb[2];
++    const size_t maximum_weight_bytes = bytes_per_expert * slot_limit;
++    const size_t id_bytes = sizeof(int32_t) * route_count;
++
++    ggml_metal_expert_cache & cache =
++        ggml_metal_get_expert_cache(
++            dev, op->src[0], maximum_weight_bytes, id_bytes);
++
++    GGML_ASSERT(ggml_metal_buffer_is_shared(cache.weights));
++    GGML_ASSERT(ggml_metal_buffer_is_shared(cache.ids));
++    GGML_ASSERT(op->src[0]->data != nullptr);
++    GGML_ASSERT(op->src[2]->data != nullptr);
++
++    uint8_t * slots = static_cast<uint8_t *>(
++        ggml_metal_buffer_get_base(cache.weights));
++    int32_t * compact_ids = static_cast<int32_t *>(
++        ggml_metal_buffer_get_base(cache.ids));
++    const uint8_t * source = static_cast<const uint8_t *>(op->src[0]->data);
++    const int32_t * selected_ids =
++        static_cast<const int32_t *>(op->src[2]->data);
++    std::vector<int32_t> expert_to_slot(n_experts, -1);
++    int64_t unique_experts = 0;
++    const auto copy_started = std::chrono::steady_clock::now();
++
++    for (int64_t route = 0; route < route_count; ++route) {
++        const int32_t expert_id = selected_ids[route];
++        if (expert_id < 0 || expert_id >= n_experts) {
++            GGML_LOG_ERROR(
++                "%s: invalid routed expert id %d at route %lld (n_experts=%lld)\n",
++                __func__,
++                expert_id,
++                (long long) route,
++                (long long) n_experts);
++            return false;
++        }
++
++        int32_t slot = expert_to_slot[expert_id];
++        if (slot < 0) {
++            if (unique_experts >= slot_limit) {
++                GGML_LOG_ERROR(
++                    "%s: routed batch needs more than %lld expert slots\n",
++                    __func__,
++                    (long long) slot_limit);
++                return false;
++            }
++            slot = (int32_t) unique_experts++;
++            expert_to_slot[expert_id] = slot;
++            memcpy(
++                slots + (size_t) slot * bytes_per_expert,
++                source + (size_t) expert_id * bytes_per_expert,
++                bytes_per_expert);
++        }
++        compact_ids[route] = slot;
++    }
++
++    cache.active_slots = unique_experts;
++    cache.active_weight_bytes = bytes_per_expert * unique_experts;
++    cache.active_id_bytes = id_bytes;
++
++    if (getenv("GGML_METAL_EXPERT_CACHE_TRACE") != nullptr) {
++        const double elapsed_ms =
++            std::chrono::duration<double, std::milli>(
++                std::chrono::steady_clock::now() - copy_started).count();
++        GGML_LOG_INFO(
++            "ExpertCache stage tensor='%s' tokens=%lld routes=%lld unique=%lld "
++            "bytes=%zu elapsed_ms=%.3f\n",
++            op->src[0]->name,
++            (long long) n_tokens,
++            (long long) route_count,
++            (long long) unique_experts,
++            cache.active_weight_bytes,
++            elapsed_ms);
++    }
++
++    return true;
++}
++
+ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+     ggml_tensor * op = ctx->node(idx);
+ 
+@@ -2367,11 +2540,87 @@ int ggml_metal_op_mul_mat_id(ggml_metal_op_t ctx, int idx) {
+     GGML_ASSERT(ne03 == 1);
+     GGML_ASSERT(ne13 == 1);
+ 
+-    ggml_metal_buffer_id bid_src0 = ggml_metal_get_buffer_id(op->src[0]);
+     ggml_metal_buffer_id bid_src1 = ggml_metal_get_buffer_id(op->src[1]);
+     ggml_metal_buffer_id bid_src2 = ggml_metal_get_buffer_id(op->src[2]);
+     ggml_metal_buffer_id bid_dst  = ggml_metal_get_buffer_id(op);
+ 
++    const bool use_expert_cache =
++        ggml_metal_op_mul_mat_id_uses_expert_cache(op);
++    const bool cpu_fill =
++        getenv("GGML_METAL_EXPERT_CACHE_CPU_FILL") != nullptr;
++    ggml_metal_buffer_id bid_src0 = { nullptr, 0 };
++    if (!use_expert_cache || !cpu_fill) {
++        bid_src0 = ggml_metal_get_buffer_id(op->src[0]);
++    }
++
++    if (use_expert_cache) {
++        const size_t default_weight_bytes = nb02 * ne20;
++        const size_t default_id_bytes = sizeof(int32_t) * ne20 * ne21;
++        ggml_metal_expert_cache & cache = ggml_metal_get_expert_cache(
++            ctx->dev, op->src[0], default_weight_bytes, default_id_bytes);
++        const size_t weight_bytes =
++            cpu_fill ? cache.active_weight_bytes : default_weight_bytes;
++        const size_t id_bytes =
++            cpu_fill ? cache.active_id_bytes : default_id_bytes;
++
++        GGML_ASSERT(weight_bytes > 0);
++        GGML_ASSERT(id_bytes > 0);
++        ggml_metal_buffer_id bid_slots = ggml_metal_buffer_get_raw_id(
++            cache.weights, 0, weight_bytes);
++        ggml_metal_buffer_id bid_compact_ids = ggml_metal_buffer_get_raw_id(
++            cache.ids, 0, id_bytes);
++
++        GGML_ASSERT(bid_slots.metal != nullptr);
++        GGML_ASSERT(bid_compact_ids.metal != nullptr);
++
++        if (!cpu_fill) {
++            ggml_metal_kargs_expert_cache_fill fill_args = {
++                /*.bytes_per_expert      =*/ nb02,
++                /*.source_expert_stride =*/ nb02,
++                /*.experts_used          =*/ (uint32_t) ne20,
++                /*.reserved              =*/ 0,
++            };
++
++            auto fill_pipeline = ggml_metal_library_get_pipeline(
++                lib, "kernel_expert_cache_fill");
++            if (!fill_pipeline.pipeline) {
++                fill_pipeline = ggml_metal_library_compile_pipeline(
++                    lib,
++                    "kernel_expert_cache_fill",
++                    "kernel_expert_cache_fill",
++                    nullptr);
++            }
++            GGML_ASSERT(fill_pipeline.pipeline != nullptr);
++
++            ggml_metal_encoder_set_pipeline(enc, fill_pipeline);
++            ggml_metal_encoder_set_bytes(enc, &fill_args, sizeof(fill_args), 0);
++            ggml_metal_encoder_set_buffer(enc, bid_src0, 1);
++            ggml_metal_encoder_set_buffer(enc, bid_src2, 2);
++            ggml_metal_encoder_set_buffer(enc, bid_slots, 3);
++            ggml_metal_encoder_set_buffer(enc, bid_compact_ids, 4);
++
++            const uint64_t total_words = weight_bytes / 16;
++            const int threads = std::min(
++                256,
++                ggml_metal_pipeline_max_theads_per_threadgroup(fill_pipeline));
++            ggml_metal_encoder_dispatch_threadgroups(
++                enc,
++                (int) ((total_words + threads - 1) / threads),
++                1,
++                1,
++                threads,
++                1,
++                1);
++
++            // The multiply must observe both the copied expert bytes and the
++            // compact 0..N slot IDs in the same command stream.
++            ggml_metal_op_concurrency_reset(ctx);
++        }
++
++        bid_src0 = bid_slots;
++        bid_src2 = bid_compact_ids;
++    }
++
+     const uint32_t r2 = 1;
+     const uint32_t r3 = 1;
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal-ops.h b/ggml/src/ggml-metal/ggml-metal-ops.h
+index 2783ecb8..0dc59812 100644
+--- a/ggml/src/ggml-metal/ggml-metal-ops.h
++++ b/ggml/src/ggml-metal/ggml-metal-ops.h
+@@ -36,6 +36,18 @@ size_t ggml_metal_op_mul_mat_id_extra_tpe(const struct ggml_tensor * op);
+ // id map [n_tokens, n_expert]
+ size_t ggml_metal_op_mul_mat_id_extra_ids(const struct ggml_tensor * op);
+ 
++// Experimental sparse expert staging for MXFP4 MoE inference. The CPU-fill
++// path deliberately synchronizes after routing, deduplicates the experts used
++// by the current token batch, then copies only those byte ranges into a shared
++// Metal slot buffer. Every token's expert IDs are remapped to compact slots.
++// This keeps the complete expert bank out of Metal's resource set while
++// supporting bounded prefill batches on memory-constrained unified-memory
++// systems.
++bool ggml_metal_op_mul_mat_id_uses_expert_cache(const struct ggml_tensor * op);
++bool ggml_metal_op_expert_cache_prepare_cpu(
++        ggml_metal_device_t dev,
++        const struct ggml_tensor * op);
++
+ // return true if we should use the FA vector kernel for this op
+ bool ggml_metal_op_flash_attn_ext_use_vec(const struct ggml_tensor * op);
+ 
+diff --git a/ggml/src/ggml-metal/ggml-metal.metal b/ggml/src/ggml-metal/ggml-metal.metal
+index f14ee079..8307c45c 100644
+--- a/ggml/src/ggml-metal/ggml-metal.metal
++++ b/ggml/src/ggml-metal/ggml-metal.metal
+@@ -11012,6 +11012,33 @@ template [[host_name("kernel_mul_mv_id_iq2_s_f32")]]   kernel kernel_mul_mv_id_t
+ template [[host_name("kernel_mul_mv_id_iq4_nl_f32")]]  kernel kernel_mul_mv_id_t kernel_mul_mv_id<mmv_fn<kernel_mul_mv_iq4_nl_f32_impl <N_R0_IQ4_NL>>>;
+ template [[host_name("kernel_mul_mv_id_iq4_xs_f32")]]  kernel kernel_mul_mv_id_t kernel_mul_mv_id<mmv_fn<kernel_mul_mv_iq4_xs_f32_impl <N_R0_IQ4_XS>>>;
+ 
++kernel void kernel_expert_cache_fill(
++        constant ggml_metal_kargs_expert_cache_fill & args,
++        device const uint4 * source,
++        device const int32_t * global_ids,
++        device uint4 * slots,
++        device int32_t * compact_ids,
++        uint gid [[thread_position_in_grid]]) {
++    const uint64_t words_per_expert = args.bytes_per_expert / sizeof(uint4);
++    const uint64_t total_words = words_per_expert * args.experts_used;
++
++    if (gid < total_words) {
++        const uint32_t slot = gid / words_per_expert;
++        const uint64_t word_in_expert = gid - slot * words_per_expert;
++        const uint64_t source_word_stride =
++            args.source_expert_stride / sizeof(uint4);
++        const uint32_t global_id = global_ids[slot];
++
++        slots[gid] = source[
++            (uint64_t) global_id * source_word_stride + word_in_expert
++        ];
++    }
++
++    if (gid < args.experts_used) {
++        compact_ids[gid] = (int32_t) gid;
++    }
++}
++
+ kernel void kernel_pool_2d_max_f32(
+         constant    ggml_metal_kargs_pool_2d & args,
+         device  const float * src0,
