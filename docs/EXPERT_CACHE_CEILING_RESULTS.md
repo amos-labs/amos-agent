@@ -196,3 +196,14 @@ Two conclusions:
    no dispatch change can close. The next lever is explicit prefetch or
    ownership of the measured 27–30 GiB route window, and speculative
    verification batches that keep the routed working set warm.
+
+The grouped arm passed the full hidden coding gate at batch 64/micro-batch 64
+with a 1,536-token allowance: 3/3 (hidden optimum, tie-break, immutability),
+1,128 generated tokens, 358.5 seconds on the contaminated host, 5.75 prompt
+and 3.38 decode tok/s. The wall time is not comparable to the 173.0-second
+per-route batch-64 arm because the runs used different reasoning trajectories
+and host states; the comparable claims are the bit-exact 32-token equivalence
+and the hot-ceiling ratio above. Because grouping only changes which launch
+computes each output element — never the weights, inputs, or accumulation
+order within an element — per-element math is identical to the per-route path
+at any generation length, not merely the tested prefix.
