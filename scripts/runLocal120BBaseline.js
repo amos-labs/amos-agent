@@ -114,6 +114,19 @@ const child = spawn(server, serverArgs, {
 });
 child.stdout.pipe(log);
 child.stderr.pipe(log);
+let activeQualificationRunner = null;
+let interruptedSignal = null;
+const signalHandlers = new Map(
+  ["SIGINT", "SIGTERM"].map((signal) => {
+    const handler = () => {
+      interruptedSignal ||= signal;
+      stopProcessGroup(child.pid);
+      activeQualificationRunner?.kill("SIGTERM");
+    };
+    process.once(signal, handler);
+    return [signal, handler];
+  })
+);
 
 const samples = [];
 const sampler = setInterval(() => {
@@ -159,6 +172,9 @@ try {
   samples.push(processSnapshot(child.pid));
   stopProcessGroup(child.pid);
   await waitForExit(child, 15_000);
+  for (const [signal, handler] of signalHandlers) {
+    process.off(signal, handler);
+  }
   log.end();
 }
 
@@ -216,7 +232,11 @@ console.log(JSON.stringify({
   ),
   failure
 }, null, 2));
-if (failure || qualification?.status !== 0) process.exitCode = 1;
+if (interruptedSignal) {
+  process.exitCode = interruptedSignal === "SIGINT" ? 130 : 143;
+} else if (failure || qualification?.status !== 0) {
+  process.exitCode = 1;
+}
 
 async function waitForServer(url, exited) {
   const deadline = Date.now() + 45 * 60_000;
@@ -332,6 +352,7 @@ function runQualification({
     const runner = spawn(process.execPath, qualificationArgs, {
       stdio: ["ignore", "pipe", "pipe"]
     });
+    activeQualificationRunner = runner;
     let stdout = "";
     let stderr = "";
     runner.stdout.on("data", (chunk) => {
@@ -347,6 +368,9 @@ function runQualification({
     }, 90 * 60_000);
     runner.once("error", (error) => {
       clearTimeout(timeout);
+      if (activeQualificationRunner === runner) {
+        activeQualificationRunner = null;
+      }
       resolveRun({
         status: null,
         signal: null,
@@ -357,6 +381,9 @@ function runQualification({
     });
     runner.once("exit", (status, signal) => {
       clearTimeout(timeout);
+      if (activeQualificationRunner === runner) {
+        activeQualificationRunner = null;
+      }
       resolveRun({
         status,
         signal,
