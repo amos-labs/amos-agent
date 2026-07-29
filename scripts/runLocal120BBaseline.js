@@ -24,6 +24,7 @@ const gpuLayers = readOption(args, "--gpu-layers");
 const cpuMoe = args.includes("--cpu-moe");
 const noWarmup = args.includes("--no-warmup");
 const skipProbe = args.includes("--skip-probe");
+const serverVerbose = args.includes("--server-verbose");
 const expertCacheSlots = boundedInteger(
   readOption(args, "--expert-cache-slots") ||
     process.env.GGML_METAL_EXPERT_CACHE_SLOTS,
@@ -37,6 +38,9 @@ const expertCacheCpuFill =
 const expertCacheTrace =
   args.includes("--expert-cache-trace") ||
   process.env.GGML_METAL_EXPERT_CACHE_TRACE !== undefined;
+const expertCacheZeroCopy =
+  args.includes("--expert-cache-zero-copy") ||
+  process.env.GGML_METAL_EXPERT_CACHE_ZERO_COPY !== undefined;
 const port = boundedInteger(readOption(args, "--port"), 1_024, 65_535, 11_436);
 const suite = readOption(args, "--suite") || "qualification";
 const only = readOption(args, "--only");
@@ -96,6 +100,7 @@ const serverArgs = [
 if (gpuLayers) serverArgs.push("--gpu-layers", gpuLayers);
 if (cpuMoe) serverArgs.push("--cpu-moe");
 if (noWarmup) serverArgs.push("--no-warmup");
+if (serverVerbose) serverArgs.push("--verbose");
 const childEnv = { ...process.env };
 if (expertCacheSlots > 0) {
   childEnv.GGML_METAL_LAZY_TENSOR_MAP = "1";
@@ -105,6 +110,9 @@ if (expertCacheSlots > 0) {
   }
   if (expertCacheTrace) {
     childEnv.GGML_METAL_EXPERT_CACHE_TRACE = "1";
+  }
+  if (expertCacheZeroCopy) {
+    childEnv.GGML_METAL_EXPERT_CACHE_ZERO_COPY = "1";
   }
 }
 const child = spawn(server, serverArgs, {
@@ -197,9 +205,12 @@ const report = {
   gpu_layers: gpuLayers || "auto",
   cpu_moe: cpuMoe,
   warmup: !noWarmup,
+  server_verbose: serverVerbose,
   streaming_probe_enabled: !skipProbe,
   expert_cache_slots: expertCacheSlots,
   expert_cache_cpu_fill: expertCacheSlots > 0 && expertCacheCpuFill,
+  expert_cache_trace: expertCacheSlots > 0 && expertCacheTrace,
+  expert_cache_zero_copy: expertCacheSlots > 0 && expertCacheZeroCopy,
   expert_cache_trace: expertCacheSlots > 0 && expertCacheTrace,
   suite,
   only_scenarios: only || null,
@@ -477,9 +488,9 @@ function requiredOption(values, name) {
       "--model MODEL.gguf --server LLAMA_SERVER " +
       "[--context TOKENS] [--batch TOKENS] [--ubatch TOKENS] " +
       "[--fit-target-mib MiB] [--gpu-layers N|auto|all] [--cpu-moe] " +
-      "[--no-warmup] [--skip-probe] " +
+      "[--no-warmup] [--skip-probe] [--server-verbose] " +
       "[--expert-cache-slots N] [--expert-cache-cpu-fill] " +
-      "[--expert-cache-trace] " +
+      "[--expert-cache-trace] [--expert-cache-zero-copy] " +
       "[--suite smoke|qualification|all] " +
       "[--only SCENARIO,...] " +
       "[--request-timeout-seconds SECONDS] " +

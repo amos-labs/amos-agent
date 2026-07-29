@@ -181,6 +181,7 @@ tests.
 | Bedrock GPT-OSS 120B | 3/3 | 11.9 s | 119.0 tok/s |
 | local ExpertCache GPT-OSS 120B MXFP4 | 3/3 | 1,048.0 s | 0.9 tok/s |
 | local ExpertCache, layer-grouped projections | 3/3 | 714.9 s | 1.6 tok/s |
+| local ExpertCache, direct selected-expert views | 3/3 | 320.6 s | 3.6 tok/s |
 
 Both passed the hidden optimum, deterministic tie-break, and input
 immutability tests. At the original 768-token budget, both outputs were
@@ -190,11 +191,15 @@ This is the decisive architectural finding: the bounded-memory path preserves
 the model's demonstrated coding capability. The current product blocker is
 latency, not a loss of model quality caused by ExpertCache.
 
-The first scheduling optimization preserved the same result while reducing
-wall time by 31.8% and increasing reported generation throughput from
-0.93 to 1.56 tok/s. It is still far from an interactive hosted-model
-experience, but it proves that runtime improvements can move speed without
-weakening the model.
+The layer-grouped scheduling optimization preserved the same result while
+reducing wall time by 31.8% and increasing reported generation throughput from
+0.93 to 1.56 tok/s. The direct selected-expert path then completed in
+320.6 seconds at 3.58 tok/s. The observed full-length comparison to the
+714.9-second grouped run is 55.1% lower wall time, but that earlier run
+occurred before the clean-machine reset. It is evidence of a large effect, not
+the final publication multiplier. The clean short probe measured 98.1 versus
+71.4 seconds and 1.83 versus 3.39 reported generation tok/s. A clean,
+counterbalanced full-length A/B remains required.
 
 The full 768-token qualification score remains 11/16 for strict comparison
 with the resident controls. The 1,536-token coding run is a diagnostic, not a
@@ -234,6 +239,10 @@ negative controls rather than presented as improvements:
 | 128 slots, 32-token block | 0.20 tok/s at token 32 | not reached | stopped; broad cold-expert staging regressed |
 | 16 slots, four-token block | 0.64 tok/s at token 52 | not reached | entered a 15-minute page/swap stall and timed out |
 | four slots, layer-grouped projections | 1.03 tok/s | 1.56 tok/s | stable; coding 3/3 at 1,536 in 714.9 s |
+| four slots, clean warm timing probe | 1.80 tok/s | 1.83 tok/s | 98.1 s for 145 prompt + 32 generated tokens |
+| persistent four-slot LRU, warm timing probe | 1.55 tok/s | 1.60 tok/s | rejected; 113.3 s on the identical probe |
+| parallel gate/up/down staging | — | — | rejected; 99.7 s probe versus 98.1 s warm control |
+| direct selected-expert Metal views | 2.05 tok/s | 3.58 tok/s | stable; coding 3/3 at 1,536 in 320.6 s |
 
 The broad-cache runs did not fail because 72–576 MiB of slot storage was
 intrinsically too large. They failed because each block touched a much wider
@@ -249,29 +258,78 @@ diagnostic, the path reduced wall time from 1,048.0 to 714.9 seconds while
 preserving the 3/3 result. Reported generation throughput increased by 67.4%
 without broadening the cold checkpoint working set.
 
-Absolute memory measurements after the negative controls are contaminated:
+Absolute memory measurements after the original negative controls were
+contaminated:
 macOS retained a large swap allocation, and an unrelated virtualization
 process was using roughly 21 GiB of resident memory and more than six CPU
-cores. A clean-machine rerun is required before publishing product
-throughput. The relative result is still useful because the grouped run
-crossed the exact token range where the wider cache stalled.
+cores. Those figures are not product throughput. The relative result was still
+useful because the grouped run crossed the exact token range where the wider
+cache stalled.
 
-## Next experiment: performance without quality drift
+The post-reboot A/B removed that contamination. Swap began at zero, no model
+server was resident, and the only virtualization process was idle at roughly
+1.5 GiB RSS. A cold grouped run took 132.3 seconds while warming checkpoint
+pages. The persistent-slot candidate then took 113.3 seconds, but the
+immediately following warm grouped control took only 98.1 seconds. Persistent
+slot reuse is therefore rejected: page-cache warming explained the apparent
+gain, and the added lookup/eviction work made the candidate 15.5% slower than
+the comparable warm control.
 
-With execution, capability, and one quality-preserving speed improvement
-captured:
+## Bottleneck localization
 
-1. repeat the layer-grouped path after a reboot or with the unrelated VM
-   stopped to establish a
-   clean latency and swap baseline;
-2. instrument per-layer expert staging bytes, unique routes, copy time, and
-   command-buffer wait time;
-3. parallelize the three bounded projection copies without widening the
-   per-projection expert set;
-4. evaluate direct, cache-bypassing reads into explicitly owned slots so cold
-   expert pages do not accumulate in the normal mmap page cache;
-5. run the 1,536-token coding diagnostic after each material optimization; and
-6. run the frozen full qualification suite only at milestone candidates.
+Graph-level timing on the grouped-copy path measured 102.2 seconds of graph
+work across the short probe:
 
-Only after the local 120B path reaches a practical speed should the experiment
-expand to other checkpoints that previously exceeded the 64 GB machine.
+| Work | Time | Share |
+|---|---:|---:|
+| ordinary graph spans | 19.8 s | 19.4% |
+| selected-expert staging | 68.0 s | 66.5% |
+| routed expert math | 12.9 s | 12.6% |
+| tail | 1.2 s | 1.2% |
+
+That run copied 315.6 GiB through the bounded slots at an effective 5.0 GB/s.
+The result changed the optimization target: Metal math was not the primary
+gate. Copying selected expert pages out of the memory-mapped checkpoint and
+into a second allocation consumed two thirds of graph time.
+
+Parallel staging reduced measured copy time by only 7.8% and did not improve
+total wall time. A persistent LRU reduced logical bytes copied but duplicated
+the operating system's file-page cache, lowered effective transfer throughput,
+and increased memory pressure. Both approaches are retained as documented
+negative controls, not runtime modes.
+
+## Direct selected-expert result
+
+The winning path removes the copy boundary. For one-token decode, each routed
+expert is exposed to Metal through a page-aligned
+`newBufferWithBytesNoCopy` view of its exact memory-mapped byte range. The
+runtime dispatches only those selected expert slices and never binds the full
+MoE projection or allocates a duplicate expert-weight slot pool.
+
+On the exact 1,536-token hidden coding diagnostic:
+
+- result: 3/3, including optimum, deterministic tie-break, and input
+  immutability;
+- wall time: 320.6 seconds;
+- prompt processing: 2.05 tok/s;
+- generation: 3.58 tok/s;
+- peak process RSS: 47.6 GB; and
+- peak system swap during the run: 44.8 MB.
+
+This is a validated architectural result, not yet a product throughput claim.
+The direct path currently requires one-token expert batches. Multi-token
+prefill, reusable view management, command-dispatch reduction, thermal
+behavior, and broader model coverage remain open engineering work. Full
+methodology, ablations, and publication gates are in
+[`EXPERT_CACHE_ZERO_COPY_RESULTS.md`](EXPERT_CACHE_ZERO_COPY_RESULTS.md).
+
+## Next experiments
+
+1. repeat the zero-copy arm cold and warm with fixed host-state capture;
+2. run the frozen full qualification suite and compare output artifacts;
+3. characterize 32 GB and 64 GB Apple Silicon separately;
+4. add a safe multi-token path without recreating the physical-memory burst;
+5. reduce per-expert command encoding and view-creation overhead;
+6. test at least one second oversized MoE checkpoint; and
+7. extract the runtime and benchmark into a neutral open-source repository
+   once the result reproduces outside the AMOS worktree.
