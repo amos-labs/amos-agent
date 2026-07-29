@@ -191,3 +191,17 @@ reads at aggregate and per-workflow p95, bound each task transition to the same
 throughput, memory, thermal, and quality gates remain mandatory after a pass.
 Pass `--max-tokens 128` for a short calibration run before committing to the
 full corpus.
+
+## Phase 2 direct selected-expert views
+
+Phase 2 changed the ownership boundary rather than continuing to tune mmap
+advice. The validated path exposes only the routed expert byte ranges to Metal
+through page-aligned, no-copy host-memory views. On the same hidden coding
+diagnostic, GPT-OSS 120B MXFP4 preserved a 3/3 result while improving from
+714.9 seconds on the grouped-copy path to 320.6 seconds on the direct-view
+path. Peak process RSS was 47.6 GB and measured swap stayed below 45 MB.
+
+Read
+[`../../docs/EXPERT_CACHE_ZERO_COPY_RESULTS.md`](../../docs/EXPERT_CACHE_ZERO_COPY_RESULTS.md)
+for the exact result, rejected ablations, limitations, and the extraction plan
+for a standalone open-source runtime and reproducible research artifact.
