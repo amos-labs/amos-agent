@@ -43,22 +43,66 @@ export class DesktopRemoteStateClient {
   }
 
   async connectionsCatalog({ signal = null } = {}) {
-    const [connectionsResult, providersResult] = await Promise.all([
+    const [connectionsResult, providerPayload] = await Promise.all([
       this.mcp.callTool("list_connections", {}, { signal }),
-      this.mcp.callTool("list_oauth_providers", {}, { signal })
+      this.connectionProviderCatalog({ signal })
     ]);
     const connectionPayload = parseMcpJson(connectionsResult, "AMOS connections");
-    const providerPayload = parseMcpJson(providersResult, "AMOS connection providers");
+    const providers = Array.isArray(providerPayload?.providers)
+      ? providerPayload.providers.map(normalizeProvider).filter(Boolean)
+      : [
+          ...(Array.isArray(providerPayload?.curated) ? providerPayload.curated : []),
+          ...(Array.isArray(providerPayload?.tenant_defined) ? providerPayload.tenant_defined : [])
+        ].map(normalizeProvider).filter(Boolean);
     return {
       connections: Array.isArray(connectionPayload?.connections)
         ? connectionPayload.connections.map(normalizeConnection).filter(Boolean)
         : [],
+      providers,
+      catalogVersion: Number(providerPayload?.catalog_version || 0),
+      // Retained for one release so older renderer consumers do not break while
+      // list_connection_catalog rolls through deployed platform environments.
       curated: Array.isArray(providerPayload?.curated)
         ? providerPayload.curated.map(normalizeProvider).filter(Boolean)
         : [],
       tenantDefined: Array.isArray(providerPayload?.tenant_defined)
         ? providerPayload.tenant_defined.map(normalizeProvider).filter(Boolean)
         : []
+    };
+  }
+
+  async connectionProviderCatalog({ signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("list_connection_catalog", {}, { signal });
+      return parseMcpJson(result, "AMOS connection catalog");
+    } catch (error) {
+      if (!/unknown tool ['"]list_connection_catalog['"]/i.test(String(error?.message || ""))) {
+        throw error;
+      }
+      // Backward-compatible rollout only. The legacy response remains
+      // platform-owned; Desktop never substitutes a bundled provider list.
+      const result = await this.mcp.callTool("list_oauth_providers", {}, { signal });
+      return parseMcpJson(result, "AMOS connection providers");
+    }
+  }
+
+  async connectLink(provider, { signal = null } = {}) {
+    const providerKey = String(provider || "").trim();
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(providerKey)) {
+      throw new Error("AMOS blocked an invalid connection provider");
+    }
+    const result = await this.mcp.callTool(
+      "connect_link",
+      { provider: providerKey },
+      { signal }
+    );
+    const payload = parseMcpJson(result, "AMOS connection link");
+    const url = String(payload?.url || "");
+    if (!url) throw new Error("AMOS did not return a connection link");
+    return {
+      provider: String(payload?.provider || providerKey),
+      url,
+      expiresIn: Number(payload?.expires_in || 0)
     };
   }
 
@@ -431,6 +475,20 @@ function normalizeProvider(value) {
     provider,
     label: String(value.label || provider),
     source: String(value.source || "tenant"),
+    connectionKind: String(value.connection_kind || "oauth"),
+    group: value.group ? String(value.group) : "",
+    description: value.description ? String(value.description) : "",
+    capabilities: Array.isArray(value.capabilities)
+      ? value.capabilities.map((item) => String(item)).filter(Boolean)
+      : [],
+    setupMode: String(value.setup_mode || "hosted_oauth"),
+    availability: String(
+      value.availability ||
+      ((value.configured === true || value.credentials_registered === true)
+        ? "available"
+        : "setup_required")
+    ),
+    upstreamStatus: value.upstream_status ? String(value.upstream_status) : "",
     configured: value.configured === true || value.credentials_registered === true
   };
 }

@@ -495,10 +495,15 @@ function showView(view) {
 function renderConnections() {
   const catalog = state?.connectionsCatalog || {};
   const connections = Array.isArray(catalog.connections) ? catalog.connections : [];
-  const providers = [
-    ...(Array.isArray(catalog.curated) ? catalog.curated : []),
-    ...(Array.isArray(catalog.tenantDefined) ? catalog.tenantDefined : [])
-  ];
+  const providers = Array.isArray(catalog.providers)
+    ? catalog.providers
+    : [
+        ...(Array.isArray(catalog.curated) ? catalog.curated : []),
+        ...(Array.isArray(catalog.tenantDefined) ? catalog.tenantDefined : [])
+      ];
+  const connectionsByProvider = new Map(
+    connections.map((connection) => [connection.provider, connection])
+  );
   elements.connectionBadge.textContent = String(connections.length);
   elements.connectionBadge.classList.toggle("hidden", connections.length === 0);
   elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
@@ -544,6 +549,7 @@ function renderConnections() {
     ));
   } else {
     for (const provider of providers) {
+      const connection = connectionsByProvider.get(provider.provider);
       const card = document.createElement("article");
       card.className = "connection-provider-card";
       const top = document.createElement("div");
@@ -551,18 +557,57 @@ function renderConnections() {
       icon.className = "connection-provider-icon";
       icon.textContent = providerMonogram(provider.provider);
       const status = document.createElement("span");
-      status.className = `status-pill ${provider.configured ? "available" : "attention"}`;
-      status.textContent = provider.configured ? "AVAILABLE" : "SETUP NEEDED";
+      const providerState = connection?.status || provider.availability || "setup_required";
+      status.className = `status-pill ${
+        connection?.status === "connected"
+          ? "connected"
+          : providerState === "available"
+            ? "available"
+            : "attention"
+      }`;
+      status.textContent = providerState.replaceAll("_", " ").toUpperCase();
       top.append(icon, status);
       const title = document.createElement("strong");
       title.textContent = provider.label;
       const detail = document.createElement("p");
-      detail.textContent = provider.source === "platform"
-        ? "Curated and governed by the AMOS platform."
-        : "Defined for this tenant; credentials remain platform-vaulted.";
+      detail.textContent = provider.description || (
+        provider.source === "platform"
+          ? "Curated and governed by the AMOS platform."
+          : "Defined for this tenant; credentials remain platform-vaulted."
+      );
       const boundary = document.createElement("small");
-      boundary.textContent = `Provider key: ${provider.provider}`;
+      const context = [
+        provider.group,
+        provider.connectionKind.replaceAll("_", " "),
+        provider.upstreamStatus ? `upstream ${provider.upstreamStatus}` : "",
+        provider.capabilities.length > 0
+          ? provider.capabilities.map((item) => item.replaceAll("_", " ")).join(" · ")
+          : ""
+      ].filter(Boolean);
+      boundary.textContent = context.join(" · ") || `Provider key: ${provider.provider}`;
       card.append(top, title, detail, boundary);
+      if (
+        connection?.status !== "connected" &&
+        provider.setupMode === "hosted_oauth" &&
+        provider.availability === "available"
+      ) {
+        const connect = document.createElement("button");
+        connect.type = "button";
+        connect.className = "button secondary connection-connect-button";
+        connect.textContent = "Connect";
+        connect.addEventListener("click", async () => {
+          connect.disabled = true;
+          try {
+            await api.connectProvider(provider.provider);
+            toast(`Opened secure setup for ${provider.label}`);
+          } catch (error) {
+            toast(error.message, true);
+          } finally {
+            connect.disabled = false;
+          }
+        });
+        card.append(connect);
+      }
       elements.availableProviderList.append(card);
     }
   }

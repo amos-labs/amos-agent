@@ -76,17 +76,15 @@ test("routine approval review stays inside Desktop", async () => {
   assert.match(javascript, /state\.approvalDecisionMode === "desktop"/);
 });
 
-test("Neighborly featured connections keep live services behind AMOS governance", async () => {
-  const html = await readFile(
-    new URL("../desktop/renderer/index.html", import.meta.url),
-    "utf8"
-  );
+test("Connections HTML contains no customer or provider-specific catalog truth", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
 
-  assert.match(html, /Microsoft 365 · Outlook/);
-  assert.match(html, /Power BI/);
-  assert.match(html, /Nuvola Learning MCP/);
-  assert.match(html, />SUPPORTED</);
-  assert.match(html, />LIVE SERVICE</);
-  assert.match(html, /AMOS Platform connection required/);
-  assert.match(html, /Desktop never connects directly/);
+  assert.doesNotMatch(html, /Neighborly/i);
+  assert.doesNotMatch(html, /Microsoft 365|Power BI|Nuvola|AWS Data Lake/);
+  assert.doesNotMatch(html, />SUPPORTED|>LIVE SERVICE|>SCOPED NEXT/);
+  assert.match(html, /id="availableProviderList"/);
+  assert.match(javascript, /api\.connectProvider\(provider\.provider\)/);
 });

@@ -143,7 +143,11 @@ requirement for using or approving AMOS work.
 ## Connections in Desktop
 
 The Connections surface is a projection of the platform connection catalog.
-Desktop calls `list_connections` and `list_oauth_providers` and renders:
+Desktop calls `list_connection_catalog` for canonical provider/service metadata
+and `list_connections` for tenant-visible state. During a rolling deployment it
+may fall back to the older platform-owned `list_oauth_providers` response when
+the new tool is unknown; it never falls back to a Desktop-bundled provider list.
+It renders:
 
 - connected, attention-needed, and available states;
 - ownership (user or shared service account);
@@ -155,10 +159,16 @@ Connect and reconnect launch a platform-issued hosted OAuth/link flow. Connector
 credentials remain in the platform. Data reads, synchronization, and connector
 writes continue through governed platform verbs and produce proof receipts.
 
+Customer names, demo priorities, provider availability, setup status, and
+service maturity must not be encoded in Desktop HTML or JavaScript. A provider
+appears only when the connected AMOS Platform advertises it. Desktop joins
+catalog and tenant state by the opaque provider key and renders the returned
+labels, grouping, descriptions, capabilities, setup mode, and availability.
+
 ## Microsoft 365 and Power BI
 
-The Desktop catalog groups these products under “Microsoft” for a simple setup
-experience, but the platform maintains separate connections and tokens:
+The platform catalog groups these products under “Microsoft” for a simple setup
+experience, while maintaining separate connections and tokens:
 
 - `microsoft_graph` covers Outlook mail, calendar, contacts, and related
   Microsoft 365 resources. Start with least-privilege delegated access.
@@ -233,12 +243,14 @@ authoring, review/build gates, publishing, enrollment, and outcome data. It is
 distinct from an ordinary OAuth API connection, but that distinction must not
 create a Desktop-only integration or a second governance plane.
 
-**Canonical execution path:** every AMOS client calls AMOS Platform MCP; AMOS
-Platform resolves the tenant-bound Nuvola connection, applies AMOS policy,
-invokes the allowlisted Nuvola MCP operation, writes the AMOS receipt, and
-returns a bounded result. Desktop never holds a Nuvola token or calls Nuvola
-directly. Nuvola's own authorization and audit remain defense in depth, not a
-substitute for AMOS governance.
+**Required canonical execution path:** every AMOS client calls AMOS Platform
+MCP. The production adapter must resolve the tenant-bound Nuvola connection,
+apply AMOS policy, invoke the allowlisted Nuvola MCP operation, write the AMOS
+receipt, and return a bounded result. Until that adapter passes its acceptance
+tests, the platform catalog reports `upstream_status: live` separately from
+`availability: adapter_required`. Desktop never holds a Nuvola token or calls
+Nuvola directly. Nuvola's own authorization and audit remain defense in depth,
+not a substitute for AMOS governance.
 
 The platform owns the tenant binding, endpoint allowlist, identity, credential
 material, policy, receipts, and durable course references. AMOS Desktop
@@ -267,12 +279,15 @@ injects or validates it server-side. Longer term, Nuvola should issue
 organization-scoped service authorization so both systems independently enforce
 the same boundary.
 
-Desktop may show Nuvola as a live service before a tenant has connected it, but
-must distinguish service availability from that tenant's connection state.
+Desktop may show Nuvola only when the platform catalog advertises it. It must
+render upstream maturity, AMOS adapter availability, and tenant connection
+state as separate facts and may not promote `upstream_status: live` into an
+AMOS-supported or tenant-connected claim.
 
 ## AWS and data lakes
 
-The catalog must show two distinct concepts:
+When the platform implements and advertises these surfaces, the catalog must
+show two distinct concepts:
 
 - **AMOS Data Lake — Included.** Connected-system data ingested by AMOS is
   stored and queried by the platform. Desktop shows coverage, freshness, and
@@ -404,3 +419,5 @@ For each Desktop feature, verify:
    connector credentials or bypassing policy.
 5. Equivalent proof receipts are produced regardless of client.
 6. The non-Desktop happy path is covered by a contract or integration test.
+7. Desktop contains no customer-specific roadmap, provider list, or provider
+   status; those facts come from the authenticated platform catalog.

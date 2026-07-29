@@ -832,6 +832,53 @@ export class DesktopController {
     return this.state();
   }
 
+  async connectProvider(provider) {
+    const providerKey = String(provider || "").trim();
+    const providers = Array.isArray(this.connectionsCatalog?.providers)
+      ? this.connectionsCatalog.providers
+      : [
+          ...(Array.isArray(this.connectionsCatalog?.curated)
+            ? this.connectionsCatalog.curated
+            : []),
+          ...(Array.isArray(this.connectionsCatalog?.tenantDefined)
+            ? this.connectionsCatalog.tenantDefined
+            : [])
+        ];
+    const advertised = providers.find((item) => item.provider === providerKey);
+    if (!advertised) {
+      throw new Error("AMOS blocked a provider that was not advertised by the connected platform");
+    }
+    if (advertised.setupMode !== "hosted_oauth" || advertised.availability !== "available") {
+      throw new Error("This provider is not ready for hosted connection setup");
+    }
+
+    const settings = await this.settingsStore.read();
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (!shouldUseDesktopOAuth(config, credentials)) {
+      throw new Error("Connect your AMOS company before adding a business system");
+    }
+
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const link = await remote.connectLink(providerKey);
+    const url = new URL(link.url);
+    if (url.protocol !== "https:") {
+      throw new Error("AMOS blocked a non-HTTPS connection link");
+    }
+    await this.openBrowser(url.href);
+    this.record("connection", `Opened governed setup for ${advertised.label}`);
+    return {
+      opened: true,
+      provider: providerKey,
+      expiresIn: link.expiresIn
+    };
+  }
+
   async accountStatusFor(settings, oauth = this.oauthFor(settings)) {
     const config = this.configFrom(settings);
     const remote = new DesktopRemoteStateClient({

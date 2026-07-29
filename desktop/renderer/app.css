@@ -726,8 +726,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .connection-provider-card strong { display: block; font-size: 13px; }
 .connection-provider-card p { min-height: 44px; margin: 7px 0 12px; color: var(--muted); font-size: 9px; line-height: 1.55; }
 .connection-provider-card small { color: var(--muted-2); font-size: 8px; line-height: 1.45; }
+.connection-connect-button { margin-top: 12px; width: 100%; }
 .connection-provider-card.included { border-color: rgba(59,213,143,.24); background: rgba(59,213,143,.035); }
-.connection-provider-card.featured { border-color: rgba(109,147,255,.28); background: rgba(109,147,255,.045); }
 .connection-provider-card.planned { border-style: dashed; }
 .connection-provider-icon {
   display: inline-grid;
