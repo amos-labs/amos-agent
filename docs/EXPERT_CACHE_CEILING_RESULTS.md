@@ -153,3 +153,46 @@ The corrected real-routing batch-64 arm has passed its full targeted quality
 gate. The next runtime milestone is an expert-grouped matrix path plus explicit
 residency telemetry; speculative decoding should be layered only onto kernels
 that retain the deterministic trajectory and hidden-test result.
+
+## Expert-grouped dispatch result
+
+The expert-grouped path is now implemented as
+`GGML_METAL_EXPERT_CACHE_GROUPED` (runner flag `--expert-cache-grouped`,
+requires zero-copy). `kernel_mul_mv_id_gathered` receives a per-expert
+`(token, expert-use slot)` route map, so every token routed to one expert
+shares a single dispatch against that expert's zero-copy weight view. The
+kernel wraps the identical MXFP4 matrix-vector implementation, and grouping
+only reorders independent output writes, so the math is unchanged by
+construction. Single-token decode keeps the per-route path because grouping a
+one-token batch is pure bookkeeping overhead.
+
+Correctness was verified by character-for-character raw-trajectory comparison
+against the per-route zero-copy control on the same deterministic 32-token
+request, at micro-batch 4 and micro-batch 64, with both real routing and the
+synthetic hot ceiling. All four comparisons matched exactly.
+
+Measured on the same 64 GB M1 Max (decision-grade: the host had accumulated
+swap and page-cache churn from repeated experiments; a clean-boot rerun is
+required before publication):
+
+| Arm (batch 64, 361-token prompt for hot, 99-token for real) | Prompt tok/s | Decode tok/s |
+| --- | ---: | ---: |
+| Hot ceiling, per-route | 25.3 | 5.0 |
+| Hot ceiling, grouped | **78.0** | 5.0 |
+| Real routing, per-route (contemporaneous control) | 4.0–5.1 | 2.2–3.1 |
+| Real routing, grouped | 4.6–5.5 | 2.4–2.5 |
+
+Two conclusions:
+
+1. **The compute path now exceeds the ~45 tok/s verification target.** The
+   grouped hot ceiling is 3.08 times the per-route hot ceiling, and unlike the
+   retracted 74.24 number, this measurement goes through the quality-bearing
+   kernel and is bit-exact against the validated control. Per-route dispatch
+   overhead — not the M1 Max compute path — was the ceiling's limiter.
+2. **Real-routing prefill is confirmed residency-bound.** Grouping moves real
+   prompt throughput by roughly 10% at most (within host drift), while the
+   same kernel is 3 times faster on hot experts. The ~14× gap between the
+   grouped hot ceiling and grouped real routing is expert page faults, which
+   no dispatch change can close. The next lever is explicit prefetch or
+   ownership of the measured 27–30 GiB route window, and speculative
+   verification batches that keep the routed working set warm.
