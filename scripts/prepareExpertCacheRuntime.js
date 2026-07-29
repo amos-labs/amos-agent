@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -11,6 +12,10 @@ const manifestPath = resolve(
   "experiments/expert_cache/runtime-manifest.json"
 );
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+const expertCachePatch = resolve(
+  root,
+  "experiments/expert_cache/llama-expert-cache-runtime.patch"
+);
 const args = process.argv.slice(2);
 const checkout = resolve(
   readOption(args, "--dir") ||
@@ -30,6 +35,30 @@ if (actual !== runtime.revision) {
   throw new Error(
     `Pinned llama.cpp revision mismatch: expected ${runtime.revision}, got ${actual}`
   );
+}
+
+const hasExpertCachePatch = await exists(expertCachePatch);
+let patchApplied = false;
+if (hasExpertCachePatch) {
+  const patchDigest = createHash("sha256")
+    .update(await readFile(expertCachePatch))
+    .digest("hex");
+  if (patchDigest !== manifest.runtime_patch?.sha256) {
+    throw new Error(
+      `ExpertCache patch digest mismatch: expected ` +
+      `${manifest.runtime_patch?.sha256 || "(missing)"}, got ${patchDigest}`
+    );
+  }
+  const alreadyApplied = succeeds(
+    "git",
+    ["apply", "--reverse", "--check", expertCachePatch],
+    checkout
+  );
+  if (!alreadyApplied) {
+    run("git", ["apply", "--check", expertCachePatch], checkout);
+    run("git", ["apply", expertCachePatch], checkout);
+    patchApplied = true;
+  }
 }
 
 if (build) {
@@ -57,6 +86,7 @@ if (build) {
       "Release",
       "--target",
       "llama-cli",
+      "llama-server",
       "llama-bench",
       "test-backend-ops",
       "-j",
@@ -72,6 +102,8 @@ console.log(
       checkout,
       revision: actual,
       metalStrategy: manifest.metal_strategy.name,
+      expertCachePatch: hasExpertCachePatch ? expertCachePatch : null,
+      patchApplied,
       built: build
     },
     null,
@@ -90,6 +122,19 @@ function run(command, commandArgs, cwd = root) {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "inherit"]
   });
+}
+
+function succeeds(command, commandArgs, cwd = root) {
+  try {
+    execFileSync(command, commandArgs, {
+      cwd,
+      encoding: "utf8",
+      stdio: "ignore"
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function exists(path) {
