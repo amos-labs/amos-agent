@@ -61,3 +61,17 @@ test("AMOS Hosted turns an unauthenticated intelligence test into account onboar
   assert.match(javascript, /Create or connect to test/);
   assert.match(javascript, /Error invoking remote method/);
 });
+
+test("routine approval review stays inside Desktop", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /id="approvalsButton"[^>]*>Review decisions</);
+  assert.match(
+    javascript,
+    /elements\.approvalsButton\.addEventListener\("click", \(\) => showView\("decisions"\)\)/
+  );
+  assert.match(javascript, /state\.approvalDecisionMode === "desktop"/);
+});

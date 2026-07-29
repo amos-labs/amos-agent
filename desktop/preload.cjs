@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   logout: () => ipcRenderer.invoke("desktop:logout"),
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),
+  reviewApproval: (id) => ipcRenderer.invoke("desktop:review-company-approval", id),
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
   refreshOffline: () => ipcRenderer.invoke("desktop:refresh-offline"),
   refreshCompanyCache: (ttlSeconds) =>
@@ -49,6 +50,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   cancelTask: (id) => ipcRenderer.invoke("desktop:cancel-task", id),
   clear: () => ipcRenderer.invoke("desktop:clear"),
   removeCanvas: (id) => ipcRenderer.invoke("desktop:remove-canvas", id),
+  saveCanvasView: (id) => ipcRenderer.invoke("desktop:save-canvas-view", id),
+  removeSavedView: (id) => ipcRenderer.invoke("desktop:remove-saved-view", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),
   addPastedImage: (input) => ipcRenderer.invoke("desktop:add-pasted-image", input),

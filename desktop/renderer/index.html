@@ -28,10 +28,13 @@
             <span class="nav-icon">⌁</span><span>Operator</span>
           </button>
           <button class="nav-item" data-view="canvas">
-            <span class="nav-icon">▦</span><span>Canvas</span><span id="canvasBadge" class="nav-badge canvas-badge hidden">0</span>
+            <span class="nav-icon">▦</span><span>Briefings</span><span id="canvasBadge" class="nav-badge canvas-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="memory">
             <span class="nav-icon">◎</span><span>Memory</span><span id="privateMemoryBadge" class="nav-badge memory-badge hidden">0</span>
+          </button>
+          <button class="nav-item" data-view="connections">
+            <span class="nav-icon">⌘</span><span>Connections</span><span id="connectionBadge" class="nav-badge connection-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="decisions">
             <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
@@ -76,7 +79,7 @@
             <span id="identityBadge" class="identity-badge hidden"></span>
             <span id="modeBadge" class="mode-badge">ONLINE COMPANY</span>
             <span id="runtimeBadge" class="runtime-badge">Intelligence not configured</span>
-            <button id="approvalsButton" class="button ghost">Open approvals</button>
+            <button id="approvalsButton" class="button ghost">Review decisions</button>
           </div>
         </header>
 
@@ -223,22 +226,39 @@
           <div class="canvas-shell">
             <div class="canvas-heading">
               <div>
-                <span class="eyebrow">LIVE COMPANY VIEW</span>
+                <span class="eyebrow">PROACTIVE BUSINESS ADVISOR</span>
                 <h1 id="canvasTitle">A clearer view of the work.</h1>
-                <p id="canvasSubtitle">AMOS can turn current company context into a bounded, source-aware operating view.</p>
+                <p id="canvasSubtitle">Live, source-aware briefings generated from the company systems you already use.</p>
               </div>
               <div class="canvas-actions">
+                <button id="canvasSaveButton" class="button secondary hidden" type="button">Save briefing</button>
                 <button id="canvasRefreshButton" class="button secondary hidden" type="button">Refresh with AMOS</button>
-                <button id="canvasCloseButton" class="button ghost hidden" type="button">Close canvas</button>
+                <button id="canvasCloseButton" class="button ghost hidden" type="button">Close briefing</button>
               </div>
             </div>
+            <section id="briefingLibrary" class="briefing-library">
+              <div class="briefing-library-section">
+                <div>
+                  <span class="eyebrow">SAVED VIEWS</span>
+                  <p>Definitions are encrypted and identity-pinned. Live company data is refreshed when you run them.</p>
+                </div>
+                <div id="savedViewList" class="briefing-card-list"></div>
+              </div>
+              <div class="briefing-library-section">
+                <div>
+                  <span class="eyebrow">START FROM A TEMPLATE</span>
+                  <p>Choose a useful operating question; AMOS selects the governed sources and representation.</p>
+                </div>
+                <div id="briefingTemplateList" class="briefing-card-list"></div>
+              </div>
+            </section>
             <div id="canvasSourceBar" class="canvas-source-bar hidden"></div>
             <div id="canvasTabs" class="canvas-tabs hidden" role="tablist" aria-label="Open canvases"></div>
             <div id="canvasEmpty" class="canvas-empty">
               <span>▦</span>
-              <strong id="canvasEmptyTitle">No canvas open yet</strong>
-              <p id="canvasEmptyMessage">Ask AMOS to compare performance, chart a trend, show a decision, or organize company data into a table.</p>
-              <button id="canvasStartButton" class="button primary" type="button">Ask AMOS for a view</button>
+              <strong id="canvasEmptyTitle">Choose a briefing or ask AMOS</strong>
+              <p id="canvasEmptyMessage">Start with a template, reopen a saved view, or ask for any company comparison, trend, decision, or operating brief.</p>
+              <button id="canvasStartButton" class="button primary" type="button">Create a briefing with AMOS</button>
             </div>
             <div id="canvasBlocks" class="canvas-blocks hidden"></div>
           </div>
@@ -309,6 +329,74 @@
           </div>
         </section>
 
+        <section id="connectionsView" class="view connections-view hidden">
+          <div class="section-heading connections-heading">
+            <div>
+              <span class="eyebrow">GOVERNED COMPANY SOURCES</span>
+              <h1>Your systems, without moving credentials into Desktop.</h1>
+              <p>
+                This catalog is projected from the AMOS platform. Connection ownership,
+                status, and availability are visible here; tokens and secrets remain in
+                the governed platform vault.
+              </p>
+            </div>
+            <div class="connection-boundary">
+              <span class="boundary-icon">◈</span>
+              <div>
+                <strong>Platform-owned credentials</strong>
+                <p>Desktop reads credential-free metadata and invokes typed governed actions.</p>
+              </div>
+            </div>
+          </div>
+          <div id="connectionCatalogSummary" class="connection-catalog-summary"></div>
+          <div class="connection-catalog-section">
+            <div>
+              <span class="eyebrow accent">CONNECTED TO THIS COMPANY</span>
+              <p>Live platform connection records available to your signed-in identity.</p>
+            </div>
+            <div id="connectedSystemList" class="connection-catalog-grid"></div>
+          </div>
+          <div class="connection-catalog-section">
+            <div>
+              <span class="eyebrow">AVAILABLE FROM AMOS</span>
+              <p>Provider definitions advertised by this AMOS server. Setup remains hosted so credentials never enter Desktop.</p>
+            </div>
+            <div id="availableProviderList" class="connection-catalog-grid"></div>
+          </div>
+          <div class="connection-catalog-section">
+            <div>
+              <span class="eyebrow">NEIGHBORLY DEMO ROADMAP</span>
+              <p>Microsoft is grouped visually while Microsoft 365 and Power BI remain separate governed connections and tokens.</p>
+            </div>
+            <div class="connection-catalog-grid connection-roadmap-grid">
+              <article class="connection-provider-card planned">
+                <div><span class="connection-provider-icon">M</span><span class="status-pill planned">SCOPED NEXT</span></div>
+                <strong>Microsoft 365</strong>
+                <p>Outlook mail, calendar, contacts, and Graph reads through least-privilege delegated access.</p>
+                <small>Separate `microsoft_graph` token</small>
+              </article>
+              <article class="connection-provider-card planned">
+                <div><span class="connection-provider-icon">P</span><span class="status-pill planned">SCOPED NEXT</span></div>
+                <strong>Power BI</strong>
+                <p>Workspaces, semantic models, reports, and bounded typed DAX query reads.</p>
+                <small>Separate `power_bi` token</small>
+              </article>
+              <article class="connection-provider-card included">
+                <div><span class="connection-provider-icon">A</span><span class="status-pill connected">INCLUDED</span></div>
+                <strong>AMOS Data Lake</strong>
+                <p>Normalized company data ingested and governed by AMOS, with coverage and freshness surfaced here.</p>
+                <small>No customer AWS credentials required</small>
+              </article>
+              <article class="connection-provider-card planned">
+                <div><span class="connection-provider-icon">AWS</span><span class="status-pill planned">OPTIONAL</span></div>
+                <strong>Customer AWS Data Lake</strong>
+                <p>Cross-account AssumeRole with external ID and temporary credentials for approved S3, Glue, and Athena resources.</p>
+                <small>Never long-lived access keys</small>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section id="decisionsView" class="view decisions-view hidden">
           <div class="section-heading decisions-heading">
             <div>
@@ -322,7 +410,7 @@
             <div class="decision-actions">
               <span id="decisionSyncStatus" class="sync-status">Not synced</span>
               <button id="refreshDecisionsButton" class="button secondary">Refresh</button>
-              <button id="allApprovalsButton" class="button primary">Open full approval center</button>
+              <button id="allApprovalsButton" class="button secondary">Review securely on web</button>
             </div>
           </div>
           <div id="decisionNotice" class="decision-notice hidden"></div>

@@ -42,6 +42,26 @@ export class DesktopRemoteStateClient {
     return current;
   }
 
+  async connectionsCatalog({ signal = null } = {}) {
+    const [connectionsResult, providersResult] = await Promise.all([
+      this.mcp.callTool("list_connections", {}, { signal }),
+      this.mcp.callTool("list_oauth_providers", {}, { signal })
+    ]);
+    const connectionPayload = parseMcpJson(connectionsResult, "AMOS connections");
+    const providerPayload = parseMcpJson(providersResult, "AMOS connection providers");
+    return {
+      connections: Array.isArray(connectionPayload?.connections)
+        ? connectionPayload.connections.map(normalizeConnection).filter(Boolean)
+        : [],
+      curated: Array.isArray(providerPayload?.curated)
+        ? providerPayload.curated.map(normalizeProvider).filter(Boolean)
+        : [],
+      tenantDefined: Array.isArray(providerPayload?.tenant_defined)
+        ? providerPayload.tenant_defined.map(normalizeProvider).filter(Boolean)
+        : []
+    };
+  }
+
   async approvals({ signal = null } = {}) {
     let token = await this.oauth.getAccessToken();
     let response = await this.fetchApprovals(token, { signal });
@@ -55,6 +75,7 @@ export class DesktopRemoteStateClient {
       return {
         available: false,
         reason: payload.error || "Only an owner or admin can review company approvals.",
+        decision_mode: "hosted",
         pending_operations: []
       };
     }
@@ -64,10 +85,56 @@ export class DesktopRemoteStateClient {
     return {
       available: true,
       reason: "",
+      decision_mode: payload.decision_mode === "desktop" ? "desktop" : "hosted",
       pending_operations: Array.isArray(payload.pending_operations)
         ? payload.pending_operations.map(normalizeApproval).filter(Boolean)
         : []
     };
+  }
+
+  async decideApproval(id, decision, { signal = null, sign = null } = {}) {
+    const approvalId = String(id || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(approvalId)) throw new Error("Invalid AMOS approval id");
+    const action = decision === "approve" ? "approve" : decision === "deny" ? "deny" : null;
+    if (!action) throw new Error("Approval decision must be approve or deny");
+    if (typeof sign !== "function") throw new Error("Desktop approval signing is unavailable");
+    let token = await this.oauth.getAccessToken();
+    let challengeResponse = await this.fetchApprovalChallenge(token, approvalId, action, { signal });
+    if (challengeResponse.status === 401) {
+      token = await this.oauth.getAccessToken({ forceRefresh: true });
+      challengeResponse = await this.fetchApprovalChallenge(token, approvalId, action, { signal });
+    }
+    const challenge = await parseJsonResponse(challengeResponse, "AMOS approval challenge");
+    if (!challengeResponse.ok) {
+      throw new Error(challenge.error || `AMOS approval challenge failed with ${challengeResponse.status}`);
+    }
+    if (
+      !/^[0-9a-f-]{36}$/i.test(challenge.challenge_id || "") ||
+      typeof challenge.message !== "string"
+    ) {
+      throw new Error("AMOS returned an invalid approval challenge");
+    }
+    const signature = await sign(challenge.message);
+    let response = await this.fetchApprovalDecision(
+      token,
+      approvalId,
+      action,
+      { challengeId: challenge.challenge_id, signature, signal }
+    );
+    if (response.status === 401) {
+      token = await this.oauth.getAccessToken({ forceRefresh: true });
+      response = await this.fetchApprovalDecision(
+        token,
+        approvalId,
+        action,
+        { challengeId: challenge.challenge_id, signature, signal }
+      );
+    }
+    const payload = await parseJsonResponse(response, `AMOS approval ${action}`);
+    if (!response.ok) {
+      throw new Error(payload.error || `AMOS approval ${action} failed with ${response.status}`);
+    }
+    return payload;
   }
 
   async intelligenceStatus({ signal = null } = {}) {
@@ -198,6 +265,70 @@ export class DesktopRemoteStateClient {
     }
   }
 
+  async fetchApprovalChallenge(token, id, action, { signal = null } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const unlink = linkAbortSignal(signal, controller);
+    try {
+      return await this.fetch(
+        `${amosOrigin(this.mcpUrl)}/api/v1/approvals/${encodeURIComponent(id)}/challenge`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ decision: action }),
+          signal: controller.signal
+        }
+      );
+    } catch (error) {
+      if (signal?.aborted) throw createAbortError();
+      if (error.name === "AbortError") throw new Error("AMOS approval challenge timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      unlink();
+    }
+  }
+
+  async fetchApprovalDecision(
+    token,
+    id,
+    action,
+    { challengeId, signature, signal = null } = {}
+  ) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const unlink = linkAbortSignal(signal, controller);
+    try {
+      return await this.fetch(
+        `${amosOrigin(this.mcpUrl)}/api/v1/approvals/${encodeURIComponent(id)}/${action}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            challenge_id: challengeId,
+            signature
+          }),
+          signal: controller.signal
+        }
+      );
+    } catch (error) {
+      if (signal?.aborted) throw createAbortError();
+      if (error.name === "AbortError") throw new Error("AMOS approval decision timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      unlink();
+    }
+  }
+
   async fetchIntelligenceStatus(token, { signal = null } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
@@ -272,6 +403,35 @@ function normalizeApproval(value) {
     agency_origin: String(value.agency_origin || "human_directed"),
     goal_id: value.goal_id ? String(value.goal_id) : "",
     args: value.args && typeof value.args === "object" ? value.args : {}
+  };
+}
+
+function normalizeConnection(value) {
+  if (!value || typeof value !== "object") return null;
+  const provider = String(value.provider || "").trim();
+  const displayName = String(value.display_name || "").trim();
+  if (!provider || !displayName) return null;
+  return {
+    id: String(value.id || ""),
+    provider,
+    displayName,
+    kind: String(value.kind || "connection"),
+    status: String(value.status || "unknown"),
+    ownership: String(value.ownership || "service_account"),
+    usable: value.usable === true,
+    createdAt: value.created_at || null
+  };
+}
+
+function normalizeProvider(value) {
+  if (!value || typeof value !== "object") return null;
+  const provider = String(value.provider || "").trim();
+  if (!provider) return null;
+  return {
+    provider,
+    label: String(value.label || provider),
+    source: String(value.source || "tenant"),
+    configured: value.configured === true || value.credentials_registered === true
   };
 }
 
