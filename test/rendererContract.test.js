@@ -74,6 +74,24 @@ test("routine approval review stays inside Desktop", async () => {
     /elements\.approvalsButton\.addEventListener\("click", \(\) => showView\("decisions"\)\)/
   );
   assert.match(javascript, /state\.approvalDecisionMode === "desktop"/);
+  assert.match(javascript, /Enable native approval/);
+  assert.match(javascript, /state = await api\.login\(\)/);
+  assert.match(
+    javascript,
+    /const openHosted = window\.confirm\([\s\S]*?if \(openHosted\) await api\.openApproval\(id\)/
+  );
+});
+
+test("background remote refresh projects live Connections into the renderer", async () => {
+  const javascript = await readFile(
+    new URL("../desktop/renderer/app.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(
+    javascript,
+    /api\.on\("remote:changed",[\s\S]*?Object\.assign\(state, remote\)[\s\S]*?renderConnections\(\)/
+  );
 });
 
 test("Connections HTML contains no customer or provider-specific catalog truth", async () => {

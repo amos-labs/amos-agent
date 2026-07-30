@@ -282,6 +282,7 @@ function bindEvents() {
     renderIdentity();
     renderDecisions();
     renderCompanyCache();
+    renderConnections();
   });
   api.on("update:changed", (nextUpdateState) => {
     updateState = nextUpdateState;
@@ -1080,10 +1081,8 @@ function renderCanvasDecision(block) {
     const review = document.createElement("button");
     review.type = "button";
     review.className = "button primary";
-    review.textContent = "Review securely →";
-    review.addEventListener("click", () =>
-      api.reviewApproval(block.pendingId).catch((error) => toast(error.message, true))
-    );
+    review.textContent = approvalActionLabel();
+    review.addEventListener("click", () => reviewGovernedApproval(block.pendingId, review));
     card.append(review);
   }
   return card;
@@ -1952,17 +1951,8 @@ function decisionCard(approval, actionable) {
   if (actionable) {
     const review = document.createElement("button");
     review.className = "button primary";
-    review.textContent = "Review securely →";
-    review.addEventListener("click", async () => {
-      setButtonBusy(review, true, "Opening…");
-      try {
-        await api.reviewApproval(approval.id);
-      } catch (error) {
-        toast(error.message, true);
-      } finally {
-        setButtonBusy(review, false, "Review securely →");
-      }
-    });
+    review.textContent = approvalActionLabel();
+    review.addEventListener("click", () => reviewGovernedApproval(approval.id, review));
     actions.append(review);
   }
   const details = document.createElement("details");
@@ -1974,6 +1964,46 @@ function decisionCard(approval, actionable) {
   actions.append(details);
   card.append(content, actions);
   return card;
+}
+
+function approvalActionLabel() {
+  return state?.connectionMode === "user" && state?.approvalDecisionMode !== "desktop"
+    ? "Enable native approval"
+    : "Review securely →";
+}
+
+async function reviewGovernedApproval(id, button) {
+  const needsEnrollment =
+    state?.connectionMode === "user" && state?.approvalDecisionMode !== "desktop";
+  const idleLabel = approvalActionLabel();
+  setButtonBusy(button, true, needsEnrollment ? "Waiting for browser…" : "Reviewing…");
+  try {
+    if (needsEnrollment) {
+      state = await api.login();
+      render();
+      if (state.approvalDecisionMode === "desktop") {
+        toast("Native approvals enabled. Review the decision again to approve or deny it.");
+      } else {
+        toast(
+          "This AMOS server did not enable native approvals. Hosted review remains available.",
+          true
+        );
+      }
+      return;
+    }
+
+    const review = await api.reviewApproval(id);
+    if (review?.mode === "hosted") {
+      const openHosted = window.confirm(
+        "This AMOS server requires its hosted approval ceremony. Open it in your browser?"
+      );
+      if (openHosted) await api.openApproval(id);
+    }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, idleLabel);
+  }
 }
 
 function decisionEmpty(message) {
