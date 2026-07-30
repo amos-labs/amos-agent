@@ -90,9 +90,9 @@ const briefingTemplates = Object.freeze([
     prompt: "Create a lead-source ROI briefing from live governed company data. Use Company Performance observations when available to compare spend, leads, conversions, revenue, and return by source. Identify material outliers, cite the exact source and period, and distinguish observed gaps from hypotheses about why they exist."
   },
   {
-    title: "Goals and coaching",
-    description: "Track goals, leading indicators, blockers, and the next intervention.",
-    prompt: "Create a goals and coaching briefing from live AMOS goals and Company Performance signals. Show each active goal, cited baseline, target, progress, leading indicators, blockers, owner, and the most relevant coaching or learning intervention. Recommend content or a coach only as a proposal; do not create, assign, or schedule anything without the governed platform action and required human approval."
+    title: "Goals and progress",
+    description: "Track objectives, progress, blockers, and evidence-backed next actions.",
+    prompt: "Create a goals and progress briefing from live AMOS goals and relevant company signals. Show each active objective, cited baseline, target, progress, leading indicators, blockers, and owner. Recommend the next evidence-backed action. Do not introduce coaching, training, content, or another intervention type unless the user requested it or cited company evidence supports it. Clearly label unavailable data and platform-reported capability states; never describe data, an engine, or a capability as locked unless the platform explicitly reports that state."
   }
 ]);
 
