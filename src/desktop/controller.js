@@ -1004,8 +1004,7 @@ export class DesktopController {
     const approval = this.companyApprovals.find((item) => item.id === id);
     if (!approval) throw new Error("That approval is no longer available");
     if (this.approvalDecisionMode !== "desktop") {
-      await this.openApproval(id);
-      return { mode: "hosted", opened: true };
+      return { mode: "hosted", opened: false };
     }
     return {
       mode: "desktop",
@@ -1951,8 +1950,15 @@ export class DesktopController {
   async sendRemoteState() {
     this.send("remote:changed", {
       identity: this.identity,
+      accountStatus: this.accountStatus,
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
+      approvalDecisionMode: this.approvalDecisionMode,
+      connectionsCatalog: structuredClone(this.connectionsCatalog),
+      companies: {
+        currentTenantId: this.companies.currentTenantId,
+        tenants: structuredClone(this.companies.tenants)
+      },
       remoteStatus: { ...this.remoteStatus },
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState()
