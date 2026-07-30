@@ -104,6 +104,20 @@ Initial templates:
 - Lead-source ROI
 - Goals and coaching
 
+Portfolio, operating-unit, lead-source, and goal views bind to the
+platform-owned Company Performance Loop. The platform exposes generic operating
+units, metric definitions, time-bounded observations, cited benchmarks, source
+classification, and goal-compatible signals through MCP. “Franchise” is one
+supported operating-unit type, not a Desktop-only or Neighborly-specific data
+model.
+
+Desktop adds a deterministic `performance` presentation intent for
+`get_performance_snapshot`. It may format percentages and rank cited gaps, but
+it must preserve current/prior periods, source references, classification, and
+the platform's non-causal interpretation rule. It must not infer missing facts,
+persist result payloads inside saved briefing definitions, or promote sample
+data as connected customer data.
+
 ## Native Desktop approvals
 
 API keys remain machine principals and cannot approve work. The official

@@ -75,6 +75,7 @@ export function createCompanyViewTool({ present }) {
           enum: [
             "auto",
             "company_overview",
+            "performance",
             "kpi",
             "funnel",
             "cohort",
