@@ -106,3 +106,16 @@ test("Connections HTML contains no customer or provider-specific catalog truth",
   assert.match(html, /id="availableProviderList"/);
   assert.match(javascript, /api\.connectProvider\(provider\.provider\)/);
 });
+
+test("built-in Briefings stay objective-led instead of prescribing coaching", async () => {
+  const javascript = await readFile(
+    new URL("../desktop/renderer/app.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(javascript, /title: "Goals and progress"/);
+  assert.match(javascript, /unless the user requested it or cited company evidence supports it/);
+  assert.match(javascript, /never describe data, an engine, or a capability as locked unless the platform explicitly reports that state/);
+  assert.doesNotMatch(javascript, /title: "Goals and coaching"/);
+  assert.doesNotMatch(javascript, /most relevant coaching or learning intervention/);
+});

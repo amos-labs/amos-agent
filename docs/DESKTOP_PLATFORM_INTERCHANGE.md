@@ -102,7 +102,14 @@ Initial templates:
 - Daily company brief
 - Portfolio performance
 - Lead-source ROI
-- Goals and coaching
+- Goals and progress
+
+Built-in templates remain objective-led and company-neutral. They must not
+introduce coaching, training, content, or another predetermined intervention
+unless the user requests it or cited company evidence makes it relevant.
+Connection and capability labels are platform facts: Desktop and its model must
+not describe data, an engine, or a capability as “locked” unless the current
+platform result explicitly reports that state.
 
 Portfolio, operating-unit, lead-source, and goal views bind to the
 platform-owned Company Performance Loop. The platform exposes generic operating
