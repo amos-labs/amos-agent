@@ -2,6 +2,8 @@ appId: com.amoslabs.desktop.preview
 productName: AMOS Desktop Preview
 asar: true
 forceCodeSigning: false
+extraMetadata:
+  amosDesktopReleaseChannel: preview
 
 files:
   - desktop/**/*

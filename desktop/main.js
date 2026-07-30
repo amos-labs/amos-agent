@@ -10,7 +10,7 @@ import {
   shell,
   Tray
 } from "electron";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
@@ -25,7 +25,10 @@ import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
 import { SavedViewStore } from "../src/desktop/savedViewStore.js";
 import { DecisionKeyStore } from "../src/desktop/decisionKeyStore.js";
-import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
+import {
+  DesktopUpdateManager,
+  shouldEnableDesktopUpdates
+} from "../src/desktop/updateManager.js";
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -222,6 +225,17 @@ function createUpdaterLogger(logPath) {
     warn: (value) => write("warn", value),
     error: (value) => write("error", value)
   };
+}
+
+function packagedReleaseChannel() {
+  try {
+    const metadata = JSON.parse(
+      readFileSync(join(app.getAppPath(), "package.json"), "utf8")
+    );
+    return metadata.amosDesktopReleaseChannel || null;
+  } catch {
+    return null;
+  }
 }
 
 function installUpdate() {
@@ -514,7 +528,10 @@ app.whenReady().then(async () => {
   updateManager = new DesktopUpdateManager({
     updater: autoUpdater,
     currentVersion: app.getVersion(),
-    enabled: app.isPackaged && app.getName() === "AMOS Desktop",
+    enabled: shouldEnableDesktopUpdates({
+      isPackaged: app.isPackaged,
+      releaseChannel: packagedReleaseChannel()
+    }),
     emit: (payload) => send("update:changed", payload),
     notify: notifyUpdate
   });

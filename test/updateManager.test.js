@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { DesktopUpdateManager } from "../src/desktop/updateManager.js";
+import {
+  DesktopUpdateManager,
+  shouldEnableDesktopUpdates
+} from "../src/desktop/updateManager.js";
 
 class FakeUpdater extends EventEmitter {
   constructor() {
@@ -36,6 +40,38 @@ function managerOptions(overrides = {}) {
     ...overrides
   };
 }
+
+test("only explicit stable packaged builds enable the production updater", () => {
+  assert.equal(shouldEnableDesktopUpdates({
+    isPackaged: true,
+    releaseChannel: "stable"
+  }), true);
+  assert.equal(shouldEnableDesktopUpdates({
+    isPackaged: true,
+    releaseChannel: "preview"
+  }), false);
+  assert.equal(shouldEnableDesktopUpdates({
+    isPackaged: true,
+    releaseChannel: null
+  }), false);
+  assert.equal(shouldEnableDesktopUpdates({
+    isPackaged: false,
+    releaseChannel: "stable"
+  }), false);
+});
+
+test("stable and preview packaging declare different updater channels", () => {
+  const stable = readFileSync(
+    new URL("../desktop/electron-builder.release.yml", import.meta.url),
+    "utf8"
+  );
+  const preview = readFileSync(
+    new URL("../desktop/electron-builder.windows-preview.yml", import.meta.url),
+    "utf8"
+  );
+  assert.match(stable, /amosDesktopReleaseChannel: stable/);
+  assert.match(preview, /amosDesktopReleaseChannel: preview/);
+});
 
 test("signed packaged builds check periodically without downloading automatically", () => {
   const updater = new FakeUpdater();
