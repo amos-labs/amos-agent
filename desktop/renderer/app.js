@@ -77,22 +77,22 @@ const briefingTemplates = Object.freeze([
   {
     title: "Daily company brief",
     description: "The material changes, risks, decisions, and opportunities that need attention today.",
-    prompt: "Create today's company operating brief. Prioritize material changes, risks, decisions, and opportunities, cite every live source, and show the result as a briefing."
+    prompt: "Create today's company operating brief from the live AMOS company overview. Include the largest cited Company Performance Loop gaps when available, prioritize material changes, risks, decisions, and opportunities, and show the result as a briefing. Clearly label unavailable or sample data."
   },
   {
     title: "Portfolio performance",
     description: "Compare locations or business units with relevant peers and show the gap to top quartile.",
-    prompt: "Create a portfolio performance briefing. Compare each business unit with its relevant peer group, show revenue, growth, conversion, and the gap to top quartile, then identify the three highest-impact opportunities."
+    prompt: "Load the AMOS performance engine, call get_performance_snapshot, and present the live result as a Company Performance briefing. Compare each operating unit with its cited relevant peer or target benchmark, show current and prior results and the gap to top quartile where available, then identify the three highest-impact opportunities without claiming causes the evidence does not prove."
   },
   {
     title: "Lead-source ROI",
     description: "Find acquisition sources that are creating or destroying value.",
-    prompt: "Create a lead-source ROI briefing. Compare spend, leads, conversions, revenue, and return by source, explain material outliers, and cite the underlying company data."
+    prompt: "Create a lead-source ROI briefing from live governed company data. Use Company Performance observations when available to compare spend, leads, conversions, revenue, and return by source. Identify material outliers, cite the exact source and period, and distinguish observed gaps from hypotheses about why they exist."
   },
   {
     title: "Goals and coaching",
     description: "Track goals, leading indicators, blockers, and the next intervention.",
-    prompt: "Create a goals and coaching briefing. Show each active goal, baseline, target, progress, leading indicators, blockers, owner, and the most relevant coaching or learning intervention."
+    prompt: "Create a goals and coaching briefing from live AMOS goals and Company Performance signals. Show each active goal, cited baseline, target, progress, leading indicators, blockers, owner, and the most relevant coaching or learning intervention. Recommend content or a coach only as a proposal; do not create, assign, or schedule anything without the governed platform action and required human approval."
   }
 ]);
 

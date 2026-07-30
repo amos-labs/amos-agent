@@ -1,6 +1,7 @@
 export const COMPANY_VIEW_INTENTS = Object.freeze([
   "auto",
   "company_overview",
+  "performance",
   "kpi",
   "funnel",
   "cohort",
@@ -71,6 +72,7 @@ export function adaptCompanyResult({
 function blocksForIntent(intent, payload, context) {
   if (intent === "approvals") return decisionBlocks(payload, "approval", context);
   if (intent === "receipts") return decisionBlocks(payload, "receipt", context);
+  if (intent === "performance") return performanceBlocks(payload, context);
   if (intent === "timeline") return timelineBlocks(payload, context);
   if (intent === "funnel") return funnelBlocks(payload, context);
   if (intent === "cohort" || intent === "comparison") return comparisonBlocks(payload, context);
@@ -158,6 +160,127 @@ function comparisonBlocks(payload, context) {
   const baseProvenance = provenance({ ...context, references });
   const table = tableBlock(rows, "Comparison", baseProvenance);
   return table ? [table] : genericDataBlocks(payload, context);
+}
+
+function performanceBlocks(payload, context) {
+  const units = Array.isArray(payload?.operating_units) ? payload.operating_units : [];
+  const entries = [];
+  for (const unit of units.slice(0, MAX_ROWS)) {
+    const metrics = Array.isArray(unit?.metrics) ? unit.metrics : [];
+    for (const item of metrics.slice(0, MAX_ROWS)) {
+      const metric = item?.metric && typeof item.metric === "object" ? item.metric : {};
+      const current = item?.current && typeof item.current === "object" ? item.current : null;
+      if (!current || finiteNumber(current.value) === null) continue;
+      const benchmarks = Array.isArray(item.benchmarks) ? item.benchmarks : [];
+      const primaryBenchmark = benchmarks.find((benchmark) =>
+        finiteNumber(benchmark?.value) !== null
+      ) || null;
+      const shortfall = finiteNumber(primaryBenchmark?.gap?.shortfall) ?? 0;
+      const relativeShortfall = finiteNumber(primaryBenchmark?.gap?.relative_shortfall) ?? 0;
+      entries.push({
+        unit,
+        item,
+        metric,
+        current,
+        previous: item?.previous && typeof item.previous === "object" ? item.previous : null,
+        trend: item?.trend && typeof item.trend === "object" ? item.trend : null,
+        primaryBenchmark,
+        attention: shortfall > 0,
+        shortfall,
+        relativeShortfall
+      });
+    }
+  }
+  if (entries.length === 0) return genericDataBlocks(payload, context);
+
+  entries.sort((left, right) =>
+    Number(right.attention) - Number(left.attention) ||
+    right.relativeShortfall - left.relativeShortfall ||
+    String(left.unit?.name || left.unit?.key || "").localeCompare(
+      String(right.unit?.name || right.unit?.key || "")
+    ) ||
+    String(left.metric?.name || left.metric?.key || "").localeCompare(
+      String(right.metric?.name || right.metric?.key || "")
+    )
+  );
+
+  const blocks = entries.slice(0, MAX_METRICS).map((entry, index) => {
+    const references = collectReferences({
+      current: entry.current,
+      benchmark: entry.primaryBenchmark
+    });
+    return {
+      id: `performance-${index + 1}-${slug(entry.unit?.key)}-${slug(entry.metric?.key)}`,
+      type: "metric",
+      label: cleanText(
+        `${entry.metric?.name || humanize(entry.metric?.key)} — ${entry.unit?.name || humanize(entry.unit?.key)}`,
+        120
+      ),
+      value: formatPerformanceValue(entry.current.value, entry.metric),
+      trend: performanceTone(entry),
+      change: performanceChange(entry),
+      note: cleanText([
+        humanize(entry.current.data_classification || "unclassified"),
+        entry.current.source_name || entry.current.source_kind,
+        entry.current.period_end ? `period ending ${entry.current.period_end}` : "",
+        "observed comparison; not a causal claim"
+      ].filter(Boolean).join(" · "), 300),
+      provenance: provenance({ ...context, references })
+    };
+  });
+
+  blocks.push({
+    id: "performance-comparison",
+    type: "table",
+    title: "Performance and benchmark gaps",
+    searchable: true,
+    columns: [
+      { key: "unit", label: "Operating unit", format: "text" },
+      { key: "type", label: "Type", format: "text" },
+      { key: "metric", label: "Metric", format: "text" },
+      { key: "current", label: "Current", format: "text" },
+      { key: "previous", label: "Previous", format: "text" },
+      { key: "trend", label: "Trend", format: "text" },
+      { key: "benchmark", label: "Benchmark", format: "text" },
+      { key: "gap", label: "Gap", format: "text" },
+      { key: "period", label: "Period end", format: "date" },
+      { key: "classification", label: "Classification", format: "text" },
+      { key: "source", label: "Source", format: "text" }
+    ],
+    rows: entries.slice(0, MAX_ROWS).map((entry) => ({
+      unit: entry.unit?.name || humanize(entry.unit?.key),
+      type: humanize(entry.unit?.type || "other"),
+      metric: entry.metric?.name || humanize(entry.metric?.key),
+      current: formatPerformanceValue(entry.current.value, entry.metric),
+      previous: entry.previous
+        ? formatPerformanceValue(entry.previous.value, entry.metric)
+        : null,
+      trend: performanceTrendLabel(entry.trend),
+      benchmark: entry.primaryBenchmark
+        ? `${entry.primaryBenchmark.label || humanize(entry.primaryBenchmark.key)}: ${formatPerformanceValue(
+            entry.primaryBenchmark.value,
+            entry.metric
+          )}`
+        : null,
+      gap: entry.primaryBenchmark ? performanceGapLabel(entry) : null,
+      period: entry.current.period_end || null,
+      classification: humanize(entry.current.data_classification || "unclassified"),
+      source: entry.current.source_name || entry.current.source_ref || entry.current.source_kind || null
+    })),
+    provenance: provenance({ ...context, references: collectReferences(payload) })
+  });
+
+  const references = collectReferences(payload);
+  if (references.length > 0) {
+    blocks.push({
+      id: "performance-evidence",
+      type: "sources",
+      title: "Cited performance evidence",
+      items: references.slice(0, MAX_REFERENCES),
+      provenance: provenance({ ...context, references })
+    });
+  }
+  return blocks.slice(0, 24);
 }
 
 function timelineBlocks(payload, context) {
@@ -286,18 +409,45 @@ function collectReferences(payload) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return;
     const id = firstValue(value, ["id", "receipt_id", "pending_id", "goal_id", "campaign_id", "record_id"]);
     const label = firstValue(value, ["label", "title", "name", "summary", "operation", "tool"]);
-    if (!id || !label) return;
-    references.push({
-      type: inferReferenceType(value),
-      id: String(id),
-      label: cleanText(label, 240),
-      observed_at: validDate(firstValue(value, [
-        "observed_at",
-        "updated_at",
-        "created_at",
-        "completed_at"
-      ]))
-    });
+    if (id && label) {
+      references.push({
+        type: inferReferenceType(value),
+        id: String(id),
+        label: cleanText(label, 240),
+        observed_at: validDate(firstValue(value, [
+          "observed_at",
+          "updated_at",
+          "created_at",
+          "completed_at"
+        ]))
+      });
+    }
+    const sourceRef = stringValue(value.source_ref).trim();
+    if (sourceRef) {
+      references.push({
+        type: cleanText(value.source_kind || "evidence", 80),
+        id: cleanText(sourceRef, 160),
+        label: cleanText(
+          value.source_name
+            ? `${value.source_name} — ${sourceRef}`
+            : sourceRef,
+          240
+        ),
+        observed_at: validDate(value.observed_at)
+      });
+    }
+    if (Array.isArray(value.evidence_refs)) {
+      for (const evidenceRef of value.evidence_refs.slice(0, MAX_REFERENCES)) {
+        const id = cleanText(evidenceRef, 160);
+        if (!id) continue;
+        references.push({
+          type: "evidence",
+          id,
+          label: cleanText(evidenceRef, 240),
+          observed_at: ""
+        });
+      }
+    }
   });
   return dedupeReferences(references);
 }
@@ -366,6 +516,13 @@ function resultState(payload) {
       message: "This view contains the available result; some data was partial or unavailable."
     };
   }
+  if (
+    String(payload?.status || "").toLowerCase() === "empty" &&
+    Array.isArray(payload?.operating_units) &&
+    payload.operating_units.length === 0
+  ) {
+    return { kind: "empty", message: "No matching company performance data is currently available." };
+  }
   if (isEmpty(payload)) {
     return { kind: "empty", message: "No matching company data is currently available." };
   }
@@ -377,6 +534,10 @@ function inferIntent(sourceTool, payload) {
   const keys = JSON.stringify(Object.keys(payload || {})).toLowerCase();
   if (/approval|pending_operation/.test(name + keys)) return "approvals";
   if (/receipt|proof/.test(name + keys)) return "receipts";
+  if (
+    /performance_snapshot|performance_units/.test(name + keys) ||
+    (Array.isArray(payload?.operating_units) && payload?.goal_signal_pattern)
+  ) return "performance";
   if (/funnel|conversion/.test(name + keys)) return "funnel";
   if (/cohort/.test(name + keys)) return "cohort";
   if (/timeline|activity|event/.test(name + keys)) return "timeline";
@@ -389,6 +550,7 @@ function inferIntent(sourceTool, payload) {
 function titleForIntent(intent) {
   return {
     company_overview: "Company operating view",
+    performance: "Company performance",
     kpi: "Company metrics",
     funnel: "Conversion funnel",
     cohort: "Cohort view",
@@ -401,6 +563,9 @@ function titleForIntent(intent) {
 }
 
 function subtitleForIntent(intent) {
+  if (intent === "performance") {
+    return "Current and prior results, relevant benchmark gaps, and cited source evidence.";
+  }
   if (intent === "approvals") return "Current governed decisions waiting for human authority.";
   if (intent === "receipts") return "Recorded outcomes with their available proof and provenance.";
   if (intent === "live_work") return "Current work, decisions, and operating evidence.";
@@ -457,6 +622,55 @@ function conversionLabel(previous, current) {
   const right = finiteNumber(current);
   if (left === null || right === null || left === 0) return "";
   return `${((right / left) * 100).toFixed(1)}% from prior stage`;
+}
+
+function formatPerformanceValue(value, metric = {}) {
+  const numeric = finiteNumber(value);
+  if (numeric === null) return "—";
+  if (metric.value_kind === "percent") {
+    return `${formatNumber(numeric * 100)}%`;
+  }
+  if (metric.value_kind === "currency") {
+    return `${formatNumber(numeric)} ${metric.unit || "currency"}`;
+  }
+  const rendered = formatNumber(numeric);
+  return metric.unit ? `${rendered} ${metric.unit}` : rendered;
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
+function performanceTone(entry) {
+  if (entry.attention) return "down";
+  if (entry.primaryBenchmark?.gap?.meets_or_exceeds === true) return "up";
+  if (entry.trend?.favorable === true) return "up";
+  if (entry.trend?.favorable === false) return "down";
+  return "neutral";
+}
+
+function performanceChange(entry) {
+  if (entry.primaryBenchmark) return performanceGapLabel(entry);
+  return performanceTrendLabel(entry.trend);
+}
+
+function performanceGapLabel(entry) {
+  const label = entry.primaryBenchmark?.label || humanize(entry.primaryBenchmark?.key);
+  if (entry.primaryBenchmark?.gap?.meets_or_exceeds === true) {
+    return `Meets or exceeds ${label}`;
+  }
+  const shortfall = formatPerformanceValue(entry.shortfall, entry.metric);
+  return `${shortfall} to ${label}`;
+}
+
+function performanceTrendLabel(trend) {
+  if (!trend) return "";
+  const direction = humanize(trend.direction || "flat");
+  if (trend.favorable === true) return `${direction} vs prior (favorable)`;
+  if (trend.favorable === false) return `${direction} vs prior (unfavorable)`;
+  return `${direction} vs prior`;
 }
 
 function textSummary(payload) {

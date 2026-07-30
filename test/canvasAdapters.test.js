@@ -53,6 +53,96 @@ test("funnel adapter computes stage display without inventing missing values", (
   assert.equal(metrics[1].change, "25.0% from prior stage");
 });
 
+test("performance adapter renders cited benchmark gaps without inventing causes", () => {
+  const canvas = normalized(adaptCompanyResult({
+    intent: "auto",
+    sourceTool: "amos_call_engine_tool",
+    observedAt,
+    result: {
+      contract_version: 1,
+      status: "ready",
+      goal_signal_pattern: "performance:<operating_unit_key>:<metric_key>",
+      operating_units: [{
+        key: "dallas",
+        name: "Dallas",
+        type: "location",
+        metrics: [{
+          metric: {
+            key: "close_rate",
+            name: "Close rate",
+            unit: "percent",
+            value_kind: "percent",
+            direction: "increase"
+          },
+          current: {
+            value: 0.11,
+            period_end: "2026-06-30",
+            data_classification: "customer_provided",
+            source_kind: "customer_report",
+            source_name: "Quarterly business review",
+            source_ref: "document:qbr:sha256:abc",
+            evidence_refs: ["page:1", "cell:C9"]
+          },
+          previous: {
+            value: 0.14,
+            period_end: "2026-03-31",
+            source_ref: "document:qbr:sha256:abc"
+          },
+          trend: {
+            direction: "down",
+            favorable: false
+          },
+          benchmarks: [{
+            key: "top_quartile",
+            label: "Top quartile",
+            value: 0.22,
+            source_kind: "customer_report",
+            source_ref: "document:qbr:sha256:abc",
+            gap: {
+              shortfall: 0.11,
+              relative_shortfall: 0.5,
+              meets_or_exceeds: false
+            }
+          }],
+          interpretation_rule: "Observed comparison; not causal proof."
+        }]
+      }]
+    }
+  }));
+
+  assert.equal(canvas.title, "Company performance");
+  assert.equal(canvas.state.kind, "ready");
+  const metric = canvas.blocks.find((block) => block.type === "metric");
+  assert.equal(metric.value, "11%");
+  assert.equal(metric.trend, "down");
+  assert.match(metric.change, /11% to Top quartile/);
+  assert.match(metric.note, /not a causal claim/);
+  assert.ok(metric.provenance.references.some(
+    (reference) => reference.id === "document:qbr:sha256:abc"
+  ));
+  assert.ok(canvas.source.references.some((reference) => reference.id === "cell:C9"));
+  const table = canvas.blocks.find((block) => block.type === "table");
+  assert.equal(table.rows[0].current, "11%");
+  assert.equal(table.rows[0].benchmark, "Top quartile: 22%");
+  assert.equal(table.rows[0].classification, "Customer Provided");
+});
+
+test("performance adapter preserves the platform's honest empty state", () => {
+  const canvas = normalized(adaptCompanyResult({
+    intent: "performance",
+    sourceTool: "amos_call_engine_tool",
+    observedAt,
+    result: {
+      contract_version: 1,
+      status: "empty",
+      operating_units: [],
+      goal_signal_pattern: "performance:<operating_unit_key>:<metric_key>"
+    }
+  }));
+  assert.equal(canvas.state.kind, "empty");
+  assert.equal(canvas.blocks.length, 0);
+});
+
 test("approval and receipt adapters preserve governed IDs and status", () => {
   const approvalCanvas = normalized(adaptCompanyResult({
     intent: "approvals",
