@@ -261,6 +261,32 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.company-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid rgba(109,147,255,.25);
+  border-radius: 999px;
+  background: rgba(109,147,255,.08);
+  color: var(--blue-2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.company-switcher select {
+  max-width: 190px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+.company-switcher select:disabled { cursor: wait; opacity: .65; }
 
 .button {
   border: 1px solid transparent;

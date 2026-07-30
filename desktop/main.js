@@ -267,6 +267,9 @@ function registerIpc() {
   ipcMain.handle("desktop:login", () => controller.login());
   ipcMain.handle("desktop:logout", () => controller.logout());
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
+  ipcMain.handle("desktop:switch-company", (_event, tenantId) =>
+    controller.switchCompany(tenantId)
+  );
   ipcMain.handle("desktop:connect-provider", (_event, provider) =>
     controller.connectProvider(provider)
   );

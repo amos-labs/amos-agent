@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { webcrypto } from "node:crypto";
 import { chmodSync, mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,7 +49,7 @@ test("OAuth login performs discovery, DCR, PKCE callback, and token storage", as
     if (value.endsWith("/oauth/token")) {
       const form = new URLSearchParams(options.body);
       assert.equal(form.get("code"), "authorization-code");
-      const actual = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(form.get("code_verifier")));
+      const actual = await webcrypto.subtle.digest("SHA-256", new TextEncoder().encode(form.get("code_verifier")));
       assert.equal(Buffer.from(actual).toString("base64url"), challenge);
       return jsonResponse(200, {
         access_token: "access-1",
@@ -166,6 +167,98 @@ test("OAuth refresh rotates and stores the refresh token", async () => {
 
   assert.equal(await session.getAccessToken(), "access-2");
   assert.equal((await stored.read()).refresh_token, "refresh-2");
+});
+
+test("OAuth company switching is issuer-pinned and stores the target token", async () => {
+  const sourceTenant = "25deefb7-0e4f-43ad-8b2f-f2f86fac6594";
+  const targetTenant = "35deefb7-0e4f-43ad-8b2f-f2f86fac6594";
+  const stored = new MemoryStore({
+    issuer: "https://amos.example",
+    mcp_url: "https://amos.example/mcp",
+    token_endpoint: "https://amos.example/oauth/token",
+    tenants_endpoint: "https://amos.example/oauth/tenants",
+    tenant_switch_endpoint: "https://amos.example/oauth/switch-tenant",
+    client_id: "desktop-client",
+    access_token: "source-access",
+    refresh_token: "source-refresh",
+    expires_at: Date.now() + 120_000
+  });
+  const requests = [];
+  const session = new AmosOAuthSession({
+    mcpUrl: "https://amos.example/mcp",
+    store: stored,
+    fetchImpl: async (url, options = {}) => {
+      requests.push({ url: String(url), options });
+      assert.equal(options.headers.Authorization, "Bearer source-access");
+      if (String(url).endsWith("/oauth/tenants")) {
+        return jsonResponse(200, {
+          current_tenant_id: sourceTenant,
+          tenants: [
+            { tenant_id: sourceTenant, tenant_name: "AMOS Labs", role: "owner" },
+            { tenant_id: targetTenant, tenant_name: "Smile Wise", role: "owner" }
+          ]
+        });
+      }
+      assert.equal(String(url), "https://amos.example/oauth/switch-tenant");
+      assert.deepEqual(JSON.parse(options.body), { tenant_id: targetTenant });
+      return jsonResponse(200, {
+        access_token: "target-access",
+        refresh_token: "target-refresh",
+        expires_in: 3600,
+        scope: "company:read"
+      });
+    }
+  });
+
+  const companies = await session.companies();
+  assert.equal(companies.current_tenant_id, sourceTenant);
+  assert.equal(companies.tenants.length, 2);
+  await session.switchCompany(targetTenant);
+  assert.equal((await stored.read()).access_token, "target-access");
+  assert.equal((await stored.read()).refresh_token, "target-refresh");
+  assert.equal(requests.length, 2);
+});
+
+test("OAuth discovery rejects company switching endpoints outside the issuer", async () => {
+  const session = new AmosOAuthSession({
+    mcpUrl: "https://platform.custom.amoslabs.com/mcp",
+    store: new MemoryStore(),
+    fetchImpl: discoveryFetch({
+      amos_tenants_endpoint: "https://attacker.example/oauth/tenants",
+      amos_tenant_switch_endpoint: "https://platform.custom.amoslabs.com/oauth/switch-tenant"
+    })
+  });
+
+  await assert.rejects(session.discover(), /company list endpoint must share the issuer origin/);
+});
+
+test("OAuth company switching never carries source refresh authority into the target", async () => {
+  const stored = new MemoryStore({
+    issuer: "https://amos.example",
+    mcp_url: "https://amos.example/mcp",
+    token_endpoint: "https://amos.example/oauth/token",
+    tenants_endpoint: "https://amos.example/oauth/tenants",
+    tenant_switch_endpoint: "https://amos.example/oauth/switch-tenant",
+    client_id: "desktop-client",
+    access_token: "source-access",
+    refresh_token: "source-refresh",
+    scope: "source:write",
+    expires_at: Date.now() + 120_000
+  });
+  const session = new AmosOAuthSession({
+    mcpUrl: "https://amos.example/mcp",
+    store: stored,
+    fetchImpl: async () => jsonResponse(200, {
+      access_token: "target-access",
+      expires_in: 60,
+      scope: ""
+    })
+  });
+
+  await session.switchCompany("35deefb7-0e4f-43ad-8b2f-f2f86fac6594");
+  assert.equal((await stored.read()).access_token, "target-access");
+  assert.equal((await stored.read()).refresh_token, "");
+  assert.equal((await stored.read()).scope, "");
 });
 
 test("FileTokenStore writes owner-only credentials", async () => {
