@@ -1,6 +1,10 @@
 const DEFAULT_INITIAL_DELAY_MS = 15_000;
 const DEFAULT_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000;
 
+export function shouldEnableDesktopUpdates({ isPackaged, releaseChannel }) {
+  return Boolean(isPackaged && releaseChannel === "stable");
+}
+
 function normalizedVersion(info) {
   const value = info?.version;
   return typeof value === "string" && value.trim() ? value.trim() : null;

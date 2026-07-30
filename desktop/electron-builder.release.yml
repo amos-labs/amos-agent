@@ -2,6 +2,8 @@ appId: com.amoslabs.desktop
 productName: AMOS Desktop
 asar: true
 forceCodeSigning: true
+extraMetadata:
+  amosDesktopReleaseChannel: stable
 
 files:
   - desktop/**/*
