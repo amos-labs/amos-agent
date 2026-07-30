@@ -81,6 +81,15 @@ export class AmosOAuthSession {
     assertSecureEndpoint(metadata.authorization_endpoint, "authorization endpoint");
     assertSameOrigin(metadata.token_endpoint, issuer, "token endpoint");
     assertSameOrigin(metadata.registration_endpoint, issuer, "registration endpoint");
+    const hasCompanyList = Boolean(metadata.amos_tenants_endpoint);
+    const hasCompanySwitch = Boolean(metadata.amos_tenant_switch_endpoint);
+    if (hasCompanyList !== hasCompanySwitch) {
+      throw new Error("AMOS OAuth metadata must advertise both company switching endpoints");
+    }
+    if (hasCompanyList) {
+      assertSameOrigin(metadata.amos_tenants_endpoint, issuer, "company list endpoint");
+      assertSameOrigin(metadata.amos_tenant_switch_endpoint, issuer, "company switch endpoint");
+    }
     if (!metadata.code_challenge_methods_supported?.includes("S256")) {
       throw new Error("AMOS OAuth server does not advertise PKCE S256");
     }
@@ -151,6 +160,8 @@ export class AmosOAuthSession {
         authorization_endpoint: metadata.authorization_endpoint,
         token_endpoint: metadata.token_endpoint,
         registration_endpoint: metadata.registration_endpoint,
+        tenants_endpoint: metadata.amos_tenants_endpoint,
+        tenant_switch_endpoint: metadata.amos_tenant_switch_endpoint,
         client_id: registration.client_id
       });
       await this.store.write(credentials);
@@ -209,6 +220,87 @@ export class AmosOAuthSession {
     await this.store.clear();
   }
 
+  async companies() {
+    const endpoints = await this.companyEndpoints();
+    if (!endpoints) return { current_tenant_id: null, tenants: [] };
+    return this.fetchAuthorizedJson(endpoints.tenants);
+  }
+
+  async switchCompany(tenantId) {
+    const normalizedTenantId = String(tenantId || "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalizedTenantId)) {
+      throw new Error("Choose a valid AMOS company");
+    }
+    const endpoints = await this.companyEndpoints();
+    if (!endpoints) {
+      throw new Error("This AMOS server does not support company switching");
+    }
+    const token = await this.fetchAuthorizedJson(endpoints.switchTenant, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenant_id: normalizedTenantId })
+    });
+    const credentials = await this.store.read();
+    // A company boundary switch must never retain source-company token
+    // material if an older or faulty server omits a target refresh token.
+    const updated = this.credentialsFromToken(token, {
+      ...credentials,
+      access_token: "",
+      refresh_token: "",
+      scope: ""
+    });
+    await this.store.write(updated);
+    return updated;
+  }
+
+  async companyEndpoints() {
+    const credentials = await this.store.read();
+    if (!credentials?.access_token) {
+      throw new Error("AMOS is not connected. Run `amos-agent login` first.");
+    }
+    if (credentials.tenants_endpoint && credentials.tenant_switch_endpoint) {
+      assertSameOrigin(credentials.tenants_endpoint, credentials.issuer, "company list endpoint");
+      assertSameOrigin(credentials.tenant_switch_endpoint, credentials.issuer, "company switch endpoint");
+      return {
+        tenants: credentials.tenants_endpoint,
+        switchTenant: credentials.tenant_switch_endpoint
+      };
+    }
+
+    // Sessions created before the server gained multi-company support can pick
+    // up the optional capability without forcing the human to sign in again.
+    const metadata = await this.discover();
+    if (!metadata.amos_tenants_endpoint || !metadata.amos_tenant_switch_endpoint) return null;
+    const updated = {
+      ...credentials,
+      tenants_endpoint: metadata.amos_tenants_endpoint,
+      tenant_switch_endpoint: metadata.amos_tenant_switch_endpoint
+    };
+    await this.store.write(updated);
+    return {
+      tenants: updated.tenants_endpoint,
+      switchTenant: updated.tenant_switch_endpoint
+    };
+  }
+
+  async fetchAuthorizedJson(url, options = {}) {
+    let accessToken = await this.getAccessToken();
+    const request = () => this.fetchJson(url, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
+    try {
+      return await request();
+    } catch (error) {
+      if (error.status !== 401) throw error;
+      accessToken = await this.getAccessToken({ forceRefresh: true });
+      return request();
+    }
+  }
+
   async exchangeCode(tokenEndpoint, { code, clientId, redirectUri, verifier }) {
     const form = new URLSearchParams({
       grant_type: "authorization_code",
@@ -249,7 +341,11 @@ export class AmosOAuthSession {
         throw new Error(`AMOS OAuth returned an invalid response (${response.status})`);
       }
       if (!response.ok) {
-        throw new Error(payload.error_description || payload.error || `AMOS OAuth request failed with ${response.status}`);
+        const error = new Error(
+          payload.error_description || payload.error || `AMOS OAuth request failed with ${response.status}`
+        );
+        error.status = response.status;
+        throw error;
       }
       return payload;
     } catch (error) {

@@ -101,7 +101,8 @@ const elements = Object.fromEntries(
     "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
     "decisionsView", "memoryView", "canvasView", "connectionsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
-    "identityDetail", "identityBadge", "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge",
+    "identityDetail", "identityBadge", "companySwitcherControl", "companySwitcher",
+    "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
@@ -208,6 +209,7 @@ function bindActions() {
   elements.testButton.addEventListener("click", testModel);
   elements.managedConnectButton.addEventListener("click", connectManagedIntelligence);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
+  elements.companySwitcher.addEventListener("change", switchCompany);
   elements.approvalsButton.addEventListener("click", () => showView("decisions"));
   elements.allApprovalsButton.addEventListener("click", () => api.openApprovals());
   elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
@@ -313,6 +315,7 @@ function render() {
 
   elements.connectionDot.classList.toggle("connected", state.connected);
   renderIdentity();
+  renderCompanySwitcher();
   elements.runtimeBadge.textContent = state.configured
     ? providerStatusLabel()
     : "Intelligence not configured";
@@ -1534,6 +1537,30 @@ function renderIdentity() {
   elements.identityBadge.classList.toggle("hidden", !person && !demo);
 }
 
+function renderCompanySwitcher() {
+  const tenants =
+    state?.connectionMode === "user" && Array.isArray(state.companies?.tenants)
+      ? state.companies.tenants
+      : [];
+  const visible = tenants.length > 1;
+  elements.companySwitcherControl.classList.toggle("hidden", !visible);
+  if (!visible) {
+    elements.companySwitcher.replaceChildren();
+    return;
+  }
+
+  const options = tenants.map((tenant) => {
+    const option = document.createElement("option");
+    option.value = tenant.tenant_id;
+    option.textContent = tenant.parent_tenant_name
+      ? `${tenant.tenant_name} · ${tenant.relationship_kind || "unit"} of ${tenant.parent_tenant_name}`
+      : tenant.tenant_name;
+    option.selected = tenant.tenant_id === state.companies.currentTenantId;
+    return option;
+  });
+  elements.companySwitcher.replaceChildren(...options);
+}
+
 function renderStarterActions() {
   if (!state || !elements.starterActions) return;
   const actions = state.connectionMode === "demo"
@@ -2316,6 +2343,28 @@ async function disconnectAmos() {
   }
 }
 
+async function switchCompany(event) {
+  const targetTenantId = event.currentTarget.value;
+  event.currentTarget.disabled = true;
+  try {
+    state = await api.switchCompany(targetTenantId);
+    resetSessionView();
+    render();
+    toast(`Switched to ${activeCompanyName()}.`);
+  } catch (error) {
+    renderCompanySwitcher();
+    toast(error.message, true);
+  } finally {
+    event.currentTarget.disabled = false;
+  }
+}
+
+function activeCompanyName() {
+  return state?.companies?.tenants?.find(
+    (tenant) => tenant.tenant_id === state.companies.currentTenantId
+  )?.tenant_name || state?.identity?.tenant_slug || "the selected company";
+}
+
 async function chooseWorkspace() {
   try {
     state = await api.chooseWorkspace();
@@ -2721,6 +2770,10 @@ async function cancelTask() {
 
 async function clearSession() {
   await api.clear();
+  resetSessionView();
+}
+
+function resetSessionView() {
   resumingCheckpointId = null;
   state.canvases = [];
   state.activeCanvasId = null;

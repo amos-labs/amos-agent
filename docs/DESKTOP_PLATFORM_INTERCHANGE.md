@@ -315,6 +315,56 @@ show two distinct concepts:
 Do not accept long-lived AWS access keys for this product path. Test and
 discovery calls must be read-only, tenant-pinned, bounded, and receipted.
 
+## Multi-company identity and organization hierarchy
+
+Single-company AMOS remains the default experience. A user with one active
+company membership sees no picker and signs in exactly as before. A user with
+two or more explicit memberships receives a platform-backed company selector in
+the managed app and Desktop.
+
+The platform keeps three concerns separate:
+
+- a global human login identity;
+- one tenant-scoped user membership, role, and grants per company; and
+- non-authorizing parent/child organization relationships such as portfolio,
+  division, business unit, region, brand, franchise, subsidiary, or managed
+  company.
+
+An organization relationship never grants access. A coach who works across
+franchises, or an executive who manages several companies, must hold an explicit
+membership in each company. Operating units remain inside one tenant when they
+are only analytics dimensions; a related tenant is appropriate when the unit
+needs separate users, connections, credentials, policies, approvals, receipts,
+or durable state.
+
+Desktop discovers the optional `amos_tenants_endpoint` and
+`amos_tenant_switch_endpoint` fields from the OAuth authorization-server
+metadata. It does not bundle a tenant list, infer membership from hierarchy, or
+send a tenant ID through normal company-tool arguments.
+
+When the user switches:
+
+1. the platform verifies the target membership and recalculates its role/scopes;
+2. the platform mints a fresh OAuth token bound to the target user and tenant and
+   writes a `switch_tenant` receipt;
+3. Desktop preserves the verified installation key but clears the old company
+   cache, runtime conversation, attachments, transient briefing results,
+   approval list, connection projection, and notification cursor;
+4. Desktop reloads identity, approvals, connections, intelligence status, saved
+   briefing definitions, and company list from the target boundary; and
+5. encrypted task checkpoints remain local references only and retain their
+   existing user/tenant revalidation requirement before any continuation.
+
+Desktop refuses a switch while a task is running. API keys and machine clients
+cannot enumerate or switch human memberships. The source token remains pinned
+to its source company; switching never creates a token with portfolio-wide
+authority.
+
+The client-neutral platform contract is documented in
+`docs/MULTI-COMPANY-IDENTITY.md` in the managed-platform repository. Owner/admin
+hierarchy management, membership invitations, portfolio navigation, and
+aggregate analytics are subsequent platform milestones built on that boundary.
+
 ## What still belongs on the managed website
 
 - tenant creation, ownership transfer, and destructive account administration;

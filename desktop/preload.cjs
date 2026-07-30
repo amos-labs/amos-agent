@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   login: () => ipcRenderer.invoke("desktop:login"),
   logout: () => ipcRenderer.invoke("desktop:logout"),
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
+  switchCompany: (tenantId) => ipcRenderer.invoke("desktop:switch-company", tenantId),
   connectProvider: (provider) => ipcRenderer.invoke("desktop:connect-provider", provider),
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),
   reviewApproval: (id) => ipcRenderer.invoke("desktop:review-company-approval", id),

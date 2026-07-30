@@ -85,6 +85,7 @@ export class DesktopController {
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    this.companies = { currentTenantId: null, tenants: [] };
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: null,
@@ -155,6 +156,10 @@ export class DesktopController {
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
       connectionsCatalog: this.connectionsCatalog,
+      companies: {
+        currentTenantId: this.companies.currentTenantId,
+        tenants: structuredClone(this.companies.tenants)
+      },
       remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model, settings),
       providers: listModelProviders(),
@@ -730,10 +735,65 @@ export class DesktopController {
     this.identity = null;
     this.accountStatus = null;
     this.companyApprovals = [];
+    this.companies = { currentTenantId: null, tenants: [] };
     this.approvalsAvailable = true;
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
     await this.sendRemoteState();
     this.record("auth", "AMOS account disconnected");
+    return this.state();
+  }
+
+  async switchCompany(tenantId) {
+    if (this.activeTask) {
+      throw new Error("Finish or stop the current task before switching companies");
+    }
+    if (this.remoteRefreshPromise) await this.remoteRefreshPromise;
+
+    const settings = await this.settingsStore.read();
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (
+      settings.operatingMode !== "online" ||
+      credentials?.demo ||
+      !shouldUseDesktopOAuth(config, credentials)
+    ) {
+      throw new Error("A personal AMOS sign-in is required to switch companies");
+    }
+
+    const target = this.companies.tenants.find((tenant) => tenant.tenant_id === tenantId);
+    if (!target) {
+      throw new Error("That company is not available to this AMOS identity");
+    }
+    if (target.tenant_id === this.companies.currentTenantId) return this.state();
+
+    await oauth.switchCompany(target.tenant_id);
+    if (this.companyCacheStore) await this.companyCacheStore.clear();
+    this.companyCacheRevalidatedFor = null;
+    await this.settingsStore.write({ ...settings, notifiedApprovalIds: [] });
+
+    // Ephemeral company material must never survive a boundary switch. Durable
+    // encrypted checkpoints remain local and still require user+tenant
+    // revalidation before they can be resumed.
+    this.resetRuntime();
+    this.attachments.clear();
+    this.canvases.clear();
+    this.activity = [];
+    this.identity = null;
+    this.accountStatus = null;
+    this.companyApprovals = [];
+    this.approvalsAvailable = true;
+    this.approvalDecisionMode = "hosted";
+    this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    this.companies = { currentTenantId: null, tenants: [] };
+    this.send("activity:changed", []);
+    this.send("canvas:changed", this.canvases.state());
+
+    await this.refreshRemote({ notify: false });
+    this.record("auth", `Switched to ${target.tenant_name}`, {
+      tenant_id: target.tenant_id,
+      role: target.role
+    });
     return this.state();
   }
 
@@ -767,6 +827,7 @@ export class DesktopController {
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+      this.companies = { currentTenantId: null, tenants: [] };
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
       await this.sendRemoteState();
       return this.state();
@@ -779,11 +840,18 @@ export class DesktopController {
       oauth,
       requestTimeoutMs: config.amos.requestTimeoutMs
     });
-    const [identityResult, approvalsResult, accountStatusResult, connectionsResult] = await Promise.allSettled([
+    const [
+      identityResult,
+      approvalsResult,
+      accountStatusResult,
+      connectionsResult,
+      companiesResult
+    ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
       remote.intelligenceStatus(),
-      remote.connectionsCatalog()
+      remote.connectionsCatalog(),
+      oauth.companies()
     ]);
 
     const errors = [];
@@ -820,6 +888,18 @@ export class DesktopController {
       this.connectionsCatalog = connectionsResult.value;
     } else {
       errors.push(connectionsResult.reason?.message || "Could not load AMOS connections");
+    }
+
+    if (companiesResult.status === "fulfilled") {
+      this.companies = {
+        currentTenantId: companiesResult.value.current_tenant_id || null,
+        tenants: Array.isArray(companiesResult.value.tenants)
+          ? companiesResult.value.tenants
+          : []
+      };
+    } else {
+      this.companies = { currentTenantId: this.identity?.tenant_id || null, tenants: [] };
+      errors.push(companiesResult.reason?.message || "Could not load AMOS companies");
     }
 
     this.remoteStatus = {
