@@ -72,8 +72,13 @@ let capsuleFlow = null;
 let connectionSetupProvider = null;
 let currentTaskId = null;
 let streamingMessage = null;
+let canvasSidecarOpen = false;
+let pendingUiActions = [];
+let pendingGenericConnectCalls = 0;
 const transientTaskMessages = new Set();
 let resumingCheckpointId = null;
+const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
+const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const briefingTemplates = Object.freeze([
   {
     title: "Daily company brief",
@@ -109,6 +114,8 @@ const elements = Object.fromEntries(
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
     "providerCheck", "onboardingProviderText", "workspaceCheck", "enterButton", "boundaryReadinessText",
     "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
+    "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
+    "canvasSidecar", "contextResizeHandle",
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
     "managedProfileField", "intelligenceProfileInput", "intelligenceProfileHelp",
@@ -144,7 +151,7 @@ const elements = Object.fromEntries(
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
     "offlineSetupSteps", "offlineSetupRuntime", "offlineSetupModel", "offlineSetupActivate",
     "demoBanner", "demoExpiry", "demoConnectButton", "starterActions",
-    "connectionCatalogSummary", "connectedSystemList", "availableProviderList"
+    "connectionCatalogSummary", "connectedSystemList", "availableProviderList", "liveCanvasList"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -156,6 +163,8 @@ async function initialize() {
   [state, updateState] = await Promise.all([api.state(), api.updateState()]);
   updateAttachments(state.attachments || []);
   selectedProvider = state.settings.provider;
+  canvasSidecarOpen = Boolean(state.activeCanvasId);
+  restoreShellPreferences();
   render();
   elements.loading.classList.add("hidden");
   elements.app.classList.remove("hidden");
@@ -173,6 +182,8 @@ function bindActions() {
   for (const button of document.querySelectorAll(".nav-item")) {
     button.addEventListener("click", () => showView(button.dataset.view));
   }
+  elements.sidebarToggle.addEventListener("click", toggleSidebar);
+  bindContextResize();
   for (const button of document.querySelectorAll("[data-open-settings]")) {
     button.addEventListener("click", () => showView("settings"));
   }
@@ -236,7 +247,7 @@ function bindActions() {
     elements.promptInput.value = "Show me the most important company metrics and decisions right now.";
     elements.promptInput.focus();
   });
-  elements.canvasCloseButton.addEventListener("click", removeActiveCanvas);
+  elements.canvasCloseButton.addEventListener("click", closeCanvasSidecar);
   elements.canvasSaveButton.addEventListener("click", saveActiveBriefing);
   elements.offlineRefreshButton.addEventListener("click", refreshOfflineModels);
   elements.offlineInstallRuntimeButton.addEventListener("click", refreshOfflineModels);
@@ -279,8 +290,8 @@ function bindEvents() {
     state.canvases = canvasState.canvases || [];
     state.activeCanvasId = canvasState.activeCanvasId || null;
     activeCanvasId = state.activeCanvasId;
+    if (activeCanvasId) canvasSidecarOpen = true;
     renderCanvas();
-    if (activeCanvasId) showView("canvas");
   });
   api.on("offline:changed", (offline) => {
     if (!state) return;
@@ -499,6 +510,78 @@ function render() {
   renderStarterActions();
 }
 
+function restoreShellPreferences() {
+  let collapsed = false;
+  let contextWidth = 0;
+  try {
+    collapsed = localStorage.getItem(NAV_COLLAPSED_KEY) === "true";
+    contextWidth = Number(localStorage.getItem(CONTEXT_WIDTH_KEY) || 0);
+  } catch {
+    // UI preferences are optional and contain no company data.
+  }
+  setSidebarCollapsed(collapsed);
+  if (Number.isFinite(contextWidth) && contextWidth >= 380) {
+    elements.operatorGrid.style.setProperty("--context-width", `${contextWidth}px`);
+  }
+}
+
+function toggleSidebar() {
+  setSidebarCollapsed(!elements.app.classList.contains("nav-collapsed"));
+}
+
+function setSidebarCollapsed(collapsed) {
+  elements.app.classList.toggle("nav-collapsed", collapsed);
+  elements.sidebarToggle.textContent = collapsed ? "›" : "‹";
+  elements.sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
+  elements.sidebarToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Expand navigation" : "Collapse navigation"
+  );
+  elements.sidebarToggle.title = collapsed ? "Expand navigation" : "Collapse navigation";
+  try {
+    localStorage.setItem(NAV_COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // The shell remains usable when persistence is unavailable.
+  }
+}
+
+function bindContextResize() {
+  let pointerId = null;
+  const resize = (clientX) => {
+    const bounds = elements.operatorGrid.getBoundingClientRect();
+    const width = Math.round(Math.min(Math.max(bounds.right - clientX, 380), bounds.width - 480));
+    if (!Number.isFinite(width) || width < 380) return;
+    elements.operatorGrid.style.setProperty("--context-width", `${width}px`);
+    elements.contextResizeHandle.setAttribute("aria-valuenow", String(width));
+    try {
+      localStorage.setItem(CONTEXT_WIDTH_KEY, String(width));
+    } catch {
+      // Resizing does not depend on persistence.
+    }
+  };
+  elements.contextResizeHandle.addEventListener("pointerdown", (event) => {
+    pointerId = event.pointerId;
+    elements.contextResizeHandle.setPointerCapture(pointerId);
+    resize(event.clientX);
+  });
+  elements.contextResizeHandle.addEventListener("pointermove", (event) => {
+    if (event.pointerId === pointerId) resize(event.clientX);
+  });
+  const release = (event) => {
+    if (event.pointerId !== pointerId) return;
+    pointerId = null;
+  };
+  elements.contextResizeHandle.addEventListener("pointerup", release);
+  elements.contextResizeHandle.addEventListener("pointercancel", release);
+  elements.contextResizeHandle.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    const current = elements.canvasSidecar.getBoundingClientRect().width;
+    const next = current + (event.key === "ArrowLeft" ? 24 : -24);
+    resize(elements.operatorGrid.getBoundingClientRect().right - next);
+  });
+}
+
 function showView(view) {
   currentView = view;
   const map = {
@@ -515,6 +598,7 @@ function showView(view) {
   for (const button of document.querySelectorAll(".nav-item")) {
     button.classList.toggle("active", button.dataset.view === view);
   }
+  renderCanvas();
 }
 
 function renderConnections() {
@@ -772,6 +856,11 @@ function renderCanvas() {
   const canvas = canvases.find((item) => item.id === activeCanvasId) || null;
   const hasBlocks = Boolean(canvas?.blocks?.length);
   renderBriefingLibrary();
+  if (!canvas) canvasSidecarOpen = false;
+  const sidecarVisible = Boolean(canvas && canvasSidecarOpen && currentView === "operator");
+  elements.operatorGrid.classList.toggle("has-context", sidecarVisible);
+  elements.canvasSidecar.classList.toggle("hidden", !sidecarVisible);
+  elements.contextResizeHandle.classList.toggle("hidden", !sidecarVisible);
 
   elements.canvasBadge.textContent = String(canvases.length);
   elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
@@ -779,7 +868,6 @@ function renderCanvas() {
   elements.canvasBlocks.classList.toggle("hidden", !hasBlocks);
   elements.canvasSourceBar.classList.toggle("hidden", !canvas);
   elements.canvasTabs.classList.toggle("hidden", canvases.length < 2);
-  elements.canvasCloseButton.classList.toggle("hidden", !canvas);
   elements.canvasSaveButton.classList.toggle("hidden", !canvas?.source?.refreshPrompt);
   elements.canvasRefreshButton.classList.toggle("hidden", !canvas?.source?.refreshPrompt);
   elements.canvasTabs.replaceChildren();
@@ -795,19 +883,20 @@ function renderCanvas() {
     tab.setAttribute("aria-selected", String(item.id === activeCanvasId));
     tab.addEventListener("click", () => {
       activeCanvasId = item.id;
+      canvasSidecarOpen = true;
       renderCanvas();
     });
     elements.canvasTabs.append(tab);
   }
 
   if (!canvas) {
-    elements.canvasTitle.textContent = "Briefings that stay useful.";
+    elements.canvasTitle.textContent = "No current work surface";
     elements.canvasSubtitle.textContent =
-      "Generate a live operating view, then save its definition so AMOS can refresh it whenever you need it.";
-    elements.canvasEmptyTitle.textContent = "Choose a briefing or ask AMOS";
+      "Ask AMOS to compare, analyze, draft, or visualize something and the result can open here beside chat.";
+    elements.canvasEmptyTitle.textContent = "Ask AMOS for a work surface";
     elements.canvasEmptyMessage.textContent =
-      "Start with a template, reopen a saved view, or ask for any company comparison, trend, decision, or operating brief.";
-    elements.canvasStartButton.classList.remove("hidden");
+      "The conversation remains the primary interface; durable briefing definitions stay in Briefings.";
+    elements.canvasStartButton.classList.add("hidden");
     return;
   }
 
@@ -831,8 +920,27 @@ function renderCanvas() {
 
 function renderBriefingLibrary() {
   const savedViews = Array.isArray(state.savedViews) ? state.savedViews : [];
+  const canvases = Array.isArray(state.canvases) ? state.canvases : [];
+  elements.liveCanvasList.replaceChildren();
   elements.savedViewList.replaceChildren();
   elements.briefingTemplateList.replaceChildren();
+
+  if (canvases.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "briefing-library-empty";
+    empty.textContent = "Ask AMOS for a comparison, analysis, draft, or visualization to create a work surface.";
+    elements.liveCanvasList.append(empty);
+  } else {
+    for (const canvas of canvases) {
+      elements.liveCanvasList.append(briefingCard({
+        title: canvas.title,
+        description: `${canvas.blocks?.length || 0} block${canvas.blocks?.length === 1 ? "" : "s"} · ${canvas.source?.label || "AMOS work"}`,
+        actionLabel: "Open beside chat",
+        onAction: () => openCanvasSidecar(canvas.id),
+        onRemove: () => removeCanvas(canvas.id)
+      }));
+    }
+  }
 
   if (savedViews.length === 0) {
     const empty = document.createElement("p");
@@ -1245,13 +1353,29 @@ function formatCanvasValue(value, format) {
   return String(value);
 }
 
-async function removeActiveCanvas() {
-  if (!activeCanvasId) return;
+function openCanvasSidecar(id = activeCanvasId) {
+  if (!id) return;
+  activeCanvasId = id;
+  state.activeCanvasId = id;
+  canvasSidecarOpen = true;
+  showView("operator");
+  elements.promptInput.focus();
+}
+
+function closeCanvasSidecar() {
+  canvasSidecarOpen = false;
+  renderCanvas();
+  elements.promptInput.focus();
+}
+
+async function removeCanvas(id) {
+  if (!id) return;
   try {
-    const result = await api.removeCanvas(activeCanvasId);
+    const result = await api.removeCanvas(id);
     state.canvases = result.canvases;
     state.activeCanvasId = result.activeCanvasId;
     activeCanvasId = result.activeCanvasId;
+    if (!activeCanvasId) canvasSidecarOpen = false;
     renderCanvas();
   } catch (error) {
     toast(error.message, true);
@@ -2829,6 +2953,7 @@ async function runTask(event) {
   addMessage("user", `${prompt || "Review the attached material."}${attachmentSummary}`);
   elements.promptInput.value = "";
   clearTransientTaskMessages();
+  beginInlineActivity();
   const pending = addMessage("pending", "AMOS is loading company context and determining the next action…");
   transientTaskMessages.add(pending);
   streamingMessage = pending;
@@ -2845,12 +2970,16 @@ async function runTask(event) {
     streamingMessage = null;
     clearTransientTaskMessages();
     addMessage("assistant", result.answer);
+    renderGovernedUiActions();
     state.activity = result.activity;
     state.canvases = result.canvases || state.canvases;
     state.activeCanvasId = result.activeCanvasId || state.activeCanvasId;
+    activeCanvasId = state.activeCanvasId || activeCanvasId;
+    if (activeCanvasId) canvasSidecarOpen = true;
     state.privateMemory = result.privateMemory || state.privateMemory;
     state.offlineProposals = result.offlineProposals || state.offlineProposals;
     renderActivity();
+    renderCanvas();
     renderPrivateMemory();
     renderDecisions();
     for (const attachment of submitted) {
@@ -2938,10 +3067,17 @@ function resetSessionView() {
   updateAttachments([]);
   const welcome = elements.messages.querySelector(".welcome-message");
   const starters = elements.messages.querySelector(".starter-actions");
+  const activity = elements.activityStream;
   elements.messages.replaceChildren();
   if (welcome) elements.messages.append(welcome);
   if (starters) elements.messages.append(starters);
-  elements.liveEvents.replaceChildren(emptyLiveState());
+  elements.liveEvents.replaceChildren();
+  activity.classList.add("hidden");
+  activity.open = false;
+  elements.messages.append(activity);
+  pendingUiActions = [];
+  pendingGenericConnectCalls = 0;
+  canvasSidecarOpen = false;
   renderCanvas();
   renderStarterActions();
 }
@@ -3084,6 +3220,126 @@ function appendInline(container, nodes) {
   }
 }
 
+function beginInlineActivity() {
+  pendingUiActions = [];
+  pendingGenericConnectCalls = 0;
+  elements.liveEvents.replaceChildren();
+  elements.activityStreamTitle.textContent = "AMOS is working";
+  elements.runningIndicator.textContent = "Starting…";
+  elements.runningIndicator.classList.add("active");
+  elements.activityStream.classList.remove("hidden");
+  elements.activityStream.open = true;
+  elements.messages.append(elements.activityStream);
+  elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
+function finishInlineActivity() {
+  if (elements.activityStream.classList.contains("hidden")) return;
+  const count = elements.liveEvents.childElementCount;
+  elements.activityStreamTitle.textContent = "Work complete";
+  elements.runningIndicator.textContent = `${count} recorded step${count === 1 ? "" : "s"}`;
+  elements.runningIndicator.classList.remove("active");
+  elements.activityStream.open = false;
+}
+
+function captureGovernedUiActions(event) {
+  if (
+    event?.type === "tool_start" &&
+    event.name === "amos_call_engine_tool" &&
+    event.args?.engine === "connections" &&
+    event.args?.tool === "connect_link"
+  ) {
+    pendingGenericConnectCalls += 1;
+    return;
+  }
+  const directConnect = ["connect_link", "amos_connections_connect_link"].includes(event?.name);
+  const genericConnect = event?.name === "amos_call_engine_tool" && pendingGenericConnectCalls > 0;
+  if (event?.type === "tool_error" && genericConnect) {
+    pendingGenericConnectCalls -= 1;
+    return;
+  }
+  if (event?.type !== "tool_end" || (!directConnect && !genericConnect)) return;
+  if (genericConnect) pendingGenericConnectCalls -= 1;
+  const payload = parsePlatformToolResult(event.result);
+  const actions = Array.isArray(payload?.ui_actions) ? payload.ui_actions : [];
+  for (const action of actions) {
+    if (action?.authority !== "amos_platform" || action?.type !== "open_url") continue;
+    let url;
+    try {
+      url = new URL(String(action.url || ""));
+    } catch {
+      continue;
+    }
+    if (url.protocol !== "https:") continue;
+    pendingUiActions.push({
+      label: String(action.label || "Continue securely").slice(0, 120),
+      description: String(action.description || "Continue in your browser; credentials remain with AMOS Platform.").slice(0, 300),
+      url: url.href,
+      expiresAt: String(action.expires_at || "")
+    });
+  }
+}
+
+function parsePlatformToolResult(result) {
+  for (const candidate of [result, result?.result]) {
+    if (candidate && typeof candidate === "object" && Array.isArray(candidate.ui_actions)) {
+      return candidate;
+    }
+    for (const item of Array.isArray(candidate?.content) ? candidate.content : []) {
+      if (item?.type !== "text" || typeof item.text !== "string") continue;
+      try {
+        const parsed = JSON.parse(item.text);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {
+        // A normal prose tool result is not a UI action.
+      }
+    }
+    if (typeof candidate?.text === "string") {
+      try {
+        const parsed = JSON.parse(candidate.text);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {
+        // Ignore untyped text.
+      }
+    }
+  }
+  return null;
+}
+
+function renderGovernedUiActions() {
+  for (const action of pendingUiActions) {
+    const card = document.createElement("div");
+    card.className = "message-actions";
+    const copy = document.createElement("div");
+    copy.className = "message-action-copy";
+    const title = document.createElement("strong");
+    title.textContent = action.label;
+    const detail = document.createElement("span");
+    detail.textContent = action.expiresAt
+      ? `${action.description} · Short-lived link`
+      : action.description;
+    copy.append(title, detail);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button primary message-action-button";
+    button.textContent = `${action.label} →`;
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await api.openExternal(action.url);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        button.disabled = false;
+      }
+    });
+    card.append(copy, button);
+    elements.messages.append(card);
+  }
+  pendingUiActions = [];
+  elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
 function renderLiveEvent(event) {
   if (event.type === "assistant_delta") {
     if (streamingMessage) {
@@ -3097,7 +3353,7 @@ function renderLiveEvent(event) {
     }
     return;
   }
-  if (elements.liveEvents.querySelector(".empty-state")) elements.liveEvents.replaceChildren();
+  captureGovernedUiActions(event);
   const card = document.createElement("div");
   card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}`;
   const title = document.createElement("strong");
@@ -3123,7 +3379,8 @@ function renderLiveEvent(event) {
         ? humanizeTool(event.name)
         : "Completed with a recorded result";
   card.append(title, detail);
-  elements.liveEvents.prepend(card);
+  elements.liveEvents.append(card);
+  elements.messages.scrollTop = elements.messages.scrollHeight;
 }
 
 function renderActivity() {
@@ -3192,6 +3449,11 @@ function setRunning(value) {
     : "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
   elements.runningIndicator.textContent = value ? "Working · steer or stop" : "Idle";
   elements.runningIndicator.classList.toggle("active", value);
+  if (value) {
+    elements.activityStreamTitle.textContent = "AMOS is working";
+  } else {
+    finishInlineActivity();
+  }
   renderAttachments();
   renderUpdate();
 }
@@ -3274,19 +3536,6 @@ function showFatal(error) {
   const detail = document.createElement("p");
   detail.textContent = error.message;
   elements.loading.append(title, detail);
-}
-
-function emptyLiveState() {
-  const empty = document.createElement("div");
-  empty.className = "empty-state";
-  const icon = document.createElement("span");
-  icon.textContent = "⌁";
-  const title = document.createElement("strong");
-  title.textContent = "Nothing running";
-  const detail = document.createElement("p");
-  detail.textContent = "Tool calls, approvals, and receipts will appear here as AMOS works.";
-  empty.append(icon, title, detail);
-  return empty;
 }
 
 function humanizeTool(name) {

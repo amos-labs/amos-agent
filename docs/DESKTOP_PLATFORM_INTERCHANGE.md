@@ -55,6 +55,46 @@ notifications, secure operating-system dialogs, offline drafts, and persistent
 navigation. Those enhancements must not fork company logic or make an external
 client less capable than it was before.
 
+## Conversation-first Desktop shell
+
+Chat is the primary operating surface. Dedicated pages remain durable places
+to browse and administer company state; they are not prerequisites for doing
+the same authorized work conversationally.
+
+- The navigation rail collapses so the conversation can use the window.
+- Model progress, workflow selection, governed tool use, approvals, and
+  outcomes appear as a transient inline activity stream in the conversation.
+  Desktop presents useful progress and reasoning **summaries**, never hidden
+  chain-of-thought or credential-bearing tool payloads. Completed work collapses
+  to a bounded summary; durable proof remains under Activity & proof.
+- A dynamic canvas is a contextual work surface beside chat, not a navigation
+  destination. It may resize or close without deleting its task-local view.
+- Briefings is the library for saved definitions, templates, and reopening
+  current work surfaces. It does not own the live company result or replace the
+  conversation.
+- Responsive layouts may temporarily prioritize either chat or the work
+  surface, but both remain parts of one task rather than separate workflows.
+
+When a Platform tool returns a typed UI action, any client may present it. The
+current action envelope is additive to the normal MCP result:
+
+```json
+{
+  "schema": "amos.ui_action.v1",
+  "authority": "amos_platform",
+  "type": "open_url",
+  "purpose": "oauth_consent",
+  "label": "Connect Example App",
+  "url": "https://provider.example/authorize?...",
+  "expires_at": "2026-07-31T12:10:00Z"
+}
+```
+
+Desktop renders only the narrow typed actions it understands and still applies
+local URL/protocol checks. Free-form model text cannot mint a privileged button.
+Claude, Codex, and other MCP clients receive the same action and may render a
+link or use another appropriate affordance.
+
 ## The interchange contract
 
 Desktop discovers capabilities from the platform instead of hard-coding which
