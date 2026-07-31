@@ -141,6 +141,35 @@ test("Operator is chat-first with collapsible navigation and inline governed pro
   assert.match(javascript, /finishInlineActivity\(\)/);
 });
 
+test("local auto-approve is an exact-folder Desktop trust ceremony, not a company approval bypass", async () => {
+  const [javascript, html, preload, main] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /id="localApprovalButton"/);
+  assert.match(html, /id="alwaysApproveButton"/);
+  assert.match(html, /id="autoApproveFolderButton"/);
+  assert.match(html, /id="approvalModal" class="approval-modal inline-approval hidden"/);
+  assert.match(html, /You can keep typing while this waits/);
+  assert.doesNotMatch(html, /id="approvalModal" class="modal-backdrop/);
+  assert.match(javascript, /api\.setLocalApprovalMode\(enabled \? "ask" : "workspace"\)/);
+  assert.match(javascript, /api\.allowLocalApprovalKind\(approval\.kind\)/);
+  assert.match(javascript, /elements\.messages\.append\(elements\.approvalModal\)/);
+  assert.match(javascript, /Keep typing—your direction will be queued while this approval waits/);
+  assert.match(javascript, /elements\.promptInput\.disabled = false/);
+  assert.match(javascript, /Company approvals remain governed/);
+  assert.match(preload, /desktop:set-local-approval-mode/);
+  assert.match(main, /Exact project folder:/);
+  assert.match(main, /run with your local user permissions and are not OS-sandboxed/);
+  assert.match(main, /Changing folders turns this off automatically/);
+  assert.match(main, /AMOS company operations, connected-app writes, and governed decisions/);
+  assert.match(main, /defaultId: 1/);
+  assert.match(main, /cancelId: 1/);
+});
+
 test("dynamic canvases open beside chat without navigating away from Operator", async () => {
   const [javascript, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),

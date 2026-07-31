@@ -11,7 +11,7 @@ import {
   Tray
 } from "electron";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { basename, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
 import { DesktopSettingsStore } from "../src/desktop/settingsStore.js";
@@ -423,6 +423,37 @@ function registerIpc() {
     if (result.canceled || !result.filePaths[0]) return controller.state();
     return controller.chooseWorkspace(result.filePaths[0]);
   });
+  ipcMain.handle("desktop:set-local-approval-mode", async (_event, mode) => {
+    if (mode === "ask") return controller.setLocalApprovalMode("ask");
+    if (mode !== "workspace") throw new Error("Unsupported local approval mode");
+
+    const current = await controller.state();
+    const workspace = current.settings.workspace;
+    if (!workspace) throw new Error("Choose a project folder before enabling local auto-approve");
+    const result = await dialog.showMessageBox(window, {
+      type: "warning",
+      title: "Auto-approve local work",
+      message: `Trust ${basename(workspace)} for local work?`,
+      detail: [
+        `Exact project folder: ${workspace}`,
+        "",
+        "AMOS will stop asking before local file edits, code patches, and shell commands for tasks in this folder.",
+        "File tools remain bounded to this folder. Shell commands start here with a scrubbed environment, but run with your local user permissions and are not OS-sandboxed to the folder.",
+        "Changing folders turns this off automatically.",
+        "",
+        "AMOS company operations, connected-app writes, and governed decisions always keep their separate Platform policy and approval requirements."
+      ].join("\n"),
+      buttons: ["Turn on for this folder", "Cancel"],
+      defaultId: 1,
+      cancelId: 1,
+      noLink: true
+    });
+    if (result.response !== 0) return controller.state();
+    return controller.setLocalApprovalMode("workspace");
+  });
+  ipcMain.handle("desktop:allow-local-approval-kind", (_event, kind) =>
+    controller.allowLocalApprovalKind(kind)
+  );
   ipcMain.handle("desktop:open-approvals", () => controller.openApprovals());
   ipcMain.handle("desktop:open-external", async (_event, value) => {
     if (typeof value !== "string" || value.length > 2_048) {

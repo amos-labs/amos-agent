@@ -73,6 +73,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:cancel-private-memory-capsule", previewId),
   pathForFile: (file) => webUtils.getPathForFile(file),
   chooseWorkspace: () => ipcRenderer.invoke("desktop:choose-workspace"),
+  setLocalApprovalMode: (mode) =>
+    ipcRenderer.invoke("desktop:set-local-approval-mode", mode),
+  allowLocalApprovalKind: (kind) =>
+    ipcRenderer.invoke("desktop:allow-local-approval-kind", kind),
   openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),
   openExternal: (url) => ipcRenderer.invoke("desktop:open-external", url),
   updateState: () => ipcRenderer.invoke("desktop:update-state"),

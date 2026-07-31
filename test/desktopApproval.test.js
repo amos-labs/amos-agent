@@ -13,6 +13,16 @@ test("desktop approval bridge parks local work until the user decides", async ()
   assert.equal(bridge.resolve(request.id, false), false);
 });
 
+test("desktop approval bridge exposes the bounded local request kind", async () => {
+  let request;
+  const bridge = new DesktopApprovalBridge({ onRequest: (value) => (request = value) });
+  const decision = bridge.confirm("Apply a patch", { kind: "code-patch" });
+
+  assert.equal(request.kind, "code-patch");
+  bridge.resolve(request.id, true);
+  assert.equal(await decision, true);
+});
+
 test("desktop approval bridge denies pending work when the runtime resets", async () => {
   const bridge = new DesktopApprovalBridge();
   const decision = bridge.confirm("Write a local file");

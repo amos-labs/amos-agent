@@ -41,7 +41,10 @@ export function createBashTool() {
       );
       const timeoutMs = Number(args.timeout_ms || context.config.safety.bashTimeoutMs);
 
-      if (!context.config.safety.autoApproveBash) {
+      if (
+        !context.config.safety.autoApproveBash &&
+        !context.config.safety.autoApproveKinds?.includes("shell")
+      ) {
         const approved = await context.approvals.confirm(
           [
             "AMOS Agent wants to run a local command:",
@@ -52,7 +55,8 @@ export function createBashTool() {
             args.reason ? `reason: ${args.reason}` : ""
           ]
             .filter(Boolean)
-            .join("\n")
+            .join("\n"),
+          { kind: "shell" }
         );
         if (!approved) {
           return { ok: false, denied: true, message: "User denied bash command." };

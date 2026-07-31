@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runBash, safeChildEnvironment, shellInvocation } from "../src/tools/bash.js";
+import { mkdtempSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createBashTool, runBash, safeChildEnvironment, shellInvocation } from "../src/tools/bash.js";
 
 test("bash child environment excludes provider and AMOS secrets", () => {
   const value = safeChildEnvironment({
@@ -81,4 +84,28 @@ test("bash cancellation terminates the process group promptly", async () => {
   assert.equal(result.canceled, true);
   assert.equal(result.ok, false);
   assert.ok(Date.now() - start < 1_500);
+});
+
+test("an exact-workspace shell grant suppresses repeat command approvals", async () => {
+  const root = mkdtempSync(join(tmpdir(), "amos-approved-shell-"));
+  const result = await createBashTool().handler(
+    { command: "pwd" },
+    {
+      config: {
+        safety: {
+          workspaceRoot: root,
+          allowOutsideWorkspace: false,
+          autoApproveBash: false,
+          autoApproveKinds: ["shell"],
+          bashPath: "/bin/bash",
+          bashTimeoutMs: 2_000,
+          maxOutputBytes: 1_024
+        }
+      },
+      approvals: { confirm: async () => assert.fail("approval should not be requested") }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.stdout.trim(), realpathSync(root));
 });

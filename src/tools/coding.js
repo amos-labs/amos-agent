@@ -132,7 +132,10 @@ export function createCodingTools() {
         });
         if (!checked.ok) return { ...checked, phase: "check", files: paths };
 
-        if (!context.config.safety.autoApproveWrites) {
+        if (
+          !context.config.safety.autoApproveWrites &&
+          !context.config.safety.autoApproveKinds?.includes("code-patch")
+        ) {
           const approved = await context.approvals.confirm(
             [
               "AMOS wants to apply a local code patch:",
@@ -140,7 +143,8 @@ export function createCodingTools() {
               ...paths.map((path) => `• ${path}`),
               args.reason ? `\nreason: ${args.reason}` : "",
               `\n${truncateText(patch, 8_000)}`
-            ].join("\n")
+            ].join("\n"),
+            { kind: "code-patch" }
           );
           if (!approved) return { ok: false, denied: true, message: "User denied code patch.", files: paths };
         }

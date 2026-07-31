@@ -14,6 +14,14 @@ function intFromEnv(value, defaultValue, min, max) {
   return Math.min(Math.max(parsed, min), max);
 }
 
+function localApprovalKindsFromEnv(value) {
+  const supported = new Set(["shell", "file-write", "code-patch"]);
+  return [...new Set(String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => supported.has(item)))];
+}
+
 export function loadConfig(env = process.env, cwd = process.cwd()) {
   const workspaceRoot = resolve(env.AMOS_AGENT_WORKSPACE || cwd);
   const model = resolveModelConfig(env);
@@ -37,6 +45,7 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
       allowOutsideWorkspace: boolFromEnv(env.AMOS_AGENT_ALLOW_OUTSIDE_WORKSPACE, false),
       autoApproveBash: boolFromEnv(env.AMOS_AGENT_AUTO_APPROVE_BASH, false),
       autoApproveWrites: boolFromEnv(env.AMOS_AGENT_AUTO_APPROVE_WRITES, false),
+      autoApproveKinds: localApprovalKindsFromEnv(env.AMOS_AGENT_AUTO_APPROVE_KINDS),
       bashPath:
         env.AMOS_AGENT_SHELL ||
         env.AMOS_AGENT_BASH ||

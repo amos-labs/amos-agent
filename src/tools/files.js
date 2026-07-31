@@ -83,7 +83,10 @@ export function createFileTools() {
         );
         assertSafeAgentPath(file, context.config.safety.workspaceRoot);
 
-        if (!context.config.safety.autoApproveWrites) {
+        if (
+          !context.config.safety.autoApproveWrites &&
+          !context.config.safety.autoApproveKinds?.includes("file-write")
+        ) {
           const approved = await context.approvals.confirm(
             [
               "AMOS Agent wants to write a file:",
@@ -93,7 +96,8 @@ export function createFileTools() {
               args.reason ? `reason: ${args.reason}` : ""
             ]
               .filter(Boolean)
-              .join("\n")
+              .join("\n"),
+            { kind: "file-write" }
           );
           if (!approved) return { ok: false, denied: true, message: "User denied file write." };
         }

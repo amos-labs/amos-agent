@@ -6,11 +6,11 @@ export class DesktopApprovalBridge {
     this.pending = new Map();
   }
 
-  confirm(message) {
+  confirm(message, { kind = "local-action" } = {}) {
     const id = randomUUID();
     return new Promise((resolve) => {
       this.pending.set(id, resolve);
-      this.onRequest({ id, message, requestedAt: new Date().toISOString() });
+      this.onRequest({ id, kind, message, requestedAt: new Date().toISOString() });
     });
   }
 
