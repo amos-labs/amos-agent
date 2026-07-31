@@ -327,7 +327,7 @@ as the AMOS platform grows.
 - [Authentication](docs/AUTHENTICATION.md)
 - [Intelligence and infrastructure profiles](docs/INTELLIGENCE_PROVIDERS.md)
 - [Safety model](docs/SAFETY.md)
-- [Local GPT-OSS 120B live baseline](docs/LOCAL_120B_LIVE_BASELINE.md)
+- [ExpertCache research boundary](docs/EXPERTCACHE.md)
 - [Memory classes and private-memory controls](docs/MEMORY.md)
 - [Signed offline company context](docs/OFFLINE_COMPANY_CONTEXT.md)
 - [Offline draft reconciliation](docs/OFFLINE_RECONCILIATION.md)
