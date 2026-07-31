@@ -1446,6 +1446,69 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .approval-modal > p { padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--modal-inset); color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 1.6; white-space: pre-wrap; }
 .approval-note { margin-top: 14px; color: var(--muted-2); font-size: 10px; }
 .approval-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.connection-modal {
+  width: min(560px, 100%);
+  max-height: min(760px, calc(100vh - 60px));
+  overflow: auto;
+  padding: 30px;
+  border: 1px solid rgba(109,147,255,.34);
+  border-radius: 18px;
+  background: var(--modal);
+  box-shadow: var(--shadow);
+}
+.connection-modal h2 { margin: 11px 0 9px; font-size: 25px; }
+.connection-modal form > p { margin: 0 0 20px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.connection-field { display: block; margin-top: 13px; }
+.connection-field > span {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.connection-field input,
+.connection-field select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  outline: none;
+  background: var(--modal-inset);
+  color: var(--ink);
+}
+.connection-field input:focus,
+.connection-field select:focus { border-color: rgba(109,147,255,.58); }
+.connection-field small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted-2);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.connection-modal-boundary {
+  margin-top: 18px;
+  padding: 11px 13px;
+  border: 1px solid rgba(109,147,255,.2);
+  border-radius: 9px;
+  background: rgba(109,147,255,.05);
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+.connection-modal-error {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255,117,87,.25);
+  border-radius: 9px;
+  background: rgba(255,117,87,.06);
+  color: #ff9c86;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.connection-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .capsule-modal {
   width: min(620px, 100%);
   max-height: min(760px, calc(100vh - 60px));

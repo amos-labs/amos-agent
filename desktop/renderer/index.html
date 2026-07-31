@@ -363,7 +363,7 @@
           <div class="connection-catalog-section">
             <div>
               <span class="eyebrow">AVAILABLE FROM AMOS</span>
-              <p>Provider and governed-service definitions advertised by this AMOS server. Setup remains hosted so credentials never enter Desktop.</p>
+              <p>Provider and governed-service definitions advertised by this AMOS server. OAuth uses provider consent; one-time keys go straight to the AMOS Platform vault.</p>
             </div>
             <div id="availableProviderList" class="connection-catalog-grid"></div>
           </div>
@@ -576,6 +576,62 @@
           <button id="denyButton" class="button secondary">Deny</button>
           <button id="approveButton" class="button primary">Approve once</button>
         </div>
+      </div>
+    </div>
+
+    <div id="connectionModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="connectionModalTitle">
+      <div class="connection-modal">
+        <form id="connectionForm">
+          <span class="eyebrow accent">SECURE PLATFORM CONNECTION</span>
+          <h2 id="connectionModalTitle">Connect a company system.</h2>
+          <p id="connectionModalDescription"></p>
+          <label class="connection-field">
+            <span>Connection name</span>
+            <input id="connectionNameInput" maxlength="120" autocomplete="off" required />
+          </label>
+          <label id="connectionProviderTagField" class="connection-field hidden">
+            <span>Provider tag</span>
+            <input id="connectionProviderTagInput" maxlength="64" autocomplete="off" spellcheck="false" pattern="[a-z0-9][a-z0-9_-]{0,63}" placeholder="e.g. hubspot" />
+          </label>
+          <label id="connectionBaseUrlField" class="connection-field hidden">
+            <span>HTTPS API root</span>
+            <input id="connectionBaseUrlInput" type="url" maxlength="2048" autocomplete="off" spellcheck="false" placeholder="https://api.example.com" />
+          </label>
+          <label id="connectionAuthSchemeField" class="connection-field hidden">
+            <span>Authentication</span>
+            <select id="connectionAuthSchemeInput">
+              <option value="bearer">Bearer token</option>
+              <option value="api_key">API key header</option>
+              <option value="basic">Basic authentication</option>
+            </select>
+          </label>
+          <label id="connectionContextField" class="connection-field hidden">
+            <span id="connectionContextLabel">Connection identifier</span>
+            <input id="connectionContextInput" maxlength="256" autocomplete="off" spellcheck="false" />
+          </label>
+          <label id="connectionUsernameField" class="connection-field hidden">
+            <span id="connectionUsernameLabel">Account identifier</span>
+            <input id="connectionUsernameInput" maxlength="512" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="connection-field">
+            <span id="connectionCredentialLabel">Credential</span>
+            <input id="connectionCredentialInput" type="password" maxlength="16384" autocomplete="off" spellcheck="false" required />
+            <small id="connectionCredentialHelp"></small>
+          </label>
+          <label id="connectionDefaultFromField" class="connection-field hidden">
+            <span>Default From number</span>
+            <input id="connectionDefaultFromInput" maxlength="64" autocomplete="off" spellcheck="false" placeholder="+15551234567" />
+          </label>
+          <div class="connection-modal-boundary">
+            The value is sent directly to AMOS Platform over your authenticated connection,
+            encrypted there, and never added to chat or saved by Desktop.
+          </div>
+          <div id="connectionModalError" class="connection-modal-error hidden"></div>
+          <div class="connection-modal-actions">
+            <button id="connectionCancelButton" class="button secondary" type="button">Cancel</button>
+            <button id="connectionSubmitButton" class="button primary" type="submit">Save and connect</button>
+          </div>
+        </form>
       </div>
     </div>
 

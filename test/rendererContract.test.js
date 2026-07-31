@@ -104,7 +104,14 @@ test("Connections HTML contains no customer or provider-specific catalog truth",
   assert.doesNotMatch(html, /Microsoft 365|Power BI|Nuvola|AWS Data Lake/);
   assert.doesNotMatch(html, />SUPPORTED|>LIVE SERVICE|>SCOPED NEXT/);
   assert.match(html, /id="availableProviderList"/);
+  assert.match(html, /id="connectionModal"/);
+  assert.match(html, /never added to chat or saved by Desktop/);
+  assert.match(
+    javascript,
+    /availableProviders = providers\.filter\([\s\S]*?!connectionsByProvider\.has\(provider\.provider\)/
+  );
   assert.match(javascript, /api\.connectProvider\(provider\.provider\)/);
+  assert.match(javascript, /api\.connectSecretProvider\(connectionSetupProvider\.provider/);
 });
 
 test("built-in Briefings stay objective-led instead of prescribing coaching", async () => {

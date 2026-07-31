@@ -23,7 +23,11 @@ This is not a second implementation of AMOS in Electron:
   receipts, and audit history.
 - Every company read and action initiated in Desktop crosses the same governed
   MCP/API boundary as every other AMOS client.
-- The renderer and model never receive OAuth tokens or connector credentials.
+- OAuth tokens never enter the renderer or model. A manually entered API key
+  may exist transiently in the dedicated Connections password field and its
+  direct submission object; it never enters chat/model context, application
+  state, telemetry, drafts, settings, or local storage and is cleared when the
+  setup completes or is cancelled.
 - No company capability is implemented only inside Desktop. Desktop-specific
   conveniences compose public, governed platform capabilities.
 
@@ -176,9 +180,39 @@ It renders:
 - the business capabilities each connection unlocks;
 - Connect, Reconnect, Test, Sync, and Disconnect actions when authorized.
 
-Connect and reconnect launch a platform-issued hosted OAuth/link flow. Connector
-credentials remain in the platform. Data reads, synchronization, and connector
-writes continue through governed platform verbs and produce proof receipts.
+Each provider appears in exactly one state section. Once a tenant-visible
+connection exists, Desktop removes that provider from Available and shows the
+connection only under Connected (the generic “Any API” entry may remain
+available because it creates distinct custom providers).
+
+Connect and reconnect use one of two platform-advertised ceremonies:
+
+- `hosted_oauth` asks the platform for a short-lived consent link and opens the
+  provider's browser flow. OAuth tokens never enter Desktop.
+- `hosted_secret` opens a dedicated Connections modal outside chat. Its labels,
+  authentication shape, and safe defaults come from the platform catalog. On
+  **Save and connect**, Desktop sends the one-time value through the
+  authenticated platform client, clears the fields and submission object, and
+  refreshes the credential-free catalog. The Platform validates, encrypts, and
+  stores the secret and returns only a sanitized connection result or error.
+- typed credential ceremonies (for example a corporation-bound upstream
+  service) use the same modal, but the catalog also names the narrow Platform
+  setup verb and any non-secret binding field. Desktop may invoke only the
+  bounded setup verbs it supports; the Platform performs identity, scope, and
+  upstream-contract validation before saving anything.
+- `advanced` custom API setup may expose provider tag, HTTPS API root, and
+  authentication-shape fields from the catalog. It still submits through the
+  public governed connection verb and never becomes a Desktop-only adapter.
+
+Connection ownership remains a Platform rule. An owner using the company
+Connections surface creates the explicitly shared service-account connection;
+other authorized users create their own identity-bound connection unless the
+Platform advertises and authorizes a different ceremony.
+
+The modal value must never be copied into model input, task checkpoints, saved
+briefings, renderer state, telemetry, logs, receipts, settings, or Desktop
+storage. Data reads, synchronization, and connector writes continue through
+governed platform verbs and produce proof receipts.
 
 Customer names, demo priorities, provider availability, setup status, and
 service maturity must not be encoded in Desktop HTML or JavaScript. A provider
@@ -486,8 +520,9 @@ For each Desktop feature, verify:
    MCP with their existing authentication model.
 3. Existing MCP schemas and behavior remain backward compatible, or a versioned
    migration is provided.
-4. Desktop adds presentation or local workflow value without receiving
-   connector credentials or bypassing policy.
+4. Desktop adds presentation or local workflow value without retaining,
+   exposing, or sending connector credentials through model context, and
+   without bypassing policy.
 5. Equivalent proof receipts are produced regardless of client.
 6. The non-Desktop happy path is covered by a contract or integration test.
 7. Desktop contains no customer-specific roadmap, provider list, or provider

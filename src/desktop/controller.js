@@ -959,6 +959,89 @@ export class DesktopController {
     };
   }
 
+  async connectSecretProvider(provider, input = {}) {
+    const providerKey = String(provider || "").trim();
+    const providers = Array.isArray(this.connectionsCatalog?.providers)
+      ? this.connectionsCatalog.providers
+      : [];
+    const advertised = providers.find((item) => item.provider === providerKey);
+    if (!advertised) {
+      throw new Error("AMOS blocked a provider that was not advertised by the connected platform");
+    }
+    if (
+      !["hosted_secret", "governed_upstream_mcp", "advanced"].includes(advertised.setupMode) ||
+      advertised.availability !== "available" ||
+      !advertised.credentialForm
+    ) {
+      throw new Error("This provider is not ready for secure credential setup");
+    }
+    const existing = Array.isArray(this.connectionsCatalog?.connections)
+      ? this.connectionsCatalog.connections.some(
+          (connection) => connection.provider === providerKey
+        )
+      : false;
+    if (existing && providerKey !== "custom") {
+      throw new Error(`${advertised.label} is already connected`);
+    }
+
+    const settings = await this.settingsStore.read();
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (!shouldUseDesktopOAuth(config, credentials)) {
+      throw new Error("Connect your AMOS company before adding a business system");
+    }
+
+    const form = advertised.credentialForm;
+    const submissionTool = form.submissionTool || "create_connection";
+    if (!["create_connection", "connect_nuvola_learning"].includes(submissionTool)) {
+      throw new Error("AMOS blocked an unsupported connection setup ceremony");
+    }
+    const connectionProvider = form.customProvider
+      ? String(input.providerTag || "").trim()
+      : providerKey;
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(connectionProvider)) {
+      throw new Error("Provider tag must be a lowercase slug");
+    }
+    const authScheme = form.authSchemeEditable
+      ? String(input.authScheme || form.authScheme)
+      : form.authScheme;
+    const baseUrl = form.baseUrlEditable
+      ? String(input.baseUrl || "").trim()
+      : form.baseUrl;
+    const request = {
+      provider: connectionProvider,
+      displayName: String(input.displayName || advertised.label).trim(),
+      credential: String(input.credential || ""),
+      username: String(input.username || ""),
+      defaultFrom: String(input.defaultFrom || ""),
+      authScheme,
+      baseUrl,
+      corporationId: input.contextValue,
+      serviceAccount: this.identity?.role === "owner"
+    };
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    try {
+      const result = submissionTool === "connect_nuvola_learning"
+        ? await remote.connectNuvolaLearning(request)
+        : await remote.createSecretConnection(request);
+      this.record("connection", `Connected ${advertised.label} through AMOS Platform`);
+      await this.refreshRemote({ notify: false });
+      return result;
+    } finally {
+      request.credential = "";
+      request.username = "";
+      if (input && typeof input === "object") {
+        input.credential = "";
+        input.username = "";
+      }
+    }
+  }
+
   async accountStatusFor(settings, oauth = this.oauthFor(settings)) {
     const config = this.configFrom(settings);
     const remote = new DesktopRemoteStateClient({
