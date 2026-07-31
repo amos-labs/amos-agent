@@ -8,6 +8,5 @@ dist/
 .DS_Store
 .amos-agent/
 desktop/vendor/ollama/
-experiments/expert_cache/output/
 __pycache__/
 *.pyc

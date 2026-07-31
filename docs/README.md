@@ -19,9 +19,7 @@
 ## Product direction
 
 - [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)
-- [Local 120B inference and ExpertCache spike](LOCAL_120B_INFERENCE_SPIKE.md)
-- [ExpertCache experiment](EXPERTCACHE_EXPERIMENT.md)
-- [ExpertCache routing trace format](EXPERTCACHE_TRACE_FORMAT.md)
+- [ExpertCache research boundary](EXPERTCACHE.md)
 - [AMOS model program](AMOS_MODEL_PROGRAM.md)
 
 ## Repository policies

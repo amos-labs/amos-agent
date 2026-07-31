@@ -54,7 +54,8 @@ The likely end state is:
   interpretation;
 - **AMOS Code** — verified software and automation work; and
 - **AMOS Reviewer** — a stronger verifier, initially hosted and potentially
-  backed by ExpertCache or a private inference pool.
+  backed by [ExpertCache](https://github.com/amos-labs/expertcache) or a private
+  inference pool.
 
 The first release can combine Router, Operator, and Evidence in one fine-tuned
 20B model. Split models only when measurements show a quality, latency, privacy,
