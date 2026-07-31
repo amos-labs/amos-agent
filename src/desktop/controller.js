@@ -51,8 +51,14 @@ import { createOfflineProposalTool } from "../tools/offlineProposal.js";
 import {
   DEMO_SYSTEM_PROMPT,
   OFFLINE_SYSTEM_PROMPT,
-  PERSONAL_SYSTEM_PROMPT
+  PERSONAL_SYSTEM_PROMPT,
+  SYSTEM_PROMPT
 } from "../prompts.js";
+import {
+  LOCAL_APPROVAL_KINDS,
+  localApprovalKindEnabled,
+  localAutoApproveEnabled
+} from "./settingsStore.js";
 import { createAbortError, isAbortError } from "../util/abort.js";
 import { selectTaskWorkflow } from "../workflows.js";
 
@@ -197,12 +203,45 @@ export class DesktopController {
     });
     if (runtimeSettingsChanged(current, saved)) {
       this.resetRuntime();
-      const intelligence = saved.provider === "amos-hosted"
-        ? `AMOS Intelligence · ${profileLabel(saved.intelligenceProfile)}`
-        : `${saved.provider} · ${saved.model}`;
+      if (intelligenceSettingsChanged(current, saved)) {
+        const intelligence = saved.provider === "amos-hosted"
+          ? `AMOS Intelligence · ${profileLabel(saved.intelligenceProfile)}`
+          : `${saved.provider} · ${saved.model}`;
+        this.record(
+          "settings",
+          `Intelligence set to ${intelligence} · ${saved.operatingMode}`
+        );
+      } else if (current.workspace !== saved.workspace) {
+        this.record(
+          "settings",
+          saved.workspace
+            ? `Local workspace set to ${basename(saved.workspace)}`
+            : "Local workspace removed"
+        );
+      } else if (
+        current.localApprovalMode !== saved.localApprovalMode ||
+        current.localApprovalWorkspace !== saved.localApprovalWorkspace
+      ) {
+        this.record(
+          "settings",
+          localAutoApproveEnabled(saved)
+            ? `Local auto-approve enabled for ${basename(saved.workspace)}`
+            : "Local auto-approve disabled"
+        );
+      } else {
+        this.record("settings", "Desktop runtime settings updated");
+      }
+    } else if (localApprovalSettingsChanged(current, saved)) {
+      applyLocalApprovalSettings(this.runtime, saved);
+      const enabled = localAutoApproveEnabled(saved);
+      const allowedKinds = saved.localApprovalKinds || [];
       this.record(
         "settings",
-        `Intelligence set to ${intelligence} · ${saved.operatingMode}`
+        enabled
+          ? `Local auto-approve enabled for ${basename(saved.workspace)}`
+          : allowedKinds.length > 0
+            ? `Always allowed local ${allowedKinds.join(", ")} requests in ${basename(saved.workspace)}`
+            : "Local auto-approve disabled"
       );
     } else if (current.appearance !== saved.appearance) {
       this.record("settings", `Appearance set to ${saved.appearance}`);
@@ -459,6 +498,41 @@ export class DesktopController {
 
   async chooseWorkspace(path) {
     return this.saveSettings({ workspace: path });
+  }
+
+  async setLocalApprovalMode(mode) {
+    if (!["ask", "workspace"].includes(mode)) {
+      throw new Error("Choose ask or workspace local approval mode");
+    }
+    const settings = await this.settingsStore.read();
+    if (mode === "workspace" && !settings.workspace) {
+      throw new Error("Choose a project folder before enabling local auto-approve");
+    }
+    const next = mode === "workspace"
+      ? {
+          localApprovalMode: "workspace",
+          localApprovalWorkspace: settings.workspace
+        }
+      : {
+          localApprovalMode: "ask",
+          localApprovalWorkspace: "",
+          localApprovalKinds: []
+        };
+    return this.saveSettings(next);
+  }
+
+  async allowLocalApprovalKind(kind) {
+    if (!LOCAL_APPROVAL_KINDS.includes(kind)) {
+      throw new Error("That local request type cannot be persistently approved");
+    }
+    const settings = await this.settingsStore.read();
+    if (!settings.workspace) {
+      throw new Error("Choose a project folder before allowing local requests");
+    }
+    return this.saveSettings({
+      localApprovalWorkspace: settings.workspace,
+      localApprovalKinds: [...new Set([...(settings.localApprovalKinds || []), kind])]
+    });
   }
 
   async startPersonal() {
@@ -1973,13 +2047,13 @@ export class DesktopController {
         useOAuth,
         includeAmos: !isOffline && !isPersonal,
         includeWeb: !isOffline,
-        systemPrompt: isOffline
+        systemPrompt: desktopSystemPrompt(isOffline
           ? OFFLINE_SYSTEM_PROMPT
           : isPersonal
             ? PERSONAL_SYSTEM_PROMPT
             : credentials?.demo
               ? DEMO_SYSTEM_PROMPT
-              : undefined,
+              : SYSTEM_PROMPT, settings, config),
         extraTools,
         onToolResult: (outcome) => this.canvasResults.capture(outcome)
       })
@@ -1996,6 +2070,9 @@ export class DesktopController {
       AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
       AMOS_MODEL_REASONING_EFFORT: settings.reasoningEffort,
       AMOS_AGENT_WORKSPACE: settings.workspace || homedir(),
+      AMOS_AGENT_AUTO_APPROVE_BASH: localAutoApproveEnabled(settings) ? "true" : "false",
+      AMOS_AGENT_AUTO_APPROVE_WRITES: localAutoApproveEnabled(settings) ? "true" : "false",
+      AMOS_AGENT_AUTO_APPROVE_KINDS: (settings.localApprovalKinds || []).join(","),
       AMOS_MCP_URL: settings.amosMcpUrl
     };
     return loadConfig(env, settings.workspace || homedir());
@@ -2194,6 +2271,68 @@ function runtimeSettingsChanged(previous, next) {
     "workspace",
     "amosMcpUrl"
   ].some((key) => previous[key] !== next[key]);
+}
+
+function localApprovalSettingsChanged(previous, next) {
+  return (
+    ["localApprovalMode", "localApprovalWorkspace"]
+      .some((key) => previous[key] !== next[key]) ||
+    JSON.stringify(previous.localApprovalKinds || []) !==
+      JSON.stringify(next.localApprovalKinds || [])
+  );
+}
+
+function intelligenceSettingsChanged(previous, next) {
+  return [
+    "provider",
+    "model",
+    "baseUrl",
+    "apiKey",
+    "intelligenceProfile",
+    "reasoningEffort",
+    "operatingMode"
+  ].some((key) => previous[key] !== next[key]);
+}
+
+export function desktopSystemPrompt(basePrompt, settings, config) {
+  const workspace = config?.safety?.workspaceRoot || settings?.workspace || homedir();
+  return `${basePrompt}
+
+Current Desktop workspace grant:
+- The user selected this exact local project root for the current runtime: ${workspace}
+- Treat that folder as the current project when the user says “this project,” “the folder,” or “the workspace.”
+- Inspect the project with local read tools when its contents are relevant; do not claim the folder is missing without first checking it.
+- Local approval policy: ${desktopLocalApprovalDescription(settings)}
+- This local policy never approves AMOS company operations, external-system writes, or governed decisions.`;
+}
+
+function desktopLocalApprovalDescription(settings) {
+  if (localAutoApproveEnabled(settings)) {
+    return "trusted workspace mode is on. Local file writes, patches, and shell commands do not require a separate prompt, but all workspace and credential boundaries still apply.";
+  }
+  const allowedKinds = LOCAL_APPROVAL_KINDS
+    .filter((kind) => localApprovalKindEnabled(settings, kind));
+  return allowedKinds.length > 0
+    ? `ask by default, except these user-approved local request types: ${allowedKinds.join(", ")}.`
+    : "ask before local file writes, patches, and shell commands.";
+}
+
+function applyLocalApprovalSettings(runtimeState, settings) {
+  const config = runtimeState?.config;
+  if (!config?.safety) return;
+  const enabled = localAutoApproveEnabled(settings);
+  config.safety.autoApproveBash = enabled;
+  config.safety.autoApproveWrites = enabled;
+  config.safety.autoApproveKinds = LOCAL_APPROVAL_KINDS
+    .filter((kind) => localApprovalKindEnabled(settings, kind));
+  const loop = runtimeState?.runtime?.loop;
+  if (loop?.systemPrompt) {
+    const policy = `- Local approval policy: ${desktopLocalApprovalDescription(settings)}`;
+    loop.systemPrompt = loop.systemPrompt.replace(/- Local approval policy: .*$/m, policy);
+    if (loop.messages?.[0]?.role === "system") {
+      loop.messages[0].content = loop.systemPrompt;
+    }
+  }
 }
 
 function sanitizeAgentEvent(event) {

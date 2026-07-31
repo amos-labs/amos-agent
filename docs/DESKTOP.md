@@ -35,6 +35,20 @@ Desktop guides the user through three independent grants:
 3. **Choose a workspace** — optional local folder that AMOS may inspect and
    change through visible approval gates.
 
+After choosing a workspace, the sidebar offers **Auto-approve local work**.
+Enabling it requires a native confirmation for the exact folder. It suppresses
+repeated prompts for local writes, patches, and shell commands only; changing
+the folder turns it off. It never auto-approves Platform company operations or
+governed decisions.
+
+Each local approval dialog also offers **Always allow this kind**. That narrower
+choice can remember shell commands, file writes, or code patches independently
+for the exact workspace while leaving the other local action types ask-first.
+
+Local approvals appear inline in the Operator conversation. The requested tool
+action pauses until the user decides, but the composer remains active so the
+user can keep typing and queue direction without a modal taking over the app.
+
 The local workspace is not uploaded wholesale to AMOS. Each attachment is
 task-local unless the user explicitly selects **Keep in private memory** or
 **Add to company memory**.

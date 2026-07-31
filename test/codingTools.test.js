@@ -25,11 +25,12 @@ test("coding tools search and atomically apply a reviewed patch", async () => {
       safety: {
         workspaceRoot: root,
         allowOutsideWorkspace: false,
-        autoApproveWrites: true,
+        autoApproveWrites: false,
+        autoApproveKinds: ["code-patch"],
         maxOutputBytes: 24_000
       }
     },
-    approvals: { confirm: async () => true }
+    approvals: { confirm: async () => assert.fail("approval should not be requested") }
   };
 
   const searched = await tools.get("search_files").handler({ query: "answer" }, context);

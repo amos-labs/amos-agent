@@ -22,6 +22,12 @@ The core rules are:
 - Reads and command output are bounded.
 - File writes and patches require approval by default.
 - Shell commands require approval by default.
+- The user may explicitly enable **Auto-approve local work** for one exact
+  selected workspace. The grant is stored against that workspace path and
+  automatically returns to ask-first mode when the path changes.
+- From an individual local approval, the user may instead choose **Always
+  allow** for that request class only: shell commands, file writes, or code
+  patches. Those narrower grants are pinned and reset the same way.
 - Command timeouts terminate the full process group.
 - User cancellation terminates the active process group and propagates to model,
   MCP, and web requests.
@@ -32,8 +38,22 @@ Commands receive a small allowlist of normal process values. AMOS credentials,
 provider keys, database URLs, cloud secrets, and desktop OAuth tokens are
 removed.
 
-Approval applies to the exact proposed local action. It is not a blanket grant
-for later commands.
+In ask-first mode, approval applies to the exact proposed local action. It is
+not a blanket grant for later commands. In trusted-workspace mode, file tools
+remain bounded to the selected workspace, but shell commands are not an OS
+sandbox: they start in the workspace with a scrubbed environment and retain the
+local user's process permissions. Desktop explains that distinction before it
+stores the grant.
+
+The ask-first ceremony is non-blocking at the UI layer: it is shown inline in
+the conversation and parks the requested tool call, while the task composer
+continues accepting user direction. Typing does not authorize the parked action;
+one of the explicit approval choices is still required.
+
+Local auto-approve never grants company authority. AMOS company operations,
+connected-application writes, and governed decisions still pass independently
+through Platform identity, tenant scope, RBAC, policy, approval, idempotency,
+execution, and proof.
 
 ## Company actions
 

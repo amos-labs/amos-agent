@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFileTools } from "../src/tools/files.js";
@@ -17,4 +17,26 @@ test("read_file returns bounded content while reporting the full size", async ()
   assert.equal(result.bytes, 5_000);
   assert.match(result.content, /truncated 3976 bytes/);
   assert.ok(Buffer.byteLength(result.content) < 1_100);
+});
+
+test("an exact-workspace file-write grant suppresses repeat write approvals", async () => {
+  const root = mkdtempSync(join(tmpdir(), "amos-approved-write-"));
+  const tool = createFileTools().find(({ name }) => name === "write_file");
+  const result = await tool.handler(
+    { path: "note.txt", content: "approved locally" },
+    {
+      config: {
+        safety: {
+          workspaceRoot: root,
+          allowOutsideWorkspace: false,
+          autoApproveWrites: false,
+          autoApproveKinds: ["file-write"]
+        }
+      },
+      approvals: { confirm: async () => assert.fail("approval should not be requested") }
+    }
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(readFileSync(join(root, "note.txt"), "utf8"), "approved locally");
 });

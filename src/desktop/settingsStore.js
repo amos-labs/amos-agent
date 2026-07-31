@@ -10,6 +10,11 @@ const PROVIDER_IDS = new Set([
   "llama-cpp",
   "openai-compatible"
 ]);
+export const LOCAL_APPROVAL_KINDS = Object.freeze([
+  "shell",
+  "file-write",
+  "code-patch"
+]);
 
 export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   provider: "amos-hosted",
@@ -20,6 +25,9 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   operatingMode: "online",
   appearance: "system",
   workspace: "",
+  localApprovalMode: "ask",
+  localApprovalWorkspace: "",
+  localApprovalKinds: [],
   amosMcpUrl: "https://app.amoslabs.com/mcp",
   notifiedApprovalIds: []
 });
@@ -79,6 +87,7 @@ export class DesktopSettingsStore {
 
   async asEnvironment() {
     const settings = await this.read();
+    const autoApproveLocal = localAutoApproveEnabled(settings);
     return {
       AMOS_MODEL_PROVIDER: settings.provider,
       AMOS_MODEL: settings.model,
@@ -86,6 +95,9 @@ export class DesktopSettingsStore {
       AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
       AMOS_MODEL_REASONING_EFFORT: settings.reasoningEffort,
       AMOS_AGENT_WORKSPACE: settings.workspace || process.cwd(),
+      AMOS_AGENT_AUTO_APPROVE_BASH: autoApproveLocal ? "true" : "false",
+      AMOS_AGENT_AUTO_APPROVE_WRITES: autoApproveLocal ? "true" : "false",
+      AMOS_AGENT_AUTO_APPROVE_KINDS: (settings.localApprovalKinds || []).join(","),
       AMOS_MCP_URL: settings.amosMcpUrl
     };
   }
@@ -106,6 +118,25 @@ export function sanitizeSettings(input = {}) {
     ? input.intelligenceProfile
     : profileForReasoning(input.reasoningEffort);
   const managed = provider === "amos-hosted";
+  const workspace = clean(input.workspace, 4096);
+  const requestedApprovalWorkspace = clean(input.localApprovalWorkspace, 4096);
+  const requestedApprovalKinds = Array.isArray(input.localApprovalKinds)
+    ? [...new Set(input.localApprovalKinds
+        .map((value) => clean(value, 32))
+        .filter((value) => LOCAL_APPROVAL_KINDS.includes(value)))]
+    : [];
+  const localApprovalMode =
+    input.localApprovalMode === "workspace" &&
+    Boolean(workspace) &&
+    requestedApprovalWorkspace === workspace
+      ? "workspace"
+      : "ask";
+  const localApprovalWorkspace =
+    Boolean(workspace) &&
+    requestedApprovalWorkspace === workspace &&
+    (localApprovalMode === "workspace" || requestedApprovalKinds.length > 0)
+      ? workspace
+      : "";
   return {
     provider,
     model: managed ? "auto" : clean(input.model, 256),
@@ -120,7 +151,10 @@ export function sanitizeSettings(input = {}) {
     appearance: ["system", "light", "dark"].includes(input.appearance)
       ? input.appearance
       : "system",
-    workspace: clean(input.workspace, 4096),
+    workspace,
+    localApprovalMode,
+    localApprovalWorkspace,
+    localApprovalKinds: localApprovalWorkspace ? requestedApprovalKinds : [],
     amosMcpUrl: validateEndpoint(input.amosMcpUrl || DEFAULT_DESKTOP_SETTINGS.amosMcpUrl, {
       requireHttps: true
     }),
@@ -132,6 +166,23 @@ export function sanitizeSettings(input = {}) {
       : [],
     apiKey: managed ? "" : clean(input.apiKey, 16_384)
   };
+}
+
+export function localAutoApproveEnabled(settings = {}) {
+  return Boolean(
+    settings.workspace &&
+    settings.localApprovalMode === "workspace" &&
+    settings.localApprovalWorkspace === settings.workspace
+  );
+}
+
+export function localApprovalKindEnabled(settings = {}, kind) {
+  return Boolean(
+    settings.workspace &&
+    settings.localApprovalWorkspace === settings.workspace &&
+    Array.isArray(settings.localApprovalKinds) &&
+    settings.localApprovalKinds.includes(kind)
+  );
 }
 
 function profileForReasoning(reasoningEffort) {

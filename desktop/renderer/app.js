@@ -107,6 +107,7 @@ const elements = Object.fromEntries(
     "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
     "decisionsView", "memoryView", "canvasView", "connectionsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
+    "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "companySwitcherControl", "companySwitcher",
     "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
@@ -124,7 +125,8 @@ const elements = Object.fromEntries(
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
     "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
-    "approveButton", "denyButton", "toast", "approvalsButton", "workspaceButton",
+    "approveButton", "denyButton", "alwaysApproveButton", "autoApproveFolderButton",
+    "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
     "recentDecisions", "interruptedTaskList", "updateButton", "privateMemoryList", "privateMemoryEmpty",
@@ -192,6 +194,7 @@ function bindActions() {
   elements.demoModeButton.addEventListener("click", startDemo);
   elements.demoConnectButton.addEventListener("click", connectAmos);
   elements.workspaceButton.addEventListener("click", chooseWorkspace);
+  elements.localApprovalButton.addEventListener("click", toggleLocalApproval);
   elements.onboardingWorkspaceButton.addEventListener("click", chooseWorkspace);
   elements.enterButton.addEventListener("click", () => {
     sessionStorage.setItem("amos-onboarding-complete", "true");
@@ -236,6 +239,12 @@ function bindActions() {
   elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
   elements.denyButton.addEventListener("click", () => resolveApproval(false));
+  elements.alwaysApproveButton.addEventListener("click", () =>
+    resolveApproval(true, "kind")
+  );
+  elements.autoApproveFolderButton.addEventListener("click", () =>
+    resolveApproval(true, "workspace")
+  );
   elements.updateButton.addEventListener("click", handleUpdate);
   elements.appearanceToggle.addEventListener("change", toggleAppearance);
   elements.intelligenceProfileInput.addEventListener("change", renderManagedProfileHelp);
@@ -279,6 +288,7 @@ function bindEvents() {
   api.on("agent:event", renderLiveEvent);
   api.on("agent:status", (taskStatus) => {
     currentTaskId = taskStatus?.running ? taskStatus.taskId || currentTaskId : null;
+    if (!taskStatus?.running && pendingApproval) clearInlineApproval();
     setRunning(Boolean(taskStatus?.running));
   });
   api.on("activity:changed", (activity) => {
@@ -323,7 +333,21 @@ function bindEvents() {
   api.on("approval:requested", (approval) => {
     pendingApproval = approval;
     elements.approvalMessage.textContent = approval.message;
+    const label = localApprovalKindLabel(approval.kind);
+    elements.alwaysApproveButton.classList.toggle("hidden", !label);
+    elements.alwaysApproveButton.textContent = label ? `Always allow ${label}` : "Always allow this kind";
+    elements.autoApproveFolderButton.classList.toggle("hidden", !state.settings.workspace);
+    elements.approvalScopeNote.textContent = approval.kind === "shell"
+      ? "“Always allow local commands” applies to all shell commands started from this workspace, not only this request. Shell commands use a scrubbed environment but are not OS-sandboxed to the folder."
+      : label
+        ? `“Always allow” applies to all ${label} in this exact workspace, not only this request. “Auto-approve this folder” also covers local commands, file writes, and code patches.`
+      : "Auto-approve applies only to local work in the selected folder.";
+    elements.messages.append(elements.approvalModal);
     elements.approvalModal.classList.remove("hidden");
+    elements.activityStreamTitle.textContent = "AMOS is waiting for you";
+    elements.runningIndicator.textContent = "Local approval needed";
+    elements.promptInput.placeholder = "Keep typing—your direction will be queued while this approval waits…";
+    elements.approvalModal.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
 }
 
@@ -402,6 +426,24 @@ function render() {
   }
   elements.operatorTitle.textContent = "What should move forward?";
   elements.workspaceLabel.textContent = state.settings.workspace || "Choose a folder";
+  elements.workspaceLabel.title = state.settings.workspace || "";
+  const localAutoApprove = state.settings.localApprovalMode === "workspace" &&
+    state.settings.localApprovalWorkspace === state.settings.workspace;
+  const localApprovalKinds = state.settings.localApprovalWorkspace === state.settings.workspace
+    ? state.settings.localApprovalKinds || []
+    : [];
+  const localTrustActive = localAutoApprove || localApprovalKinds.length > 0;
+  elements.localApprovalButton.classList.toggle("hidden", !state.settings.workspace);
+  elements.localApprovalButton.classList.toggle("active", localTrustActive);
+  elements.localApprovalButton.setAttribute("aria-pressed", String(localTrustActive));
+  elements.localApprovalButton.title = localTrustActive
+    ? `Persistent local approval is active for ${state.settings.workspace}. Click to return to ask-first. Company decisions still use AMOS policy.`
+    : `Turn on local auto-approve for ${state.settings.workspace}. Company decisions remain separate.`;
+  elements.localApprovalLabel.textContent = localAutoApprove
+    ? "Auto-approve on"
+    : localApprovalKinds.length > 0
+      ? `Always allow: ${localApprovalKinds.map(localApprovalKindLabel).join(", ")}`
+      : "Auto-approve local work";
   elements.localModeButton.classList.toggle(
     "selected",
     Boolean((state.mode?.personal || state.mode?.offline) && !demo)
@@ -2648,10 +2690,36 @@ function activeCompanyName() {
 
 async function chooseWorkspace() {
   try {
+    const previousWorkspace = state.settings.workspace;
     state = await api.chooseWorkspace();
     render();
+    if (state.settings.workspace && state.settings.workspace !== previousWorkspace) {
+      toast("Project folder selected. New tasks will use this workspace; local auto-approve is off.");
+    }
   } catch (error) {
     toast(error.message, true);
+  }
+}
+
+async function toggleLocalApproval() {
+  const trustedWorkspace = state.settings.localApprovalWorkspace === state.settings.workspace;
+  const enabled = trustedWorkspace && (
+    state.settings.localApprovalMode === "workspace" ||
+    (state.settings.localApprovalKinds || []).length > 0
+  );
+  try {
+    elements.localApprovalButton.disabled = true;
+    state = await api.setLocalApprovalMode(enabled ? "ask" : "workspace");
+    render();
+    const nowEnabled = state.settings.localApprovalMode === "workspace" &&
+      state.settings.localApprovalWorkspace === state.settings.workspace;
+    toast(nowEnabled
+      ? "Local auto-approve is on for this folder. Company approvals remain governed."
+      : "Local auto-approve is off. AMOS will ask before local changes.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    elements.localApprovalButton.disabled = false;
   }
 }
 
@@ -3068,6 +3136,7 @@ function resetSessionView() {
   const welcome = elements.messages.querySelector(".welcome-message");
   const starters = elements.messages.querySelector(".starter-actions");
   const activity = elements.activityStream;
+  clearInlineApproval();
   elements.messages.replaceChildren();
   if (welcome) elements.messages.append(welcome);
   if (starters) elements.messages.append(starters);
@@ -3497,12 +3566,55 @@ async function handleUpdate() {
   }
 }
 
-async function resolveApproval(approved) {
+async function resolveApproval(approved, persistence = "once") {
   if (!pendingApproval) return;
-  await api.resolveApproval(pendingApproval.id, approved);
+  const approval = pendingApproval;
+  try {
+    if (approved && persistence === "kind") {
+      state = await api.allowLocalApprovalKind(approval.kind);
+    } else if (approved && persistence === "workspace") {
+      state = await api.setLocalApprovalMode("workspace");
+      const enabled = state.settings.localApprovalMode === "workspace" &&
+        state.settings.localApprovalWorkspace === state.settings.workspace;
+      if (!enabled) {
+        toast("Local auto-approve was not enabled. The current request is still waiting.");
+        return;
+      }
+    }
+    await api.resolveApproval(approval.id, approved);
+    clearInlineApproval();
+    if (!approved) {
+      toast("Action denied.");
+    } else if (persistence === "kind") {
+      toast(`Approved. AMOS will always allow ${localApprovalKindLabel(approval.kind)} in this folder.`);
+    } else if (persistence === "workspace") {
+      toast("Approved. Local auto-approve is on for this folder; company approvals remain governed.");
+    } else {
+      toast("Approved once.");
+    }
+    pendingApproval = null;
+    render();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function clearInlineApproval() {
   elements.approvalModal.classList.add("hidden");
-  toast(approved ? "Approved once." : "Action denied.");
   pendingApproval = null;
+  if (running) {
+    elements.promptInput.placeholder = "Add direction while AMOS works…";
+    elements.activityStreamTitle.textContent = "AMOS is working";
+    elements.runningIndicator.textContent = "Working · steer or stop";
+  }
+}
+
+function localApprovalKindLabel(kind) {
+  return {
+    shell: "local commands",
+    "file-write": "file writes",
+    "code-patch": "code patches"
+  }[kind] || "";
 }
 
 function setButtonBusy(button, busy, label) {

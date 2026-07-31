@@ -61,6 +61,10 @@
             <span>LOCAL WORKSPACE</span>
             <strong id="workspaceLabel">Choose a folder</strong>
           </button>
+          <button id="localApprovalButton" class="local-approval-button hidden" type="button" aria-pressed="false">
+            <span class="local-approval-icon" aria-hidden="true">✓</span>
+            <strong id="localApprovalLabel">Auto-approve local work</strong>
+          </button>
         </div>
       </aside>
 
@@ -191,6 +195,21 @@
                   <div id="liveEvents" class="live-events" aria-live="polite"></div>
                   <p id="deploymentSummary" class="activity-boundary">Configure a model to see its deployment boundary.</p>
                 </details>
+                <section id="approvalModal" class="approval-modal inline-approval hidden" role="region" aria-live="polite" aria-label="Local approval needed">
+                  <span class="eyebrow warning">LOCAL APPROVAL NEEDED</span>
+                  <h2>AMOS is paused before acting on this computer.</h2>
+                  <p id="approvalMessage"></p>
+                  <div id="approvalScopeNote" class="approval-scope-note"></div>
+                  <div class="approval-note">You can keep typing while this waits. Company-side policy and approvals remain independently enforced by AMOS.</div>
+                  <div class="approval-persistence-actions">
+                    <button id="alwaysApproveButton" class="button ghost" type="button">Always allow this kind</button>
+                    <button id="autoApproveFolderButton" class="button ghost" type="button">Auto-approve this folder</button>
+                  </div>
+                  <div class="approval-actions">
+                    <button id="denyButton" class="button secondary" type="button">Deny</button>
+                    <button id="approveButton" class="button primary" type="button">Approve once</button>
+                  </div>
+                </section>
               </div>
 
               <form id="promptForm" class="composer">
@@ -576,19 +595,6 @@
           </section>
         </section>
       </main>
-    </div>
-
-    <div id="approvalModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
-      <div class="approval-modal">
-        <span class="eyebrow warning">LOCAL APPROVAL NEEDED</span>
-        <h2>AMOS wants to act on this computer.</h2>
-        <p id="approvalMessage"></p>
-        <div class="approval-note">Company-side policy and approvals remain independently enforced by AMOS.</div>
-        <div class="approval-actions">
-          <button id="denyButton" class="button secondary">Deny</button>
-          <button id="approveButton" class="button primary">Approve once</button>
-        </div>
-      </div>
     </div>
 
     <div id="connectionModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="connectionModalTitle">

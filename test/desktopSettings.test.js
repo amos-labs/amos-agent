@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import {
   DEFAULT_DESKTOP_SETTINGS,
   DesktopSettingsStore,
+  localAutoApproveEnabled,
   sanitizeSettings
 } from "../src/desktop/settingsStore.js";
 
@@ -15,6 +16,27 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.baseUrl, "");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.intelligenceProfile, "balanced");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.reasoningEffort, "medium");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalMode, "ask");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalWorkspace, "");
+  assert.deepEqual(DEFAULT_DESKTOP_SETTINGS.localApprovalKinds, []);
+});
+
+test("local auto-approve is pinned to one exact selected workspace", () => {
+  const trusted = sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    workspace: "/tmp/project-a",
+    localApprovalMode: "workspace",
+    localApprovalWorkspace: "/tmp/project-a"
+  });
+  assert.equal(localAutoApproveEnabled(trusted), true);
+
+  const changed = sanitizeSettings({
+    ...trusted,
+    workspace: "/tmp/project-b"
+  });
+  assert.equal(changed.localApprovalMode, "ask");
+  assert.equal(changed.localApprovalWorkspace, "");
+  assert.equal(localAutoApproveEnabled(changed), false);
 });
 
 test("AMOS Intelligence stores a capability profile and strips provider-specific routing", () => {
@@ -79,6 +101,28 @@ test("desktop settings encrypt provider credentials at rest", async () => {
   const raw = await readFile(path, "utf8");
   assert.equal(raw.includes("secret-bedrock-key"), false);
   assert.equal((await store.read()).apiKey, "secret-bedrock-key");
+});
+
+test("trusted Desktop workspace projects local approval flags into the runtime environment", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-trust-"));
+  const path = join(directory, "settings.json");
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => value,
+    decrypt: (value) => value
+  });
+  await store.write({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    workspace: "/tmp/trusted-project",
+    localApprovalMode: "workspace",
+    localApprovalWorkspace: "/tmp/trusted-project"
+  });
+
+  const env = await store.asEnvironment();
+  assert.equal(env.AMOS_AGENT_WORKSPACE, "/tmp/trusted-project");
+  assert.equal(env.AMOS_AGENT_AUTO_APPROVE_BASH, "true");
+  assert.equal(env.AMOS_AGENT_AUTO_APPROVE_WRITES, "true");
+  assert.equal(env.AMOS_AGENT_AUTO_APPROVE_KINDS, "");
 });
 
 test("desktop settings reject non-local cleartext endpoints", () => {
