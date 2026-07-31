@@ -69,6 +69,7 @@ let dragDepth = 0;
 let updateState = null;
 let activeCanvasId = null;
 let capsuleFlow = null;
+let connectionSetupProvider = null;
 let currentTaskId = null;
 let streamingMessage = null;
 const transientTaskMessages = new Set();
@@ -123,6 +124,15 @@ const elements = Object.fromEntries(
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
     "companyCacheCard", "companyCacheStatus", "companyCacheDetail", "companyCacheMeta",
     "companyCacheRefreshButton", "companyCacheRemoveButton",
+    "connectionModal", "connectionForm", "connectionModalTitle", "connectionModalDescription",
+    "connectionProviderTagField", "connectionProviderTagInput",
+    "connectionBaseUrlField", "connectionBaseUrlInput",
+    "connectionAuthSchemeField", "connectionAuthSchemeInput",
+    "connectionContextField", "connectionContextLabel", "connectionContextInput",
+    "connectionNameInput", "connectionUsernameField", "connectionUsernameLabel",
+    "connectionUsernameInput", "connectionCredentialLabel", "connectionCredentialInput",
+    "connectionCredentialHelp", "connectionDefaultFromField", "connectionDefaultFromInput",
+    "connectionModalError", "connectionCancelButton", "connectionSubmitButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -234,10 +244,21 @@ function bindActions() {
   elements.memoryImportButton.addEventListener("click", () => openCapsuleFlow("import"));
   elements.companyCacheRefreshButton.addEventListener("click", refreshCompanyCache);
   elements.companyCacheRemoveButton.addEventListener("click", removeCompanyCache);
+  elements.connectionForm.addEventListener("submit", submitSecretConnection);
+  elements.connectionCancelButton.addEventListener("click", closeConnectionModal);
+  elements.connectionAuthSchemeInput.addEventListener("change", refreshConnectionModalFields);
   elements.capsulePassphraseForm.addEventListener("submit", handleCapsulePassphrase);
   elements.capsuleCancelButton.addEventListener("click", closeCapsuleModal);
   elements.capsulePreviewCancelButton.addEventListener("click", closeCapsuleModal);
   elements.capsuleImportConfirmButton.addEventListener("click", confirmCapsuleImport);
+  elements.connectionModal.addEventListener("click", (event) => {
+    if (event.target === elements.connectionModal) closeConnectionModal();
+  });
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !elements.connectionModal.classList.contains("hidden")) {
+      closeConnectionModal();
+    }
+  });
 }
 
 function bindEvents() {
@@ -508,10 +529,13 @@ function renderConnections() {
   const connectionsByProvider = new Map(
     connections.map((connection) => [connection.provider, connection])
   );
+  const availableProviders = providers.filter(
+    (provider) => provider.provider === "custom" || !connectionsByProvider.has(provider.provider)
+  );
   elements.connectionBadge.textContent = String(connections.length);
   elements.connectionBadge.classList.toggle("hidden", connections.length === 0);
   elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
-    ? `${connections.length} connected system${connections.length === 1 ? "" : "s"} · ${providers.length} provider definition${providers.length === 1 ? "" : "s"} advertised by AMOS`
+    ? `${connections.length} connected system${connections.length === 1 ? "" : "s"} · ${availableProviders.length} available connection${availableProviders.length === 1 ? "" : "s"}`
     : "Connect your AMOS company to load its credential-free connection catalog.";
 
   elements.connectedSystemList.replaceChildren();
@@ -547,13 +571,14 @@ function renderConnections() {
   }
 
   elements.availableProviderList.replaceChildren();
-  if (providers.length === 0) {
+  if (availableProviders.length === 0) {
     elements.availableProviderList.append(connectionCatalogEmpty(
-      "No provider definitions were advertised by this AMOS server."
+      providers.length === 0
+        ? "No provider definitions were advertised by this AMOS server."
+        : "Every advertised provider is already represented under Connected."
     ));
   } else {
-    for (const provider of providers) {
-      const connection = connectionsByProvider.get(provider.provider);
+    for (const provider of availableProviders) {
       const card = document.createElement("article");
       card.className = "connection-provider-card";
       const top = document.createElement("div");
@@ -561,13 +586,9 @@ function renderConnections() {
       icon.className = "connection-provider-icon";
       icon.textContent = providerMonogram(provider.provider);
       const status = document.createElement("span");
-      const providerState = connection?.status || provider.availability || "setup_required";
+      const providerState = provider.availability || "setup_required";
       status.className = `status-pill ${
-        connection?.status === "connected"
-          ? "connected"
-          : providerState === "available"
-            ? "available"
-            : "attention"
+        providerState === "available" ? "available" : "attention"
       }`;
       status.textContent = providerState.replaceAll("_", " ").toUpperCase();
       top.append(icon, status);
@@ -591,7 +612,6 @@ function renderConnections() {
       boundary.textContent = context.join(" · ") || `Provider key: ${provider.provider}`;
       card.append(top, title, detail, boundary);
       if (
-        connection?.status !== "connected" &&
         provider.setupMode === "hosted_oauth" &&
         provider.availability === "available"
       ) {
@@ -611,9 +631,116 @@ function renderConnections() {
           }
         });
         card.append(connect);
+      } else if (
+        ["hosted_secret", "governed_upstream_mcp", "advanced"].includes(provider.setupMode) &&
+        provider.availability === "available" &&
+        provider.credentialForm
+      ) {
+        const connect = document.createElement("button");
+        connect.type = "button";
+        connect.className = "button secondary connection-connect-button";
+        connect.textContent = "Connect";
+        connect.addEventListener("click", () => openConnectionModal(provider));
+        card.append(connect);
       }
       elements.availableProviderList.append(card);
     }
+  }
+}
+
+function openConnectionModal(provider) {
+  const form = provider?.credentialForm;
+  if (!provider || !form) {
+    toast("AMOS did not advertise a secure setup form for this provider.", true);
+    return;
+  }
+  connectionSetupProvider = provider;
+  elements.connectionModalTitle.textContent = `Connect ${provider.label}`;
+  elements.connectionModalDescription.textContent =
+    provider.description || "Add this system to your governed AMOS company.";
+  elements.connectionNameInput.value = provider.label;
+  elements.connectionProviderTagField.classList.toggle("hidden", !form.customProvider);
+  elements.connectionProviderTagInput.required = form.customProvider;
+  elements.connectionProviderTagInput.value = "";
+  elements.connectionBaseUrlField.classList.toggle("hidden", !form.baseUrlEditable);
+  elements.connectionBaseUrlInput.required = form.baseUrlEditable;
+  elements.connectionBaseUrlInput.value = form.baseUrl || "";
+  elements.connectionAuthSchemeField.classList.toggle("hidden", !form.authSchemeEditable);
+  elements.connectionAuthSchemeInput.value = form.authScheme || "bearer";
+  elements.connectionContextField.classList.toggle("hidden", !form.contextField);
+  elements.connectionContextInput.required = Boolean(form.contextField);
+  elements.connectionContextInput.type = form.contextField?.type || "text";
+  elements.connectionContextInput.min = form.contextField?.type === "number" ? "1" : "";
+  elements.connectionContextInput.value = "";
+  elements.connectionContextLabel.textContent =
+    form.contextField?.label || "Connection identifier";
+  elements.connectionContextInput.placeholder = form.contextField?.placeholder || "";
+  elements.connectionUsernameInput.value = "";
+  elements.connectionCredentialLabel.textContent = form.credentialLabel || "Credential";
+  elements.connectionCredentialInput.value = "";
+  elements.connectionCredentialInput.placeholder = form.placeholder || "Paste credential";
+  elements.connectionCredentialHelp.textContent =
+    form.help || "AMOS Platform encrypts this value immediately.";
+  elements.connectionDefaultFromField.classList.toggle("hidden", !form.defaultFrom);
+  elements.connectionDefaultFromInput.value = "";
+  refreshConnectionModalFields();
+  elements.connectionModalError.textContent = "";
+  elements.connectionModalError.classList.add("hidden");
+  elements.connectionSubmitButton.disabled = false;
+  elements.connectionSubmitButton.textContent = "Save and connect";
+  elements.connectionModal.classList.remove("hidden");
+  elements.connectionCredentialInput.focus();
+}
+
+function refreshConnectionModalFields() {
+  const form = connectionSetupProvider?.credentialForm;
+  if (!form) return;
+  const needsUsername =
+    Boolean(form.usernameLabel) ||
+    (form.authSchemeEditable && elements.connectionAuthSchemeInput.value === "basic");
+  elements.connectionUsernameField.classList.toggle("hidden", !needsUsername);
+  elements.connectionUsernameInput.required = needsUsername;
+  elements.connectionUsernameLabel.textContent =
+    form.usernameLabel || "Username";
+  elements.connectionUsernameInput.placeholder = form.usernamePlaceholder || "";
+}
+
+function closeConnectionModal() {
+  connectionSetupProvider = null;
+  elements.connectionForm.reset();
+  elements.connectionCredentialInput.value = "";
+  elements.connectionUsernameInput.value = "";
+  elements.connectionContextInput.value = "";
+  elements.connectionModalError.textContent = "";
+  elements.connectionModalError.classList.add("hidden");
+  elements.connectionModal.classList.add("hidden");
+}
+
+async function submitSecretConnection(event) {
+  event.preventDefault();
+  if (!connectionSetupProvider) return;
+  elements.connectionModalError.textContent = "";
+  elements.connectionModalError.classList.add("hidden");
+  setButtonBusy(elements.connectionSubmitButton, true, "Saving securely…");
+  try {
+    await api.connectSecretProvider(connectionSetupProvider.provider, {
+      displayName: elements.connectionNameInput.value,
+      credential: elements.connectionCredentialInput.value,
+      username: elements.connectionUsernameInput.value,
+      defaultFrom: elements.connectionDefaultFromInput.value,
+      providerTag: elements.connectionProviderTagInput.value,
+      baseUrl: elements.connectionBaseUrlInput.value,
+      authScheme: elements.connectionAuthSchemeInput.value,
+      contextValue: elements.connectionContextInput.value
+    });
+    const label = connectionSetupProvider.label;
+    closeConnectionModal();
+    toast(`${label} connected through AMOS Platform.`);
+  } catch (error) {
+    elements.connectionModalError.textContent = friendlyError(error);
+    elements.connectionModalError.classList.remove("hidden");
+    elements.connectionSubmitButton.disabled = false;
+    elements.connectionSubmitButton.textContent = "Save and connect";
   }
 }
 

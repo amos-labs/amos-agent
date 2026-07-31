@@ -106,6 +106,114 @@ export class DesktopRemoteStateClient {
     };
   }
 
+  async createSecretConnection(input, { signal = null } = {}) {
+    const provider = String(input?.provider || "").trim();
+    const displayName = String(input?.displayName || "").trim();
+    const credential = String(input?.credential || "");
+    const username = String(input?.username || "").trim();
+    const defaultFrom = String(input?.defaultFrom || "").trim();
+    const authScheme = String(input?.authScheme || "bearer");
+    const baseUrl = String(input?.baseUrl || "").trim();
+
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(provider)) {
+      throw new Error("AMOS blocked an invalid connection provider");
+    }
+    if (!displayName || displayName.length > 120) {
+      throw new Error("Connection name must be between 1 and 120 characters");
+    }
+    if (!credential || credential.length > 16_384) {
+      throw new Error("Credential must be between 1 and 16,384 characters");
+    }
+    if (!["bearer", "basic", "api_key"].includes(authScheme)) {
+      throw new Error("AMOS blocked an unsupported credential shape");
+    }
+    if (authScheme === "basic" && !username) {
+      throw new Error("This connection requires a username or account identifier");
+    }
+    if (baseUrl) {
+      let parsedBaseUrl;
+      try {
+        parsedBaseUrl = new URL(baseUrl);
+      } catch {
+        throw new Error("Connection API root must be a valid HTTPS URL");
+      }
+      if (parsedBaseUrl.protocol !== "https:") {
+        throw new Error("Connection API root must use HTTPS");
+      }
+    }
+
+    const args = {
+      provider,
+      display_name: displayName,
+      base_url: baseUrl || undefined,
+      config: defaultFrom ? { default_from: defaultFrom } : {},
+      service_account: input?.serviceAccount === true
+    };
+    if (authScheme === "basic") {
+      args.secrets = { username, password: credential };
+      args.auth_shape = {
+        scheme: "basic",
+        username_secret: "username",
+        password_secret: "password"
+      };
+    } else {
+      args.credential = credential;
+      args.auth_shape = {
+        scheme: authScheme,
+        secret: "credential",
+        ...(authScheme === "api_key"
+          ? { name: "X-API-Key", placement: "header" }
+          : {})
+      };
+    }
+
+    const result = await this.mcp.callTool("create_connection", args, { signal });
+    const payload = parseMcpJson(result, "AMOS connection setup");
+    if (payload?.connected !== true) {
+      throw new Error("AMOS did not confirm that the connection was saved");
+    }
+    return {
+      connected: true,
+      provider: String(payload.provider || provider),
+      displayName: String(payload.display_name || displayName),
+      connectionId: String(payload.connection_id || "")
+    };
+  }
+
+  async connectNuvolaLearning(input, { signal = null } = {}) {
+    const displayName = String(input?.displayName || "Nuvola Learning").trim();
+    const credential = String(input?.credential || "");
+    const corporationId = Number(input?.corporationId);
+    if (!displayName || displayName.length > 120) {
+      throw new Error("Connection name must be between 1 and 120 characters");
+    }
+    if (!credential || credential.length > 4096) {
+      throw new Error("Credential must be between 1 and 4,096 characters");
+    }
+    if (!Number.isSafeInteger(corporationId) || corporationId < 1) {
+      throw new Error("Nuvola corporation ID must be a positive number");
+    }
+    const result = await this.mcp.callTool(
+      "connect_nuvola_learning",
+      {
+        display_name: displayName,
+        credential,
+        corporation_id: corporationId
+      },
+      { signal }
+    );
+    const payload = parseMcpJson(result, "AMOS Nuvola connection setup");
+    if (payload?.connected !== true) {
+      throw new Error("AMOS did not confirm that the Nuvola connection was saved");
+    }
+    return {
+      connected: true,
+      provider: String(payload.provider || "nuvola_learning_mcp"),
+      displayName: String(payload.display_name || displayName),
+      connectionId: String(payload.connection_id || "")
+    };
+  }
+
   async approvals({ signal = null } = {}) {
     let token = await this.oauth.getAccessToken();
     let response = await this.fetchApprovals(token, { signal });
@@ -489,7 +597,50 @@ function normalizeProvider(value) {
         : "setup_required")
     ),
     upstreamStatus: value.upstream_status ? String(value.upstream_status) : "",
-    configured: value.configured === true || value.credentials_registered === true
+    configured: value.configured === true || value.credentials_registered === true,
+    credentialForm: normalizeCredentialForm(value.credential_form)
+  };
+}
+
+function normalizeCredentialForm(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const authScheme = String(value.auth_scheme || "bearer");
+  if (!["bearer", "basic", "api_key"].includes(authScheme)) return null;
+  return {
+    authScheme,
+    submissionTool: value.submission_tool
+      ? String(value.submission_tool)
+      : "create_connection",
+    baseUrl: value.base_url ? String(value.base_url) : "",
+    baseUrlEditable: value.base_url_editable === true,
+    authSchemeEditable: value.auth_scheme_editable === true,
+    customProvider: value.custom_provider === true,
+    placeholder: value.placeholder ? String(value.placeholder) : "Paste credential",
+    credentialLabel: value.credential_label
+      ? String(value.credential_label)
+      : "Secret key",
+    help: value.help ? String(value.help) : "",
+    usernameLabel: value.username_label ? String(value.username_label) : "",
+    usernamePlaceholder: value.username_placeholder
+      ? String(value.username_placeholder)
+      : "",
+    defaultFrom: value.default_from === true,
+    contextField: normalizeCredentialContextField(value.context_field)
+  };
+}
+
+function normalizeCredentialContextField(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const name = String(value.name || "");
+  const type = String(value.type || "text");
+  if (!/^[a-z][a-z0-9_]{0,31}$/.test(name) || !["text", "number"].includes(type)) {
+    return null;
+  }
+  return {
+    name,
+    type,
+    label: String(value.label || "Connection identifier"),
+    placeholder: String(value.placeholder || "")
   };
 }
 

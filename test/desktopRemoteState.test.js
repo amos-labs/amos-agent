@@ -177,15 +177,44 @@ test("Desktop projects credential-free connection and provider metadata from AMO
               availability: "available",
               token_url: "must-not-project"
             }, {
+              provider: "twilio",
+              label: "Twilio SMS",
+              source: "platform",
+              connection_kind: "api_key",
+              setup_mode: "hosted_secret",
+              configured: true,
+              availability: "available",
+              credential_form: {
+                auth_scheme: "basic",
+                base_url: "https://api.twilio.com",
+                credential_label: "Auth Token",
+                username_label: "Account SID",
+                username_placeholder: "AC...",
+                default_from: true,
+                internal_secret: "must-not-project"
+              }
+            }, {
               provider: "nuvola_learning_mcp",
               label: "Nuvola Learning",
               source: "platform",
               connection_kind: "upstream_mcp",
               description: "Governed learning",
               capabilities: ["course_authoring"],
-              configured: false,
-              availability: "adapter_required",
-              upstream_status: "live"
+              setup_mode: "governed_upstream_mcp",
+              configured: true,
+              availability: "available",
+              upstream_status: "live",
+              credential_form: {
+                submission_tool: "connect_nuvola_learning",
+                auth_scheme: "bearer",
+                credential_label: "Corporation-bound MCP key",
+                context_field: {
+                  name: "corporation_id",
+                  label: "Nuvola corporation ID",
+                  type: "number",
+                  placeholder: "e.g. 14"
+                }
+              }
             }]
           };
       return response(200, {
@@ -204,8 +233,22 @@ test("Desktop projects credential-free connection and provider metadata from AMO
   assert.equal(catalog.providers[0].group, "Microsoft");
   assert.deepEqual(catalog.providers[0].capabilities, ["mail", "calendar"]);
   assert.equal(catalog.providers[0].token_url, undefined);
-  assert.equal(catalog.providers[1].availability, "adapter_required");
-  assert.equal(catalog.providers[1].upstreamStatus, "live");
+  assert.equal(catalog.providers[1].credentialForm.authScheme, "basic");
+  assert.equal(catalog.providers[1].credentialForm.usernameLabel, "Account SID");
+  assert.equal(catalog.providers[1].credentialForm.defaultFrom, true);
+  assert.equal(catalog.providers[1].credentialForm.internal_secret, undefined);
+  assert.equal(catalog.providers[2].availability, "available");
+  assert.equal(catalog.providers[2].upstreamStatus, "live");
+  assert.equal(
+    catalog.providers[2].credentialForm.submissionTool,
+    "connect_nuvola_learning"
+  );
+  assert.deepEqual(catalog.providers[2].credentialForm.contextField, {
+    name: "corporation_id",
+    type: "number",
+    label: "Nuvola corporation ID",
+    placeholder: "e.g. 14"
+  });
 });
 
 test("Desktop falls back only to the older platform catalog, never a bundled provider list", async () => {
@@ -286,6 +329,109 @@ test("Desktop asks AMOS Platform for a hosted connection link", async () => {
   assert.equal(requests[0].params.name, "connect_link");
   assert.deepEqual(requests[0].params.arguments, { provider: "power_bi" });
   assert.equal(link.expiresIn, 600);
+});
+
+test("Desktop sends a one-time credential directly to the Platform connection verb", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              connected: true,
+              provider: "twilio",
+              display_name: "Support SMS",
+              connection_id: "55555555-5555-5555-5555-555555555555"
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const result = await client.createSecretConnection({
+    provider: "twilio",
+    displayName: "Support SMS",
+    credential: "one-time-auth-token",
+    username: "AC123",
+    defaultFrom: "+15551234567",
+    authScheme: "basic",
+    baseUrl: "https://api.twilio.com"
+  });
+
+  assert.equal(result.connected, true);
+  assert.equal(requests[0].params.name, "create_connection");
+  assert.deepEqual(requests[0].params.arguments, {
+    provider: "twilio",
+    display_name: "Support SMS",
+    base_url: "https://api.twilio.com",
+    config: { default_from: "+15551234567" },
+    service_account: false,
+    secrets: {
+      username: "AC123",
+      password: "one-time-auth-token"
+    },
+    auth_shape: {
+      scheme: "basic",
+      username_secret: "username",
+      password_secret: "password"
+    }
+  });
+  assert.equal(JSON.stringify(result).includes("one-time-auth-token"), false);
+});
+
+test("Desktop uses the typed Platform ceremony for a Nuvola corporation key", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              connected: true,
+              provider: "nuvola_learning_mcp",
+              display_name: "Neighborly Learning",
+              connection_id: "66666666-6666-6666-6666-666666666666"
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const result = await client.connectNuvolaLearning({
+    displayName: "Neighborly Learning",
+    credential: "corporation-bound-key",
+    corporationId: "14"
+  });
+
+  assert.equal(result.connected, true);
+  assert.equal(requests[0].params.name, "connect_nuvola_learning");
+  assert.deepEqual(requests[0].params.arguments, {
+    display_name: "Neighborly Learning",
+    credential: "corporation-bound-key",
+    corporation_id: 14
+  });
+  assert.equal(JSON.stringify(result).includes("corporation-bound-key"), false);
 });
 
 test("Desktop treats a non-approver role as a bounded unavailable inbox", async () => {

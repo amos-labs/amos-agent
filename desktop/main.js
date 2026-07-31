@@ -273,6 +273,9 @@ function registerIpc() {
   ipcMain.handle("desktop:connect-provider", (_event, provider) =>
     controller.connectProvider(provider)
   );
+  ipcMain.handle("desktop:connect-secret-provider", (_event, payload) =>
+    controller.connectSecretProvider(payload?.provider, payload?.input)
+  );
   ipcMain.handle("desktop:open-approval", (_event, id) => controller.openApproval(id));
   ipcMain.handle("desktop:review-company-approval", async (_event, id) => {
     const review = await controller.reviewCompanyApproval(id);
