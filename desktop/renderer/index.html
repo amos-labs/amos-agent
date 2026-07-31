@@ -20,7 +20,8 @@
       <aside class="sidebar">
         <div class="brand">
           <span class="brand-mark"><img src="../assets/amos-mark.png" alt=""></span>
-          <span><strong>AMOS</strong><small>DESKTOP</small></span>
+          <span class="brand-copy"><strong>AMOS</strong><small>DESKTOP</small></span>
+          <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true" title="Collapse navigation">‹</button>
         </div>
 
         <nav class="nav" aria-label="AMOS Desktop">
@@ -156,7 +157,7 @@
             </div>
             <button id="demoConnectButton" class="button secondary" type="button">Use my company</button>
           </div>
-          <div class="operator-grid">
+          <div id="operatorGrid" class="operator-grid">
             <div class="conversation">
               <div class="conversation-heading">
                 <div>
@@ -178,6 +179,18 @@
                   </div>
                 </div>
                 <div id="starterActions" class="starter-actions"></div>
+                <details id="activityStream" class="activity-stream hidden" open>
+                  <summary>
+                    <span class="activity-stream-icon" aria-hidden="true">⌁</span>
+                    <span class="activity-stream-copy">
+                      <strong id="activityStreamTitle">AMOS is working</strong>
+                      <small>Progress summaries, governed tool use, and recorded outcomes</small>
+                    </span>
+                    <span id="runningIndicator" class="running-indicator">Starting…</span>
+                  </summary>
+                  <div id="liveEvents" class="live-events" aria-live="polite"></div>
+                  <p id="deploymentSummary" class="activity-boundary">Configure a model to see its deployment boundary.</p>
+                </details>
               </div>
 
               <form id="promptForm" class="composer">
@@ -203,24 +216,30 @@
               </form>
             </div>
 
-            <aside class="work-panel">
-              <div class="work-panel-header">
-                <span class="eyebrow">LIVE WORK</span>
-                <span id="runningIndicator" class="running-indicator">Idle</span>
-              </div>
-              <div id="liveEvents" class="live-events">
-                <div class="empty-state">
-                  <span>⌁</span>
-                  <strong>Nothing running</strong>
-                  <p>Tool calls, approvals, and receipts will appear here as AMOS works.</p>
+            <div id="contextResizeHandle" class="context-resize-handle hidden" role="separator" aria-label="Resize work surface" aria-orientation="vertical" tabindex="0"></div>
+            <aside id="canvasSidecar" class="canvas-sidecar hidden" aria-label="Current AMOS work surface">
+              <div class="canvas-sidecar-scroll">
+                <div class="canvas-sidecar-heading">
+                  <div>
+                    <span class="eyebrow">CURRENT WORK SURFACE</span>
+                    <h2 id="canvasTitle">A clearer view of the work.</h2>
+                    <p id="canvasSubtitle">Live, source-aware work generated from the company systems you already use.</p>
+                  </div>
+                  <div class="canvas-actions">
+                    <button id="canvasSaveButton" class="button secondary hidden" type="button">Save briefing</button>
+                    <button id="canvasRefreshButton" class="button secondary hidden" type="button">Refresh</button>
+                    <button id="canvasCloseButton" class="icon-button" type="button" aria-label="Close work surface" title="Close work surface">×</button>
+                  </div>
                 </div>
-              </div>
-              <div class="boundary-card">
-                <span class="boundary-icon">◈</span>
-                <div>
-                  <strong>Where intelligence runs</strong>
-                  <p id="deploymentSummary">Configure a model to see its deployment boundary.</p>
+                <div id="canvasSourceBar" class="canvas-source-bar hidden"></div>
+                <div id="canvasTabs" class="canvas-tabs hidden" role="tablist" aria-label="Open work surfaces"></div>
+                <div id="canvasEmpty" class="canvas-empty compact">
+                  <span>▦</span>
+                  <strong id="canvasEmptyTitle">AMOS is preparing this view</strong>
+                  <p id="canvasEmptyMessage">The conversation stays available while the work surface updates.</p>
+                  <button id="canvasStartButton" class="button primary hidden" type="button">Ask AMOS</button>
                 </div>
+                <div id="canvasBlocks" class="canvas-blocks hidden"></div>
               </div>
             </aside>
           </div>
@@ -230,17 +249,19 @@
           <div class="canvas-shell">
             <div class="canvas-heading">
               <div>
-                <span class="eyebrow">PROACTIVE BUSINESS ADVISOR</span>
-                <h1 id="canvasTitle">A clearer view of the work.</h1>
-                <p id="canvasSubtitle">Live, source-aware briefings generated from the company systems you already use.</p>
-              </div>
-              <div class="canvas-actions">
-                <button id="canvasSaveButton" class="button secondary hidden" type="button">Save briefing</button>
-                <button id="canvasRefreshButton" class="button secondary hidden" type="button">Refresh with AMOS</button>
-                <button id="canvasCloseButton" class="button ghost hidden" type="button">Close briefing</button>
+                <span class="eyebrow">DURABLE BRIEFINGS</span>
+                <h1>Briefings that stay useful.</h1>
+                <p>Save the definition of a useful company view, then reopen it beside any conversation with fresh governed data.</p>
               </div>
             </div>
             <section id="briefingLibrary" class="briefing-library">
+              <div class="briefing-library-section">
+                <div>
+                  <span class="eyebrow accent">CURRENT WORK SURFACES</span>
+                  <p>Temporary views from this task. Open one beside chat or save its definition for later.</p>
+                </div>
+                <div id="liveCanvasList" class="briefing-card-list"></div>
+              </div>
               <div class="briefing-library-section">
                 <div>
                   <span class="eyebrow">SAVED VIEWS</span>
@@ -256,15 +277,6 @@
                 <div id="briefingTemplateList" class="briefing-card-list"></div>
               </div>
             </section>
-            <div id="canvasSourceBar" class="canvas-source-bar hidden"></div>
-            <div id="canvasTabs" class="canvas-tabs hidden" role="tablist" aria-label="Open canvases"></div>
-            <div id="canvasEmpty" class="canvas-empty">
-              <span>▦</span>
-              <strong id="canvasEmptyTitle">Choose a briefing or ask AMOS</strong>
-              <p id="canvasEmptyMessage">Start with a template, reopen a saved view, or ask for any company comparison, trend, decision, or operating brief.</p>
-              <button id="canvasStartButton" class="button primary" type="button">Create a briefing with AMOS</button>
-            </div>
-            <div id="canvasBlocks" class="canvas-blocks hidden"></div>
           </div>
         </section>
 

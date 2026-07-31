@@ -126,3 +126,48 @@ test("built-in Briefings stay objective-led instead of prescribing coaching", as
   assert.doesNotMatch(javascript, /title: "Goals and coaching"/);
   assert.doesNotMatch(javascript, /most relevant coaching or learning intervention/);
 });
+
+test("Operator is chat-first with collapsible navigation and inline governed progress", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /id="sidebarToggle"/);
+  assert.match(html, /id="activityStream"/);
+  assert.match(html, /Progress summaries, governed tool use, and recorded outcomes/);
+  assert.doesNotMatch(html, /class="work-panel"/);
+  assert.match(javascript, /function beginInlineActivity\(\)/);
+  assert.match(javascript, /finishInlineActivity\(\)/);
+});
+
+test("dynamic canvases open beside chat without navigating away from Operator", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /id="canvasSidecar"/);
+  assert.match(html, /id="liveCanvasList"/);
+  assert.match(javascript, /if \(activeCanvasId\) canvasSidecarOpen = true;\s+renderCanvas\(\);/);
+  assert.doesNotMatch(
+    javascript,
+    /api\.on\("canvas:changed",[\s\S]*?if \(activeCanvasId\) showView\("canvas"\)/
+  );
+  assert.match(javascript, /actionLabel: "Open beside chat"/);
+});
+
+test("chat renders only typed Platform-authorized connect actions", async () => {
+  const javascript = await readFile(
+    new URL("../desktop/renderer/app.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(javascript, /"amos_connections_connect_link"/);
+  assert.match(javascript, /event\.args\?\.tool === "connect_link"/);
+  assert.match(javascript, /function parsePlatformToolResult\(result\)/);
+  assert.match(javascript, /action\?\.authority !== "amos_platform"/);
+  assert.match(javascript, /action\?\.type !== "open_url"/);
+  assert.match(javascript, /url\.protocol !== "https:"/);
+  assert.match(javascript, /await api\.openExternal\(action\.url\)/);
+});
