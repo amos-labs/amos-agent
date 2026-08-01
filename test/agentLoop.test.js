@@ -192,6 +192,96 @@ test("productive work continues beyond the former eight-cycle limit", async () =
   assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
 
+test("completed task history stays below the provider message ceiling", async () => {
+  const observedLengths = [];
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        completedHistoryMessages: 8,
+        maxModelMessages: 12
+      }
+    },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        observedLengths.push(messages.length);
+        assert.ok(messages.length <= 12);
+        return { message: { role: "assistant", content: "Done." } };
+      }
+    }
+  });
+
+  for (let task = 0; task < 30; task += 1) {
+    assert.equal(await loop.run(`Complete task ${task}`), "Done.");
+  }
+
+  assert.ok(observedLengths.every((length) => length <= 12));
+  assert.ok(loop.messages.length <= 10);
+  assert.ok(loop.messages.some((message) => String(message.content).includes("Complete task 29")));
+  assert.ok(!loop.messages.some((message) => String(message.content).includes("Complete task 0\n")));
+});
+
+test("an active tool-heavy task keeps its objective and complete recent tool blocks", async () => {
+  const registry = new ToolRegistry();
+  const executed = [];
+  let turn = 0;
+  registry.register({
+    name: "inspect_part",
+    async handler(args) {
+      executed.push(args.part);
+      return { ok: true, part: args.part };
+    }
+  });
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxModelMessages: 12,
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        assert.ok(messages.length <= 12);
+        assert.equal(messages[0].role, "system");
+        assert.ok(
+          messages.some(
+            (message) => message.role === "user" &&
+              String(message.content).includes("Inspect all twelve parts")
+          )
+        );
+        assertCompleteToolBlocks(messages);
+        turn += 1;
+        if (turn <= 12) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: `call-${turn}`,
+                function: {
+                  name: "inspect_part",
+                  arguments: JSON.stringify({ part: turn })
+                }
+              }]
+            }
+          };
+        }
+        return { message: { role: "assistant", content: "All twelve parts inspected." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Inspect all twelve parts"), "All twelve parts inspected.");
+  assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+  assert.ok(loop.messages.length <= 13);
+});
+
 test("successful AMOS results receive a short-lived desktop canvas reference", async () => {
   const registry = new ToolRegistry();
   registry.register({
@@ -382,3 +472,21 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   assert.doesNotMatch(answer, /Stopped after/i);
   assert.equal(loop.messages.filter((message) => message.role === "system").length, 1);
 });
+
+function assertCompleteToolBlocks(messages) {
+  let pending = new Set();
+  for (const message of messages) {
+    if (message.role === "assistant" && message.tool_calls?.length > 0) {
+      assert.equal(pending.size, 0);
+      pending = new Set(message.tool_calls.map((call) => call.id));
+      continue;
+    }
+    if (message.role === "tool") {
+      assert.ok(pending.has(message.tool_call_id));
+      pending.delete(message.tool_call_id);
+      continue;
+    }
+    assert.equal(pending.size, 0);
+  }
+  assert.equal(pending.size, 0);
+}

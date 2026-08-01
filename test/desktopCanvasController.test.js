@@ -37,6 +37,17 @@ test("desktop controller emits canvas lifecycle updates and clears them with the
     source: { kind: "live", label: "AMOS overview", refreshed_at: timestamp, references: [] },
     blocks: [{ type: "metric", label: "Open approvals", value: 2 }]
   });
+  let loopCleared = false;
+  controller.runtime = {
+    runtime: {
+      loop: {
+        clear() {
+          loopCleared = true;
+        }
+      }
+    }
+  };
   await controller.clear();
+  assert.equal(loopCleared, true);
   assert.deepEqual(controller.canvases.state(), { canvases: [], activeCanvasId: null });
 });

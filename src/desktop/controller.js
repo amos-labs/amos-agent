@@ -1553,7 +1553,7 @@ export class DesktopController {
   }
 
   async clear() {
-    if (this.runtime) this.runtime.loop.clear();
+    if (this.runtime) this.runtime.runtime.loop.clear();
     this.attachments.clear();
     this.canvases.clear();
     this.canvasResults.clear();

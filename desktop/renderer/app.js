@@ -3123,8 +3123,16 @@ async function cancelTask() {
 }
 
 async function clearSession() {
-  await api.clear();
-  resetSessionView();
+  elements.clearButton.disabled = true;
+  try {
+    await api.clear();
+    resetSessionView();
+    elements.promptInput.focus();
+  } catch (error) {
+    toast(error.message || "AMOS could not clear this session.", true);
+  } finally {
+    elements.clearButton.disabled = false;
+  }
 }
 
 function resetSessionView() {
