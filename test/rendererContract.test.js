@@ -74,6 +74,10 @@ test("routine approval review stays inside Desktop", async () => {
     /elements\.approvalsButton\.addEventListener\("click", \(\) => showView\("decisions"\)\)/
   );
   assert.match(javascript, /state\.approvalDecisionMode === "desktop"/);
+  assert.match(javascript, /reviewCanvasApproval\(block\.pendingId, review\)/);
+  assert.match(javascript, /approvalIdFromUrl\(node\.href\)/);
+  assert.match(javascript, /running\s*\?\s*"Steer AMOS "/);
+  assert.match(javascript, /restoreConversationFromContinuity/);
   assert.match(javascript, /Enable native approval/);
   assert.match(javascript, /state = await api\.login\(\)/);
   assert.match(

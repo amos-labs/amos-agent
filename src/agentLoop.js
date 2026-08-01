@@ -41,6 +41,13 @@ export class AgentLoop {
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
+  restoreContinuity(content) {
+    const continuity = String(content || "").trim();
+    if (!continuity || this.activeTaskMessage || this.messages.length > 1) return false;
+    this.messages.push({ role: "assistant", content: continuity });
+    return true;
+  }
+
   async run(
     userContent,
     {

@@ -58,6 +58,23 @@ test("custom operating prompt survives a cleared session", () => {
   assert.deepEqual(loop.messages, [{ role: "system", content: "LOCAL ONLY" }]);
 });
 
+test("encrypted continuity can rehydrate an otherwise fresh loop only once", () => {
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    systemPrompt: "LOCAL ONLY",
+    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "" } }) }
+  });
+  assert.equal(loop.restoreContinuity("Previous safe milestone"), true);
+  assert.deepEqual(loop.messages, [
+    { role: "system", content: "LOCAL ONLY" },
+    { role: "assistant", content: "Previous safe milestone" }
+  ]);
+  assert.equal(loop.restoreContinuity("Duplicate"), false);
+});
+
 test("agent selects a visible skill-backed workflow and injects bounded guidance", async () => {
   const events = [];
   const loop = new AgentLoop({

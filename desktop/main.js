@@ -24,6 +24,7 @@ import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
 import { SavedViewStore } from "../src/desktop/savedViewStore.js";
+import { SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
 import { DecisionKeyStore } from "../src/desktop/decisionKeyStore.js";
 import {
   DesktopUpdateManager,
@@ -518,6 +519,11 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
+  const sessionContinuityStore = new SessionContinuityStore({
+    filePath: join(app.getPath("userData"), "session-continuity.json"),
+    encrypt,
+    decrypt
+  });
   const decisionKeyStore = new DecisionKeyStore({
     filePath: join(app.getPath("userData"), "desktop-approval-key.json"),
     encrypt,
@@ -550,6 +556,7 @@ app.whenReady().then(async () => {
     taskCheckpointStore,
     localReceiptStore,
     savedViewStore,
+    sessionContinuityStore,
     decisionKeyStore,
     offlineManager,
     telemetry,

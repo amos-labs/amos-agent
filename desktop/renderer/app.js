@@ -75,6 +75,7 @@ let streamingMessage = null;
 let canvasSidecarOpen = false;
 let pendingUiActions = [];
 let pendingGenericConnectCalls = 0;
+let continuityConversationRestored = false;
 const transientTaskMessages = new Set();
 let resumingCheckpointId = null;
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
@@ -163,11 +164,15 @@ async function initialize() {
   bindActions();
   bindEvents();
   [state, updateState] = await Promise.all([api.state(), api.updateState()]);
+  currentTaskId = state.activeTask?.id || null;
+  running = Boolean(state.activeTask);
   updateAttachments(state.attachments || []);
   selectedProvider = state.settings.provider;
   canvasSidecarOpen = Boolean(state.activeCanvasId);
   restoreShellPreferences();
   render();
+  if (running) setRunning(true);
+  restoreConversationFromContinuity();
   elements.loading.classList.add("hidden");
   elements.app.classList.remove("hidden");
   api.refreshOffline()
@@ -325,6 +330,7 @@ function bindEvents() {
     renderDecisions();
     renderCompanyCache();
     renderConnections();
+    restoreConversationFromContinuity();
   });
   api.on("update:changed", (nextUpdateState) => {
     updateState = nextUpdateState;
@@ -498,18 +504,7 @@ function render() {
     "hidden",
     state.approvalDecisionMode === "desktop"
   );
-  elements.runButton.replaceChildren(
-    document.createTextNode(
-      state.mode?.offline
-        ? "Run locally "
-        : state.mode?.personal
-          ? "Run privately "
-          : demo
-            ? "Run in demo "
-            : "Run with AMOS "
-    ),
-    text("→")
-  );
+  renderRunButtonLabel();
   const scopeDot = elements.scopeNote.querySelector(".status-dot");
   const scopeText = elements.scopeNote.querySelector("span:last-child");
   scopeDot.classList.toggle("green", !state.mode?.offline && !state.mode?.personal);
@@ -1359,7 +1354,7 @@ function renderCanvasDecision(block) {
     review.type = "button";
     review.className = "button primary";
     review.textContent = approvalActionLabel();
-    review.addEventListener("click", () => reviewGovernedApproval(block.pendingId, review));
+    review.addEventListener("click", () => reviewCanvasApproval(block.pendingId, review));
     card.append(review);
   }
   return card;
@@ -2216,6 +2211,7 @@ async function removeOfflineProposal(proposal, button) {
 function decisionCard(approval, actionable) {
   const card = document.createElement("article");
   card.className = `decision-card ${approval.status}`;
+  card.dataset.approvalId = approval.id;
   const content = document.createElement("div");
   content.className = "decision-content";
   const meta = document.createElement("div");
@@ -2269,7 +2265,9 @@ async function reviewGovernedApproval(id, button) {
   const needsEnrollment =
     state?.connectionMode === "user" && state?.approvalDecisionMode !== "desktop";
   const idleLabel = approvalActionLabel();
-  setButtonBusy(button, true, needsEnrollment ? "Waiting for browser…" : "Reviewing…");
+  if (button) {
+    setButtonBusy(button, true, needsEnrollment ? "Waiting for browser…" : "Reviewing…");
+  }
   try {
     if (needsEnrollment) {
       state = await api.login();
@@ -2295,8 +2293,48 @@ async function reviewGovernedApproval(id, button) {
   } catch (error) {
     toast(error.message, true);
   } finally {
-    if (button.isConnected) setButtonBusy(button, false, idleLabel);
+    if (button?.isConnected) setButtonBusy(button, false, idleLabel);
   }
+}
+
+async function reviewCanvasApproval(id, button = null) {
+  if (button) setButtonBusy(button, true, "Opening Decisions…");
+  try {
+    state = await api.refreshRemote();
+    render();
+    showView("decisions");
+    const approval = (Array.isArray(state.approvals) ? state.approvals : [])
+      .find((item) => item.id === id);
+    focusDecisionCard(id);
+    if (!approval || approval.status !== "pending") {
+      toast("That approval is no longer pending. Decisions now shows the current state.");
+      return;
+    }
+    if (state.approvalDecisionMode !== "desktop") {
+      toast(
+        "This server did not advertise native approval. The current governed decision is open in Decisions.",
+        true
+      );
+      return;
+    }
+    await reviewGovernedApproval(id, null);
+  } catch (error) {
+    showView("decisions");
+    toast(error.message, true);
+  } finally {
+    if (button?.isConnected) setButtonBusy(button, false, approvalActionLabel());
+  }
+}
+
+function focusDecisionCard(id) {
+  requestAnimationFrame(() => {
+    const card = [...elements.pendingDecisions.querySelectorAll(".decision-card")]
+      .find((item) => item.dataset.approvalId === id);
+    if (!card) return;
+    card.classList.add("focused");
+    card.scrollIntoView({ block: "center", behavior: "smooth" });
+    window.setTimeout(() => card.classList.remove("focused"), 2_000);
+  });
 }
 
 function decisionEmpty(message) {
@@ -3137,6 +3175,8 @@ async function clearSession() {
 
 function resetSessionView() {
   resumingCheckpointId = null;
+  continuityConversationRestored = false;
+  state.sessionContinuity = null;
   state.canvases = [];
   state.activeCanvasId = null;
   activeCanvasId = null;
@@ -3175,6 +3215,35 @@ function addMessage(role, content) {
   elements.messages.append(message);
   elements.messages.scrollTop = elements.messages.scrollHeight;
   return message;
+}
+
+function restoreConversationFromContinuity() {
+  if (continuityConversationRestored) return;
+  const continuity = state?.sessionContinuity;
+  const activeObjective = state?.activeTask?.objective;
+  if (!continuity?.turns?.length && !activeObjective) return;
+  if (elements.messages.querySelector(".message.user, .message.assistant")) {
+    continuityConversationRestored = true;
+    return;
+  }
+  continuityConversationRestored = true;
+  if (continuity?.turns?.length) {
+    addMessage(
+      "pending",
+      `Restored encrypted session continuity for ${continuity.workspace}. AMOS will revalidate live company state and local files before acting.`
+    );
+    for (const turn of continuity.turns) {
+      addMessage("user", turn.objective);
+      addMessage("assistant", turn.answer);
+    }
+  }
+  if (
+    activeObjective &&
+    activeObjective !== continuity?.turns?.at(-1)?.objective
+  ) {
+    addMessage("user", activeObjective);
+    addMessage("pending", "AMOS is still working on this task. Add direction below to steer it.");
+  }
 }
 
 function renderMarkdown(container, source) {
@@ -3285,7 +3354,12 @@ function appendInline(container, nodes) {
       appendInline(link, node.children);
       link.addEventListener("click", (event) => {
         event.preventDefault();
-        api.openExternal(node.href).catch((error) => toast(error.message, true));
+        const approvalId = approvalIdFromUrl(node.href);
+        if (approvalId) {
+          reviewCanvasApproval(approvalId).catch((error) => toast(error.message, true));
+        } else {
+          api.openExternal(node.href).catch((error) => toast(error.message, true));
+        }
       });
       container.append(link);
     } else {
@@ -3294,6 +3368,18 @@ function appendInline(container, nodes) {
       appendInline(element, node.children);
       container.append(element);
     }
+  }
+}
+
+function approvalIdFromUrl(value) {
+  try {
+    const url = new URL(value);
+    const amos = new URL(state?.settings?.amosMcpUrl || "");
+    if (url.origin !== amos.origin) return "";
+    const match = url.pathname.match(/^\/(?:settings\/)?approvals\/([0-9a-f-]{36})\/?$/i);
+    return match?.[1] || "";
+  } catch {
+    return "";
   }
 }
 
@@ -3512,10 +3598,7 @@ function renderActivity() {
 function setRunning(value) {
   running = value;
   elements.runButton.disabled = false;
-  elements.runButton.replaceChildren(
-    document.createTextNode(value ? "Steer AMOS " : "Run with AMOS "),
-    text("→")
-  );
+  renderRunButtonLabel();
   elements.cancelButton.classList.toggle("hidden", !value);
   elements.cancelButton.disabled = false;
   elements.cancelButton.textContent = "Stop safely";
@@ -3523,7 +3606,7 @@ function setRunning(value) {
   elements.promptInput.disabled = false;
   elements.promptInput.placeholder = value
     ? "Add direction while AMOS works…"
-    : "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
+    : idlePromptPlaceholder();
   elements.runningIndicator.textContent = value ? "Working · steer or stop" : "Idle";
   elements.runningIndicator.classList.toggle("active", value);
   if (value) {
@@ -3533,6 +3616,32 @@ function setRunning(value) {
   }
   renderAttachments();
   renderUpdate();
+}
+
+function renderRunButtonLabel() {
+  const label = running
+    ? "Steer AMOS "
+    : state?.mode?.offline
+      ? "Run locally "
+      : state?.mode?.personal
+        ? "Run privately "
+        : state?.connectionMode === "demo"
+          ? "Run in demo "
+          : "Run with AMOS ";
+  elements.runButton.replaceChildren(document.createTextNode(label), text("→"));
+}
+
+function idlePromptPlaceholder() {
+  if (state?.mode?.offline) {
+    return "Ask about this project, attach a document, paste a screenshot, or describe offline work…";
+  }
+  if (state?.mode?.personal) {
+    return "Ask about this project, attach a document, paste a screenshot, or describe work to move forward…";
+  }
+  if (state?.connectionMode === "demo") {
+    return "Ask about Northwind, create something, or make a governed sample-company change…";
+  }
+  return "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
 }
 
 function renderUpdate() {
