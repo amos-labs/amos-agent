@@ -1401,6 +1401,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     linear-gradient(120deg, rgba(109, 147, 255, .08), transparent 52%),
     var(--panel);
 }
+
+.decision-card.focused {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 28%, transparent);
+}
 .decision-card.offline-proposal.reconciled { border-color: rgba(59, 213, 143, .3); }
 .decision-meta { display: flex; align-items: center; gap: 12px; }
 .decision-meta time { color: var(--muted-2); font-size: 9px; }

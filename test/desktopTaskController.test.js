@@ -5,6 +5,10 @@ import {
   onlineTaskSource,
   TaskCheckpointStore
 } from "../src/desktop/taskCheckpoint.js";
+import {
+  continuityScope,
+  SessionContinuityStore
+} from "../src/desktop/sessionContinuity.js";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +16,8 @@ import { join } from "node:path";
 function settingsStore() {
   const value = {
     operatingMode: "online",
-    amosMcpUrl: "https://app.amoslabs.com/mcp"
+    amosMcpUrl: "https://app.amoslabs.com/mcp",
+    workspace: "/tmp/amos-workspace"
   };
   return {
     read: async () => value,
@@ -20,13 +25,23 @@ function settingsStore() {
   };
 }
 
-function identity() {
+async function continuityStore() {
+  const root = await mkdtemp(join(tmpdir(), "amos-controller-continuity-"));
+  return new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+}
+
+function identity(overrides = {}) {
   return {
     principal_type: "user",
     sub: "user-1",
     tenant_id: "tenant-1",
     tenant_slug: "northwind",
-    role: "owner"
+    role: "owner",
+    ...overrides
   };
 }
 
@@ -190,5 +205,55 @@ test("desktop demo skips user-bound restart checkpoints without blocking the tas
         event.payload.phase === "checkpoint_unavailable" &&
         /Short-lived demo tasks/.test(event.payload.summary)
     )
+  );
+});
+
+test("desktop rehydrates only the matching user, tenant, and workspace continuity", async () => {
+  const store = await continuityStore();
+  const settings = await settingsStore().read();
+  const matchingScope = continuityScope({
+    identity: identity(),
+    boundary: "online",
+    workspace: settings.workspace
+  });
+  await store.appendTurn(matchingScope, {
+    objective: "Fix the download page",
+    answer: "Updated amos-website/app/downloads/page.tsx",
+    artifacts: ["amos-website/app/downloads/page.tsx"]
+  });
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-continuity",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  let restored = "";
+  const runtimeState = {
+    runtime: {
+      loop: {
+        restoreContinuity(value) {
+          restored = value;
+          return true;
+        }
+      }
+    }
+  };
+
+  const record = await controller.hydrateSessionContinuity(
+    settings,
+    "online",
+    runtimeState
+  );
+  assert.equal(record.turns.length, 1);
+  assert.match(restored, /amos-website\/app\/downloads\/page\.tsx/);
+  assert.match(restored, /Reinspect the listed local artifacts/i);
+
+  controller.identity = identity({ tenant_id: "tenant-2" });
+  const otherRuntime = { runtime: { loop: { restoreContinuity: () => true } } };
+  assert.equal(
+    await controller.hydrateSessionContinuity(settings, "online", otherRuntime),
+    null
   );
 });

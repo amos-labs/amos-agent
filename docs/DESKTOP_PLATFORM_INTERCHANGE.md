@@ -95,6 +95,33 @@ local URL/protocol checks. Free-form model text cannot mint a privileged button.
 Claude, Codex, and other MCP clients receive the same action and may render a
 link or use another appropriate affordance.
 
+## Session continuity and rehydration
+
+Refreshing or relaunching Desktop must not make the operator rediscover the
+selected project, recently completed objective, or known local artifacts. A
+bounded rehydration package may persist locally when it remains an orientation
+layer rather than a second company system of record:
+
+- the package is encrypted with operating-system storage and pinned to the
+  exact user, tenant, operating boundary, and selected workspace;
+- it contains recent user/assistant milestones, local receipt references, and
+  safe workspace-relative artifact and Git metadata;
+- it never stores tool arguments, raw tool output, credentials, bearer tokens,
+  pending execution authority, or replay instructions;
+- likely secrets are redacted before encryption, and demo or machine-principal
+  sessions do not create a company continuity package;
+- rehydrated content is explicitly untrusted orientation. AMOS must reinspect
+  local files and reread current platform sources, receipts, policy, and pending
+  approvals before relying on it or acting;
+- **Clear session** removes the matching local continuity package as well as the
+  in-memory conversation.
+
+The platform remains authoritative for company data, durable operations,
+approvals, and proof. Client-neutral fork manifests and platform memory remain
+the portability path for continuity across devices and Claude/Codex; this local
+package only prevents a first-party Desktop restart from erasing useful working
+context.
+
 ## The interchange contract
 
 Desktop discovers capabilities from the platform instead of hard-coding which

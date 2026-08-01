@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { homedir, totalmem, freemem, arch, platform, release } from "node:os";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { loadConfig, validateConfig } from "../config.js";
 import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
@@ -36,6 +36,10 @@ import {
   onlineTaskSource,
   reconcileTaskCheckpoint
 } from "./taskCheckpoint.js";
+import {
+  buildSessionContinuityPrompt,
+  continuityScope
+} from "./sessionContinuity.js";
 import {
   amosOrigin,
   approvalReviewUrl,
@@ -72,6 +76,7 @@ export class DesktopController {
     taskCheckpointStore = null,
     localReceiptStore = null,
     savedViewStore = null,
+    sessionContinuityStore = null,
     decisionKeyStore = null,
     offlineManager = null,
     telemetry = null,
@@ -109,6 +114,7 @@ export class DesktopController {
     this.taskCheckpointStore = taskCheckpointStore;
     this.localReceiptStore = localReceiptStore;
     this.savedViewStore = savedViewStore;
+    this.sessionContinuityStore = sessionContinuityStore;
     this.decisionKeyStore = decisionKeyStore;
     this.activeTask = null;
     this.checkpointWrites = Promise.resolve();
@@ -182,13 +188,15 @@ export class DesktopController {
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState(),
       taskCheckpoints: await this.taskCheckpointState(),
+      sessionContinuity: await this.sessionContinuityState(settings),
       localReceipts: this.localReceiptStore ? await this.localReceiptStore.list() : [],
       activeTask: this.activeTask
         ? {
             id: this.activeTask.id,
             startedAt: this.activeTask.startedAt,
             phase: this.activeTask.phase,
-            summary: this.activeTask.summary
+            summary: this.activeTask.summary,
+            objective: this.activeTask.objective
           }
         : null
     };
@@ -1247,7 +1255,9 @@ export class DesktopController {
       steeringQueue: [],
       steeringCount: 0,
       acceptingSteering: true,
-      receiptEvents: []
+      receiptEvents: [],
+      continuityArtifacts: [],
+      continuityAllowed: false
     };
     this.send("agent:status", {
       running: true,
@@ -1256,6 +1266,7 @@ export class DesktopController {
       summary: "Preparing the task"
     });
     const settings = await this.settingsStore.read();
+    this.activeTask.workspace = settings.workspace || homedir();
     const boundary = settings.operatingMode;
     const offline = boundary === "offline";
     const company = boundary === "online";
@@ -1270,8 +1281,9 @@ export class DesktopController {
           "Company memory is unavailable in this personal boundary. Use this task only, keep it private, or connect a company."
         );
       }
+      let onlineCheckpoint = null;
       if (company) {
-        await this.startOnlineTaskCheckpoint({
+        onlineCheckpoint = await this.startOnlineTaskCheckpoint({
           id: taskId,
           prompt,
           references,
@@ -1279,6 +1291,8 @@ export class DesktopController {
           resumeTaskId
         });
       }
+      this.activeTask.continuityAllowed = !company || Boolean(onlineCheckpoint);
+      await this.hydrateSessionContinuity(settings, boundary, this.runtime);
       const memory = [
         ...await this.persistPrivateMemory(references),
         ...(!company
@@ -1340,7 +1354,7 @@ export class DesktopController {
         await this.sendTaskCheckpoints();
       }
       this.record("assistant", answer);
-      await this.recordLocalReceipt({
+      const localReceipt = await this.recordLocalReceipt({
         taskId,
         status: "completed",
         boundary,
@@ -1349,6 +1363,18 @@ export class DesktopController {
         startedAt: this.activeTask.startedAt,
         receiptEvents
       });
+      if (this.activeTask.continuityAllowed) {
+        await this.saveSessionContinuity({
+          settings,
+          boundary,
+          objective: prompt,
+          answer,
+          artifacts: this.activeTask.continuityArtifacts,
+          receipt: localReceipt
+        }).catch((error) => {
+          this.record("continuity", `Could not save encrypted session continuity: ${error.message}`);
+        });
+      }
       await this.recordNorthwindValue(settings, receiptEvents);
       return {
         answer,
@@ -1553,6 +1579,15 @@ export class DesktopController {
   }
 
   async clear() {
+    if (this.sessionContinuityStore) {
+      const settings = await this.settingsStore.read();
+      const scope = this.sessionContinuityScope(settings, settings.operatingMode);
+      if (scope) {
+        await this.sessionContinuityStore.clear(scope).catch((error) => {
+          this.record("continuity", `Could not clear encrypted session continuity: ${error.message}`);
+        });
+      }
+    }
     if (this.runtime) this.runtime.runtime.loop.clear();
     this.attachments.clear();
     this.canvases.clear();
@@ -2038,6 +2073,7 @@ export class DesktopController {
     this.runtime = {
       offline: isOffline,
       boundary: requestedBoundary,
+      demo: Boolean(credentials?.demo),
       config,
       oauth,
       runtime: createRuntime({
@@ -2055,10 +2091,64 @@ export class DesktopController {
               ? DEMO_SYSTEM_PROMPT
               : SYSTEM_PROMPT, settings, config),
         extraTools,
-        onToolResult: (outcome) => this.canvasResults.capture(outcome)
+        onToolResult: (outcome) => {
+          this.captureContinuityToolOutcome(outcome, config.safety.workspaceRoot);
+          return this.canvasResults.capture(outcome);
+        }
       })
     };
+    await this.hydrateSessionContinuity(settings, requestedBoundary, this.runtime);
     return this.runtime;
+  }
+
+  sessionContinuityScope(settings, boundary = settings?.operatingMode) {
+    if (!this.sessionContinuityStore) return null;
+    return continuityScope({
+      identity: this.identity,
+      boundary,
+      workspace: settings?.workspace || homedir()
+    });
+  }
+
+  async sessionContinuityState(settings = null) {
+    if (!this.sessionContinuityStore) return null;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.sessionContinuityScope(currentSettings, currentSettings.operatingMode);
+    if (!scope) return null;
+    return this.sessionContinuityStore.load(scope);
+  }
+
+  async hydrateSessionContinuity(settings, boundary, runtimeState = this.runtime) {
+    if (!runtimeState || runtimeState.demo || !this.sessionContinuityStore) return null;
+    const scope = this.sessionContinuityScope(settings, boundary);
+    if (!scope || runtimeState.continuityKey === scope.key) return null;
+    const record = await this.sessionContinuityStore.load(scope);
+    runtimeState.continuityKey = scope.key;
+    if (!record) return null;
+    const prompt = buildSessionContinuityPrompt(record);
+    const restored = runtimeState.runtime.loop.restoreContinuity(prompt);
+    return restored ? record : null;
+  }
+
+  async saveSessionContinuity({ settings, boundary, objective, answer, artifacts, receipt }) {
+    if (!this.sessionContinuityStore) return null;
+    const scope = this.sessionContinuityScope(settings, boundary);
+    if (!scope) return null;
+    return this.sessionContinuityStore.appendTurn(scope, {
+      objective,
+      answer,
+      artifacts,
+      receipt
+    });
+  }
+
+  captureContinuityToolOutcome(outcome, workspace) {
+    const active = this.activeTask;
+    if (!active || outcome?.failed) return;
+    active.continuityArtifacts = uniqueArtifactReferences([
+      ...(active.continuityArtifacts || []),
+      ...continuityArtifactReferences(outcome?.name, outcome?.result, workspace)
+    ]);
   }
 
   configFrom(settings) {
@@ -2108,7 +2198,7 @@ export class DesktopController {
   }
 
   async sendRemoteState() {
-    this.send("remote:changed", {
+    const remoteState = {
       identity: this.identity,
       accountStatus: this.accountStatus,
       approvals: this.companyApprovals,
@@ -2122,8 +2212,72 @@ export class DesktopController {
       remoteStatus: { ...this.remoteStatus },
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState()
-    });
+    };
+    if (this.sessionContinuityStore) {
+      remoteState.sessionContinuity = await this.sessionContinuityState();
+    }
+    this.send("remote:changed", remoteState);
   }
+}
+
+const CONTINUITY_LOCAL_TOOLS = new Set([
+  "desktop_inspect_project",
+  "list_files",
+  "read_file",
+  "write_file",
+  "search_files",
+  "git_status",
+  "apply_patch"
+]);
+
+function continuityArtifactReferences(name, result, workspace) {
+  if (!CONTINUITY_LOCAL_TOOLS.has(name) || !result || typeof result !== "object") return [];
+  const paths = [];
+  const metadata = [];
+  const addPath = (value) => {
+    const safe = safeWorkspaceReference(value, workspace);
+    if (safe) paths.push(safe);
+  };
+  addPath(result.path);
+  for (const path of Array.isArray(result.files) ? result.files : []) addPath(path);
+  for (const path of Array.isArray(result.manifests) ? result.manifests : []) addPath(path);
+  addPath(result.readme?.path);
+  for (const match of Array.isArray(result.matches) ? result.matches : []) addPath(match?.path);
+  if (name === "desktop_inspect_project") {
+    if (result.project) metadata.push(`project: ${String(result.project).slice(0, 160)}`);
+    if (result.branch) metadata.push(`git branch: ${String(result.branch).slice(0, 256)}`);
+    if (typeof result.git?.dirty === "boolean") metadata.push(`git dirty: ${result.git.dirty}`);
+    for (const change of Array.isArray(result.git?.changes) ? result.git.changes : []) {
+      addPath(String(change).replace(/^..\s+/, "").split(" -> ").at(-1));
+    }
+  }
+  if (name === "git_status" && typeof result.stdout === "string") {
+    for (const line of result.stdout.split(/\r?\n/).filter(Boolean)) {
+      if (line.startsWith("## ")) metadata.push(`git ${line.slice(3, 259)}`);
+      else addPath(line.replace(/^..\s+/, "").split(" -> ").at(-1));
+    }
+  }
+  return uniqueArtifactReferences([...metadata, ...paths]);
+}
+
+function safeWorkspaceReference(value, workspace) {
+  const input = String(value || "").trim();
+  if (!input || input.includes("\n") || input.includes("\0") || !workspace) return "";
+  const root = resolve(workspace);
+  const candidate = isAbsolute(input) ? resolve(input) : resolve(root, input);
+  const fromRoot = relative(root, candidate);
+  if (fromRoot === "") return ".";
+  if (fromRoot === ".." || fromRoot.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) || isAbsolute(fromRoot)) {
+    return "";
+  }
+  return fromRoot.slice(0, 1_024);
+}
+
+function uniqueArtifactReferences(value) {
+  return [...new Set((Array.isArray(value) ? value : [])
+    .map((item) => String(item || "").trim().slice(0, 1_024))
+    .filter(Boolean))]
+    .slice(-80);
 }
 
 function assertProposalIdentity(proposal, identity) {
