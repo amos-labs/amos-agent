@@ -2,6 +2,7 @@ export const COMPANY_VIEW_INTENTS = Object.freeze([
   "auto",
   "company_overview",
   "performance",
+  "learning",
   "kpi",
   "funnel",
   "cohort",
@@ -73,6 +74,7 @@ function blocksForIntent(intent, payload, context) {
   if (intent === "approvals") return decisionBlocks(payload, "approval", context);
   if (intent === "receipts") return decisionBlocks(payload, "receipt", context);
   if (intent === "performance") return performanceBlocks(payload, context);
+  if (intent === "learning") return learningBlocks(payload, context);
   if (intent === "timeline") return timelineBlocks(payload, context);
   if (intent === "funnel") return funnelBlocks(payload, context);
   if (intent === "cohort" || intent === "comparison") return comparisonBlocks(payload, context);
@@ -83,6 +85,106 @@ function blocksForIntent(intent, payload, context) {
     ].slice(0, 24);
   }
   return genericDataBlocks(payload, context);
+}
+
+function learningBlocks(payload, context) {
+  const course = payload?.item && typeof payload.item === "object"
+    ? payload.item
+    : payload?.course && typeof payload.course === "object"
+      ? payload.course
+      : payload;
+  const references = collectReferences(payload);
+  const baseProvenance = provenance({ ...context, references });
+  const blocks = [];
+  const description = firstValue(course, [
+    "description",
+    "short_description",
+    "summary",
+    "topic"
+  ]);
+  if (description) {
+    blocks.push({
+      id: "learning-overview",
+      type: "markdown",
+      title: cleanText(course.title || course.name || "Course overview", 160),
+      content: cleanText(description, 20_000),
+      provenance: baseProvenance
+    });
+  }
+
+  const status = firstValue(course, ["status", "state"]);
+  if (status || typeof course?.published === "boolean") {
+    blocks.push({
+      id: "learning-status",
+      type: "metric",
+      label: "Course status",
+      value: status ? humanize(status) : course.published ? "Published" : "Draft",
+      trend: "neutral",
+      provenance: baseProvenance
+    });
+  }
+  const length = finiteNumber(firstValue(course, ["length", "hours", "duration"]));
+  if (length !== null) {
+    blocks.push({
+      id: "learning-length",
+      type: "metric",
+      label: "Estimated length",
+      value: length,
+      unit: cleanText(course.length_unit || (course.hours ? "hours" : ""), 40),
+      trend: "neutral",
+      provenance: baseProvenance
+    });
+  }
+
+  const modules = Array.isArray(course?.modules) ? course.modules.slice(0, MAX_ROWS) : [];
+  if (modules.length > 0) {
+    blocks.push({
+      id: "learning-modules-count",
+      type: "metric",
+      label: "Modules",
+      value: modules.length,
+      trend: "neutral",
+      provenance: baseProvenance
+    });
+    const rows = modules.map((module, index) => ({
+      order: finiteNumber(firstValue(module, ["position", "order", "sequence"])) ?? index + 1,
+      module: String(firstValue(module, ["title", "name", "label"]) || `Module ${index + 1}`),
+      lessons: Array.isArray(module?.lessons)
+        ? module.lessons.length
+        : finiteNumber(firstValue(module, ["lesson_count", "lessons_count"])),
+      status: stringValue(firstValue(module, ["status", "state"])) || null
+    }));
+    const moduleTable = tableBlock(rows, "Course modules", baseProvenance);
+    if (moduleTable) blocks.push(moduleTable);
+  }
+
+  const reviewUrl = safeLearningUrl(firstValue(course, ["review_url", "reviewUrl"]));
+  const courseUrl = safeLearningUrl(firstValue(course, ["url", "course_url", "courseUrl"]));
+  const destination = reviewUrl || courseUrl;
+  if (destination) {
+    blocks.push({
+      id: "learning-destination",
+      type: "link",
+      title: reviewUrl ? "Review the draft" : "Open the course",
+      label: cleanText(course.title || course.name || "Learning course", 160),
+      description: reviewUrl
+        ? "Open the governed course review experience in your browser."
+        : "Open the generated course in your browser.",
+      url: destination,
+      action_label: reviewUrl ? "Review draft" : "Open course",
+      provenance: baseProvenance
+    });
+  }
+  if (references.length > 0) {
+    blocks.push({
+      id: "learning-evidence",
+      type: "sources",
+      title: "Course source",
+      items: references.slice(0, MAX_REFERENCES),
+      provenance: baseProvenance
+    });
+  }
+  return blocks.length > 0 ? blocks.slice(0, 24) : genericDataBlocks(payload, context);
 }
 
 function genericDataBlocks(payload, context) {
@@ -538,6 +640,16 @@ function inferIntent(sourceTool, payload) {
     /performance_snapshot|performance_units/.test(name + keys) ||
     (Array.isArray(payload?.operating_units) && payload?.goal_signal_pattern)
   ) return "performance";
+  const learningShape = [
+    name,
+    keys,
+    String(payload?.resource || ""),
+    String(payload?.item?.type || payload?.course?.type || ""),
+    Array.isArray(payload?.item?.modules) || Array.isArray(payload?.course?.modules)
+      ? "modules"
+      : ""
+  ].join(" ").toLowerCase();
+  if (/learning|course|curriculum|module/.test(learningShape)) return "learning";
   if (/funnel|conversion/.test(name + keys)) return "funnel";
   if (/cohort/.test(name + keys)) return "cohort";
   if (/timeline|activity|event/.test(name + keys)) return "timeline";
@@ -551,6 +663,7 @@ function titleForIntent(intent) {
   return {
     company_overview: "Company operating view",
     performance: "Company performance",
+    learning: "Learning course",
     kpi: "Company metrics",
     funnel: "Conversion funnel",
     cohort: "Cohort view",
@@ -566,10 +679,31 @@ function subtitleForIntent(intent) {
   if (intent === "performance") {
     return "Current and prior results, relevant benchmark gaps, and cited source evidence.";
   }
+  if (intent === "learning") {
+    return "Course structure, status, evidence, and the governed review destination.";
+  }
   if (intent === "approvals") return "Current governed decisions waiting for human authority.";
   if (intent === "receipts") return "Recorded outcomes with their available proof and provenance.";
   if (intent === "live_work") return "Current work, decisions, and operating evidence.";
   return "A deterministic view of the current AMOS result.";
+}
+
+function safeLearningUrl(value) {
+  if (!value) return "";
+  try {
+    const url = new URL(String(value));
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) return "";
+    if (url.username || url.password) return "";
+    for (const key of url.searchParams.keys()) {
+      if (/(?:token|secret|password|signature|api[_-]?key|access[_-]?key|code)/i.test(key)) {
+        return "";
+      }
+    }
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
 
 function provenance({
@@ -776,6 +910,7 @@ function primitiveOrNull(value) {
 }
 
 function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }

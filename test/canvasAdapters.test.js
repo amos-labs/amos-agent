@@ -143,6 +143,50 @@ test("performance adapter preserves the platform's honest empty state", () => {
   assert.equal(canvas.blocks.length, 0);
 });
 
+test("Nuvola learning results become a deterministic course review surface", () => {
+  const canvas = normalized(adaptCompanyResult({
+    intent: "auto",
+    sourceTool: "amos_call_engine_tool",
+    observedAt,
+    result: {
+      provider: "nuvola_learning_mcp",
+      corporation_id: 14,
+      resource: "course",
+      item: {
+        id: 42,
+        title: "Closing the Follow-up Gap",
+        type: "course",
+        status: "draft",
+        description: "A focused course generated from the observed learning deficit.",
+        hours: 1.5,
+        review_url: "https://learning.example/courses/42/review",
+        modules: [{
+          position: 1,
+          title: "Diagnose the gap",
+          lessons: [{ id: 1 }, { id: 2 }]
+        }, {
+          position: 2,
+          title: "Practice the response",
+          lessons: [{ id: 3 }]
+        }]
+      }
+    }
+  }));
+
+  assert.equal(canvas.title, "Learning course");
+  assert.ok(canvas.blocks.some((block) => block.type === "markdown"));
+  assert.equal(
+    canvas.blocks.find((block) => block.id === "learning-modules-count").value,
+    2
+  );
+  const modules = canvas.blocks.find((block) => block.title === "Course modules");
+  assert.deepEqual(modules.rows.map((row) => row.lessons), [2, 1]);
+  const destination = canvas.blocks.find((block) => block.type === "link");
+  assert.equal(destination.actionLabel, "Review draft");
+  assert.equal(destination.url, "https://learning.example/courses/42/review");
+  assert.ok(canvas.blocks.every((block) => block.provenance.tenantId === ""));
+});
+
 test("approval and receipt adapters preserve governed IDs and status", () => {
   const approvalCanvas = normalized(adaptCompanyResult({
     intent: "approvals",

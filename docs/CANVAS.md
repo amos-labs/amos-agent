@@ -9,15 +9,20 @@ Chat remains the command surface. The canvas is a presentation surface for:
 - filterable tables;
 - time-series charts;
 - Markdown briefs;
+- inert, syntax-labelled code;
+- safe browser destinations for app, page, and course previews;
 - source and evidence lists; and
 - approval or receipt cards.
 
 ## Trust boundary
 
-The model does not generate HTML, JavaScript, SQL, or executable controls.
-Instead, it calls the local `desktop_present_canvas` tool with a versioned
-`CanvasSpec`. Desktop validates the complete payload and renders it using local
-components.
+The model does not generate executable canvas HTML or controls. It calls the
+local `desktop_present_canvas` tool with a versioned `CanvasSpec`; Desktop
+validates the complete payload and renders it using local components. Code is
+assigned through `textContent`, never evaluated. Preview links allow HTTPS or
+loopback HTTP, reject embedded credentials and credential-like query
+parameters, and open in the system browser rather than an iframe or privileged
+webview.
 
 For live company results, Desktop captures successful AMOS tool output in a
 short-lived, session-only result store. The tool response includes a
@@ -29,6 +34,7 @@ approval, receipt, or live-work representation.
 Supported managed intents are:
 
 - company overview and KPIs;
+- learning courses, including generated Nuvola course structure and review;
 - funnels and cohorts;
 - timelines and comparisons;
 - approvals and receipts; and
@@ -44,7 +50,8 @@ The v1 limits are intentionally bounded:
 - 12 columns and 200 rows per table;
 - 6 series and 300 points per series;
 - 100 source references; and
-- 20 details per decision card.
+- 20 details per decision card; and
+- 50,000 characters per inert code block.
 
 Unknown block types, non-finite numeric values, oversized content, and malformed
 timestamps fail closed.
@@ -93,7 +100,20 @@ upload, persist, or share a canvas.
 - “Compare these accounts in a table and cite the records used.”
 - “Show everything waiting for my approval.”
 - “Turn the latest goal cycle into an operating brief with evidence.”
+- “Show me the generated course and let me open the review.”
+- “Display this code and give me a browser preview.”
 - “Refresh the company health canvas.”
 
-The model should use a canvas only when it makes the information easier to
-understand or act on. Normal questions should still receive normal answers.
+An explicit user request for a canvas or visual view is honored whenever the
+current surface supports it. For proactive presentation, the threshold is
+higher: visual structure, interaction, persistence, or dense comparison must
+make the result materially easier to understand or act on. A longer prose
+summary, a small list, or a single recommendation does not qualify.
+
+Canvas schemas are progressive. Ordinary chat turns do not advertise the
+custom canvas or update tools. An explicit canvas, code-display, or preview
+request reveals the custom
+canvas tool; a sufficiently structured captured AMOS result reveals the
+deterministic company-view tool; and the update tool appears after a canvas is
+active or the user explicitly asks to update one. This both reduces prompt size
+and prevents tool visibility from nudging the model toward unnecessary views.

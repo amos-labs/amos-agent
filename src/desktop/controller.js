@@ -37,6 +37,7 @@ import {
   reconcileTaskCheckpoint
 } from "./taskCheckpoint.js";
 import {
+  compileContinuityContext,
   buildSessionContinuityPrompt,
   continuityScope
 } from "./sessionContinuity.js";
@@ -97,6 +98,7 @@ export class DesktopController {
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.companies = { currentTenantId: null, tenants: [] };
+    this.workingContinuity = null;
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: null,
@@ -172,6 +174,7 @@ export class DesktopController {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
       },
+      workingContinuity: publicWorkingContinuity(this.workingContinuity),
       remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model, settings),
       providers: listModelProviders(),
@@ -818,6 +821,7 @@ export class DesktopController {
     this.accountStatus = null;
     this.companyApprovals = [];
     this.companies = { currentTenantId: null, tenants: [] };
+    this.workingContinuity = null;
     this.approvalsAvailable = true;
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
     await this.sendRemoteState();
@@ -868,6 +872,7 @@ export class DesktopController {
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.companies = { currentTenantId: null, tenants: [] };
+    this.workingContinuity = null;
     this.send("activity:changed", []);
     this.send("canvas:changed", this.canvases.state());
 
@@ -890,6 +895,7 @@ export class DesktopController {
   async refreshRemoteInner({ notify }) {
     const settings = await this.settingsStore.read();
     if (settings.operatingMode !== "online") {
+      this.workingContinuity = null;
       this.remoteStatus = {
         syncing: false,
         lastSyncedAt: this.remoteStatus.lastSyncedAt,
@@ -910,6 +916,7 @@ export class DesktopController {
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
       this.companies = { currentTenantId: null, tenants: [] };
+      this.workingContinuity = null;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
       await this.sendRemoteState();
       return this.state();
@@ -927,13 +934,15 @@ export class DesktopController {
       approvalsResult,
       accountStatusResult,
       connectionsResult,
-      companiesResult
+      companiesResult,
+      continuityResult
     ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
       remote.intelligenceStatus(),
       remote.connectionsCatalog(),
-      oauth.companies()
+      oauth.companies(),
+      remote.hydrateContinuity()
     ]);
 
     const errors = [];
@@ -945,6 +954,8 @@ export class DesktopController {
         errors.push(error.message);
       }
     } else {
+      this.identity = null;
+      this.workingContinuity = null;
       errors.push(identityResult.reason?.message || "Could not load AMOS identity");
     }
 
@@ -982,6 +993,24 @@ export class DesktopController {
     } else {
       this.companies = { currentTenantId: this.identity?.tenant_id || null, tenants: [] };
       errors.push(companiesResult.reason?.message || "Could not load AMOS companies");
+    }
+
+    if (continuityResult.status === "fulfilled") {
+      const continuity = continuityResult.value;
+      const tenantMatches =
+        !continuity.available ||
+        continuity.manifest?.scope?.tenantId === this.identity?.tenant_id;
+      if (tenantMatches) {
+        this.workingContinuity = continuity;
+      } else {
+        this.workingContinuity = null;
+        errors.push("AMOS working continuity did not match the authenticated company");
+      }
+    } else {
+      this.workingContinuity = null;
+      errors.push(
+        continuityResult.reason?.message || "Could not load cross-client working continuity"
+      );
     }
 
     this.remoteStatus = {
@@ -1322,6 +1351,7 @@ export class DesktopController {
       const answer = await runtime.loop.run(modelContent, {
         signal: abortController.signal,
         workflow,
+        presentationIntent: prompt,
         takeSteering: () => {
           const active = this.activeTask;
           if (!active || active.id !== taskId || active.steeringQueue.length === 0) return [];
@@ -1615,7 +1645,7 @@ export class DesktopController {
         status,
         boundary,
         workspace: basename(settings.workspace || homedir()),
-        model: `${settings.provider}:${settings.model}`,
+        model: continuityModelIdentity(settings),
         objective: prompt,
         startedAt,
         finishedAt: new Date().toISOString(),
@@ -1881,17 +1911,39 @@ export class DesktopController {
       });
       return;
     }
+    if (event.type === "tool_start") {
+      this.queueCheckpointUpdate(active.id, {
+        phase: "acting",
+        summary: `Running ${event.name}`,
+        action: {
+          name: event.name,
+          status: "started",
+          summary: "Tool execution began; current receipts must establish whether it completed"
+        }
+      });
+      return;
+    }
     if (event.type === "tool_end") {
       this.queueCheckpointUpdate(active.id, {
         phase: "acting",
         summary: `Completed ${event.name}`,
-        completedStep: `Completed ${event.name}`
+        completedStep: `Completed ${event.name}`,
+        action: {
+          name: event.name,
+          status: "completed",
+          summary: "A tool result was recorded; receipts remain authoritative for side effects"
+        }
       });
     } else if (event.type === "tool_error") {
       this.queueCheckpointUpdate(active.id, {
         phase: "evaluating",
         summary: `${event.name} returned an error; AMOS was evaluating the next safe step`,
-        completedStep: `${event.name} did not complete`
+        completedStep: `${event.name} did not complete`,
+        action: {
+          name: event.name,
+          status: "failed",
+          summary: String(event.error || "Tool returned an error").slice(0, 500)
+        }
       });
     }
   }
@@ -2121,25 +2173,73 @@ export class DesktopController {
   async hydrateSessionContinuity(settings, boundary, runtimeState = this.runtime) {
     if (!runtimeState || runtimeState.demo || !this.sessionContinuityStore) return null;
     const scope = this.sessionContinuityScope(settings, boundary);
-    if (!scope || runtimeState.continuityKey === scope.key) return null;
+    if (!scope) return null;
     const record = await this.sessionContinuityStore.load(scope);
-    runtimeState.continuityKey = scope.key;
-    if (!record) return null;
-    const prompt = buildSessionContinuityPrompt(record);
+    const localManifest = record?.manifest || null;
+    const sharedManifest =
+      boundary === "online" &&
+      this.workingContinuity?.available === true &&
+      this.workingContinuity.manifest?.scope?.tenantId === this.identity?.tenant_id
+        ? this.workingContinuity.manifest
+        : null;
+    const useShared =
+      sharedManifest &&
+      (!localManifest || continuityTimestamp(sharedManifest) > continuityTimestamp(localManifest));
+    const manifest = useShared ? sharedManifest : localManifest;
+    const continuityKey = manifest
+      ? `${scope.key}:${manifest.updatedAt}:${manifest.revision || 0}`
+      : scope.key;
+    if (runtimeState.continuityKey === continuityKey) return null;
+    runtimeState.continuityKey = continuityKey;
+    if (!manifest) return null;
+    const prompt = useShared
+      ? compileContinuityContext(manifest)
+      : buildSessionContinuityPrompt(record, {
+          currentModel: continuityModelIdentity(settings)
+        });
     const restored = runtimeState.runtime.loop.restoreContinuity(prompt);
-    return restored ? record : null;
+    return restored ? (useShared ? { source: "shared", manifest } : record) : null;
   }
 
   async saveSessionContinuity({ settings, boundary, objective, answer, artifacts, receipt }) {
     if (!this.sessionContinuityStore) return null;
     const scope = this.sessionContinuityScope(settings, boundary);
     if (!scope) return null;
-    return this.sessionContinuityStore.appendTurn(scope, {
+    const record = await this.sessionContinuityStore.appendTurn(scope, {
       objective,
       answer,
       artifacts,
-      receipt
+      receipt,
+      model: continuityModelIdentity(settings)
     });
+    if (
+      boundary === "online" &&
+      this.identity?.principal_type === "user" &&
+      this.identity?.tenant_id
+    ) {
+      await this.captureSharedContinuity(settings, record).catch((error) => {
+        this.record("continuity", `Could not sync cross-client continuity: ${error.message}`);
+      });
+    }
+    return record;
+  }
+
+  async captureSharedContinuity(settings, record) {
+    const transition = record?.manifest?.transitions?.at(-1);
+    if (!transition) return null;
+    const config = this.configFrom(settings);
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth: this.oauthFor(settings),
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const result = await remote.captureContinuity(
+      continuityCapturePayload(transition, settings),
+      { tenantId: this.identity.tenant_id }
+    );
+    this.workingContinuity = result;
+    await this.sendRemoteState();
+    return result;
   }
 
   captureContinuityToolOutcome(outcome, workspace) {
@@ -2209,6 +2309,7 @@ export class DesktopController {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
       },
+      workingContinuity: publicWorkingContinuity(this.workingContinuity),
       remoteStatus: { ...this.remoteStatus },
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState()
@@ -2229,6 +2330,86 @@ const CONTINUITY_LOCAL_TOOLS = new Set([
   "git_status",
   "apply_patch"
 ]);
+
+function publicWorkingContinuity(value) {
+  if (!value) return null;
+  return {
+    supported: value.supported !== false,
+    available: value.available === true,
+    contextKey: String(value.contextKey || "active"),
+    revision: Math.max(0, Number(value.revision) || 0),
+    sourceClient: String(value.sourceClient || ""),
+    updatedAt: value.updatedAt || null,
+    stale: value.stale === true
+  };
+}
+
+function continuityTimestamp(manifest) {
+  const timestamp = new Date(manifest?.updatedAt || "").getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function continuityCapturePayload(transition, settings) {
+  const stateItems = (value) => (Array.isArray(value) ? value : [])
+    .slice(-4)
+    .flatMap((item) => {
+      const summary = compactContinuityField(item?.summary, 300);
+      if (!summary) return [];
+      return [{
+        summary,
+        detail: compactContinuityField(item?.detail, 240),
+        status: compactContinuityField(item?.status, 80),
+        source_ref: compactContinuityField(item?.sourceRef, 160)
+      }];
+    });
+  return {
+    context_key: "active",
+    source_client: "amos_desktop",
+    workspace_hint: compactContinuityField(
+      basename(settings?.workspace || "AMOS Desktop"),
+      160
+    ),
+    task_id: compactContinuityField(transition?.taskId, 128),
+    status: transition?.status || "completed",
+    objective: compactContinuityField(transition?.objective, 2_000),
+    outcome: compactContinuityField(transition?.outcome, 5_000),
+    model: compactContinuityField(transition?.model, 256),
+    workflow: compactContinuityField(transition?.workflow?.id, 160),
+    actions: (Array.isArray(transition?.actions) ? transition.actions : [])
+      .slice(-12)
+      .flatMap((item) => {
+        const name = compactContinuityField(item?.name, 160);
+        if (!name) return [];
+        return [{
+          name,
+          status: item?.status || "started",
+          summary: compactContinuityField(item?.summary, 200)
+        }];
+      }),
+    decisions: stateItems(transition?.decisions),
+    commitments: stateItems(transition?.commitments),
+    corrections: stateItems(transition?.corrections),
+    open_loops: stateItems(transition?.openLoops),
+    artifacts: (Array.isArray(transition?.artifacts) ? transition.artifacts : [])
+      .slice(-12)
+      .map((item) => compactContinuityField(item, 320))
+      .filter(Boolean),
+    receipt: transition?.receipt?.id
+      ? {
+          id: compactContinuityField(transition.receipt.id, 128),
+          digest: /^[a-f0-9]{64}$/i.test(String(transition.receipt.digest || ""))
+            ? String(transition.receipt.digest).toLowerCase()
+            : undefined
+        }
+      : undefined
+  };
+}
+
+function compactContinuityField(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
 
 function continuityArtifactReferences(name, result, workspace) {
   if (!CONTINUITY_LOCAL_TOOLS.has(name) || !result || typeof result !== "object") return [];
@@ -2383,6 +2564,14 @@ function profileLabel(profile) {
     deep: "Deep",
     frontier: "Frontier"
   }[profile] || "Balanced";
+}
+
+function continuityModelIdentity(settings) {
+  const provider = String(settings?.provider || "compatible").trim();
+  const model = provider === "amos-hosted"
+    ? String(settings?.intelligenceProfile || "auto").trim()
+    : String(settings?.model || "auto").trim();
+  return `${provider}:${model}`.slice(0, 256);
 }
 
 function systemProfile() {

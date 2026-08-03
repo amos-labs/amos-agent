@@ -24,6 +24,7 @@ test("remote state events project every refreshed platform surface into Desktop"
       currentTenantId: "tenant-1",
       tenants: [{ tenant_id: "tenant-1", tenant_name: "AMOS Labs" }]
     },
+    workingContinuity: null,
     remoteStatus: {
       syncing: false,
       lastSyncedAt: "2026-07-30T12:00:00.000Z",
@@ -53,6 +54,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     approvalDecisionMode: "desktop",
     connectionsCatalog: controller.connectionsCatalog,
     companies: controller.companies,
+    workingContinuity: null,
     remoteStatus: controller.remoteStatus,
     companyCache: { available: true },
     offlineProposals: [{ id: "proposal-1" }]

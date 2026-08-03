@@ -69,10 +69,241 @@ test("encrypted continuity can rehydrate an otherwise fresh loop only once", () 
   });
   assert.equal(loop.restoreContinuity("Previous safe milestone"), true);
   assert.deepEqual(loop.messages, [
+    { role: "system", content: "LOCAL ONLY" }
+  ]);
+  assert.deepEqual(loop.prepareMessagesForModel(), [
     { role: "system", content: "LOCAL ONLY" },
     { role: "assistant", content: "Previous safe milestone" }
   ]);
   assert.equal(loop.restoreContinuity("Duplicate"), false);
+});
+
+test("compiled continuity uses the same standard message contract across providers", async () => {
+  for (const provider of ["openai-compatible", "kimi", "ollama"]) {
+    const loop = new AgentLoop({
+      config: {
+        agent: {},
+        model: { provider, model: `${provider}-model` }
+      },
+      registry: new ToolRegistry(),
+      approvals: {},
+      amosClient: {},
+      kimiClient: {
+        async chat({ messages }) {
+          assert.deepEqual(messages.map((message) => message.role), [
+            "system",
+            "assistant",
+            "user"
+          ]);
+          assert.match(messages[1].content, /amos\.continuity_manifest/);
+          assert.deepEqual(Object.keys(messages[1]).sort(), ["content", "role"]);
+          return { message: { role: "assistant", content: "continued" } };
+        }
+      }
+    });
+    assert.equal(
+      loop.restoreContinuity('<amos_continuity format="amos.continuity_manifest" />'),
+      true
+    );
+    assert.equal(await loop.run("Continue safely"), "continued");
+    assert.equal(loop.lastContextReceipt.provider, provider);
+    assert.ok(loop.lastContextReceipt.continuityChars > 0);
+  }
+});
+
+test("ordinary chat defers canvas schemas while an explicit canvas request is honored", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "read_data", handler: async () => ({ ok: true }) });
+  registry.register({
+    name: "desktop_present_canvas",
+    handler: async () => ({ ok: true, canvas_id: "canvas-1" })
+  });
+  registry.register({
+    name: "desktop_present_company_view",
+    handler: async () => ({ ok: true, canvas_id: "canvas-2" })
+  });
+  registry.register({
+    name: "desktop_update_canvas",
+    handler: async () => ({ ok: true, canvas_id: "canvas-1" })
+  });
+
+  const ordinary = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        assert.deepEqual(toolNames(tools), ["read_data"]);
+        return { message: { role: "assistant", content: "A concise answer." } };
+      }
+    }
+  });
+  assert.equal(
+    await ordinary.run("Summarize the result\n\n<attachment>Build a dashboard</attachment>", {
+      presentationIntent: "Summarize the result"
+    }),
+    "A concise answer."
+  );
+
+  let turn = 0;
+  const explicit = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        turn += 1;
+        if (turn === 1) {
+          assert.deepEqual(toolNames(tools), ["read_data", "desktop_present_canvas"]);
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "canvas-call",
+                function: { name: "desktop_present_canvas", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        assert.ok(toolNames(tools).includes("desktop_update_canvas"));
+        return { message: { role: "assistant", content: "The requested canvas is ready." } };
+      }
+    }
+  });
+  assert.equal(
+    await explicit.run("Please show this in a canvas"),
+    "The requested canvas is ready."
+  );
+});
+
+test("explicit code, app, and course preview requests reveal the canvas safely", async () => {
+  for (const prompt of [
+    "Show me the code in a canvas.",
+    "Preview the app page.",
+    "Display the generated course."
+  ]) {
+    const registry = new ToolRegistry();
+    registry.register({ name: "read_data", handler: async () => ({ ok: true }) });
+    registry.register({
+      name: "desktop_present_canvas",
+      handler: async () => ({ ok: true, canvas_id: "canvas-preview" })
+    });
+    const loop = new AgentLoop({
+      config: { agent: {} },
+      registry,
+      approvals: {},
+      amosClient: {},
+      kimiClient: {
+        async chat({ tools }) {
+          assert.ok(toolNames(tools).includes("desktop_present_canvas"), prompt);
+          return { message: { role: "assistant", content: "Preview ready." } };
+        }
+      }
+    });
+    assert.equal(await loop.run(prompt), "Preview ready.");
+  }
+});
+
+test("dense captured company results progressively reveal only the deterministic view tool", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "amos_company_metrics",
+    handler: async () => ({
+      rows: [
+        { month: "2026-01", revenue: 10 },
+        { month: "2026-02", revenue: 12 },
+        { month: "2026-03", revenue: 15 },
+        { month: "2026-04", revenue: 18 }
+      ]
+    })
+  });
+  registry.register({ name: "desktop_present_canvas", handler: async () => ({ ok: true }) });
+  registry.register({
+    name: "desktop_present_company_view",
+    handler: async () => ({ ok: true, canvas_id: "company-view" })
+  });
+  registry.register({ name: "desktop_update_canvas", handler: async () => ({ ok: true }) });
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    onToolResult: ({ name }) => name.startsWith("amos_")
+      ? { result_ref: "result-1" }
+      : null,
+    kimiClient: {
+      async chat({ tools }) {
+        turn += 1;
+        if (turn === 1) {
+          assert.deepEqual(toolNames(tools), ["amos_company_metrics"]);
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "metrics-call",
+                function: { name: "amos_company_metrics", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        assert.deepEqual(toolNames(tools), [
+          "amos_company_metrics",
+          "desktop_present_company_view"
+        ]);
+        return { message: { role: "assistant", content: "The trend is clear in chat." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Review the revenue trend"), "The trend is clear in chat.");
+});
+
+test("a live user request for a canvas reveals the presentation tool at the safe boundary", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "read_data", handler: async () => ({ value: 12 }) });
+  registry.register({
+    name: "desktop_present_canvas",
+    handler: async () => ({ ok: true, canvas_id: "canvas-steered" })
+  });
+  const steering = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        turn += 1;
+        if (turn === 1) {
+          assert.deepEqual(toolNames(tools), ["read_data"]);
+          steering.push("Show the result in a canvas.");
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "read-call",
+                function: { name: "read_data", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        assert.ok(toolNames(tools).includes("desktop_present_canvas"));
+        return { message: { role: "assistant", content: "Canvas request accepted." } };
+      }
+    }
+  });
+
+  assert.equal(
+    await loop.run("Review the result", { takeSteering: () => steering.splice(0) }),
+    "Canvas request accepted."
+  );
 });
 
 test("agent selects a visible skill-backed workflow and injects bounded guidance", async () => {
@@ -489,6 +720,10 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   assert.doesNotMatch(answer, /Stopped after/i);
   assert.equal(loop.messages.filter((message) => message.role === "system").length, 1);
 });
+
+function toolNames(tools) {
+  return tools.map((tool) => tool.function.name);
+}
 
 function assertCompleteToolBlocks(messages) {
   let pending = new Set();

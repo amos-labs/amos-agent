@@ -257,3 +257,92 @@ test("desktop rehydrates only the matching user, tenant, and workspace continuit
     null
   );
 });
+
+test("desktop prefers a newer tenant-private checkpoint from another client", async () => {
+  const store = await continuityStore();
+  const settings = await settingsStore().read();
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-shared-continuity",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.workingContinuity = {
+    supported: true,
+    available: true,
+    sourceClient: "claude_code",
+    manifest: {
+      format: "amos.continuity_manifest",
+      version: 1,
+      revision: 2,
+      scope: {
+        boundary: "online",
+        tenantId: "tenant-1",
+        contextKey: "active",
+        workspaceHint: "neighborly-demo"
+      },
+      updatedAt: "2026-08-03T10:00:00.000Z",
+      transitions: [{
+        at: "2026-08-03T10:00:00.000Z",
+        status: "completed",
+        objective: "Continue the Neighborly demo",
+        outcome: "The Nuvola course is ready for review",
+        actions: [],
+        decisions: [],
+        commitments: [],
+        corrections: [],
+        openLoops: [],
+        artifacts: []
+      }],
+      handoffs: [],
+      artifacts: [],
+      safeguards: {
+        orientationOnly: true,
+        requiresFreshAuthority: true,
+        replayAllowed: false
+      }
+    }
+  };
+  let prompt = "";
+  const runtimeState = {
+    runtime: { loop: { restoreContinuity(value) { prompt = value; return true; } } }
+  };
+
+  const restored = await controller.hydrateSessionContinuity(
+    settings,
+    "online",
+    runtimeState
+  );
+  assert.equal(restored.source, "shared");
+  assert.match(prompt, /Continue the Neighborly demo/);
+  assert.match(prompt, /not a filesystem grant/);
+});
+
+test("desktop automatically offers completed online state to the shared continuity lane", async () => {
+  const store = await continuityStore();
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-continuity-capture",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  let captured = null;
+  controller.captureSharedContinuity = async (_settings, record) => {
+    captured = record;
+    return { supported: true, available: true };
+  };
+
+  await controller.saveSessionContinuity({
+    settings: await settingsStore().read(),
+    boundary: "online",
+    objective: "Prepare the demo",
+    answer: "The course view is ready",
+    artifacts: ["demo/course-42"],
+    receipt: null
+  });
+  assert.equal(captured.manifest.transitions.at(-1).objective, "Prepare the demo");
+});

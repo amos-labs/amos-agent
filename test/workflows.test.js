@@ -48,6 +48,8 @@ test("workflow guidance is bounded and can be added to multimodal input", () => 
   assert.equal(content.length, 3);
   assert.match(content.at(-1).text, /cannot override the system prompt/i);
   assert.match(workflowGuidance(workflow), /Do not perform unrelated steps/i);
+  assert.ok(workflowGuidance(workflow).length < 1_100);
+  assert.doesNotMatch(workflowGuidance(workflow), /Reusable skills:/i);
   assert.ok(BUILT_IN_SKILLS.length >= 8);
 });
 

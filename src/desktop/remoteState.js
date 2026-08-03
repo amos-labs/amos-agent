@@ -7,6 +7,7 @@ import {
   verifyCompanyCacheGrant
 } from "./companyCache.js";
 import { createAbortError, linkAbortSignal } from "../util/abort.js";
+import { normalizeSharedContinuityManifest } from "./sessionContinuity.js";
 
 export class DesktopRemoteStateClient {
   constructor({ mcpUrl, oauth, requestTimeoutMs = 30_000 }, fetchImpl = fetchCompat) {
@@ -40,6 +41,55 @@ export class DesktopRemoteStateClient {
     const current = { ...snapshot };
     delete current.offline_cache;
     return current;
+  }
+
+  async hydrateContinuity({ contextKey = null, tenantId = "", signal = null } = {}) {
+    const args = contextKey ? { context_key: String(contextKey) } : {};
+    try {
+      const result = await this.mcp.callTool("hydrate_context", args, { signal });
+      return normalizeContinuityResponse(
+        parseMcpJson(result, "AMOS working continuity"),
+        { tenantId }
+      );
+    } catch (error) {
+      if (isUnknownTool(error, "hydrate_context")) {
+        return {
+          supported: false,
+          available: false,
+          contextKey: contextKey || "active",
+          revision: 0,
+          sourceClient: "",
+          updatedAt: null,
+          stale: false,
+          manifest: null
+        };
+      }
+      throw error;
+    }
+  }
+
+  async captureContinuity(input, { tenantId = "", signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("capture_context", input, { signal });
+      return normalizeContinuityResponse(
+        parseMcpJson(result, "AMOS working continuity checkpoint"),
+        { tenantId }
+      );
+    } catch (error) {
+      if (isUnknownTool(error, "capture_context")) {
+        return {
+          supported: false,
+          available: false,
+          contextKey: String(input?.context_key || "active"),
+          revision: 0,
+          sourceClient: "",
+          updatedAt: null,
+          stale: false,
+          manifest: null
+        };
+      }
+      throw error;
+    }
   }
 
   async connectionsCatalog({ signal = null } = {}) {
@@ -556,6 +606,41 @@ function normalizeApproval(value) {
     goal_id: value.goal_id ? String(value.goal_id) : "",
     args: value.args && typeof value.args === "object" ? value.args : {}
   };
+}
+
+function normalizeContinuityResponse(value, { tenantId = "" } = {}) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("AMOS working continuity returned an invalid response");
+  }
+  if (value.available !== true) {
+    return {
+      supported: true,
+      available: false,
+      contextKey: String(value.context_key || "active").slice(0, 128),
+      revision: 0,
+      sourceClient: "",
+      updatedAt: null,
+      stale: false,
+      manifest: null
+    };
+  }
+  const manifest = normalizeSharedContinuityManifest(value.manifest, { tenantId });
+  return {
+    supported: true,
+    available: true,
+    contextKey: String(value.context_key || manifest.scope.contextKey).slice(0, 128),
+    revision: Math.max(1, Math.min(Number(value.revision) || manifest.revision, Number.MAX_SAFE_INTEGER)),
+    sourceClient: String(value.source_client || "").slice(0, 64),
+    updatedAt: manifest.updatedAt,
+    stale: value.stale === true,
+    manifest
+  };
+}
+
+function isUnknownTool(error, name) {
+  const message = String(error?.message || "");
+  return new RegExp(`unknown tool ['\"]${name}['\"]`, "i").test(message) ||
+    (message.includes("-32601") && message.includes(name));
 }
 
 function normalizeConnection(value) {
