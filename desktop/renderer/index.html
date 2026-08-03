@@ -38,7 +38,7 @@
             <span class="nav-icon">⌘</span><span>Connections</span><span id="connectionBadge" class="nav-badge connection-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="work">
-            <span class="nav-icon">◇</span><span>Work &amp; proof</span><span id="decisionBadge" class="nav-badge hidden">0</span>
+            <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="settings">
             <span class="nav-icon">⚙</span><span>Intelligence</span>
@@ -430,13 +430,13 @@
           <div class="section-heading work-heading">
             <span class="eyebrow">GOVERNED WORK</span>
             <h1>Decide what moves—and see what happened.</h1>
-            <p>Reopen interrupted work, make human decisions, and inspect the proof trail from one place.</p>
+            <p>Handle work that needs you, then review the decisions and consequential outcomes that followed.</p>
           </div>
           <div class="work-tabs" role="tablist" aria-label="Work and proof">
             <button id="workDecisionsTab" class="work-tab active" type="button" role="tab" aria-selected="true" aria-controls="workDecisionsPanel">
-              Decisions <span id="workDecisionTabCount" class="work-tab-count hidden">0</span>
+              Open <span id="workDecisionTabCount" class="work-tab-count hidden">0</span>
             </button>
-            <button id="workProofTab" class="work-tab" type="button" role="tab" aria-selected="false" aria-controls="workProofPanel">Activity &amp; proof</button>
+            <button id="workProofTab" class="work-tab" type="button" role="tab" aria-selected="false" aria-controls="workProofPanel">History</button>
           </div>
 
           <div id="workDecisionsPanel" class="work-panel" role="tabpanel" aria-labelledby="workDecisionsTab">
@@ -470,18 +470,22 @@
               <p>Company changes waiting for the right human decision.</p>
             </div>
             <div id="pendingDecisions" class="decision-list"></div>
-            <div class="recent-heading">
-              <span class="eyebrow">RECENT OUTCOMES</span>
-              <p>Approved, denied, expired, and failed work remains visible for accountability.</p>
-            </div>
-            <div id="recentDecisions" class="decision-list compact"></div>
           </div>
 
           <div id="workProofPanel" class="work-panel hidden" role="tabpanel" aria-labelledby="workProofTab">
             <div class="work-panel-intro">
-              <span class="eyebrow">ACTIVITY &amp; PROOF</span>
-              <h2>What happened—and why.</h2>
-              <p>Local activity appears here. Consequential company actions also produce durable AMOS receipts.</p>
+              <span class="eyebrow">RECENT HISTORY</span>
+              <h2>What AMOS did.</h2>
+              <p>Human decisions and consequential company outcomes, summarized for review. AMOS retains the complete immutable receipt ledger for audit.</p>
+            </div>
+            <div class="recent-heading history-heading">
+              <span class="eyebrow">PAST DECISIONS</span>
+              <p>Approved, denied, expired, and failed decisions remain visible for accountability.</p>
+            </div>
+            <div id="recentDecisions" class="decision-list compact"></div>
+            <div class="recent-heading history-heading">
+              <span class="eyebrow">CONSEQUENTIAL OUTCOMES</span>
+              <p>Material work AMOS applied, failed, or verified. Routine conversation activity stays out of this view.</p>
             </div>
             <div id="activityList" class="activity-list"></div>
           </div>

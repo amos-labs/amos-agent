@@ -43,6 +43,24 @@ export class DesktopRemoteStateClient {
     return current;
   }
 
+  async receipts({ limit = 50, signal = null } = {}) {
+    const boundedLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+    try {
+      const result = await this.mcp.callTool(
+        "list_receipts",
+        { limit: boundedLimit },
+        { signal }
+      );
+      const payload = parseMcpJson(result, "AMOS proof receipts");
+      return Array.isArray(payload?.receipts)
+        ? payload.receipts.map(normalizeReceipt).filter(Boolean)
+        : [];
+    } catch (error) {
+      if (isUnknownTool(error, "list_receipts")) return [];
+      throw error;
+    }
+  }
+
   async hydrateContinuity({ contextKey = null, tenantId = "", signal = null } = {}) {
     const args = contextKey ? { context_key: String(contextKey) } : {};
     try {
@@ -620,7 +638,7 @@ function normalizeApproval(value) {
   return {
     id: String(value.id),
     verb: String(value.verb),
-    review_summary: String(value.review_summary || humanizeVerb(value.verb)),
+    review_summary: String(value.review_summary || humanizeVerb(value.verb)).slice(0, 500),
     approval_url: value.approval_url ? String(value.approval_url) : "",
     requested_by: String(value.requested_by || ""),
     status: String(value.status || "pending"),
@@ -669,6 +687,36 @@ function isUnknownTool(error, name) {
   const message = String(error?.message || "");
   return new RegExp(`unknown tool ['\"]${name}['\"]`, "i").test(message) ||
     (message.includes("-32601") && message.includes(name));
+}
+
+function normalizeReceipt(value) {
+  if (!value || typeof value !== "object") return null;
+  const id = String(value.id || "").trim();
+  const operation = String(value.operation || "").trim();
+  if (!id || !operation) return null;
+  const receipt = value.receipt && typeof value.receipt === "object"
+    ? value.receipt
+    : {};
+  return {
+    id,
+    operation: operation.slice(0, 160),
+    actor: String(value.actor || receipt.actor || "").slice(0, 160),
+    agency: String(value.agency || receipt.agency || "legacy_unclassified").slice(0, 80),
+    lifecycleState: String(
+      value.lifecycle_state || receipt.lifecycle_state || "legacy_unclassified"
+    ).slice(0, 80),
+    effectApplied:
+      typeof value.effect_applied === "boolean"
+        ? value.effect_applied
+        : typeof receipt.effect_applied === "boolean"
+          ? receipt.effect_applied
+          : null,
+    verified: value.verified === true,
+    summary: String(
+      receipt.result_summary || receipt.intent?.summary || operation
+    ).slice(0, 500),
+    createdAt: String(value.created_at || receipt.emitted_at || "")
+  };
 }
 
 function normalizeConnection(value) {

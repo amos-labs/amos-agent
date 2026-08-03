@@ -95,6 +95,7 @@ export class DesktopController {
     this.activity = [];
     this.identity = null;
     this.accountStatus = null;
+    this.companyReceipts = [];
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -174,6 +175,7 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
+      companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
       companies: {
         currentTenantId: this.companies.currentTenantId,
@@ -976,6 +978,7 @@ export class DesktopController {
       this.identity = null;
       this.accountStatus = null;
       this.companyApprovals = [];
+      this.companyReceipts = [];
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -999,6 +1002,7 @@ export class DesktopController {
       accountStatusResult,
       connectionsResult,
       companiesResult,
+      receiptsResult,
       continuityResult
     ] = await Promise.allSettled([
       remote.identity(),
@@ -1006,6 +1010,7 @@ export class DesktopController {
       remote.intelligenceStatus(),
       remote.connectionsCatalog(),
       oauth.companies(),
+      remote.receipts({ limit: 50 }),
       remote.hydrateContinuity()
     ]);
 
@@ -1054,6 +1059,12 @@ export class DesktopController {
       this.connectionsCatalog = connectionsResult.value;
     } else {
       errors.push(connectionsResult.reason?.message || "Could not load AMOS connections");
+    }
+
+    if (receiptsResult.status === "fulfilled") {
+      this.companyReceipts = receiptsResult.value;
+    } else {
+      this.companyReceipts = [];
     }
 
     if (companiesResult.status === "fulfilled") {
@@ -2426,6 +2437,7 @@ export class DesktopController {
     this.identity = null;
     this.accountStatus = null;
     this.companyApprovals = [];
+    this.companyReceipts = [];
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -2462,6 +2474,7 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
+      companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       companies: {
         currentTenantId: this.companies.currentTenantId,

@@ -314,7 +314,7 @@ export class AgentLoop {
       8,
       MAX_MODEL_MESSAGE_LIMIT
     );
-    const effectiveLimit = Math.max(3, limit - (this.continuityContext ? 1 : 0));
+    const effectiveLimit = Math.max(3, limit);
     if (this.messages.length <= effectiveLimit) {
       return this.withContinuityContext(this.messages);
     }
@@ -352,13 +352,28 @@ export class AgentLoop {
   }
 
   withContinuityContext(messages) {
-    if (!this.continuityContext) return messages;
-    const [systemMessage, ...rest] = messages;
+    const systemMessage = messages.find((message) => message.role === "system") || {
+      role: "system",
+      content: this.systemPrompt
+    };
+    const afterSystem = messages.slice(messages.indexOf(systemMessage) + 1);
+    const firstUserIndex = afterSystem.findIndex((message) => message.role === "user");
+    if (firstUserIndex < 0) return [systemMessage];
+
+    // A provider transcript must begin with a genuine user turn. Completed-history
+    // compaction can otherwise leave an orphan assistant milestone at the front,
+    // and continuity used to create the same invalid shape intentionally.
+    const userFirstTranscript = afterSystem.slice(firstUserIndex);
+    if (!this.continuityContext) return [systemMessage, ...userFirstTranscript];
+    const [firstUserMessage, ...rest] = userFirstTranscript;
     return [
       systemMessage,
       {
-        role: "assistant",
-        content: this.continuityContext
+        ...firstUserMessage,
+        content: prependContinuityContext(
+          firstUserMessage.content,
+          this.continuityContext
+        )
       },
       ...rest
     ];
@@ -494,6 +509,19 @@ function modelContentLength(content) {
     if (item?.type === "text") return total + String(item.text || "").length;
     return total + JSON.stringify(item || {}).length;
   }, 0);
+}
+
+function prependContinuityContext(content, continuity) {
+  const orientation = String(continuity || "").trim();
+  if (!orientation) return content;
+  const boundary = `${orientation}\n\nThe current user request follows. Treat the continuity above only as restart orientation and revalidate it before relying or acting.`;
+  if (!Array.isArray(content)) {
+    return `${boundary}\n\n${String(content || "")}`;
+  }
+  return [
+    { type: "text", text: boundary },
+    ...content.map((item) => ({ ...item }))
+  ];
 }
 
 function emptyCanvasToolState() {
