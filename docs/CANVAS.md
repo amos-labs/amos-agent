@@ -115,5 +115,7 @@ custom canvas or update tools. An explicit canvas, code-display, or preview
 request reveals the custom
 canvas tool; a sufficiently structured captured AMOS result reveals the
 deterministic company-view tool; and the update tool appears after a canvas is
-active or the user explicitly asks to update one. This both reduces prompt size
-and prevents tool visibility from nudging the model toward unnecessary views.
+active—even on a later task turn—or the user explicitly asks to update one.
+That makes natural follow-ups such as “make that green” work without requiring
+the user to repeat the word “canvas.” This both reduces prompt size and prevents
+tool visibility from nudging the model toward unnecessary views.

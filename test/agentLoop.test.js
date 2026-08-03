@@ -179,6 +179,31 @@ test("ordinary chat defers canvas schemas while an explicit canvas request is ho
   );
 });
 
+test("an already-open Desktop canvas supports natural cross-turn updates", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "read_data", handler: async () => ({ ok: true }) });
+  registry.register({
+    name: "desktop_update_canvas",
+    handler: async () => ({ ok: true, canvas_id: "canvas-1" })
+  });
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        assert.deepEqual(toolNames(tools), ["read_data", "desktop_update_canvas"]);
+        return { message: { role: "assistant", content: "Updated it." } };
+      }
+    }
+  });
+  assert.equal(
+    await loop.run("Make that green.", { canvasActive: true }),
+    "Updated it."
+  );
+});
+
 test("explicit code, app, and course preview requests reveal the canvas safely", async () => {
   for (const prompt of [
     "Show me the code in a canvas.",

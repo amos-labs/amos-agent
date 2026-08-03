@@ -593,6 +593,37 @@ test("Desktop continuity fails closed across tenants and rolls out against older
   assert.equal(unsupported.available, false);
 });
 
+test("Desktop clears the exact shared continuity lane with an older-server fallback", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient({
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    oauth: { async getAccessToken() { return "user-token"; } }
+  });
+  client.mcp.callTool = async (name, args) => {
+    requests.push({ name, args });
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify(workingContinuityResponse({ available: false, cleared: true }))
+      }]
+    };
+  };
+  const cleared = await client.clearContinuity({
+    contextKey: "active",
+    tenantId: "tenant-1"
+  });
+  assert.equal(cleared.available, false);
+  assert.equal(cleared.cleared, true);
+  assert.deepEqual(requests, [{ name: "clear_context", args: { context_key: "active" } }]);
+
+  client.mcp.callTool = async () => {
+    throw new Error("unknown tool 'clear_context'");
+  };
+  const unsupported = await client.clearContinuity({ tenantId: "tenant-1" });
+  assert.equal(unsupported.supported, false);
+  assert.equal(unsupported.cleared, false);
+});
+
 test("Desktop requests, verifies, and binds the exact signed company snapshot", async () => {
   const signed = signedCompanyCache();
   const client = new DesktopRemoteStateClient(
@@ -688,7 +719,24 @@ function signedCompanyCache() {
   };
 }
 
-function workingContinuityResponse({ revision = 4, sourceClient = "claude_code" } = {}) {
+function workingContinuityResponse({
+  revision = 4,
+  sourceClient = "claude_code",
+  available = true,
+  cleared = false
+} = {}) {
+  if (!available) {
+    return {
+      available: false,
+      cleared,
+      context_key: "active",
+      revision: 0,
+      source_client: null,
+      updated_at: null,
+      stale: false,
+      manifest: null
+    };
+  }
   return {
     available: true,
     context_key: "active",

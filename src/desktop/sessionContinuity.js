@@ -470,9 +470,30 @@ function redactContinuityText(value) {
     .replace(/\bAKIA[A-Z0-9]{16}\b/g, "[REDACTED AWS KEY]")
     .replace(/((?:api[_ -]?key|client[_ -]?secret|access[_ -]?token|refresh[_ -]?token|password)\s*[=:]\s*)[^\s,;]+/gi, "$1[REDACTED]")
     .replace(/([?&](?:access_token|refresh_token|code|client_secret)=)[^&#\s]+/gi, "$1[REDACTED]")
-    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, (candidate) =>
-      /^[a-f0-9]{40,64}$/i.test(candidate) ? candidate : "[REDACTED HIGH-ENTROPY VALUE]"
-    );
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, (candidate, offset, source) => {
+      const tokenStart = Math.max(
+        source.lastIndexOf(" ", offset),
+        source.lastIndexOf("\n", offset),
+        source.lastIndexOf("\t", offset)
+      ) + 1;
+      const tokenEndMatch = source.slice(offset + candidate.length).search(/\s/);
+      const tokenEnd = tokenEndMatch < 0
+        ? source.length
+        : offset + candidate.length + tokenEndMatch;
+      const token = source.slice(tokenStart, tokenEnd);
+      return looksLikeArtifactReference(token)
+        ? candidate
+        : "[REDACTED HIGH-ENTROPY VALUE]";
+    });
+}
+
+function looksLikeArtifactReference(value) {
+  const token = String(value || "").replace(/[,;\])]+$/g, "");
+  const relativePrefix = [
+    "src/", "test/", "tests/", "docs/", "app/", "desktop/", "assets/", "./", "../"
+  ].some((prefix) => token.startsWith(prefix));
+  const leaf = token.split("/").at(-1) || "";
+  return relativePrefix && leaf.includes(".") && /^[A-Za-z0-9._-]+$/.test(leaf);
 }
 
 function uniqueStrings(value, maxItems, maxLength) {

@@ -3255,8 +3255,22 @@ async function cancelTask() {
 async function clearSession() {
   elements.clearButton.disabled = true;
   try {
-    await api.clear();
+    const result = await api.clear();
     resetSessionView();
+    if (result?.sharedContinuity?.error) {
+      toast(
+        "This computer was cleared, but AMOS could not clear the shared checkpoint. Reconnect and clear again before switching clients.",
+        true
+      );
+    } else if (
+      result?.sharedContinuity?.attempted &&
+      result.sharedContinuity.supported === false
+    ) {
+      toast(
+        "This computer was cleared. The platform needs its continuity update before shared checkpoints can also be cleared.",
+        true
+      );
+    }
     elements.promptInput.focus();
   } catch (error) {
     toast(error.message || "AMOS could not clear this session.", true);
@@ -3269,6 +3283,7 @@ function resetSessionView() {
   resumingCheckpointId = null;
   continuityConversationRestored = false;
   state.sessionContinuity = null;
+  state.workingContinuity = null;
   state.canvases = [];
   state.activeCanvasId = null;
   activeCanvasId = null;

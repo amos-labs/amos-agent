@@ -1352,6 +1352,7 @@ export class DesktopController {
         signal: abortController.signal,
         workflow,
         presentationIntent: prompt,
+        canvasActive: Boolean(this.canvases.state().activeCanvasId),
         takeSteering: () => {
           const active = this.activeTask;
           if (!active || active.id !== taskId || active.steeringQueue.length === 0) return [];
@@ -1609,8 +1610,25 @@ export class DesktopController {
   }
 
   async clear() {
+    const settings = this.settingsStore?.read
+      ? await this.settingsStore.read().catch(() => ({}))
+      : {};
+    let sharedContinuity = { attempted: false, supported: true, cleared: false };
+    try {
+      sharedContinuity = await this.clearSharedContinuity(settings);
+    } catch (error) {
+      sharedContinuity = {
+        attempted: true,
+        supported: true,
+        cleared: false,
+        error: error.message || "Could not clear shared continuity"
+      };
+      this.record(
+        "continuity",
+        `Cleared this computer, but could not clear shared continuity: ${sharedContinuity.error}`
+      );
+    }
     if (this.sessionContinuityStore) {
-      const settings = await this.settingsStore.read();
       const scope = this.sessionContinuityScope(settings, settings.operatingMode);
       if (scope) {
         await this.sessionContinuityStore.clear(scope).catch((error) => {
@@ -1619,13 +1637,16 @@ export class DesktopController {
       }
     }
     if (this.runtime) this.runtime.runtime.loop.clear();
+    if (this.runtime) this.runtime.continuityKey = null;
+    this.workingContinuity = null;
     this.attachments.clear();
     this.canvases.clear();
     this.canvasResults.clear();
     this.activity = [];
     this.send("activity:changed", []);
     this.send("canvas:changed", this.canvases.state());
-    return { ok: true };
+    await this.sendRemoteState();
+    return { ok: true, sharedContinuity };
   }
 
   async recordLocalReceipt({
@@ -2240,6 +2261,27 @@ export class DesktopController {
     this.workingContinuity = result;
     await this.sendRemoteState();
     return result;
+  }
+
+  async clearSharedContinuity(settings) {
+    if (
+      settings?.operatingMode !== "online" ||
+      this.identity?.principal_type !== "user" ||
+      !this.identity?.tenant_id
+    ) {
+      return { attempted: false, supported: true, cleared: false };
+    }
+    const config = this.configFrom(settings);
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth: this.oauthFor(settings),
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const result = await remote.clearContinuity({
+      contextKey: "active",
+      tenantId: this.identity.tenant_id
+    });
+    return { attempted: true, ...result };
   }
 
   captureContinuityToolOutcome(outcome, workspace) {

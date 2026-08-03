@@ -46,9 +46,13 @@ test("session continuity is encrypted, identity pinned, redacted, and non-replay
   });
   const currentScope = scope();
   await store.appendTurn(currentScope, {
-    objective: "Fix the AMOS website; client_secret=do-not-store; sk-live_abcdefghijklmnopqrstuvwxyz123456",
-    answer: "Updated amos-website/app/downloads/page.tsx. Bearer secret-token",
-    artifacts: ["amos-website/app/downloads/page.tsx", "git branch: fix/downloads"],
+    objective: "Fix the AMOS website; client_secret=do-not-store; password: colon-secret; sk-live_abcdefghijklmnopqrstuvwxyz123456",
+    answer: `Updated amos-website/app/downloads/page.tsx. Bearer secret-token ${"a".repeat(64)}`,
+    artifacts: [
+      "amos-website/app/downloads/page.tsx",
+      "git branch: fix/downloads",
+      "src/components/company/WorkingContinuityPanelWithLongName.tsx"
+    ],
     receipt: {
       id: "receipt-1",
       digest: "a".repeat(64),
@@ -73,11 +77,15 @@ test("session continuity is encrypted, identity pinned, redacted, and non-replay
   const restored = await store.load(currentScope);
   assert.equal(restored.turns.length, 1);
   assert.match(restored.turns[0].objective, /client_secret=\[REDACTED\]/);
+  assert.match(restored.turns[0].objective, /password: \[REDACTED\]/);
+  assert.doesNotMatch(restored.turns[0].objective, /colon-secret/);
   assert.match(restored.turns[0].objective, /\[REDACTED HIGH-ENTROPY VALUE\]/);
   assert.match(restored.turns[0].answer, /Bearer \[REDACTED\]/);
+  assert.doesNotMatch(restored.turns[0].answer, new RegExp("a{64}"));
   assert.deepEqual(restored.artifacts, [
     "amos-website/app/downloads/page.tsx",
-    "git branch: fix/downloads"
+    "git branch: fix/downloads",
+    "src/components/company/WorkingContinuityPanelWithLongName.tsx"
   ]);
   assert.equal(await store.load(scope({ tenant_id: "tenant-2" })), null);
   assert.equal(restored.manifest.format, "amos.continuity_manifest");
