@@ -129,3 +129,127 @@ test("Desktop refuses unadvertised companies and switching during active work", 
   );
   assert.equal(fixture.switchedTenant(), null);
 });
+
+test("Desktop switches independently authenticated accounts and clears every live boundary", async () => {
+  const store = settingsStore();
+  let activeAccountId = "account-1";
+  let cacheCleared = false;
+  const accountStore = {
+    async list() {
+      return {
+        currentAccountId: activeAccountId,
+        accounts: [
+          { id: "account-1", label: "AMOS Labs", tenantSlug: "amos-labs" },
+          { id: "account-2", label: "Smile Wise", tenantSlug: "smile-wise" }
+        ]
+      };
+    },
+    async activate(id) {
+      activeAccountId = id;
+    }
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-account-switch-controller",
+    settingsStore: store,
+    accountStore,
+    taskCheckpointStore: {
+      async list() {
+        return [
+          { id: "task-source", source: { subjectId: "source-user", tenantId: sourceTenant } },
+          { id: "task-target", source: { subjectId: "target-user", tenantId: targetTenant } }
+        ];
+      }
+    },
+    offlineProposalStore: {
+      async list() {
+        return [
+          { id: "draft-source", source: { subjectId: "source-user", tenantId: sourceTenant } },
+          { id: "draft-target", source: { subjectId: "target-user", tenantId: targetTenant } }
+        ];
+      }
+    },
+    companyCacheStore: {
+      async clear() { cacheCleared = true; },
+      async status() { return { status: "empty", available: false }; }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = () => ({
+    async status() { return { access_token: `${activeAccountId}-token` }; }
+  });
+  controller.identity = { principal_type: "user", tenant_id: sourceTenant };
+  controller.companyApprovals = [{ id: "source-approval" }];
+  controller.attachments.items = new Map([["source-attachment", { id: "source-attachment" }]]);
+  controller.canvases.canvases = [{ id: "source-canvas" }];
+  controller.canvasResults.results = [{ id: "source-result" }];
+  controller.activity = [{ id: "source-activity" }];
+  controller.refreshRemote = async () => {
+    controller.identity = {
+      principal_type: "user",
+      tenant_id: targetTenant,
+      tenant_slug: "smile-wise",
+      user: { id: "target-user", name: "Rick Barkley", email: "rick@smilewise.com" }
+    };
+  };
+
+  const state = await controller.switchAccount("account-2");
+
+  assert.equal(activeAccountId, "account-2");
+  assert.equal(cacheCleared, true);
+  assert.equal(state.identity.tenant_id, targetTenant);
+  assert.deepEqual(state.approvals, []);
+  assert.deepEqual(state.attachments, []);
+  assert.deepEqual(state.canvases, []);
+  assert.deepEqual(controller.canvasResults.results, []);
+  assert.deepEqual(state.taskCheckpoints.map((item) => item.id), ["task-target"]);
+  assert.deepEqual(state.offlineProposals.map((item) => item.id), ["draft-target"]);
+  assert.equal(state.activity.some((item) => item.summary === "Switched to Smile Wise"), true);
+
+  controller.activeTask = { id: "active" };
+  await assert.rejects(controller.switchAccount("account-1"), /Finish or stop/);
+  assert.equal(activeAccountId, "account-2");
+});
+
+test("selecting the current account returns Personal mode to its online company", async () => {
+  const store = settingsStore();
+  await store.write({ ...await store.read(), operatingMode: "personal" });
+  let activated = false;
+  let refreshed = false;
+  const accountStore = {
+    async list() {
+      return {
+        currentAccountId: "account-1",
+        accounts: [{ id: "account-1", label: "AMOS Labs", tenantSlug: "amos-labs" }]
+      };
+    },
+    async activate() { activated = true; }
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-current-account-controller",
+    settingsStore: store,
+    accountStore,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = () => ({
+    async status() { return { access_token: "account-1-token" }; }
+  });
+  controller.refreshRemote = async () => {
+    refreshed = true;
+    controller.identity = {
+      principal_type: "user",
+      sub: "source-user",
+      tenant_id: sourceTenant,
+      tenant_slug: "amos-labs"
+    };
+  };
+
+  const state = await controller.switchAccount("account-1");
+
+  assert.equal(activated, false);
+  assert.equal(refreshed, true);
+  assert.equal((await store.read()).operatingMode, "online");
+  assert.equal(state.mode.personal, false);
+  assert.equal(state.identity.tenant_id, sourceTenant);
+});

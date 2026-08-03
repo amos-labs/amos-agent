@@ -82,6 +82,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .app-shell.nav-collapsed { --sidebar-width: 78px; }
 
 .sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: var(--sidebar);
@@ -213,10 +214,80 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--surface-soft);
 }
 
+.connection-card {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.connection-card:hover,
+.connection-card[aria-expanded="true"] { border-color: rgba(109,147,255,.48); }
+
 .connection-card strong, .connection-card small { display: block; }
 .connection-card strong { font-size: 12px; }
 .connection-card small { margin-top: 3px; color: var(--muted-2); font-size: 10px; }
 .connection-card .identity-detail { color: var(--blue-2); }
+.account-menu {
+  position: absolute;
+  z-index: 80;
+  bottom: 20px;
+  left: calc(100% + 12px);
+  display: grid;
+  width: min(390px, calc(100vw - var(--sidebar-width) - 36px));
+  max-height: min(620px, calc(100vh - 40px));
+  gap: 14px;
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--modal);
+  box-shadow: var(--shadow);
+  -webkit-app-region: no-drag;
+}
+.account-menu-heading,
+.account-menu-actions,
+.account-option {
+  display: flex;
+  align-items: center;
+}
+.account-menu-heading { justify-content: space-between; gap: 12px; }
+.account-menu-heading strong { display: block; margin-top: 5px; font-size: 16px; }
+.account-list { display: grid; gap: 8px; }
+.account-option {
+  width: 100%;
+  gap: 11px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  text-align: left;
+  cursor: pointer;
+}
+.account-option:hover { border-color: rgba(109,147,255,.4); }
+.account-option.active { border-color: var(--blue); background: rgba(109,147,255,.1); }
+.account-avatar {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--brand-surface);
+  color: #fff;
+  font-weight: 800;
+}
+.account-copy { min-width: 0; flex: 1; }
+.account-copy strong,
+.account-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-copy small { margin-top: 3px; color: var(--muted-2); font-size: 11px; }
+.account-active-mark { color: var(--green); font-size: 11px; font-weight: 800; }
+.account-menu .company-switcher { margin: 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.account-menu-actions { align-items: stretch; gap: 8px; }
+.account-menu-actions .button { flex: 1; padding-inline: 11px; }
+.account-update-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.account-update-row span { color: var(--muted-2); font-size: 11px; }
+.account-update-row .text-button { color: var(--blue-2); font-size: 11px; }
+.account-privacy { color: var(--muted-2); font-size: 10px; line-height: 1.55; }
 .status-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 4px rgba(255,202,105,.08); }
 .status-dot.connected, .status-dot.green { background: var(--green); box-shadow: 0 0 0 4px rgba(59,213,143,.08); }
 
@@ -890,7 +961,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .canvas-sidecar .canvas-decision-block { grid-column: 1 / -1; }
 .canvas-empty.compact { min-height: 320px; padding: 28px; }
 
-.activity-view, .settings-view, .decisions-view, .memory-view, .canvas-view, .connections-view { padding: 42px 46px; }
+.work-view, .settings-view, .memory-view, .canvas-view, .connections-view { padding: 42px 46px; }
 .section-heading { max-width: 850px; margin-bottom: 34px; }
 .section-heading h1 { margin-bottom: 15px; font-size: 48px; }
 .section-heading p { color: var(--muted); line-height: 1.6; }
@@ -900,6 +971,45 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .activity-summary { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .activity-time { color: var(--muted-2); font-size: 10px; }
 .activity-empty { padding: 60px; border: 1px dashed var(--line); border-radius: 16px; color: var(--muted-2); text-align: center; }
+.work-heading { max-width: 900px; margin-bottom: 24px; }
+.work-tabs {
+  display: flex;
+  max-width: 1240px;
+  gap: 6px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.work-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 15px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.work-tab:hover { color: var(--ink); }
+.work-tab.active { border-bottom-color: var(--blue); color: var(--ink); }
+.work-tab-count {
+  min-width: 20px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 202, 105, .14);
+  color: var(--warning);
+  font-size: 8px;
+  text-align: center;
+}
+.work-panel { max-width: 1240px; }
+.work-panel-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.work-panel-toolbar > p { max-width: 650px; margin: 0; color: var(--muted-2); font-size: 10px; line-height: 1.55; }
+.work-panel-intro { margin-bottom: 20px; }
+.work-panel-intro h2 { margin: 8px 0 7px; font-size: 24px; }
+.work-panel-intro p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.button.compact-button { min-height: 34px; padding: 8px 12px; font-size: 10px; }
 
 .connections-heading {
   display: grid;

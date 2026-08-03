@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   startPersonal: () => ipcRenderer.invoke("desktop:start-personal"),
   startDemo: () => ipcRenderer.invoke("desktop:start-demo"),
   login: () => ipcRenderer.invoke("desktop:login"),
+  addAccount: () => ipcRenderer.invoke("desktop:add-account"),
+  switchAccount: (accountId) => ipcRenderer.invoke("desktop:switch-account", accountId),
   logout: () => ipcRenderer.invoke("desktop:logout"),
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
   switchCompany: (tenantId) => ipcRenderer.invoke("desktop:switch-company", tenantId),

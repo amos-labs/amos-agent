@@ -31,6 +31,7 @@ import {
   shouldEnableDesktopUpdates
 } from "../src/desktop/updateManager.js";
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
+import { DesktopAccountStore } from "../src/auth/tokenStore.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { autoUpdater } = electronUpdater;
@@ -266,6 +267,10 @@ function registerIpc() {
   ipcMain.handle("desktop:start-personal", () => controller.startPersonal());
   ipcMain.handle("desktop:start-demo", () => controller.startDemo());
   ipcMain.handle("desktop:login", () => controller.login());
+  ipcMain.handle("desktop:add-account", () => controller.addAccount());
+  ipcMain.handle("desktop:switch-account", (_event, accountId) =>
+    controller.switchAccount(accountId)
+  );
   ipcMain.handle("desktop:logout", () => controller.logout());
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
   ipcMain.handle("desktop:switch-company", (_event, tenantId) =>
@@ -529,6 +534,13 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
+  const accountStore = new DesktopAccountStore({
+    filePath: join(app.getPath("userData"), "accounts.json"),
+    legacyFilePath: join(app.getPath("userData"), "oauth.json"),
+    encrypt,
+    decrypt
+  });
+  await accountStore.initialize();
   const managedOllamaRuntime = new ManagedOllamaRuntime({
     platform: process.platform,
     arch: process.arch,
@@ -558,6 +570,7 @@ app.whenReady().then(async () => {
     savedViewStore,
     sessionContinuityStore,
     decisionKeyStore,
+    accountStore,
     offlineManager,
     telemetry,
     openBrowser: (url) => shell.openExternal(url),

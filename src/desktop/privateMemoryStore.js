@@ -29,39 +29,44 @@ export class PrivateMemoryStore {
     this.createId = createId;
   }
 
-  async list() {
+  async list(scope = null) {
     const store = await this.readStore();
-    const items = store.items.map((envelope) => this.decryptMetadata(envelope));
+    const items = store.items
+      .map((envelope) => this.decryptMetadata(envelope))
+      .filter((item) => scopeMatches(item, scope));
     return items
       .map(publicMemory)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  async get(id) {
+  async get(id, scope = null) {
     const store = await this.readStore();
     const envelope = store.items.find((item) => item.id === id);
     if (!envelope) throw new Error("That private memory is no longer available");
-    return this.decryptEnvelope(envelope);
+    const memory = this.decryptEnvelope(envelope);
+    if (!scopeMatches(memory, scope)) throw new Error("That private memory is no longer available");
+    return memory;
   }
 
-  async exportRecords(ids = null) {
+  async exportRecords(ids = null, scope = null) {
     const store = await this.readStore();
     const selected = Array.isArray(ids) && ids.length > 0 ? new Set(ids) : null;
     const records = store.items
       .filter((envelope) => !selected || selected.has(envelope.id))
-      .map((envelope) => this.decryptEnvelope(envelope));
+      .map((envelope) => this.decryptEnvelope(envelope))
+      .filter((item) => scopeMatches(item, scope));
     if (selected && records.length !== selected.size) {
       throw new Error("One or more selected private memories are no longer available");
     }
     return records.map((record) => ({ ...record, companyResult: null }));
   }
 
-  async add(input) {
+  async add(input, scope = null) {
     memoryClassSpec("private");
     const store = await this.readStore();
     const existing = store.items
       .map((envelope) => this.decryptMetadata(envelope))
-      .find((item) => item.sha256 === input.sha256);
+      .find((item) => item.sha256 === input.sha256 && scopeMatches(item, scope));
     if (existing) return { item: publicMemory(existing), status: "already_saved" };
     if (store.items.length >= MAX_ITEMS) {
       throw new Error(`AMOS Desktop keeps up to ${MAX_ITEMS} private memories; forget one before adding another`);
@@ -77,7 +82,8 @@ export class PrivateMemoryStore {
       createdAt: now,
       updatedAt: now,
       promotedAt: null,
-      companyResult: null
+      companyResult: null,
+      ...normalizedScope(scope)
     });
     const envelope = this.encryptItem(item);
     const encryptedSize = store.items.reduce((total, value) => total + encryptedEnvelopeSize(value), 0);
@@ -99,14 +105,18 @@ export class PrivateMemoryStore {
   async importCapsuleRecords(records, {
     capsuleId,
     parentCapsuleId = null,
-    importedAt = this.now().toISOString()
+    importedAt = this.now().toISOString(),
+    scope = null
   }) {
     if (!Array.isArray(records) || records.length === 0) {
       throw new Error("That AMOS memory capsule contains no private memory");
     }
     const store = await this.readStore();
     const existingHashes = new Set(
-      store.items.map((envelope) => this.decryptMetadata(envelope).sha256)
+      store.items
+        .map((envelope) => this.decryptMetadata(envelope))
+        .filter((item) => scopeMatches(item, scope))
+        .map((item) => item.sha256)
     );
     const result = { imported: [], duplicates: [] };
     let encryptedSize = store.items.reduce(
@@ -131,6 +141,7 @@ export class PrivateMemoryStore {
         updatedAt: importedAt,
         promotedAt: null,
         companyResult: null,
+        ...normalizedScope(scope),
         lineage: {
           capsuleId,
           parentCapsuleId,
@@ -159,11 +170,12 @@ export class PrivateMemoryStore {
     return result;
   }
 
-  async markPromoted(id, companyResult) {
+  async markPromoted(id, companyResult, scope = null) {
     const store = await this.readStore();
     const index = store.items.findIndex((item) => item.id === id);
     if (index < 0) throw new Error("That private memory is no longer available");
     const current = this.decryptMetadata(store.items[index]);
+    if (!scopeMatches(current, scope)) throw new Error("That private memory is no longer available");
     const now = this.now().toISOString();
     const item = normalizePrivateMetadata({
       ...current,
@@ -186,10 +198,11 @@ export class PrivateMemoryStore {
     return publicMemory(item);
   }
 
-  async forget(id) {
+  async forget(id, scope = null) {
     const store = await this.readStore();
     const index = store.items.findIndex((item) => item.id === id);
     if (index < 0) return false;
+    if (!scopeMatches(this.decryptMetadata(store.items[index]), scope)) return false;
     store.items.splice(index, 1);
     store.journal.push(createSyncJournalEntry({
       operation: "forget",
@@ -202,9 +215,31 @@ export class PrivateMemoryStore {
     return true;
   }
 
-  async journal() {
+  async journal(scope = null) {
     const store = await this.readStore();
-    return store.journal.map((entry) => ({ ...entry }));
+    if (!scope) return store.journal.map((entry) => ({ ...entry }));
+    const visibleIds = new Set(
+      store.items
+        .map((envelope) => this.decryptMetadata(envelope))
+        .filter((item) => scopeMatches(item, scope))
+        .map((item) => item.id)
+    );
+    return store.journal.filter((entry) => visibleIds.has(entry.memoryId)).map((entry) => ({ ...entry }));
+  }
+
+  async bindUnscoped(scope) {
+    const normalized = normalizedScope(scope);
+    if (!normalized.ownerSubjectId) return 0;
+    const store = await this.readStore();
+    let changed = 0;
+    store.items = store.items.map((envelope) => {
+      const metadata = this.decryptMetadata(envelope);
+      if (metadata.ownerSubjectId || metadata.ownerTenantId) return envelope;
+      changed += 1;
+      return { ...envelope, metadata: this.encryptMetadata({ ...metadata, ...normalized }) };
+    });
+    if (changed > 0) await this.writeStore(store);
+    return changed;
   }
 
   encryptItem(item) {
@@ -322,6 +357,8 @@ function normalizePrivateMetadata(input) {
     updatedAt: timestamp(input.updatedAt),
     promotedAt: input.promotedAt ? timestamp(input.promotedAt) : null,
     companyResult: boundedJsonValue(input.companyResult),
+    ownerSubjectId: clean(input.ownerSubjectId, 256),
+    ownerTenantId: clean(input.ownerTenantId, 256),
     lineage: normalizeLineage(input.lineage)
   };
 }
@@ -348,6 +385,24 @@ function publicMemory(item) {
     companyResult: item.companyResult,
     lineage: item.lineage
   };
+}
+
+function normalizedScope(scope) {
+  if (!scope) return { ownerSubjectId: "", ownerTenantId: "" };
+  return {
+    ownerSubjectId: clean(scope.ownerSubjectId, 256),
+    ownerTenantId: clean(scope.ownerTenantId, 256)
+  };
+}
+
+function scopeMatches(item, scope) {
+  if (!scope) return true;
+  const normalized = normalizedScope(scope);
+  return Boolean(
+    normalized.ownerSubjectId &&
+    item.ownerSubjectId === normalized.ownerSubjectId &&
+    item.ownerTenantId === normalized.ownerTenantId
+  );
 }
 
 function normalizeLineage(value) {

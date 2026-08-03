@@ -427,16 +427,26 @@ show two distinct concepts:
 Do not accept long-lived AWS access keys for this product path. Test and
 discovery calls must be read-only, tenant-pinned, bounded, and receipted.
 
-## Multi-company identity and organization hierarchy
+## Multi-account identity, companies, and organization hierarchy
 
-Single-company AMOS remains the default experience. A user with one active
-company membership sees no picker and signs in exactly as before. A user with
-two or more explicit memberships receives a platform-backed company selector in
-the managed app and Desktop.
+Single-account AMOS remains the default experience. The signed-in identity card
+still looks and behaves normally, but clicking it opens the account menu. The
+menu can add another AMOS account, switch accounts, sign out of the active
+account, and check for Desktop updates. This is the same mental model as a
+Google account switcher, not a portfolio-wide Platform identity.
 
-The platform keeps three concerns separate:
+Each added account completes an independent browser OAuth ceremony. Desktop
+stores each complete OAuth session as a separate operating-system-encrypted
+record and keeps the active-account index local. The Platform receives no list,
+link, identifier, telemetry field, or other signal describing the other
+accounts present on that computer. Selecting an account changes which isolated
+OAuth record is used; it never asks one Platform account for permission to see
+or activate another.
 
-- a global human login identity;
+AMOS keeps four concerns separate:
+
+- a local Desktop account profile containing one independently authenticated
+  human login;
 - one tenant-scoped user membership, role, and grants per company; and
 - non-authorizing parent/child organization relationships such as portfolio,
   division, business unit, region, brand, franchise, subsidiary, or managed
@@ -449,12 +459,32 @@ are only analytics dimensions; a related tenant is appropriate when the unit
 needs separate users, connections, credentials, policies, approvals, receipts,
 or durable state.
 
-Desktop discovers the optional `amos_tenants_endpoint` and
+Within one active account, Desktop may also discover the optional `amos_tenants_endpoint` and
 `amos_tenant_switch_endpoint` fields from the OAuth authorization-server
-metadata. It does not bundle a tenant list, infer membership from hierarchy, or
-send a tenant ID through normal company-tool arguments.
+metadata. That secondary selector covers only memberships already visible to
+that one login. It does not replace **Add another account**, bundle a tenant
+list, infer membership from hierarchy, or send a tenant ID through normal
+company-tool arguments.
 
-When the user switches:
+When the user switches an independently authenticated account:
+
+1. Desktop refuses the switch while work is active, then activates only the
+   selected locally encrypted OAuth record;
+2. Desktop cancels local approval prompts and clears the old runtime,
+   conversation, attachments, canvas result handles, transient briefing
+   results, approval list, connection projection, company cache, notification
+   cursor, and shared-continuity projection;
+3. locally durable private memory, task checkpoints, saved briefing
+   definitions, receipts, and restart continuity remain encrypted and are
+   filtered by the exact user and tenant before they can be listed or loaded;
+4. Desktop reloads identity, policy, approvals, connections, intelligence
+   status, receipts, and continuity under the newly active OAuth session; and
+5. the Platform sees only ordinary requests from that selected session and
+   never records a cross-account switch receipt because no cross-account event
+   occurred on the Platform.
+
+When the user instead switches between memberships advertised inside one
+active account:
 
 1. the platform verifies the target membership and recalculates its role/scopes;
 2. the platform mints a fresh OAuth token bound to the target user and tenant and
@@ -467,10 +497,12 @@ When the user switches:
 5. encrypted task checkpoints remain local references only and retain their
    existing user/tenant revalidation requirement before any continuation.
 
-Desktop refuses a switch while a task is running. API keys and machine clients
-cannot enumerate or switch human memberships. The source token remains pinned
-to its source company; switching never creates a token with portfolio-wide
-authority.
+Both kinds of switch fail closed while a task is running. API keys and machine
+clients cannot enumerate local Desktop accounts or switch human memberships.
+No renderer, model prompt, task checkpoint, telemetry event, or Platform call
+receives OAuth or refresh-token material. The source token remains pinned to
+its source identity/company; switching never creates a token with
+portfolio-wide or cross-account authority.
 
 The client-neutral platform contract is documented in
 `docs/MULTI-COMPANY-IDENTITY.md` in the managed-platform repository. Owner/admin

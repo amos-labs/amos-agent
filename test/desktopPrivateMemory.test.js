@@ -72,6 +72,7 @@ test("desktop previews encrypted capsules before importing private memory", asyn
   const sourceRoot = await mkdtemp(join(tmpdir(), "amos-desktop-capsule-source-"));
   const destinationRoot = await mkdtemp(join(tmpdir(), "amos-desktop-capsule-destination-"));
   const sourceStore = privateStore(sourceRoot);
+  const sourceScope = { ownerSubjectId: "user-1", ownerTenantId: "tenant-1" };
   await sourceStore.add({
     name: "portable-context.md",
     mime: "text/markdown",
@@ -79,7 +80,7 @@ test("desktop previews encrypted capsules before importing private memory", asyn
     size: 19,
     sha256: "9".repeat(64),
     text: "Portable context"
-  });
+  }, sourceScope);
   const sourceController = new DesktopController({
     userDataPath: sourceRoot,
     settingsStore: { read: async () => ({ operatingMode: "online" }) },
