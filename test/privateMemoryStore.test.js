@@ -155,3 +155,34 @@ test("private memory exports full records and imports them with capsule lineage"
   assert.equal(duplicate.imported.length, 0);
   assert.equal(duplicate.duplicates.length, 1);
 });
+
+test("private memory is identity-and-tenant pinned across local account switches", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-private-memory-scope-"));
+  let index = 0;
+  const store = new PrivateMemoryStore({
+    filePath: join(root, "private-memory.json"),
+    ...codec(),
+    createId: () => `scope-${++index}`
+  });
+  const input = {
+    name: "private-plan.md",
+    mime: "text/markdown",
+    kind: "document",
+    size: 12,
+    sha256: "a".repeat(64),
+    text: "Account A only"
+  };
+  const accountA = { ownerSubjectId: "user-a", ownerTenantId: "tenant-a" };
+  const accountB = { ownerSubjectId: "user-b", ownerTenantId: "tenant-b" };
+
+  const legacy = await store.add(input);
+  assert.equal(await store.bindUnscoped(accountA), 1);
+  assert.equal((await store.list(accountA)).length, 1);
+  assert.equal((await store.list(accountB)).length, 0);
+  await assert.rejects(store.get(legacy.item.id, accountB), /no longer available/);
+
+  const separate = await store.add({ ...input, text: "Account B only" }, accountB);
+  assert.equal(separate.status, "saved");
+  assert.equal((await store.list(accountA)).length, 1);
+  assert.equal((await store.list(accountB)).length, 1);
+});

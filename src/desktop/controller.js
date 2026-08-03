@@ -5,7 +5,7 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { loadConfig, validateConfig } from "../config.js";
 import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
-import { FileTokenStore } from "../auth/tokenStore.js";
+import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
 import {
   intelligenceProfileForReasoning,
   listModelProviders
@@ -79,6 +79,7 @@ export class DesktopController {
     savedViewStore = null,
     sessionContinuityStore = null,
     decisionKeyStore = null,
+    accountStore = null,
     offlineManager = null,
     telemetry = null,
     openBrowser,
@@ -118,6 +119,7 @@ export class DesktopController {
     this.savedViewStore = savedViewStore;
     this.sessionContinuityStore = sessionContinuityStore;
     this.decisionKeyStore = decisionKeyStore;
+    this.accountStore = accountStore;
     this.activeTask = null;
     this.checkpointWrites = Promise.resolve();
     this.capsulePreviews = new Map();
@@ -151,6 +153,9 @@ export class DesktopController {
         }
       : null;
     const system = systemProfile();
+    const accounts = this.accountStore
+      ? await this.accountStore.list()
+      : { currentAccountId: useOAuth ? "legacy" : "", accounts: [] };
     return {
       configured,
       connected: useOAuth || Boolean(config.amos.apiKey),
@@ -174,6 +179,7 @@ export class DesktopController {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
       },
+      accounts,
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
       remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model, settings),
@@ -187,12 +193,16 @@ export class DesktopController {
       ...this.canvases.state(),
       savedViews: this.savedViewStore ? await this.savedViewStore.list(this.identity) : [],
       memoryClasses: Object.values(MEMORY_CLASSES),
-      privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
+      privateMemory: this.privateMemoryStore
+        ? await this.privateMemoryStore.list(privateMemoryScope(this.identity))
+        : [],
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState(),
       taskCheckpoints: await this.taskCheckpointState(),
       sessionContinuity: await this.sessionContinuityState(settings),
-      localReceipts: this.localReceiptStore ? await this.localReceiptStore.list() : [],
+      localReceipts: this.localReceiptStore
+        ? await this.localReceiptStore.list(privateMemoryScope(this.identity))
+        : [],
       activeTask: this.activeTask
         ? {
             id: this.activeTask.id,
@@ -439,6 +449,7 @@ export class DesktopController {
   async removeOfflineProposal(id) {
     const store = this.requireOfflineProposalStore();
     const proposal = await store.get(id);
+    assertDurableRecordScope(proposal, await this.durableAccountScope(), "offline draft");
     await store.remove(id);
     this.record("draft", `Removed offline draft: ${proposal.title}`, {
       proposal_id: proposal.id
@@ -449,7 +460,8 @@ export class DesktopController {
 
   async initializeTaskCheckpoints() {
     if (!this.taskCheckpointStore) return [];
-    const checkpoints = await this.taskCheckpointStore.initialize();
+    await this.taskCheckpointStore.initialize();
+    const checkpoints = await this.taskCheckpointState();
     this.send("task-checkpoints:changed", checkpoints);
     return checkpoints;
   }
@@ -500,6 +512,7 @@ export class DesktopController {
     }
     const store = this.requireTaskCheckpointStore();
     const checkpoint = await store.get(id);
+    assertDurableRecordScope(checkpoint, await this.durableAccountScope(), "interrupted task");
     await store.remove(id);
     this.record("task", `Removed interrupted task: ${checkpoint.title}`, {
       task_id: checkpoint.id
@@ -557,9 +570,7 @@ export class DesktopController {
         : settings.workspace,
       operatingMode: "personal"
     });
-    this.resetRuntime();
-    this.identity = null;
-    this.companyApprovals = [];
+    this.clearEphemeralCompanyBoundary();
     this.record("mode", "Private personal workspace enabled");
     return this.state();
   }
@@ -575,22 +586,30 @@ export class DesktopController {
           "Your AMOS workspace is already active. Continue with My company to connect data, applications, memory, and policy."
         );
       }
-      await oauth.logout();
+      if (!this.accountStore) await oauth.logout();
     }
     const demoWorkspace = join(this.userDataPath, "northwind-demo-workspace");
     await mkdir(demoWorkspace, { recursive: true, mode: 0o700 });
+    const pendingStore = this.accountStore ? new MemoryTokenStore() : new FileTokenStore(join(this.userDataPath, "oauth.json"));
     const demo = new AmosDesktopDemoSession({
       mcpUrl: settings.amosMcpUrl,
-      store: new FileTokenStore(join(this.userDataPath, "oauth.json")),
+      store: pendingStore,
       openBrowser: (url) => {
         this.openBrowser(url);
         return true;
       }
     });
-    await demo.start({
+    const demoCredentials = await demo.start({
       previousWorkspace: settings.workspace,
       installId: await this.desktopInstallId()
     });
+    if (this.accountStore) {
+      await this.accountStore.add(demoCredentials, {
+        label: "Northwind Labs demo",
+        tenantId: demoCredentials.tenant_id,
+        tenantSlug: "northwind-demo"
+      });
+    }
     await this.settingsStore.write({
       ...settings,
       provider: "amos-hosted",
@@ -601,8 +620,7 @@ export class DesktopController {
       operatingMode: "online",
       workspace: demoWorkspace
     });
-    this.resetRuntime();
-    this.accountStatus = null;
+    this.clearEphemeralCompanyBoundary();
     this.record("auth", "Northwind Labs demo company connected");
     await this.refreshRemote({ notify: false });
     return this.state();
@@ -625,22 +643,24 @@ export class DesktopController {
 
   async usePrivateMemory(id) {
     const store = this.requirePrivateMemory();
-    const memory = await store.get(id);
+    const scope = privateMemoryScope(this.identity);
+    const memory = await store.get(id, scope);
     const attachment = this.attachments.addPrivateMemory(memory);
     this.record("memory", `Added private memory ${memory.name} to the next task`);
     return {
       attachments: this.attachments.list(),
-      privateMemory: await store.list(),
+      privateMemory: await store.list(scope),
       attachment
     };
   }
 
   async forgetPrivateMemory(id) {
     const store = this.requirePrivateMemory();
-    const memory = await store.get(id);
-    await store.forget(id);
+    const scope = privateMemoryScope(this.identity);
+    const memory = await store.get(id, scope);
+    await store.forget(id, scope);
     this.record("memory", `Forgot private memory ${memory.name}`);
-    return { privateMemory: await store.list() };
+    return { privateMemory: await store.list(scope) };
   }
 
   async promotePrivateMemory(id) {
@@ -649,7 +669,8 @@ export class DesktopController {
       throw new Error("Return to online company mode before promoting private memory");
     }
     const store = this.requirePrivateMemory();
-    const memory = await store.get(id);
+    const scope = privateMemoryScope(this.identity);
+    const memory = await store.get(id, scope);
     const attachment = this.attachments.addPrivateMemory(memory);
     try {
       const { config, runtime } = await this.getRuntime({ requireAmos: true });
@@ -661,9 +682,9 @@ export class DesktopController {
       if (!result || result.status === "failed") {
         throw new Error(result?.error || "AMOS could not promote that private memory");
       }
-      const promoted = await store.markPromoted(id, result.result || { status: result.status });
+      const promoted = await store.markPromoted(id, result.result || { status: result.status }, scope);
       this.record("memory", `Promoted ${memory.name} into governed company memory`);
-      return { privateMemory: await store.list(), promoted };
+      return { privateMemory: await store.list(scope), promoted };
     } finally {
       this.attachments.remove(attachment.id);
     }
@@ -671,14 +692,15 @@ export class DesktopController {
 
   async exportPrivateMemoryCapsule({ filePath, passphrase, ids = null }) {
     const store = this.requirePrivateMemory();
-    const memories = await store.exportRecords(ids);
+    const scope = privateMemoryScope(this.identity);
+    const memories = await store.exportRecords(ids, scope);
     const summary = await writePrivateMemoryCapsule({
       filePath,
       passphrase,
       subjectId: privateMemorySubject(this.identity),
       tenantId: privateMemoryTenant(this.identity),
       memories,
-      journal: await store.journal(),
+      journal: await store.journal(scope),
       parentCapsuleId: commonParentCapsule(memories)
     });
     this.record(
@@ -723,9 +745,11 @@ export class DesktopController {
     }
     this.capsulePreviews.delete(previewId);
     const store = this.requirePrivateMemory();
+    const scope = privateMemoryScope(this.identity);
     const result = await store.importCapsuleRecords(staged.capsule.records, {
       capsuleId: staged.capsule.manifest.capsule_id,
-      parentCapsuleId: staged.capsule.manifest.parent_capsule_id
+      parentCapsuleId: staged.capsule.manifest.parent_capsule_id,
+      scope
     });
     this.record(
       "memory",
@@ -737,7 +761,7 @@ export class DesktopController {
       }
     );
     return {
-      privateMemory: await store.list(),
+      privateMemory: await store.list(scope),
       capsuleId: staged.capsule.manifest.capsule_id,
       importedCount: result.imported.length,
       duplicateCount: result.duplicates.length
@@ -760,10 +784,21 @@ export class DesktopController {
   }
 
   async login() {
+    return this.addAccount({ replaceDisconnected: true });
+  }
+
+  async addAccount({ replaceDisconnected = false } = {}) {
+    if (this.activeTask) {
+      throw new Error("Finish or stop the current task before adding an account");
+    }
     const settings = await this.settingsStore.read();
-    const oauth = this.oauthFor(settings);
-    const previous = await oauth.status();
-    await oauth.login({
+    const activeOauth = this.oauthFor(settings);
+    const previous = await activeOauth.status();
+    const pendingStore = this.accountStore ? new MemoryTokenStore() : null;
+    const oauth = pendingStore
+      ? this.oauthFor(settings, { store: pendingStore })
+      : activeOauth;
+    const credentials = await oauth.login({
       openBrowser: true,
       desktopInstallId: await this.desktopInstallId(),
       desktopApprovalKey: this.decisionKeyStore
@@ -771,6 +806,11 @@ export class DesktopController {
         : null,
       onAuthorize: ({ url }) => this.send("auth:browser", { url })
     });
+    if (this.accountStore) {
+      await this.accountStore.add(credentials);
+    } else if (!replaceDisconnected && previous?.access_token) {
+      throw new Error("This AMOS Desktop build supports only one account");
+    }
     const nextSettings = {
       ...settings,
       operatingMode: "online",
@@ -795,8 +835,12 @@ export class DesktopController {
       );
     }
     this.resetRuntime();
+    this.clearEphemeralCompanyBoundary();
     this.record("auth", "AMOS account connected");
     await this.refreshRemote({ notify: true });
+    if (this.accountStore && this.identity) {
+      await this.accountStore.updateActiveProfile(this.identity);
+    }
     return this.state();
   }
 
@@ -805,7 +849,10 @@ export class DesktopController {
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     await oauth.logout();
-    if (this.decisionKeyStore) await this.decisionKeyStore.clear();
+    const remainingAccounts = this.accountStore ? await this.accountStore.list() : null;
+    if (this.decisionKeyStore && (!remainingAccounts || remainingAccounts.accounts.length === 0)) {
+      await this.decisionKeyStore.clear();
+    }
     if (this.companyCacheStore) await this.companyCacheStore.clear();
     this.companyCacheRevalidatedFor = null;
     await this.settingsStore.write({
@@ -813,19 +860,52 @@ export class DesktopController {
       workspace: credentials?.demo
         ? credentials.previous_workspace || ""
         : settings.workspace,
-      operatingMode: credentials?.demo ? "personal" : settings.operatingMode,
+      operatingMode: remainingAccounts?.currentAccountId
+        ? "online"
+        : credentials?.demo
+          ? "personal"
+          : settings.operatingMode,
       notifiedApprovalIds: []
     });
-    this.resetRuntime();
-    this.identity = null;
-    this.accountStatus = null;
-    this.companyApprovals = [];
-    this.companies = { currentTenantId: null, tenants: [] };
-    this.workingContinuity = null;
-    this.approvalsAvailable = true;
-    this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
-    await this.sendRemoteState();
-    this.record("auth", "AMOS account disconnected");
+    this.clearEphemeralCompanyBoundary();
+    if (remainingAccounts?.currentAccountId) {
+      await this.refreshRemote({ notify: false });
+      this.record("auth", "Signed out and switched to another account");
+    } else {
+      await this.sendRemoteState();
+      this.record("auth", "AMOS account disconnected");
+    }
+    return this.state();
+  }
+
+  async switchAccount(accountId) {
+    if (!this.accountStore) throw new Error("Account switching is unavailable in this build");
+    if (this.activeTask) {
+      throw new Error("Finish or stop the current task before switching accounts");
+    }
+    if (this.remoteRefreshPromise) await this.remoteRefreshPromise;
+    const accounts = await this.accountStore.list();
+    const target = accounts.accounts.find((account) => account.id === accountId);
+    if (!target) throw new Error("That AMOS account is not available on this computer");
+    const settings = await this.settingsStore.read();
+    if (accountId === accounts.currentAccountId && settings.operatingMode === "online") {
+      return this.state();
+    }
+
+    if (accountId !== accounts.currentAccountId) await this.accountStore.activate(accountId);
+    if (this.companyCacheStore) await this.companyCacheStore.clear();
+    this.companyCacheRevalidatedFor = null;
+    await this.settingsStore.write({
+      ...settings,
+      operatingMode: "online",
+      notifiedApprovalIds: []
+    });
+    this.clearEphemeralCompanyBoundary();
+    await this.refreshRemote({ notify: false });
+    this.record("auth", `Switched to ${target.label || target.email || "AMOS account"}`, {
+      account_id: target.id,
+      tenant_id: this.identity?.tenant_id || null
+    });
     return this.state();
   }
 
@@ -858,23 +938,7 @@ export class DesktopController {
     this.companyCacheRevalidatedFor = null;
     await this.settingsStore.write({ ...settings, notifiedApprovalIds: [] });
 
-    // Ephemeral company material must never survive a boundary switch. Durable
-    // encrypted checkpoints remain local and still require user+tenant
-    // revalidation before they can be resumed.
-    this.resetRuntime();
-    this.attachments.clear();
-    this.canvases.clear();
-    this.activity = [];
-    this.identity = null;
-    this.accountStatus = null;
-    this.companyApprovals = [];
-    this.approvalsAvailable = true;
-    this.approvalDecisionMode = "hosted";
-    this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
-    this.companies = { currentTenantId: null, tenants: [] };
-    this.workingContinuity = null;
-    this.send("activity:changed", []);
-    this.send("canvas:changed", this.canvases.state());
+    this.clearEphemeralCompanyBoundary();
 
     await this.refreshRemote({ notify: false });
     this.record("auth", `Switched to ${target.tenant_name}`, {
@@ -948,6 +1012,15 @@ export class DesktopController {
     const errors = [];
     if (identityResult.status === "fulfilled") {
       this.identity = identityResult.value;
+      if (this.privateMemoryStore) {
+        await this.privateMemoryStore.bindUnscoped(privateMemoryScope(identityResult.value));
+      }
+      if (this.localReceiptStore) {
+        await this.localReceiptStore.bindUnscoped(privateMemoryScope(identityResult.value));
+      }
+      if (this.accountStore) {
+        await this.accountStore.updateActiveProfile(identityResult.value);
+      }
       try {
         await this.revalidateCompanyCache(remote, identityResult.value, settings);
       } catch (error) {
@@ -1414,7 +1487,9 @@ export class DesktopController {
         attachments: this.attachments.list(),
         ...this.canvases.state(),
         memory,
-        privateMemory: this.privateMemoryStore ? await this.privateMemoryStore.list() : [],
+        privateMemory: this.privateMemoryStore
+          ? await this.privateMemoryStore.list(privateMemoryScope(this.identity))
+          : [],
         offlineProposals: await this.offlineProposalState()
       };
     } catch (error) {
@@ -1672,7 +1747,7 @@ export class DesktopController {
         finishedAt: new Date().toISOString(),
         events: receiptEvents,
         error
-      });
+      }, privateMemoryScope(this.identity));
       this.record("proof", `Local task receipt ${receipt.digest.slice(0, 12)} · ${status}`, {
         receipt_id: receipt.id,
         digest: receipt.digest,
@@ -1761,7 +1836,10 @@ export class DesktopController {
       seen.add(reference.id);
       const item = this.attachments.get(reference.id);
       try {
-        const saved = await this.requirePrivateMemory().add(this.attachments.privateMemoryRecord(item.id));
+        const saved = await this.requirePrivateMemory().add(
+          this.attachments.privateMemoryRecord(item.id),
+          privateMemoryScope(this.identity)
+        );
         this.attachments.markPrivateSaved(item.id, { private_memory_id: saved.item.id });
         const status = saved.status === "already_saved" ? "already_saved" : "saved_private";
         this.record("memory", `${saved.status === "already_saved" ? "Reused" : "Saved"} ${item.name} in private memory`);
@@ -1791,7 +1869,10 @@ export class DesktopController {
   async offlineProposalState() {
     if (!this.offlineProposalStore) return [];
     try {
-      return await this.offlineProposalStore.list();
+      const scope = await this.durableAccountScope();
+      if (!scope) return [];
+      return (await this.offlineProposalStore.list())
+        .filter((proposal) => durableRecordMatches(proposal, scope));
     } catch (error) {
       this.record("draft", `Could not read encrypted offline drafts: ${error.message}`);
       return [];
@@ -1808,7 +1889,10 @@ export class DesktopController {
   async taskCheckpointState() {
     if (!this.taskCheckpointStore) return [];
     try {
-      return await this.taskCheckpointStore.list();
+      const scope = await this.durableAccountScope();
+      if (!scope) return [];
+      return (await this.taskCheckpointStore.list())
+        .filter((checkpoint) => durableRecordMatches(checkpoint, scope));
     } catch (error) {
       this.record("task", `Could not read encrypted task checkpoints: ${error.message}`);
       return [];
@@ -1888,7 +1972,7 @@ export class DesktopController {
     this.activeTask.summary = "Checkpoint secured; beginning the task";
     this.activeTask.lastCheckpointAt = Date.now();
     this.activeTask.partialLength = 0;
-    this.send("task-checkpoints:changed", await this.taskCheckpointStore.list());
+    await this.sendTaskCheckpoints();
     this.send("agent:event", {
       type: "phase",
       phase: "checkpointed",
@@ -2310,16 +2394,48 @@ export class DesktopController {
     return loadConfig(env, settings.workspace || homedir());
   }
 
-  oauthFor(settings) {
+  oauthFor(settings, { store = null } = {}) {
     return new AmosOAuthSession({
       mcpUrl: settings.amosMcpUrl,
       clientName: "AMOS Desktop",
-      store: new FileTokenStore(join(this.userDataPath, "oauth.json")),
+      store: store || this.accountStore || new FileTokenStore(join(this.userDataPath, "oauth.json")),
       openBrowser: (url) => {
         this.openBrowser(url);
         return true;
       }
     });
+  }
+
+  async durableAccountScope() {
+    const identityScope = privateMemoryScope(this.identity);
+    if (identityScope.ownerSubjectId !== "local-owner" && identityScope.ownerTenantId) {
+      return identityScope;
+    }
+    return this.accountStore?.activeScope ? this.accountStore.activeScope() : null;
+  }
+
+  clearEphemeralCompanyBoundary() {
+    // Nothing obtained under one identity can remain actionable or visible
+    // after another identity becomes active.
+    this.resetRuntime();
+    this.approvals.cancelAll();
+    this.attachments.clear();
+    this.canvases.clear();
+    this.canvasResults.clear();
+    this.activity = [];
+    this.identity = null;
+    this.accountStatus = null;
+    this.companyApprovals = [];
+    this.approvalsAvailable = true;
+    this.approvalDecisionMode = "hosted";
+    this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    this.companies = { currentTenantId: null, tenants: [] };
+    this.workingContinuity = null;
+    this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
+    this.send("activity:changed", []);
+    this.send("canvas:changed", this.canvases.state());
+    this.send("offline-proposals:changed", []);
+    this.send("task-checkpoints:changed", []);
   }
 
   record(type, summary, detail = null) {
@@ -2351,10 +2467,14 @@ export class DesktopController {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
       },
+      accounts: this.accountStore
+        ? await this.accountStore.list()
+        : { currentAccountId: this.identity ? "legacy" : "", accounts: [] },
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
       remoteStatus: { ...this.remoteStatus },
       companyCache: await this.companyCacheState(),
-      offlineProposals: await this.offlineProposalState()
+      offlineProposals: await this.offlineProposalState(),
+      taskCheckpoints: await this.taskCheckpointState()
     };
     if (this.sessionContinuityStore) {
       remoteState.sessionContinuity = await this.sessionContinuityState();
@@ -2526,8 +2646,16 @@ function privateMemorySubject(identity) {
     identity?.user?.id ||
     identity?.user?.email ||
     identity?.subject_id ||
+    identity?.sub ||
     "local-owner"
   ).slice(0, 256);
+}
+
+function privateMemoryScope(identity) {
+  return {
+    ownerSubjectId: privateMemorySubject(identity),
+    ownerTenantId: privateMemoryTenant(identity) || ""
+  };
 }
 
 function privateMemoryTenant(identity) {
@@ -2537,6 +2665,21 @@ function privateMemoryTenant(identity) {
     identity?.tenant_slug ||
     null;
   return value ? String(value).slice(0, 256) : null;
+}
+
+function durableRecordMatches(record, scope) {
+  return Boolean(
+    scope?.ownerSubjectId &&
+    scope?.ownerTenantId &&
+    record?.source?.subjectId === scope.ownerSubjectId &&
+    record?.source?.tenantId === scope.ownerTenantId
+  );
+}
+
+function assertDurableRecordScope(record, scope, label) {
+  if (!durableRecordMatches(record, scope)) {
+    throw new Error(`That ${label} belongs to a different AMOS account`);
+  }
 }
 
 function cacheRevalidationKey(claims) {

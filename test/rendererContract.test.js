@@ -69,10 +69,15 @@ test("routine approval review stays inside Desktop", async () => {
   ]);
 
   assert.match(html, /id="approvalsButton"[^>]*>Review decisions</);
+  assert.match(html, /data-view="work"[\s\S]*?Work &amp; proof/);
+  assert.match(html, /id="workDecisionsTab"[\s\S]*?id="workProofTab"/);
+  assert.match(html, /id="allApprovalsButton"[^>]*compact-button[^>]*>Web approval center</);
   assert.match(
     javascript,
     /elements\.approvalsButton\.addEventListener\("click", \(\) => showView\("decisions"\)\)/
   );
+  assert.match(javascript, /showWorkTab\(view === "activity" \? "proof" : "decisions"\)/);
+  assert.match(javascript, /Revalidate & reopen/);
   assert.match(javascript, /state\.approvalDecisionMode === "desktop"/);
   assert.match(javascript, /reviewCanvasApproval\(block\.pendingId, review\)/);
   assert.match(javascript, /approvalIdFromUrl\(node\.href\)/);
@@ -140,7 +145,8 @@ test("Operator is chat-first with collapsible navigation and inline governed pro
   assert.match(html, /id="sidebarToggle"/);
   assert.match(html, /id="activityStream"/);
   assert.match(html, /Progress summaries, governed tool use, and recorded outcomes/);
-  assert.doesNotMatch(html, /class="work-panel"/);
+  const operator = html.match(/<section id="operatorView"([\s\S]*?)<section id="canvasView"/)?.[1] || "";
+  assert.doesNotMatch(operator, /class="work-panel"/);
   assert.match(javascript, /function beginInlineActivity\(\)/);
   assert.match(javascript, /finishInlineActivity\(\)/);
 });
@@ -190,16 +196,21 @@ test("dynamic canvases open beside chat without navigating away from Operator", 
   assert.match(javascript, /actionLabel: "Open beside chat"/);
 });
 
-test("advanced company switching lives in Settings and clears the visible boundary", async () => {
-  const html = await readFile(
-    new URL("../desktop/renderer/index.html", import.meta.url),
-    "utf8"
-  );
+test("the identity card opens Google-style account switching outside Intelligence", async () => {
+  const [html, controller] = await Promise.all([
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
+  ]);
   const topbar = html.match(/<header class="topbar">([\s\S]*?)<\/header>/)?.[1] || "";
   const settings = html.match(/<section id="settingsView"([\s\S]*?)<\/section>/)?.[1] || "";
+  const sidebar = html.match(/<aside class="sidebar">([\s\S]*?)<\/aside>/)?.[1] || "";
   assert.doesNotMatch(topbar, /companySwitcher/);
-  assert.match(settings, /id="companySwitcherControl"/);
-  assert.match(settings, /clears open canvases, attachments, approvals, and live task context/);
+  assert.doesNotMatch(settings, /companySwitcherControl|addAccountButton/);
+  assert.match(sidebar, /id="accountMenuButton"/);
+  assert.match(sidebar, /id="addAccountButton"/);
+  assert.match(sidebar, /id="companySwitcherControl"/);
+  assert.match(sidebar, /Platform is never told what other accounts are present/);
+  assert.match(controller, /clearEphemeralCompanyBoundary\(\)/);
 });
 
 test("canvas code and previews stay typed, inert, and outside the privileged renderer", async () => {

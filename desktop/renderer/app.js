@@ -61,6 +61,7 @@ const intelligenceProfiles = {
 
 let state = null;
 let currentView = "operator";
+let currentWorkTab = "decisions";
 let selectedProvider = "amos-hosted";
 let pendingApproval = null;
 let running = false;
@@ -105,11 +106,13 @@ const briefingTemplates = Object.freeze([
 
 const elements = Object.fromEntries(
   [
-    "loading", "app", "onboardingView", "operatorView", "activityView", "settingsView",
-    "decisionsView", "memoryView", "canvasView", "connectionsView",
+    "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
+    "memoryView", "canvasView", "connectionsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
-    "identityDetail", "identityBadge", "companySwitcherControl", "companySwitcher",
+    "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
+    "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
+    "companySwitcherControl", "companySwitcher",
     "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
@@ -131,6 +134,7 @@ const elements = Object.fromEntries(
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
     "recentDecisions", "interruptedTaskList", "updateButton", "privateMemoryList", "privateMemoryEmpty",
+    "workDecisionsTab", "workProofTab", "workDecisionTabCount", "workDecisionsPanel", "workProofPanel",
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
     "workingContinuityCard", "workingContinuityStatus", "workingContinuityDetail",
     "workingContinuityMeta",
@@ -240,8 +244,15 @@ function bindActions() {
   elements.testButton.addEventListener("click", testModel);
   elements.managedConnectButton.addEventListener("click", connectManagedIntelligence);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
+  elements.accountMenuButton.addEventListener("click", toggleAccountMenu);
+  elements.accountMenuClose.addEventListener("click", closeAccountMenu);
+  elements.addAccountButton.addEventListener("click", addAccount);
+  elements.signOutAccountButton.addEventListener("click", disconnectAmos);
+  elements.accountUpdateButton.addEventListener("click", handleAccountUpdate);
   elements.companySwitcher.addEventListener("change", switchCompany);
   elements.approvalsButton.addEventListener("click", () => showView("decisions"));
+  elements.workDecisionsTab.addEventListener("click", () => showWorkTab("decisions"));
+  elements.workProofTab.addEventListener("click", () => showWorkTab("proof"));
   elements.allApprovalsButton.addEventListener("click", () => api.openApprovals());
   elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
@@ -285,6 +296,14 @@ function bindActions() {
     if (event.key === "Escape" && !elements.connectionModal.classList.contains("hidden")) {
       closeConnectionModal();
     }
+    if (event.key === "Escape" && !elements.accountMenu.classList.contains("hidden")) {
+      closeAccountMenu();
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (elements.accountMenu.classList.contains("hidden")) return;
+    if (elements.accountMenu.contains(event.target) || elements.accountMenuButton.contains(event.target)) return;
+    closeAccountMenu();
   });
 }
 
@@ -329,6 +348,7 @@ function bindEvents() {
     if (!state) return;
     Object.assign(state, remote);
     renderIdentity();
+    renderAccountMenu();
     renderCompanySwitcher();
     renderDecisions();
     renderWorkingContinuity();
@@ -373,8 +393,7 @@ function render() {
     elements.operatorView.classList.add("hidden");
     elements.canvasView.classList.add("hidden");
     elements.memoryView.classList.add("hidden");
-    elements.decisionsView.classList.add("hidden");
-    elements.activityView.classList.add("hidden");
+    elements.workView.classList.add("hidden");
     elements.settingsView.classList.add("hidden");
   } else {
     showView(currentView);
@@ -382,6 +401,7 @@ function render() {
 
   elements.connectionDot.classList.toggle("connected", state.connected);
   renderIdentity();
+  renderAccountMenu();
   renderCompanySwitcher();
   elements.runtimeBadge.textContent = state.configured
     ? providerStatusLabel()
@@ -502,6 +522,9 @@ function render() {
     state.mode?.valid !== false
   );
   elements.disconnectButton.classList.toggle("hidden", !state.connected);
+  elements.disconnectButton.textContent = state.accounts?.currentAccountId
+    ? "Sign out of this account"
+    : "Disconnect AMOS";
   elements.approvalsButton.disabled = Boolean(state.mode?.offline || state.mode?.personal || demo);
   elements.approvalsButton.textContent = "Review decisions";
   elements.allApprovalsButton.classList.toggle(
@@ -625,14 +648,17 @@ function bindContextResize() {
 }
 
 function showView(view) {
+  if (view === "decisions" || view === "activity") {
+    showWorkTab(view === "activity" ? "proof" : "decisions");
+    view = "work";
+  }
   currentView = view;
   const map = {
     operator: elements.operatorView,
     canvas: elements.canvasView,
     memory: elements.memoryView,
     connections: elements.connectionsView,
-    decisions: elements.decisionsView,
-    activity: elements.activityView,
+    work: elements.workView,
     settings: elements.settingsView
   };
   for (const [name, section] of Object.entries(map)) section.classList.toggle("hidden", name !== view);
@@ -641,6 +667,17 @@ function showView(view) {
     button.classList.toggle("active", button.dataset.view === view);
   }
   renderCanvas();
+}
+
+function showWorkTab(tab) {
+  currentWorkTab = tab === "proof" ? "proof" : "decisions";
+  const decisionsActive = currentWorkTab === "decisions";
+  elements.workDecisionsTab.classList.toggle("active", decisionsActive);
+  elements.workDecisionsTab.setAttribute("aria-selected", String(decisionsActive));
+  elements.workProofTab.classList.toggle("active", !decisionsActive);
+  elements.workProofTab.setAttribute("aria-selected", String(!decisionsActive));
+  elements.workDecisionsPanel.classList.toggle("hidden", !decisionsActive);
+  elements.workProofPanel.classList.toggle("hidden", decisionsActive);
 }
 
 function renderConnections() {
@@ -1940,6 +1977,135 @@ function renderCompanySwitcher() {
   elements.companySwitcher.replaceChildren(...options);
 }
 
+function renderAccountMenu() {
+  const accounts = Array.isArray(state?.accounts?.accounts) ? state.accounts.accounts : [];
+  const currentAccountId = state?.accounts?.currentAccountId || "";
+  elements.accountMenuButton.title = state?.connectionMode === "api_key"
+    ? "Add a personal AMOS sign-in or manage local accounts"
+    : "Switch or add an AMOS account";
+  elements.accountList.replaceChildren();
+
+  if (accounts.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "account-privacy";
+    empty.textContent = "No personal AMOS account is connected on this computer.";
+    elements.accountList.append(empty);
+  } else {
+    for (const account of accounts) {
+      const active = account.id === currentAccountId;
+      const activeOnline = active && !state.mode?.personal && !state.mode?.offline;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `account-option${active ? " active" : ""}`;
+      button.disabled = activeOnline;
+      button.dataset.accountId = account.id;
+
+      const avatar = document.createElement("span");
+      avatar.className = "account-avatar";
+      avatar.textContent = accountInitial(account);
+      const copy = document.createElement("span");
+      copy.className = "account-copy";
+      const title = document.createElement("strong");
+      title.textContent = account.name || account.email || account.label || "AMOS account";
+      const detail = document.createElement("small");
+      detail.textContent = [account.email, account.tenantSlug, account.role]
+        .filter(Boolean)
+        .filter((value, index, list) => list.indexOf(value) === index)
+        .join(" · ") || (account.demo ? "Sample company" : "AMOS account");
+      copy.append(title, detail);
+      button.append(avatar, copy);
+      if (active) {
+        const mark = document.createElement("span");
+        mark.className = "account-active-mark";
+        mark.textContent = activeOnline ? "ACTIVE" : "USE";
+        button.append(mark);
+      }
+      if (!activeOnline) {
+        button.addEventListener("click", () => switchAccount(account.id));
+      }
+      elements.accountList.append(button);
+    }
+  }
+
+  elements.signOutAccountButton.classList.toggle("hidden", !currentAccountId);
+  elements.accountVersion.textContent = updateState?.currentVersion
+    ? `AMOS Desktop v${updateState.currentVersion}`
+    : "AMOS Desktop";
+  const status = updateState?.status;
+  elements.accountUpdateButton.disabled = ["checking", "downloading", "installing"].includes(status);
+  elements.accountUpdateButton.textContent = status === "available"
+    ? `Download v${updateState.availableVersion || "latest"}`
+    : status === "downloading"
+      ? `Downloading${Number.isFinite(updateState.progress) ? ` ${updateState.progress}%` : "…"}`
+      : status === "downloaded"
+        ? running ? "Ready after task" : "Restart and install"
+        : status === "checking"
+          ? "Checking…"
+          : status === "installing"
+            ? "Installing…"
+            : "Check for updates";
+}
+
+function accountInitial(account) {
+  return String(account.name || account.email || account.tenantSlug || "A")
+    .trim()
+    .charAt(0)
+    .toUpperCase() || "A";
+}
+
+function toggleAccountMenu() {
+  const open = elements.accountMenu.classList.contains("hidden");
+  elements.accountMenu.classList.toggle("hidden", !open);
+  elements.accountMenuButton.setAttribute("aria-expanded", String(open));
+  if (open) renderAccountMenu();
+}
+
+function closeAccountMenu() {
+  elements.accountMenu.classList.add("hidden");
+  elements.accountMenuButton.setAttribute("aria-expanded", "false");
+}
+
+async function addAccount() {
+  setButtonBusy(elements.addAccountButton, true, "Waiting for sign-in…");
+  try {
+    state = await api.addAccount();
+    sessionStorage.setItem("amos-onboarding-complete", "true");
+    resetSessionView();
+    closeAccountMenu();
+    render();
+    toast(`Connected ${activeCompanyName()}.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.addAccountButton, false, "Add another account");
+  }
+}
+
+async function switchAccount(accountId) {
+  closeAccountMenu();
+  try {
+    state = await api.switchAccount(accountId);
+    resetSessionView();
+    render();
+    toast(`Switched to ${state.identity?.user?.name || activeCompanyName()}.`);
+  } catch (error) {
+    render();
+    toast(error.message, true);
+  }
+}
+
+async function handleAccountUpdate() {
+  if (["available", "downloaded"].includes(updateState?.status)) {
+    await handleUpdate();
+    return;
+  }
+  try {
+    await api.checkForUpdates();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
 function renderStarterActions() {
   if (!state || !elements.starterActions) return;
   const actions = state.connectionMode === "demo"
@@ -1986,6 +2152,8 @@ function renderDecisions() {
   const waitingCount = pending.length + proposals.length + checkpoints.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
+  elements.workDecisionTabCount.textContent = String(waitingCount);
+  elements.workDecisionTabCount.classList.toggle("hidden", waitingCount === 0);
 
   const sync = state.remoteStatus || {};
   elements.decisionSyncStatus.textContent = sync.paused
@@ -2016,7 +2184,7 @@ function renderDecisions() {
   elements.interruptedTaskList.replaceChildren();
   if (checkpoints.length === 0) {
     elements.interruptedTaskList.append(
-      decisionEmpty("No interrupted tasks are waiting to be resumed.")
+      decisionEmpty("No interrupted or failed conversations are waiting to be reopened.")
     );
   } else {
     for (const checkpoint of checkpoints) {
@@ -2116,7 +2284,7 @@ function taskCheckpointCard(checkpoint) {
       ? "Reconnect to revalidate"
       : state.connectionMode !== "user"
         ? "Personal sign-in required"
-        : "Revalidate & resume →",
+        : "Revalidate & reopen →",
     "primary"
   );
   resume.disabled = Boolean(state.mode?.offline || state.connectionMode !== "user" || running);
@@ -2139,11 +2307,11 @@ async function resumeTaskCheckpoint(id, button) {
     showView("operator");
     elements.promptInput.focus();
     renderDecisions();
-    toast("Revalidated and loaded. Review the continuation, then press Run.");
+    toast("Context revalidated and reopened. Review the continuation, then press Run.");
   } catch (error) {
     toast(error.message, true);
   } finally {
-    setButtonBusy(button, false, "Revalidate & resume →");
+    setButtonBusy(button, false, "Revalidate & reopen →");
   }
 }
 
@@ -2788,8 +2956,14 @@ async function startDemo() {
 async function disconnectAmos() {
   try {
     state = await api.logout();
-    sessionStorage.removeItem("amos-onboarding-complete");
-    toast("AMOS disconnected from this computer.");
+    closeAccountMenu();
+    if (state.accounts?.currentAccountId) {
+      sessionStorage.setItem("amos-onboarding-complete", "true");
+      toast(`Signed out. Switched to ${state.identity?.user?.name || activeCompanyName()}.`);
+    } else {
+      sessionStorage.removeItem("amos-onboarding-complete");
+      toast("AMOS disconnected from this computer.");
+    }
     render();
   } catch (error) {
     toast(error.message, true);
@@ -3772,6 +3946,7 @@ function renderUpdate() {
     elements.updateButton.textContent = "Restarting to update…";
   }
   elements.updateButton.title = updateState?.message || "";
+  renderAccountMenu();
 }
 
 async function handleUpdate() {

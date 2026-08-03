@@ -24,7 +24,7 @@ export class LocalReceiptStore {
     this.createId = createId;
   }
 
-  async list() {
+  async list(scope = null) {
     const store = await this.readStore();
     return store.receipts
       .map((envelope) => {
@@ -34,13 +34,16 @@ export class LocalReceiptStore {
         }
         return receipt;
       })
+      .filter((receipt) => scopeMatches(receipt, scope))
+      .map(publicReceipt)
       .reverse();
   }
 
-  async add(input) {
+  async add(input, scope = null) {
     const store = await this.readStore();
     const receipt = normalizeReceipt({
       ...input,
+      ...normalizedScope(scope),
       id: this.createId(),
       recordedAt: this.now().toISOString()
     });
@@ -55,7 +58,30 @@ export class LocalReceiptStore {
     });
     store.receipts = store.receipts.slice(-MAX_RECEIPTS);
     await this.writeStore(store);
-    return receipt;
+    return publicReceipt(receipt);
+  }
+
+  async bindUnscoped(scope) {
+    const normalized = normalizedScope(scope);
+    if (!normalized.ownerSubjectId) return 0;
+    const store = await this.readStore();
+    let changed = 0;
+    store.receipts = store.receipts.map((envelope) => {
+      const receipt = JSON.parse(this.decrypt(envelope.payload));
+      if (receipt.ownerSubjectId || receipt.ownerTenantId) return envelope;
+      changed += 1;
+      const updated = { ...receipt, ...normalized };
+      updated.digest = createHash("sha256")
+        .update(JSON.stringify({ ...updated, digest: undefined }))
+        .digest("hex");
+      return {
+        ...envelope,
+        digest: updated.digest,
+        payload: this.encrypt(JSON.stringify(updated))
+      };
+    });
+    if (changed > 0) await this.writeStore(store);
+    return changed;
   }
 
   async readStore() {
@@ -110,7 +136,35 @@ function normalizeReceipt(input) {
         }))
       : [],
     error: input.error ? String(input.error).slice(0, 1_000) : null,
+    ownerSubjectId: clean(input.ownerSubjectId, 256),
+    ownerTenantId: clean(input.ownerTenantId, 256),
     recordedAt: String(input.recordedAt),
     digest: ""
   };
+}
+
+function normalizedScope(scope) {
+  return {
+    ownerSubjectId: clean(scope?.ownerSubjectId, 256),
+    ownerTenantId: clean(scope?.ownerTenantId, 256)
+  };
+}
+
+function scopeMatches(receipt, scope) {
+  if (!scope) return true;
+  const normalized = normalizedScope(scope);
+  return Boolean(
+    normalized.ownerSubjectId &&
+    receipt.ownerSubjectId === normalized.ownerSubjectId &&
+    receipt.ownerTenantId === normalized.ownerTenantId
+  );
+}
+
+function publicReceipt(receipt) {
+  const { ownerSubjectId: _ownerSubjectId, ownerTenantId: _ownerTenantId, ...value } = receipt;
+  return value;
+}
+
+function clean(value, limit) {
+  return String(value || "").trim().slice(0, limit);
 }

@@ -37,11 +37,8 @@
           <button class="nav-item" data-view="connections">
             <span class="nav-icon">⌘</span><span>Connections</span><span id="connectionBadge" class="nav-badge connection-badge hidden">0</span>
           </button>
-          <button class="nav-item" data-view="decisions">
-            <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
-          </button>
-          <button class="nav-item" data-view="activity">
-            <span class="nav-icon">✓</span><span>Activity &amp; proof</span>
+          <button class="nav-item" data-view="work">
+            <span class="nav-icon">◇</span><span>Work &amp; proof</span><span id="decisionBadge" class="nav-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="settings">
             <span class="nav-icon">⚙</span><span>Intelligence</span>
@@ -49,13 +46,37 @@
         </nav>
 
         <div class="sidebar-bottom">
-          <div class="connection-card">
+          <button id="accountMenuButton" class="connection-card" type="button" aria-haspopup="dialog" aria-expanded="false">
             <span id="connectionDot" class="status-dot"></span>
             <span>
               <strong id="connectionLabel">Checking AMOS</strong>
               <small id="connectionDetail"></small>
               <small id="identityDetail" class="identity-detail"></small>
             </span>
+          </button>
+          <div id="accountMenu" class="account-menu hidden" role="dialog" aria-label="AMOS accounts">
+            <div class="account-menu-heading">
+              <div>
+                <span class="eyebrow">AMOS ACCOUNTS</span>
+                <strong>Accounts &amp; organizations</strong>
+              </div>
+              <button id="accountMenuClose" class="icon-button" type="button" aria-label="Close account menu">×</button>
+            </div>
+            <div id="accountList" class="account-list"></div>
+            <div id="companySwitcherControl" class="field company-switcher hidden">
+              <label for="companySwitcher">Organizations in this account</label>
+              <select id="companySwitcher" aria-label="Active AMOS organization"></select>
+              <small>These memberships belong to the active login. Other accounts remain separate on this computer.</small>
+            </div>
+            <div class="account-menu-actions">
+              <button id="addAccountButton" class="button primary" type="button">Add another account</button>
+              <button id="signOutAccountButton" class="button ghost" type="button">Sign out of this account</button>
+            </div>
+            <div class="account-update-row">
+              <span id="accountVersion">AMOS Desktop</span>
+              <button id="accountUpdateButton" class="text-button" type="button">Check for updates</button>
+            </div>
+            <small class="account-privacy">Each sign-in is encrypted locally and isolated. AMOS Platform is never told what other accounts are present.</small>
           </div>
           <button id="workspaceButton" class="workspace-button">
             <span>LOCAL WORKSPACE</span>
@@ -405,58 +426,65 @@
           </div>
         </section>
 
-        <section id="decisionsView" class="view decisions-view hidden">
-          <div class="section-heading decisions-heading">
-            <div>
-              <span class="eyebrow">HUMAN AUTHORITY</span>
-              <h1>Drafts and decisions waiting for you.</h1>
+        <section id="workView" class="view work-view hidden">
+          <div class="section-heading work-heading">
+            <span class="eyebrow">GOVERNED WORK</span>
+            <h1>Decide what moves—and see what happened.</h1>
+            <p>Reopen interrupted work, make human decisions, and inspect the proof trail from one place.</p>
+          </div>
+          <div class="work-tabs" role="tablist" aria-label="Work and proof">
+            <button id="workDecisionsTab" class="work-tab active" type="button" role="tab" aria-selected="true" aria-controls="workDecisionsPanel">
+              Decisions <span id="workDecisionTabCount" class="work-tab-count hidden">0</span>
+            </button>
+            <button id="workProofTab" class="work-tab" type="button" role="tab" aria-selected="false" aria-controls="workProofPanel">Activity &amp; proof</button>
+          </div>
+
+          <div id="workDecisionsPanel" class="work-panel" role="tabpanel" aria-labelledby="workDecisionsTab">
+            <div class="work-panel-toolbar">
+              <p>Nothing approves, retries, or replays itself. AMOS revalidates current authority before continuing.</p>
+              <div class="decision-actions">
+                <span id="decisionSyncStatus" class="sync-status">Not synced</span>
+                <button id="refreshDecisionsButton" class="button secondary compact-button">Refresh</button>
+                <button id="allApprovalsButton" class="button secondary compact-button">Web approval center</button>
+              </div>
+            </div>
+            <div id="decisionNotice" class="decision-notice hidden"></div>
+            <div class="recent-heading proposal-heading">
+              <span class="eyebrow accent">INTERRUPTED &amp; FAILED WORK</span>
               <p>
-                Resume interrupted work only after AMOS revalidates your identity, company
-                context, and approval queue. Nothing approves or replays itself.
+                Encrypted conversation checkpoints. Revalidation restores safe context in
+                Operator for your review; it never silently repeats a model request or tool call.
               </p>
             </div>
-            <div class="decision-actions">
-              <span id="decisionSyncStatus" class="sync-status">Not synced</span>
-              <button id="refreshDecisionsButton" class="button secondary">Refresh</button>
-              <button id="allApprovalsButton" class="button secondary">Review securely on web</button>
+            <div id="interruptedTaskList" class="decision-list task-checkpoint-list"></div>
+            <div class="recent-heading proposal-heading">
+              <span class="eyebrow accent">OFFLINE DRAFTS</span>
+              <p>
+                Encrypted local proposals—not queued commands. Reconnect to compare each one
+                with current company context before explicitly loading it into Operator.
+              </p>
             </div>
+            <div id="offlineProposalList" class="decision-list proposal-list"></div>
+            <div class="recent-heading approval-heading">
+              <span class="eyebrow">GOVERNED APPROVALS</span>
+              <p>Company changes waiting for the right human decision.</p>
+            </div>
+            <div id="pendingDecisions" class="decision-list"></div>
+            <div class="recent-heading">
+              <span class="eyebrow">RECENT OUTCOMES</span>
+              <p>Approved, denied, expired, and failed work remains visible for accountability.</p>
+            </div>
+            <div id="recentDecisions" class="decision-list compact"></div>
           </div>
-          <div id="decisionNotice" class="decision-notice hidden"></div>
-          <div class="recent-heading proposal-heading">
-            <span class="eyebrow accent">INTERRUPTED WORK</span>
-            <p>
-              Encrypted restart checkpoints. Revalidation loads a safe continuation into
-              Operator for your review; it never silently repeats a tool call.
-            </p>
-          </div>
-          <div id="interruptedTaskList" class="decision-list task-checkpoint-list"></div>
-          <div class="recent-heading proposal-heading">
-            <span class="eyebrow accent">OFFLINE DRAFTS</span>
-            <p>
-              Encrypted local proposals—not queued commands. Reconnect to compare each one
-              with current company context before explicitly loading it into Operator.
-            </p>
-          </div>
-          <div id="offlineProposalList" class="decision-list proposal-list"></div>
-          <div class="recent-heading approval-heading">
-            <span class="eyebrow">GOVERNED APPROVALS</span>
-            <p>Company changes waiting for the right human decision.</p>
-          </div>
-          <div id="pendingDecisions" class="decision-list"></div>
-          <div class="recent-heading">
-            <span class="eyebrow">RECENT OUTCOMES</span>
-            <p>Approved, denied, expired, and failed work remains visible for accountability.</p>
-          </div>
-          <div id="recentDecisions" class="decision-list compact"></div>
-        </section>
 
-        <section id="activityView" class="view activity-view hidden">
-          <div class="section-heading">
-            <span class="eyebrow">ACTIVITY &amp; PROOF</span>
-            <h1>See what happened—and why.</h1>
-            <p>Local activity is shown here. Consequential company actions also produce durable AMOS receipts.</p>
+          <div id="workProofPanel" class="work-panel hidden" role="tabpanel" aria-labelledby="workProofTab">
+            <div class="work-panel-intro">
+              <span class="eyebrow">ACTIVITY &amp; PROOF</span>
+              <h2>What happened—and why.</h2>
+              <p>Local activity appears here. Consequential company actions also produce durable AMOS receipts.</p>
+            </div>
+            <div id="activityList" class="activity-list"></div>
           </div>
-          <div id="activityList" class="activity-list"></div>
         </section>
 
         <section id="settingsView" class="view settings-view hidden">
@@ -493,11 +521,6 @@
                   <option value="offline">Local-only — no company or public-network tools</option>
                 </select>
                 <small>Personal mode can use your chosen cloud model without company access. Local-only never uses network tools.</small>
-              </div>
-              <div id="companySwitcherControl" class="field company-switcher settings-company-switcher hidden">
-                <label for="companySwitcher">Active company · advanced</label>
-                <select id="companySwitcher" aria-label="Active AMOS company"></select>
-                <small>Switches the authenticated tenant boundary. AMOS clears open canvases, attachments, approvals, and live task context before loading the selected company.</small>
               </div>
               <div id="managedProfileField" class="field hidden">
                 <label for="intelligenceProfileInput">Capability</label>

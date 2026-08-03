@@ -37,6 +37,9 @@ test("remote state events project every refreshed platform surface into Desktop"
     async offlineProposalState() {
       return [{ id: "proposal-1" }];
     },
+    async taskCheckpointState() {
+      return [{ id: "checkpoint-1" }];
+    },
     send(channel, payload) {
       emitted.push({ channel, payload });
     }
@@ -54,10 +57,12 @@ test("remote state events project every refreshed platform surface into Desktop"
     approvalDecisionMode: "desktop",
     connectionsCatalog: controller.connectionsCatalog,
     companies: controller.companies,
+    accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,
     remoteStatus: controller.remoteStatus,
     companyCache: { available: true },
-    offlineProposals: [{ id: "proposal-1" }]
+    offlineProposals: [{ id: "proposal-1" }],
+    taskCheckpoints: [{ id: "checkpoint-1" }]
   });
 });
 
