@@ -14,7 +14,7 @@ import { createRegistry } from "../src/runtime.js";
 
 const timestamp = "2026-07-26T12:00:00.000Z";
 
-test("canvas contract normalizes all six safe block types", () => {
+test("canvas contract normalizes all eight safe block types", () => {
   const canvas = normalizeCanvasSpec({
     version: "1",
     title: "Campaign operating view",
@@ -39,6 +39,22 @@ test("canvas contract normalizes all six safe block types", () => {
         series: [{ name: "Sessions", points: [{ x: "2026-07-25", y: 16 }] }]
       },
       { type: "markdown", content: "## What changed\nTraffic increased." },
+      {
+        type: "code",
+        title: "Implementation",
+        filename: "src/app.js",
+        language: "javascript",
+        start_line: 12,
+        content: "const value = '<script>never execute</script>';\n"
+      },
+      {
+        type: "link",
+        title: "Preview",
+        label: "Open the local app",
+        url: "http://127.0.0.1:3000/preview",
+        description: "Open in the system browser.",
+        action_label: "Open preview"
+      },
       { type: "sources", items: [{ type: "receipt", id: "receipt-1", label: "Cycle receipt" }] },
       {
         type: "decision",
@@ -54,7 +70,9 @@ test("canvas contract normalizes all six safe block types", () => {
   assert.deepEqual(canvas.blocks.map((block) => block.type), CANVAS_BLOCK_TYPES);
   assert.equal(canvas.source.references[0].id, "campaign-1");
   assert.equal(canvas.blocks[1].rows[0].spend, 18.25);
-  assert.equal(canvas.blocks[5].pendingId, "pending-1");
+  assert.equal(canvas.blocks[4].content.includes("<script>"), true);
+  assert.equal(canvas.blocks[5].url, "http://127.0.0.1:3000/preview");
+  assert.equal(canvas.blocks[7].pendingId, "pending-1");
 });
 
 test("canvas contract rejects arbitrary block types and unbounded tables", () => {
@@ -78,6 +96,20 @@ test("canvas contract rejects arbitrary block types and unbounded tables", () =>
     }),
     /limit of 200/
   );
+  for (const url of [
+    "javascript:alert(1)",
+    "http://example.com/preview",
+    "https://user:password@example.com/preview",
+    "https://example.com/preview?access_token=secret"
+  ]) {
+    assert.throws(
+      () => normalizeCanvasSpec({
+        ...base,
+        blocks: [{ type: "link", label: "Unsafe", url }]
+      }),
+      /URL|HTTPS|credential/i
+    );
+  }
 });
 
 test("desktop canvas manager keeps a bounded session-only history", () => {

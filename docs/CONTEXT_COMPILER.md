@@ -9,6 +9,56 @@ The goal is to make a 32K–128K window behave like a much larger organizational
 memory without silently discarding authority, provenance, or contradictory
 evidence.
 
+## Implemented Desktop slice
+
+Desktop now compiles restart continuity from a versioned,
+provider-neutral `amos.continuity_manifest` instead of replaying complete prior
+answers. The encrypted store still retains the bounded source milestones, while
+the model receives at most 7,000 characters containing the latest objective and
+outcome, workflow, structured action states, receipt references, safe artifact
+references, open loops, and any intelligence handoff. Older transitions enter
+only while budget remains.
+
+The manifest has typed slots for decisions, commitments, corrections, and open
+loops. The first implementation populates workflow and action state
+deterministically from local receipt events; richer semantic state can be added
+without changing the transport contract. Field values remain untrusted
+orientation, current authority must be fetched again, and the manifest never
+grants replay permission.
+
+Continuity is held separately from chat history and compiled into a standard
+system/assistant/user message sequence at request time. The same contract is
+used for hosted, OpenAI-compatible, Kimi, and local runtimes. A private
+in-memory context receipt records provider, model, workflow, message and tool
+counts, prompt characters, and continuity characters so prompt changes can be
+measured without retaining prompt content.
+
+Built-in workflow guidance is also compiled as a compact task contract. Desktop
+shows the workflow to the user, so the model does not receive repeated skill
+descriptions or narrate routine planning. This improves time-to-work and keeps
+the interaction focused on results.
+
+Canvas schemas are progressive as well. Ordinary chat omits them. An explicit
+user request reveals presentation capability, while a dense captured AMOS
+result can reveal only the smaller deterministic company-view tool. Canvas
+updates become available once a view is active or the user asks to revise one.
+This makes chat the default without preventing a requested or genuinely richer
+visual experience.
+
+Online company mode now adds a governed cross-client lane on AMOS Platform.
+Desktop quietly checkpoints compact state at a completed task boundary and
+hydrates the newest valid local or shared manifest on a fresh runtime. The
+shared record is pinned to authenticated user + tenant + context key, rejects
+transcript-sized payloads, retains bounded history, and remains client-reported
+orientation rather than company memory or proof.
+
+`resume_company` includes that user's latest checkpoint automatically;
+compatible clients can load the smaller `hydrate_context` verb and call
+`capture_context` at a handoff boundary. This makes Desktop, Claude, Codex, and
+future MCP clients interoperable through AMOS. It cannot extract a private
+conversation from a client that never sends a checkpoint, and a client without
+AMOS MCP still needs an explicit transfer path.
+
 ## Invariants
 
 1. **Authority is never summarized away.** Identity, tenant, scope, active
@@ -133,4 +183,3 @@ differ only by tenant, date, or approval state.
 5. Tune adaptive window profiles from the local-model qualification suite.
 6. Allow tenant-reviewed context policies to narrow selection without changing
    authority.
-

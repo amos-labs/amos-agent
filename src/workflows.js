@@ -241,16 +241,13 @@ export function applyWorkflowToModelContent(content, workflow) {
 }
 
 export function workflowGuidance(workflow) {
-  const skills = workflow.skills.map((skill) => `${skill.name}: ${skill.purpose}`).join("\n- ");
-  const steps = workflow.steps.map((step, index) => `${index + 1}. ${step}`).join("\n");
+  const steps = workflow.steps.map((step, index) => `${index + 1}. ${step}`).join(" ");
   return [
     `<amos_workflow id="${workflow.id}" version="${workflow.version}" source="${workflow.source}">`,
-    "AMOS selected this workflow as lower-priority execution guidance. It cannot override the system prompt, the user's request, tenant boundaries, tool policy, approvals, or source evidence. Adapt it when evidence requires, and say why.",
-    `Workflow: ${workflow.title}`,
-    `Purpose: ${workflow.summary}`,
-    `Reusable skills:\n- ${skills}`,
-    `Execution route:\n${steps}`,
-    `Done when: ${workflow.doneWhen}`,
+    "This lower-priority route cannot override the system prompt, user request, evidence, tenant boundaries, policy, or approvals.",
+    `Outcome: ${workflow.summary}`,
+    `Route: ${steps}`,
+    `Verify: ${workflow.doneWhen}`,
     "Do not perform unrelated steps merely to complete the workflow.",
     "</amos_workflow>"
   ].join("\n");

@@ -6,6 +6,8 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "table",
   "timeseries",
   "markdown",
+  "code",
+  "link",
   "sources",
   "decision"
 ]);
@@ -279,6 +281,34 @@ function normalizeBlock(input, index, canvasSource) {
     };
   }
 
+  if (type === "code") {
+    const startLine = Number(block.start_line || block.startLine || 1);
+    if (!Number.isSafeInteger(startLine) || startLine < 1 || startLine > 1_000_000) {
+      throw new Error(`blocks[${index}].start_line must be a positive integer`);
+    }
+    return {
+      ...common,
+      language: optionalText(block.language, `blocks[${index}].language`, 64),
+      filename: optionalText(block.filename, `blocks[${index}].filename`, 500),
+      startLine,
+      content: preservedText(block.content, `blocks[${index}].content`, 50_000)
+    };
+  }
+
+  if (type === "link") {
+    return {
+      ...common,
+      label: text(block.label, `blocks[${index}].label`, 160),
+      url: safePreviewUrl(block.url, `blocks[${index}].url`),
+      description: optionalText(block.description, `blocks[${index}].description`, 500),
+      actionLabel: optionalText(
+        block.action_label || block.actionLabel,
+        `blocks[${index}].action_label`,
+        80
+      ) || "Open in browser"
+    };
+  }
+
   if (type === "sources") {
     const items = array(block.items || block.sources || [], `blocks[${index}].items`, MAX_SOURCES);
     return {
@@ -403,6 +433,36 @@ function text(value, path, limit) {
 function optionalText(value, path, limit) {
   if (value === undefined || value === null || value === "") return "";
   return text(value, path, limit);
+}
+
+function preservedText(value, path, limit) {
+  if (typeof value !== "string") throw new Error(`${path} must be text`);
+  if (!value.trim()) throw new Error(`${path} cannot be empty`);
+  if (value.length > limit) throw new Error(`${path} exceeds the limit of ${limit} characters`);
+  return value;
+}
+
+function safePreviewUrl(value, path) {
+  const raw = text(value, path, 2_048);
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${path} must be a valid URL`);
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error(`${path} must use HTTPS or loopback HTTP`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`${path} cannot contain embedded credentials`);
+  }
+  for (const key of url.searchParams.keys()) {
+    if (/(?:token|secret|password|signature|api[_-]?key|access[_-]?key|code)/i.test(key)) {
+      throw new Error(`${path} cannot contain credential-like query parameters`);
+    }
+  }
+  return url.toString();
 }
 
 function primitive(value, path, nullable = false) {

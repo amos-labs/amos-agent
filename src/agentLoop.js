@@ -9,6 +9,9 @@ import {
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 48;
 const DEFAULT_MODEL_MESSAGE_LIMIT = 112;
 const MAX_MODEL_MESSAGE_LIMIT = 120;
+const CANVAS_PRESENT_TOOL = "desktop_present_canvas";
+const COMPANY_VIEW_TOOL = "desktop_present_company_view";
+const CANVAS_UPDATE_TOOL = "desktop_update_canvas";
 
 export class AgentLoop {
   constructor({
@@ -31,20 +34,31 @@ export class AgentLoop {
     this.workflowSelector = workflowSelector;
     this.onToolResult = onToolResult;
     this.lastWorkflow = null;
+    this.lastContextReceipt = null;
     this.activeTaskMessage = null;
+    this.continuityContext = null;
+    this.canvasToolState = emptyCanvasToolState();
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
   clear() {
     this.lastWorkflow = null;
+    this.lastContextReceipt = null;
     this.activeTaskMessage = null;
+    this.continuityContext = null;
+    this.canvasToolState = emptyCanvasToolState();
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
   restoreContinuity(content) {
     const continuity = String(content || "").trim();
-    if (!continuity || this.activeTaskMessage || this.messages.length > 1) return false;
-    this.messages.push({ role: "assistant", content: continuity });
+    if (
+      !continuity ||
+      this.continuityContext ||
+      this.activeTaskMessage ||
+      this.messages.length > 1
+    ) return false;
+    this.continuityContext = continuity;
     return true;
   }
 
@@ -54,11 +68,13 @@ export class AgentLoop {
       onEvent = () => {},
       signal = null,
       takeSteering = () => [],
-      workflow: selectedWorkflow = null
+      workflow: selectedWorkflow = null,
+      presentationIntent = null
     } = {}
   ) {
     throwIfAborted(signal);
     this.compactCompletedHistory();
+    this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
     const workflow = selectedWorkflow || this.workflowSelector({ objective: userContent });
     this.lastWorkflow = workflow;
     onEvent({
@@ -99,9 +115,12 @@ export class AgentLoop {
           turn,
           summary: turn === 0 ? "Understanding the task and company context" : "Evaluating the latest results"
         });
+        const messages = this.prepareMessagesForModel();
+        const tools = this.availableToolsForModel();
+        this.captureContextReceipt({ messages, tools, turn });
         const response = await this.modelClient.chat({
-          messages: this.prepareMessagesForModel(),
-          tools: this.registry.openAiTools(),
+          messages,
+          tools,
           signal,
           onDelta: (delta, text) => {
             onEvent({ type: "assistant_delta", turn, delta, text });
@@ -196,6 +215,8 @@ export class AgentLoop {
             }
           }
 
+          this.observeCanvasToolOutcome({ name, result, failed });
+
           this.messages.push({
             role: "tool",
             tool_call_id: toolCall.id,
@@ -245,6 +266,7 @@ export class AgentLoop {
     if (steering.length === 0) return 0;
     for (const content of steering) {
       this.messages.push({ role: "user", content });
+      this.applyCanvasIntent(content);
     }
     onEvent({
       type: "phase",
@@ -287,7 +309,10 @@ export class AgentLoop {
       8,
       MAX_MODEL_MESSAGE_LIMIT
     );
-    if (this.messages.length <= limit) return this.messages;
+    const effectiveLimit = Math.max(3, limit - (this.continuityContext ? 1 : 0));
+    if (this.messages.length <= effectiveLimit) {
+      return this.withContinuityContext(this.messages);
+    }
 
     const systemMessage = this.messages.find((message) => message.role === "system") || {
       role: "system",
@@ -296,11 +321,11 @@ export class AgentLoop {
     const taskIndex = this.messages.indexOf(this.activeTaskMessage);
     if (taskIndex < 0) {
       this.compactCompletedHistory();
-      return this.messages.slice(0, limit);
+      return this.withContinuityContext(this.messages.slice(0, effectiveLimit));
     }
 
     const selected = [];
-    let remaining = limit - 2;
+    let remaining = effectiveLimit - 2;
     const blocks = historyBlocks(this.messages.slice(taskIndex + 1));
     for (let index = blocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
       const block = blocks[index];
@@ -318,7 +343,73 @@ export class AgentLoop {
       this.activeTaskMessage,
       ...selected.flat()
     ];
-    return this.messages;
+    return this.withContinuityContext(this.messages);
+  }
+
+  withContinuityContext(messages) {
+    if (!this.continuityContext) return messages;
+    const [systemMessage, ...rest] = messages;
+    return [
+      systemMessage,
+      {
+        role: "assistant",
+        content: this.continuityContext
+      },
+      ...rest
+    ];
+  }
+
+  captureContextReceipt({ messages, tools, turn }) {
+    this.lastContextReceipt = {
+      version: 1,
+      provider: String(this.config.model?.provider || this.config.model?.displayName || "compatible"),
+      model: String(this.config.model?.model || ""),
+      workflow: this.lastWorkflow?.id || null,
+      turn,
+      messageCount: messages.length,
+      messageChars: messages.reduce(
+        (total, message) => total + modelContentLength(message?.content),
+        0
+      ),
+      toolCount: tools.length,
+      continuityChars: this.continuityContext?.length || 0
+    };
+    return this.lastContextReceipt;
+  }
+
+  availableToolsForModel() {
+    return this.registry.openAiTools().filter((tool) => {
+      const name = tool?.function?.name;
+      if (name === CANVAS_PRESENT_TOOL) return this.canvasToolState.requested;
+      if (name === COMPANY_VIEW_TOOL) return this.canvasToolState.companyOpportunity;
+      if (name === CANVAS_UPDATE_TOOL) {
+        return this.canvasToolState.active || this.canvasToolState.updateRequested;
+      }
+      return true;
+    });
+  }
+
+  observeCanvasToolOutcome({ name, result, failed }) {
+    if (failed) return;
+    if (
+      [CANVAS_PRESENT_TOOL, COMPANY_VIEW_TOOL, CANVAS_UPDATE_TOOL].includes(name) &&
+      result?.canvas_id
+    ) {
+      this.canvasToolState.active = true;
+    }
+    if (
+      result?.desktop_result_ref &&
+      isCanvasEligibleCompanyTool(name) &&
+      (this.canvasToolState.requested || hasDenseStructuredData(result))
+    ) {
+      this.canvasToolState.companyOpportunity = true;
+    }
+  }
+
+  applyCanvasIntent(content) {
+    const intent = canvasToolStateFor(content);
+    this.canvasToolState.requested ||= intent.requested;
+    this.canvasToolState.updateRequested ||= intent.updateRequested;
   }
 
   guardReason({ repeatedToolCycles, consecutiveToolErrorCycles }) {
@@ -351,8 +442,10 @@ export class AgentLoop {
         "Do not describe this as a tool-turn limit."
       ].join(" ")
     };
+    const messages = [...this.prepareMessagesForModel(), guardInstruction];
+    this.captureContextReceipt({ messages, tools: [], turn: turn + 1 });
     const response = await this.modelClient.chat({
-      messages: [...this.prepareMessagesForModel(), guardInstruction],
+      messages,
       tools: [],
       signal,
       onDelta: (delta, text) => {
@@ -387,6 +480,85 @@ function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
+}
+
+function modelContentLength(content) {
+  if (typeof content === "string") return content.length;
+  if (!Array.isArray(content)) return 0;
+  return content.reduce((total, item) => {
+    if (item?.type === "text") return total + String(item.text || "").length;
+    return total + JSON.stringify(item || {}).length;
+  }, 0);
+}
+
+function emptyCanvasToolState() {
+  return {
+    requested: false,
+    updateRequested: false,
+    companyOpportunity: false,
+    active: false
+  };
+}
+
+function canvasToolStateFor(content) {
+  const text = modelInputText(content);
+  const requested =
+    /\b(?:canvas|dashboard|chart|graph|timeline|heatmap|diagram|plot|picture|visuali[sz]e|visual view|side[- ]by[- ]side)\b/i.test(text) ||
+    /\bas (?:a )?(?:table|tabular view)\b/i.test(text) ||
+    /\b(?:show|display|present|render|format|compare|give|put)\b.{0,60}\btable\b/i.test(text) ||
+    /\b(?:show|display|open|render|preview)\b.{0,50}\b(?:code|app|site|website|page|course|browser preview)\b/i.test(text) ||
+    /\b(?:app|site|website|page|course|browser)\s+preview\b/i.test(text);
+  const updateRequested = requested &&
+    /\b(?:update|refresh|revise|change|continue|extend)\b/i.test(text);
+  return {
+    requested,
+    updateRequested,
+    companyOpportunity: false,
+    active: false
+  };
+}
+
+function modelInputText(content) {
+  if (!Array.isArray(content)) return String(content || "");
+  return content
+    .filter((item) => item?.type === "text")
+    .map((item) => String(item.text || ""))
+    .join("\n");
+}
+
+function hasDenseStructuredData(value) {
+  const stats = { leaves: 0, quantitative: 0, maxArray: 0 };
+  inspectStructuredData(value, stats, 0, new Set());
+  return stats.maxArray >= 4 || (stats.leaves >= 12 && stats.quantitative >= 3);
+}
+
+function isCanvasEligibleCompanyTool(name) {
+  return ![
+    "amos_get_started",
+    "amos_whoami",
+    "amos_resume_company",
+    "amos_list_engines",
+    "amos_load_engine_tools"
+  ].includes(name);
+}
+
+function inspectStructuredData(value, stats, depth, seen) {
+  if (depth > 4 || value == null) return;
+  if (typeof value !== "object") {
+    stats.leaves += 1;
+    if (
+      typeof value === "number" ||
+      typeof value === "boolean" ||
+      /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(String(value))
+    ) stats.quantitative += 1;
+    return;
+  }
+  if (seen.has(value)) return;
+  seen.add(value);
+  if (Array.isArray(value)) stats.maxArray = Math.max(stats.maxArray, value.length);
+  for (const item of Array.isArray(value) ? value : Object.values(value)) {
+    inspectStructuredData(item, stats, depth + 1, seen);
+  }
 }
 
 function hasToolCalls(message) {

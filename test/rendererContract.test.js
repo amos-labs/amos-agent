@@ -190,6 +190,28 @@ test("dynamic canvases open beside chat without navigating away from Operator", 
   assert.match(javascript, /actionLabel: "Open beside chat"/);
 });
 
+test("advanced company switching lives in Settings and clears the visible boundary", async () => {
+  const html = await readFile(
+    new URL("../desktop/renderer/index.html", import.meta.url),
+    "utf8"
+  );
+  const topbar = html.match(/<header class="topbar">([\s\S]*?)<\/header>/)?.[1] || "";
+  const settings = html.match(/<section id="settingsView"([\s\S]*?)<\/section>/)?.[1] || "";
+  assert.doesNotMatch(topbar, /companySwitcher/);
+  assert.match(settings, /id="companySwitcherControl"/);
+  assert.match(settings, /clears open canvases, attachments, approvals, and live task context/);
+});
+
+test("canvas code and previews stay typed, inert, and outside the privileged renderer", async () => {
+  const javascript = await readFile(
+    new URL("../desktop/renderer/app.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(javascript, /function renderCanvasCode[\s\S]*?code\.textContent = block\.content/);
+  assert.match(javascript, /function renderCanvasLink[\s\S]*?api\.openExternal\(block\.url\)/);
+  assert.doesNotMatch(javascript, /renderCanvasLink[\s\S]{0,900}createElement\("iframe"\)/);
+});
+
 test("chat renders only typed Platform-authorized connect actions", async () => {
   const javascript = await readFile(
     new URL("../desktop/renderer/app.js", import.meta.url),

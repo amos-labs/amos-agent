@@ -132,6 +132,8 @@ const elements = Object.fromEntries(
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
     "recentDecisions", "interruptedTaskList", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
+    "workingContinuityCard", "workingContinuityStatus", "workingContinuityDetail",
+    "workingContinuityMeta",
     "companyCacheCard", "companyCacheStatus", "companyCacheDetail", "companyCacheMeta",
     "companyCacheRefreshButton", "companyCacheRemoveButton",
     "connectionModal", "connectionForm", "connectionModalTitle", "connectionModalDescription",
@@ -327,7 +329,9 @@ function bindEvents() {
     if (!state) return;
     Object.assign(state, remote);
     renderIdentity();
+    renderCompanySwitcher();
     renderDecisions();
+    renderWorkingContinuity();
     renderCompanyCache();
     renderConnections();
     restoreConversationFromContinuity();
@@ -540,6 +544,7 @@ function render() {
   renderDecisions();
   renderAttachments();
   renderPrivateMemory();
+  renderWorkingContinuity();
   renderCompanyCache();
   renderConnections();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
@@ -1100,6 +1105,8 @@ function renderCanvasBlock(block) {
   else if (block.type === "table") card = renderCanvasTable(block);
   else if (block.type === "timeseries") card = renderCanvasTimeseries(block);
   else if (block.type === "markdown") card = renderCanvasMarkdown(block);
+  else if (block.type === "code") card = renderCanvasCode(block);
+  else if (block.type === "link") card = renderCanvasLink(block);
   else if (block.type === "sources") card = renderCanvasSources(block);
   else card = renderCanvasDecision(block);
   card.classList.add(`canvas-source-${block.provenance?.sourceKind || "live"}`);
@@ -1307,6 +1314,44 @@ function renderCanvasMarkdown(block) {
   markdown.className = "markdown-content";
   renderMarkdown(markdown, block.content);
   card.append(markdown);
+  return card;
+}
+
+function renderCanvasCode(block) {
+  const card = canvasCard(block, "canvas-code-block wide");
+  const meta = document.createElement("div");
+  meta.className = "canvas-code-meta";
+  meta.textContent = [
+    block.filename,
+    block.language,
+    block.startLine > 1 ? `starts at line ${block.startLine}` : ""
+  ].filter(Boolean).join(" · ") || "Code";
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = block.content;
+  pre.append(code);
+  card.append(meta, pre);
+  return card;
+}
+
+function renderCanvasLink(block) {
+  const card = canvasCard(block, "canvas-link-block");
+  const label = document.createElement("strong");
+  label.textContent = block.label;
+  card.append(label);
+  if (block.description) {
+    const description = document.createElement("p");
+    description.textContent = block.description;
+    card.append(description);
+  }
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "button secondary";
+  action.textContent = `${block.actionLabel} ↗`;
+  action.addEventListener("click", () => {
+    api.openExternal(block.url).catch((error) => toast(error.message, true));
+  });
+  card.append(action);
   return card;
 }
 
@@ -1584,6 +1629,53 @@ function renderCompanyCache() {
     const item = document.createElement("span");
     item.textContent = value;
     elements.companyCacheMeta.append(item);
+  }
+}
+
+function renderWorkingContinuity() {
+  if (!state || !elements.workingContinuityCard) return;
+  const continuity = state.workingContinuity;
+  const onlineUser =
+    state.mode?.id === "online" && state.connectionMode === "user";
+  const paused = !onlineUser || continuity?.supported === false;
+  elements.workingContinuityCard.classList.toggle("paused", paused);
+  elements.workingContinuityMeta.replaceChildren();
+
+  if (!onlineUser) {
+    elements.workingContinuityStatus.textContent = "Cross-client continuity is paused";
+    elements.workingContinuityDetail.textContent =
+      "It resumes automatically in online company mode with a personal AMOS sign-in. Personal and local-only work stays on this computer.";
+  } else if (continuity?.supported === false) {
+    elements.workingContinuityStatus.textContent = "Continuity is waiting for the platform update";
+    elements.workingContinuityDetail.textContent =
+      "This Desktop version is ready, but the connected AMOS server does not yet expose the private continuity lane. Normal work is unaffected.";
+  } else if (continuity?.available) {
+    elements.workingContinuityStatus.textContent = "Your latest work can follow you";
+    elements.workingContinuityDetail.textContent =
+      "AMOS saved compact state—not chat—so another compatible client using this same identity and company can continue. It carries no current authority and never becomes company memory automatically.";
+  } else if (continuity) {
+    elements.workingContinuityStatus.textContent = "Continuity is ready";
+    elements.workingContinuityDetail.textContent =
+      "After a completed online task, AMOS will quietly save the objective, outcome, decisions, open loops, and safe artifact references for the next compatible client.";
+  } else {
+    elements.workingContinuityStatus.textContent = "Continuity is preparing";
+    elements.workingContinuityDetail.textContent =
+      "AMOS is checking for bounded working state from this user and company. You do not need to manage it.";
+  }
+
+  const source = String(continuity?.sourceClient || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+  for (const value of [
+    continuity?.updatedAt ? `Updated ${relativeTime(continuity.updatedAt)}` : "",
+    source ? `From ${source}` : "",
+    continuity?.revision ? `Revision ${continuity.revision}` : "",
+    continuity?.stale ? "Older checkpoint · verify before use" : "",
+    continuity?.available ? "State only · no credentials or authority" : ""
+  ].filter(Boolean)) {
+    const item = document.createElement("span");
+    item.textContent = value;
+    elements.workingContinuityMeta.append(item);
   }
 }
 

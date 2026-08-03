@@ -4,7 +4,7 @@ export function createCanvasTool({ present }) {
     name: "desktop_present_canvas",
     source: "desktop",
     description:
-      "Present a safe typed canvas when business data is materially clearer as metrics, a table, a time series, a brief, evidence, or a governed decision. Never invent data.",
+      "Present a safe typed canvas when the user requests one or visual structure materially outperforms chat. Do not use it for a slightly longer prose answer. Never invent data.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -60,7 +60,7 @@ export function createCompanyViewTool({ present }) {
     name: "desktop_present_company_view",
     source: "desktop",
     description:
-      "Turn a captured AMOS tool result into a safe deterministic company view. Pass the desktop_result_ref returned with the AMOS tool result and choose the business intent; Desktop selects and validates the representation.",
+      "Turn a captured AMOS result into a deterministic company view when the user requests one or the result has a material visual advantage. Desktop selects and validates the representation.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -76,6 +76,7 @@ export function createCompanyViewTool({ present }) {
             "auto",
             "company_overview",
             "performance",
+            "learning",
             "kpi",
             "funnel",
             "cohort",
@@ -179,7 +180,7 @@ function blockSchema() {
   return {
     type: "object",
     description:
-      "Fields depend on type: metric uses label/value; table uses columns/rows; timeseries uses series; markdown uses content; sources uses items; decision uses kind/status/summary.",
+      "Fields depend on type: metric uses label/value; table uses columns/rows; timeseries uses series; markdown uses content; code uses content/language/filename; link uses label/url/description; sources uses items; decision uses kind/status/summary.",
     additionalProperties: false,
     required: ["type"],
     properties: {
@@ -188,7 +189,7 @@ function blockSchema() {
       provenance: provenanceSchema(),
       type: {
         type: "string",
-        enum: ["metric", "table", "timeseries", "markdown", "sources", "decision"]
+        enum: ["metric", "table", "timeseries", "markdown", "code", "link", "sources", "decision"]
       },
       label: { type: "string" },
       value: {},
@@ -247,6 +248,12 @@ function blockSchema() {
         }
       },
       content: { type: "string" },
+      language: { type: "string" },
+      filename: { type: "string" },
+      start_line: { type: "integer", minimum: 1, maximum: 1000000 },
+      url: { type: "string" },
+      description: { type: "string" },
+      action_label: { type: "string" },
       items: {
         type: "array",
         maxItems: 100,

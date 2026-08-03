@@ -80,7 +80,12 @@ test("resuming revalidates identity, company drift, and pending approvals withou
     phase: "acting",
     summary: "Drafted a landing page",
     objective: "Improve campaign conversion\n\nUser steering: prioritize mobile traffic",
-    completedStep: "Completed create_landing_page"
+    completedStep: "Completed create_landing_page",
+    action: {
+      name: "create_landing_page",
+      status: "completed",
+      summary: "Result recorded; receipt still required for side-effect proof"
+    }
   });
   const current = await store.get(checkpoint.id);
   const reconciliation = reconcileTaskCheckpoint({
@@ -98,6 +103,8 @@ test("resuming revalidates identity, company drift, and pending approvals withou
   assert.match(prompt, /Do not repeat an action unless current receipts prove it did not already complete/i);
   assert.match(prompt, /Company_state/i);
   assert.match(prompt, /Completed create_landing_page/);
+  assert.match(prompt, /create_landing_page: completed/);
+  assert.match(prompt, /receipts remain authoritative/i);
   assert.match(prompt, /prioritize mobile traffic/);
   assert.equal(reconciliation.replayAllowed, false);
 

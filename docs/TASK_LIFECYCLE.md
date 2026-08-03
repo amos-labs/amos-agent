@@ -61,6 +61,7 @@ The checkpoint may contain:
 - the user's objective and any directions added while the task was running;
 - attachment filenames, with a reminder to reattach material;
 - high-level completed tool names;
+- structured started, completed, or failed tool state without tool arguments;
 - a bounded partial response; and
 - phase and timestamp metadata.
 
@@ -88,6 +89,20 @@ The user reviews that prompt and presses **Run** explicitly. The resumed model
 must inspect current sources, receipts, approvals, and policy before doing
 anything. Mentioning a completed step in a checkpoint is not proof that its
 side effect happened.
+
+Completed sessions also produce a compact typed continuity manifest. It keeps
+the latest task state, workflow, action outcomes, receipt and artifact
+references, open loops, and model-handoff metadata separate from transcript
+history. Desktop compiles only the budgeted subset needed for orientation; the
+model must still revalidate current evidence and authority.
+
+For personally signed-in online company work, Desktop also sends a smaller
+projection of that manifest to AMOS Platform after successful completion. It
+contains state rather than transcript, labels the source client and model, and
+uses only a portable workspace basename. Platform stores it privately for that
+authenticated user inside that tenant. A fresh Desktop runtime prefers it only
+when it is newer than the matching encrypted local record; switching companies
+clears every live surface before the target tenant's state is loaded.
 
 This design preserves the product invariant: Desktop supplies continuity and
 local execution; AMOS remains authoritative for company identity, memory,

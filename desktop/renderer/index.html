@@ -81,10 +81,6 @@
               <span aria-hidden="true">☾</span>
             </label>
             <button id="updateButton" class="button update-button hidden" type="button"></button>
-            <label id="companySwitcherControl" class="company-switcher hidden">
-              <span>Company</span>
-              <select id="companySwitcher" aria-label="Active AMOS company"></select>
-            </label>
             <span id="identityBadge" class="identity-badge hidden"></span>
             <span id="modeBadge" class="mode-badge">ONLINE COMPANY</span>
             <span id="runtimeBadge" class="runtime-badge">Intelligence not configured</span>
@@ -305,8 +301,8 @@
               <span class="eyebrow">YOUR CONTEXT · YOUR CONTROL</span>
               <h1>Private memory and verified company context.</h1>
               <p>
-                Keep private working context encrypted locally. When you choose, AMOS can also
-                make a short-lived, server-signed company briefing available for offline work.
+                AMOS carries bounded working state forward automatically in online company mode.
+                The controls below are advanced options for private files, offline context, and transfer.
               </p>
             </div>
             <div class="memory-boundary">
@@ -317,6 +313,15 @@
               </div>
             </div>
           </div>
+          <section id="workingContinuityCard" class="working-continuity-card">
+            <div class="working-continuity-icon">↻</div>
+            <div>
+              <span class="eyebrow accent">AUTOMATIC · USER-PRIVATE · TENANT-SCOPED</span>
+              <h2 id="workingContinuityStatus">Continuity is preparing</h2>
+              <p id="workingContinuityDetail">AMOS saves compact working state at completed task boundaries so compatible clients can pick up where you left off.</p>
+              <div id="workingContinuityMeta" class="company-cache-meta"></div>
+            </div>
+          </section>
           <section id="companyCacheCard" class="company-cache-card">
             <div class="company-cache-icon">◇</div>
             <div class="company-cache-copy">
@@ -339,8 +344,8 @@
           </section>
           <div class="memory-transfer">
             <div>
-              <span class="eyebrow accent">PORTABLE · ENCRYPTED · FORKABLE</span>
-              <strong>Move private working memory without moving credentials.</strong>
+              <span class="eyebrow accent">ADVANCED TRANSFER · ENCRYPTED · FORKABLE</span>
+              <strong>Manually move selected private files when automatic continuity is not available.</strong>
               <p>
                 Export an owner-controlled capsule for another device or compatible client.
                 Imports are previewed before anything is added, and fork lineage stays attached.
@@ -488,6 +493,11 @@
                   <option value="offline">Local-only — no company or public-network tools</option>
                 </select>
                 <small>Personal mode can use your chosen cloud model without company access. Local-only never uses network tools.</small>
+              </div>
+              <div id="companySwitcherControl" class="field company-switcher settings-company-switcher hidden">
+                <label for="companySwitcher">Active company · advanced</label>
+                <select id="companySwitcher" aria-label="Active AMOS company"></select>
+                <small>Switches the authenticated tenant boundary. AMOS clears open canvases, attachments, approvals, and live task context before loading the selected company.</small>
               </div>
               <div id="managedProfileField" class="field hidden">
                 <label for="intelligenceProfileInput">Capability</label>

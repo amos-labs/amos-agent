@@ -530,6 +530,69 @@ test("Desktop reads a fresh company briefing without requesting an offline token
   assert.equal(Object.hasOwn(snapshot, "offline_cache"), false);
 });
 
+test("Desktop hydrates and captures bounded cross-client working continuity", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient({
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    oauth: { async getAccessToken() { return "user-token"; } }
+  });
+  client.mcp.callTool = async (name, args) => {
+    requests.push({ name, args });
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify(workingContinuityResponse({
+          revision: name === "capture_context" ? 5 : 4,
+          sourceClient: name === "capture_context" ? "amos_desktop" : "claude_code"
+        }))
+      }]
+    };
+  };
+
+  const hydrated = await client.hydrateContinuity({ tenantId: "tenant-1" });
+  assert.equal(hydrated.available, true);
+  assert.equal(hydrated.sourceClient, "claude_code");
+  assert.equal(hydrated.manifest.scope.workspaceHint, "neighborly-demo");
+
+  const captured = await client.captureContinuity({
+    context_key: "active",
+    source_client: "amos_desktop",
+    objective: "Continue the demo",
+    outcome: "Course is ready"
+  }, { tenantId: "tenant-1" });
+  assert.equal(captured.revision, 5);
+  assert.deepEqual(requests, [{ name: "hydrate_context", args: {} }, {
+    name: "capture_context",
+    args: {
+      context_key: "active",
+      source_client: "amos_desktop",
+      objective: "Continue the demo",
+      outcome: "Course is ready"
+    }
+  }]);
+});
+
+test("Desktop continuity fails closed across tenants and rolls out against older servers", async () => {
+  const client = new DesktopRemoteStateClient({
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    oauth: { async getAccessToken() { return "user-token"; } }
+  });
+  client.mcp.callTool = async () => ({
+    content: [{ type: "text", text: JSON.stringify(workingContinuityResponse()) }]
+  });
+  await assert.rejects(
+    client.hydrateContinuity({ tenantId: "tenant-2" }),
+    /does not match the current company/
+  );
+
+  client.mcp.callTool = async () => {
+    throw new Error("unknown tool 'hydrate_context'");
+  };
+  const unsupported = await client.hydrateContinuity({ tenantId: "tenant-1" });
+  assert.equal(unsupported.supported, false);
+  assert.equal(unsupported.available, false);
+});
+
 test("Desktop requests, verifies, and binds the exact signed company snapshot", async () => {
   const signed = signedCompanyCache();
   const client = new DesktopRemoteStateClient(
@@ -622,5 +685,52 @@ function signedCompanyCache() {
     claims,
     jwk,
     token: `${encodedHeader}.${encodedClaims}.${signature}`
+  };
+}
+
+function workingContinuityResponse({ revision = 4, sourceClient = "claude_code" } = {}) {
+  return {
+    available: true,
+    context_key: "active",
+    revision,
+    source_client: sourceClient,
+    updated_at: "2026-08-03T10:00:00.000Z",
+    stale: false,
+    manifest: {
+      format: "amos.continuity_manifest",
+      version: 1,
+      revision,
+      scope: {
+        boundary: "online",
+        tenantId: "tenant-1",
+        contextKey: "active",
+        workspaceHint: "neighborly-demo"
+      },
+      updatedAt: "2026-08-03T10:00:00.000Z",
+      transitions: [{
+        at: "2026-08-03T10:00:00.000Z",
+        status: "completed",
+        objective: "Show the generated course",
+        outcome: "Course is ready",
+        model: "anthropic:claude",
+        sourceClient,
+        actions: [],
+        decisions: [],
+        commitments: [],
+        corrections: [],
+        openLoops: [],
+        artifacts: []
+      }],
+      handoffs: [],
+      artifacts: [],
+      safeguards: {
+        orientationOnly: true,
+        requiresFreshAuthority: true,
+        replayAllowed: false,
+        clientReported: true,
+        credentialsIncluded: false,
+        companyMemory: false
+      }
+    }
   };
 }
