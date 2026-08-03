@@ -72,8 +72,7 @@ test("encrypted continuity can rehydrate an otherwise fresh loop only once", () 
     { role: "system", content: "LOCAL ONLY" }
   ]);
   assert.deepEqual(loop.prepareMessagesForModel(), [
-    { role: "system", content: "LOCAL ONLY" },
-    { role: "assistant", content: "Previous safe milestone" }
+    { role: "system", content: "LOCAL ONLY" }
   ]);
   assert.equal(loop.restoreContinuity("Duplicate"), false);
 });
@@ -92,10 +91,10 @@ test("compiled continuity uses the same standard message contract across provide
         async chat({ messages }) {
           assert.deepEqual(messages.map((message) => message.role), [
             "system",
-            "assistant",
             "user"
           ]);
           assert.match(messages[1].content, /amos\.continuity_manifest/);
+          assert.match(messages[1].content, /Continue safely/);
           assert.deepEqual(Object.keys(messages[1]).sort(), ["content", "role"]);
           return { message: { role: "assistant", content: "continued" } };
         }
@@ -109,6 +108,41 @@ test("compiled continuity uses the same standard message contract across provide
     assert.equal(loop.lastContextReceipt.provider, provider);
     assert.ok(loop.lastContextReceipt.continuityChars > 0);
   }
+});
+
+test("restored continuity keeps follow-up model transcripts user-first", async () => {
+  const observed = [];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    systemPrompt: "LOCAL ONLY",
+    kimiClient: {
+      async chat({ messages }) {
+        observed.push(messages);
+        assert.equal(messages[0].role, "system");
+        assert.equal(messages[1].role, "user");
+        assert.match(messages[1].content, /Previous safe milestone/);
+        assert.equal(
+          messages.slice(1).findIndex((message) => message.role === "user"),
+          0
+        );
+        return { message: { role: "assistant", content: `Answer ${observed.length}` } };
+      }
+    }
+  });
+
+  assert.equal(loop.restoreContinuity("Previous safe milestone"), true);
+  assert.equal(await loop.run("hello"), "Answer 1");
+  assert.equal(await loop.run("what sort of things can you do?"), "Answer 2");
+  assert.equal(observed.length, 2);
+  assert.ok(
+    observed[1].some(
+      (message) => message.role === "user" &&
+        String(message.content).includes("what sort of things can you do?")
+    )
+  );
 });
 
 test("ordinary chat defers canvas schemas while an explicit canvas request is honored", async () => {
@@ -481,6 +515,8 @@ test("completed task history stays below the provider message ceiling", async ()
       async chat({ messages }) {
         observedLengths.push(messages.length);
         assert.ok(messages.length <= 12);
+        assert.equal(messages[0].role, "system");
+        assert.equal(messages[1].role, "user");
         return { message: { role: "assistant", content: "Done." } };
       }
     }

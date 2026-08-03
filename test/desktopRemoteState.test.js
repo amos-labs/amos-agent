@@ -87,6 +87,66 @@ test("Desktop remote state resolves the signed-in user and their approvals", asy
   assert.equal(requests[1].options.headers.Authorization, "Bearer user-access-token");
 });
 
+test("Desktop projects bounded tenant proof from the canonical AMOS receipt ledger", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "proof-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              tenant_id: "tenant-1",
+              count: 1,
+              receipts: [{
+                id: "receipt-1",
+                operation: "create_ad",
+                actor: "user-1",
+                agency: "human_directed",
+                lifecycle_state: "executed",
+                effect_applied: true,
+                verified: true,
+                created_at: "2026-08-03T17:00:00.000Z",
+                receipt: {
+                  result_summary: "Campaign created and verified",
+                  inputs: { secret: "must-not-project" },
+                  outputs: { provider_payload: "must-not-project" }
+                }
+              }]
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const receipts = await client.receipts({ limit: 500 });
+
+  assert.equal(requests[0].params.name, "list_receipts");
+  assert.deepEqual(requests[0].params.arguments, { limit: 100 });
+  assert.deepEqual(receipts, [{
+    id: "receipt-1",
+    operation: "create_ad",
+    actor: "user-1",
+    agency: "human_directed",
+    lifecycleState: "executed",
+    effectApplied: true,
+    verified: true,
+    summary: "Campaign created and verified",
+    createdAt: "2026-08-03T17:00:00.000Z"
+  }]);
+  assert.equal(receipts[0].inputs, undefined);
+  assert.equal(receipts[0].outputs, undefined);
+});
+
 test("Desktop sends native human decisions only through the dedicated approval endpoint", async () => {
   const requests = [];
   const client = new DesktopRemoteStateClient(

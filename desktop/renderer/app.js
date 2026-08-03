@@ -61,7 +61,7 @@ const intelligenceProfiles = {
 
 let state = null;
 let currentView = "operator";
-let currentWorkTab = "decisions";
+let currentWorkTab = "open";
 let selectedProvider = "amos-hosted";
 let pendingApproval = null;
 let running = false;
@@ -251,8 +251,8 @@ function bindActions() {
   elements.accountUpdateButton.addEventListener("click", handleAccountUpdate);
   elements.companySwitcher.addEventListener("change", switchCompany);
   elements.approvalsButton.addEventListener("click", () => showView("decisions"));
-  elements.workDecisionsTab.addEventListener("click", () => showWorkTab("decisions"));
-  elements.workProofTab.addEventListener("click", () => showWorkTab("proof"));
+  elements.workDecisionsTab.addEventListener("click", () => showWorkTab("open"));
+  elements.workProofTab.addEventListener("click", () => showWorkTab("history"));
   elements.allApprovalsButton.addEventListener("click", () => api.openApprovals());
   elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
@@ -319,7 +319,6 @@ function bindEvents() {
   });
   api.on("activity:changed", (activity) => {
     if (state) state.activity = activity;
-    renderActivity();
   });
   api.on("canvas:changed", (canvasState) => {
     if (!state) return;
@@ -354,6 +353,7 @@ function bindEvents() {
     renderWorkingContinuity();
     renderCompanyCache();
     renderConnections();
+    renderHistory();
     restoreConversationFromContinuity();
   });
   api.on("update:changed", (nextUpdateState) => {
@@ -563,7 +563,7 @@ function render() {
 
   renderSettings();
   renderOfflineModels();
-  renderActivity();
+  renderHistory();
   renderDecisions();
   renderAttachments();
   renderPrivateMemory();
@@ -649,7 +649,7 @@ function bindContextResize() {
 
 function showView(view) {
   if (view === "decisions" || view === "activity") {
-    showWorkTab(view === "activity" ? "proof" : "decisions");
+    showWorkTab(view === "activity" ? "history" : "open");
     view = "work";
   }
   currentView = view;
@@ -670,8 +670,8 @@ function showView(view) {
 }
 
 function showWorkTab(tab) {
-  currentWorkTab = tab === "proof" ? "proof" : "decisions";
-  const decisionsActive = currentWorkTab === "decisions";
+  currentWorkTab = ["history", "proof"].includes(tab) ? "history" : "open";
+  const decisionsActive = currentWorkTab === "open";
   elements.workDecisionsTab.classList.toggle("active", decisionsActive);
   elements.workDecisionsTab.setAttribute("aria-selected", String(decisionsActive));
   elements.workProofTab.classList.toggle("active", !decisionsActive);
@@ -2480,17 +2480,18 @@ function decisionCard(approval, actionable) {
   status.className = `decision-status ${approval.status}`;
   status.textContent = approval.status.replaceAll("_", " ");
   const time = document.createElement("time");
-  time.dateTime = approval.requested_at;
-  time.textContent = approval.requested_at ? new Date(approval.requested_at).toLocaleString() : "";
+  const eventTime = actionable ? approval.requested_at : approval.decided_at || approval.requested_at;
+  time.dateTime = eventTime;
+  time.textContent = eventTime ? new Date(eventTime).toLocaleString() : "";
   meta.append(status, time);
   const title = document.createElement("h2");
   title.textContent = humanizeTool(approval.verb);
   const summary = document.createElement("p");
-  summary.textContent = approval.review_summary || humanizeTool(approval.verb);
+  summary.textContent = decisionSummary(approval, actionable);
   const provenance = document.createElement("small");
   provenance.textContent = [
     approval.agency_origin === "goal_pursuit" ? "Autonomous goal" : "Requested work",
-    approval.decided_by ? `decided by ${approval.decided_by}` : "",
+    !actionable && approval.decided_by ? "Human decision recorded" : "",
     approval.last_error ? `execution error: ${approval.last_error}` : ""
   ].filter(Boolean).join(" · ");
   content.append(meta, title, summary, provenance);
@@ -2513,6 +2514,17 @@ function decisionCard(approval, actionable) {
   actions.append(details);
   card.append(content, actions);
   return card;
+}
+
+function decisionSummary(approval, actionable) {
+  const title = humanizeTool(approval.verb);
+  const reviewSummary = String(approval.review_summary || title).trim();
+  if (actionable) return reviewSummary;
+  const structuredTail = reviewSummary.search(/\s+[—–-]\s*[\[{]/);
+  const cleanSummary = (structuredTail >= 0 ? reviewSummary.slice(0, structuredTail) : reviewSummary)
+    .trim();
+  if (cleanSummary && cleanSummary.toLowerCase() !== title.toLowerCase()) return cleanSummary;
+  return `This request was ${String(approval.status || "recorded").replaceAll("_", " ")}.`;
 }
 
 function approvalActionLabel() {
@@ -3350,7 +3362,7 @@ async function runTask(event) {
     if (activeCanvasId) canvasSidecarOpen = true;
     state.privateMemory = result.privateMemory || state.privateMemory;
     state.offlineProposals = result.offlineProposals || state.offlineProposals;
-    renderActivity();
+    renderHistory();
     renderCanvas();
     renderPrivateMemory();
     renderDecisions();
@@ -3380,7 +3392,7 @@ async function runTask(event) {
       state.localReceipts = latest.localReceipts || [];
       renderPrivateMemory();
       renderDecisions();
-      renderActivity();
+      renderHistory();
     } catch {
       // Task completion must not be masked if a local memory refresh fails.
     }
@@ -3827,53 +3839,79 @@ function renderLiveEvent(event) {
   elements.messages.scrollTop = elements.messages.scrollHeight;
 }
 
-function renderActivity() {
+const CONSEQUENTIAL_RECEIPT_STATES = new Set([
+  "executed",
+  "failed",
+  "denied",
+  "expired",
+  "measured",
+  "reverted",
+  "rolled_back",
+  "canceled",
+  "cancelled"
+]);
+
+function renderHistory() {
   if (!state) return;
   elements.activityList.replaceChildren();
-  const receipts = Array.isArray(state.localReceipts) ? state.localReceipts : [];
-  if (!state.activity?.length && receipts.length === 0) {
+  const companyReceipts = (Array.isArray(state.companyReceipts) ? state.companyReceipts : [])
+    .filter(isConsequentialReceipt)
+    .slice(0, 25);
+  if (companyReceipts.length === 0) {
     const empty = document.createElement("div");
     empty.className = "activity-empty";
-    empty.textContent = "Activity and proof will appear after AMOS begins working.";
+    empty.textContent = "Consequential company outcomes will appear here.";
     elements.activityList.append(empty);
     return;
   }
-  for (const receipt of receipts.slice(0, 25)) {
-    const row = document.createElement("div");
-    row.className = "activity-item local-receipt";
-    const type = document.createElement("span");
-    type.className = "activity-type";
-    type.textContent = "receipt";
-    const summary = document.createElement("span");
-    summary.className = "activity-summary";
-    summary.textContent =
-      `${receipt.status} · ${receipt.objective || "local task"} · sha256:${receipt.digest.slice(0, 12)}`;
+  for (const receipt of companyReceipts) {
+    const row = document.createElement("article");
+    row.className = "history-outcome-card";
+    const content = document.createElement("div");
+    content.className = "history-outcome-content";
+    const meta = document.createElement("div");
+    meta.className = "decision-meta";
+    const status = document.createElement("span");
+    status.className = `decision-status ${receipt.lifecycleState || "recorded"}`;
+    status.textContent = historyOutcomeStatus(receipt);
+    const verification = document.createElement("span");
+    verification.className = `history-verification ${receipt.verified ? "verified" : "recorded"}`;
+    verification.textContent = receipt.verified ? "Verified" : "Receipt recorded";
+    meta.append(status, verification);
+    const title = document.createElement("h3");
+    title.textContent = humanizeOperation(receipt.operation);
+    const summary = document.createElement("p");
+    summary.textContent = receipt.summary || "AMOS recorded the outcome of this company action.";
+    content.append(meta, title, summary);
     const time = document.createElement("time");
-    time.className = "activity-time";
-    time.dateTime = receipt.recordedAt;
-    time.textContent = new Date(receipt.recordedAt).toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-    row.append(type, summary, time);
+    time.className = "history-outcome-time";
+    time.dateTime = receipt.createdAt;
+    time.textContent = receipt.createdAt
+      ? new Date(receipt.createdAt).toLocaleString()
+      : "";
+    row.append(content, time);
     elements.activityList.append(row);
   }
-  for (const item of [...state.activity].reverse()) {
-    const row = document.createElement("div");
-    row.className = "activity-item";
-    const type = document.createElement("span");
-    type.className = "activity-type";
-    type.textContent = item.type;
-    const summary = document.createElement("span");
-    summary.className = "activity-summary";
-    summary.textContent = item.summary;
-    const time = document.createElement("time");
-    time.className = "activity-time";
-    time.dateTime = item.at;
-    time.textContent = new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    row.append(type, summary, time);
-    elements.activityList.append(row);
-  }
+}
+
+function isConsequentialReceipt(receipt) {
+  const lifecycleState = String(receipt?.lifecycleState || "").toLowerCase();
+  return Boolean(
+    receipt?.effectApplied === true ||
+    CONSEQUENTIAL_RECEIPT_STATES.has(lifecycleState)
+  );
+}
+
+function historyOutcomeStatus(receipt) {
+  const lifecycleState = String(receipt?.lifecycleState || "recorded").toLowerCase();
+  if (lifecycleState === "executed" && receipt.effectApplied === true) return "Applied";
+  if (lifecycleState === "measured") return "Measured";
+  return lifecycleState.replaceAll("_", " ");
+}
+
+function humanizeOperation(operation) {
+  const value = String(operation || "Company action").replace(/^amos_/, "").replaceAll("_", " ");
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function setRunning(value) {

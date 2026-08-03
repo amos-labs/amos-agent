@@ -14,6 +14,7 @@ test("remote state events project every refreshed platform surface into Desktop"
       workspaceActive: true
     },
     companyApprovals: [{ id: "approval-1", status: "pending" }],
+    companyReceipts: [{ id: "receipt-1", operation: "create_ad" }],
     approvalsAvailable: true,
     approvalDecisionMode: "desktop",
     connectionsCatalog: {
@@ -55,6 +56,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     approvals: controller.companyApprovals,
     approvalsAvailable: true,
     approvalDecisionMode: "desktop",
+    companyReceipts: controller.companyReceipts,
     connectionsCatalog: controller.connectionsCatalog,
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },

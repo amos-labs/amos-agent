@@ -69,14 +69,19 @@ test("routine approval review stays inside Desktop", async () => {
   ]);
 
   assert.match(html, /id="approvalsButton"[^>]*>Review decisions</);
-  assert.match(html, /data-view="work"[\s\S]*?Work &amp; proof/);
-  assert.match(html, /id="workDecisionsTab"[\s\S]*?id="workProofTab"/);
+  assert.match(html, /data-view="work"[\s\S]*?Decisions/);
+  assert.match(html, /id="workDecisionsTab"[\s\S]*?Open[\s\S]*?id="workProofTab"[^>]*>History</);
+  assert.match(html, /PAST DECISIONS[\s\S]*?id="recentDecisions"[\s\S]*?CONSEQUENTIAL OUTCOMES/);
   assert.match(html, /id="allApprovalsButton"[^>]*compact-button[^>]*>Web approval center</);
   assert.match(
     javascript,
     /elements\.approvalsButton\.addEventListener\("click", \(\) => showView\("decisions"\)\)/
   );
-  assert.match(javascript, /showWorkTab\(view === "activity" \? "proof" : "decisions"\)/);
+  assert.match(javascript, /showWorkTab\(view === "activity" \? "history" : "open"\)/);
+  assert.doesNotMatch(javascript, /sha256:\$\{receipt\.digest/);
+  assert.doesNotMatch(javascript, /for \(const receipt of receipts\.slice/);
+  assert.match(javascript, /function decisionSummary\([\s\S]*?structuredTail/);
+  assert.doesNotMatch(javascript, /decided by \$\{approval\.decided_by\}/);
   assert.match(javascript, /Revalidate & reopen/);
   assert.match(javascript, /state\.approvalDecisionMode === "desktop"/);
   assert.match(javascript, /reviewCanvasApproval\(block\.pendingId, review\)/);
@@ -100,6 +105,10 @@ test("background remote refresh projects live Connections into the renderer", as
   assert.match(
     javascript,
     /api\.on\("remote:changed",[\s\S]*?Object\.assign\(state, remote\)[\s\S]*?renderConnections\(\)/
+  );
+  assert.match(
+    javascript,
+    /api\.on\("remote:changed",[\s\S]*?Object\.assign\(state, remote\)[\s\S]*?renderHistory\(\)/
   );
 });
 
