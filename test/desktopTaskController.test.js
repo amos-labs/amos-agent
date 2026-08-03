@@ -346,3 +346,58 @@ test("desktop automatically offers completed online state to the shared continui
   });
   assert.equal(captured.manifest.transitions.at(-1).objective, "Prepare the demo");
 });
+
+test("clear session removes local and shared continuity without resurrecting either", async () => {
+  const store = await continuityStore();
+  const settings = await settingsStore().read();
+  const currentIdentity = identity();
+  const currentScope = continuityScope({
+    identity: currentIdentity,
+    boundary: "online",
+    workspace: settings.workspace
+  });
+  await store.appendTurn(currentScope, {
+    objective: "Private task",
+    answer: "Private outcome"
+  });
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-continuity-clear",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = currentIdentity;
+  controller.workingContinuity = { available: true, manifest: { scope: {} } };
+  let sharedClearCalled = false;
+  controller.clearSharedContinuity = async () => {
+    sharedClearCalled = true;
+    return { attempted: true, supported: true, available: false, cleared: true };
+  };
+  let loopCleared = false;
+  controller.runtime = {
+    continuityKey: "old-checkpoint",
+    runtime: { loop: { clear() { loopCleared = true; } } }
+  };
+
+  const result = await controller.clear();
+  assert.equal(result.ok, true);
+  assert.equal(result.sharedContinuity.cleared, true);
+  assert.equal(sharedClearCalled, true);
+  assert.equal(loopCleared, true);
+  assert.equal(controller.runtime.continuityKey, null);
+  assert.equal(controller.workingContinuity, null);
+  assert.equal(await store.load(currentScope), null);
+
+  await store.appendTurn(currentScope, {
+    objective: "Second private task",
+    answer: "Second private outcome"
+  });
+  controller.clearSharedContinuity = async () => {
+    throw new Error("platform unavailable");
+  };
+  const degraded = await controller.clear();
+  assert.equal(degraded.ok, true);
+  assert.match(degraded.sharedContinuity.error, /platform unavailable/);
+  assert.equal(await store.load(currentScope), null);
+});

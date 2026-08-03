@@ -69,12 +69,17 @@ export class AgentLoop {
       signal = null,
       takeSteering = () => [],
       workflow: selectedWorkflow = null,
-      presentationIntent = null
+      presentationIntent = null,
+      canvasActive = false
     } = {}
   ) {
     throwIfAborted(signal);
     this.compactCompletedHistory();
     this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
+    // The canvas lives in Desktop, not in the model transcript. Preserve its
+    // existence across task turns so follow-ups like “make that green” can use
+    // the update tool without forcing the user to say “canvas” again.
+    this.canvasToolState.active = canvasActive === true;
     const workflow = selectedWorkflow || this.workflowSelector({ objective: userContent });
     this.lastWorkflow = workflow;
     onEvent({

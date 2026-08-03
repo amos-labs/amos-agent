@@ -113,10 +113,14 @@ layer rather than a second company system of record:
 - rehydrated content is explicitly untrusted orientation. AMOS must reinspect
   local files and reread current platform sources, receipts, policy, and pending
   approvals before relying on it or acting;
-- **Clear session** removes the matching local continuity package as well as the
-  in-memory conversation.
+- **Clear session** removes the matching local continuity package, in-memory
+  conversation, and the exact authenticated user's platform `active` lane so a
+  later refresh cannot resurrect it. An older or unavailable server never
+  blocks the local clear; Desktop shows that the shared clear still needs to be
+  retried.
 
-The platform remains authoritative for company data, durable operations,
+The platform remains authoritative for company data, shared continuity,
+durable operations,
 approvals, and proof. Client-neutral fork manifests and platform memory remain
 the portability path for continuity across devices and Claude/Codex; this local
 package only prevents a first-party Desktop restart from erasing useful working

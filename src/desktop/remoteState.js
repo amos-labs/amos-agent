@@ -92,6 +92,32 @@ export class DesktopRemoteStateClient {
     }
   }
 
+  async clearContinuity({ contextKey = "active", tenantId = "", signal = null } = {}) {
+    const args = { context_key: String(contextKey || "active") };
+    try {
+      const result = await this.mcp.callTool("clear_context", args, { signal });
+      return normalizeContinuityResponse(
+        parseMcpJson(result, "AMOS working continuity clear"),
+        { tenantId }
+      );
+    } catch (error) {
+      if (isUnknownTool(error, "clear_context")) {
+        return {
+          supported: false,
+          available: false,
+          cleared: false,
+          contextKey: args.context_key,
+          revision: 0,
+          sourceClient: "",
+          updatedAt: null,
+          stale: false,
+          manifest: null
+        };
+      }
+      throw error;
+    }
+  }
+
   async connectionsCatalog({ signal = null } = {}) {
     const [connectionsResult, providerPayload] = await Promise.all([
       this.mcp.callTool("list_connections", {}, { signal }),
@@ -616,6 +642,7 @@ function normalizeContinuityResponse(value, { tenantId = "" } = {}) {
     return {
       supported: true,
       available: false,
+      cleared: value.cleared === true,
       contextKey: String(value.context_key || "active").slice(0, 128),
       revision: 0,
       sourceClient: "",
@@ -628,6 +655,7 @@ function normalizeContinuityResponse(value, { tenantId = "" } = {}) {
   return {
     supported: true,
     available: true,
+    cleared: false,
     contextKey: String(value.context_key || manifest.scope.contextKey).slice(0, 128),
     revision: Math.max(1, Math.min(Number(value.revision) || manifest.revision, Number.MAX_SAFE_INTEGER)),
     sourceClient: String(value.source_client || "").slice(0, 64),

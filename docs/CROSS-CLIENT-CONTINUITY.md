@@ -16,6 +16,10 @@ AMOS-compatible client without learning a memory-management system.
   state can load the company engine and call `hydrate_context`.
 - Claude, Codex, or another MCP client can call `capture_context` before an
   intentional client change or at a natural completed-work boundary.
+- When the user clears a session, Desktop calls `clear_context` for the exact
+  authenticated user, tenant, and `active` lane before removing the encrypted
+  local package. API keys and other machine principals cannot capture, hydrate,
+  clear, or receive user-private continuity through `resume_company`.
 
 The checkpoint contains objective, outcome, typed action status, decisions,
 commitments, corrections, open loops, safe artifact references, receipt
@@ -35,6 +39,9 @@ Tenant switching is an advanced Desktop setting. The OAuth token is rotated to
 the selected advertised membership, and Desktop clears runtime context,
 attachments, canvases, approvals, connection metadata, activity, and the prior
 tenant's shared checkpoint before refreshing the target company.
+
+Clearing a continuity lane does not clear company memory, receipts, approvals,
+another teammate's lane, or any named lane that the user did not select.
 
 AMOS cannot recover private state from a third-party client that never calls
 `capture_context`. Clients without AMOS MCP need a separate explicit export or
