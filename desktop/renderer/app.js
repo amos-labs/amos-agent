@@ -379,6 +379,30 @@ function bindEvents() {
     elements.promptInput.placeholder = "Keep typing—your direction will be queued while this approval waits…";
     elements.approvalModal.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
+  api.on("approval:completed", (outcome) => {
+    const encoded = JSON.stringify(outcome?.result, null, 2);
+    const result = encoded === undefined
+      ? "No structured result was returned."
+      : encoded.length <= 40_000
+        ? encoded
+        : `${encoded.slice(0, 39_900)}\n… [result shortened for display]`;
+    addMessage(
+      "assistant",
+      [
+        "### Approved work completed",
+        "",
+        `**${outcome?.title || humanizeTool(outcome?.verb || "governed operation")}** executed once under the original pending operation.`,
+        "",
+        "```json",
+        result,
+        "```",
+        outcome?.truncated
+          ? "The durable result was truncated; ask AMOS for a bounded or paginated follow-up read if you need more rows."
+          : ""
+      ].filter(Boolean).join("\n")
+    );
+    toast("Approved work completed. The original result is now in this task.");
+  });
 }
 
 function render() {

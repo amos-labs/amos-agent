@@ -15,7 +15,8 @@ function settingsStore() {
     apiKey: "",
     reasoningEffort: "medium",
     workspace: "/tmp",
-    notifiedApprovalIds: ["approval-from-source"]
+    notifiedApprovalIds: ["approval-from-source"],
+    deliveredApprovalOutcomeIds: ["outcome-from-source"]
   };
   return {
     async read() {
@@ -113,6 +114,7 @@ test("Desktop switches only to advertised memberships and clears ephemeral compa
   assert.deepEqual(state.canvases, []);
   assert.equal(state.activity.some((item) => item.summary === "Switched to Smile Wise"), true);
   assert.deepEqual((await fixture.store.read()).notifiedApprovalIds, []);
+  assert.deepEqual((await fixture.store.read()).deliveredApprovalOutcomeIds, []);
 });
 
 test("Desktop refuses unadvertised companies and switching during active work", async () => {

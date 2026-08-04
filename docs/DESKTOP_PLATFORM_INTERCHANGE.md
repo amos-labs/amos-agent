@@ -236,6 +236,15 @@ The existing hosted approval path remains supported for Claude, Codex, and other
 MCP clients. Native Desktop approval is an additional verified ceremony, never a
 requirement for using or approving AMOS work.
 
+An approval result is part of the platform operation ledger. After the original
+pending operation executes once, the platform returns and durably exposes a
+bounded `execution_result`, digest, and truncation flag on that same pending id.
+Desktop consumes each completed outcome once, inserts it into encrypted task
+continuity as an immutable result (never as permission to replay), and renders it
+inline. Hosted approval, native Desktop approval, Claude, and Codex therefore
+converge on the same result rather than creating a second request and a second
+approval. Large results require a bounded/paginated follow-up read.
+
 ## Connections in Desktop
 
 The Connections surface is a projection of the platform connection catalog.
@@ -284,6 +293,32 @@ The modal value must never be copied into model input, task checkpoints, saved
 briefings, renderer state, telemetry, logs, receipts, settings, or Desktop
 storage. Data reads, synchronization, and connector writes continue through
 governed platform verbs and produce proof receipts.
+
+### Open-world connection capabilities
+
+Supporting a new API must not require a hard-coded Desktop card or a bespoke
+server adapter for every endpoint. The canonical extension unit is a
+platform-owned, provider-neutral operation contract:
+
+1. Any MCP client may propose inert operation drafts from provider docs,
+   OpenAPI, or a request shape the user has reviewed.
+2. Each draft binds one connection, semantic operation key, exact HTTP method,
+   fixed relative path template, strict path/query/body schemas, non-secret
+   headers, evidence, and a `read` or `write` consequence.
+3. A signed-in owner/admin activates the exact credential-free manifest under
+   the normal approval ceremony. The platform rechecks it before activation.
+4. Every client discovers the same active contracts and calls the same generic
+   execution verb. The platform pins the revision before policy, validates all
+   values, injects the vaulted credential, fixes the origin/method/path, emits a
+   receipt, and returns the result.
+
+This permits fixed POST queries, searches, and GraphQL operations to be governed
+as reads without weakening raw proxy safety. `PUT`, `PATCH`, and `DELETE` can
+never masquerade as reads; contract writes always park. The raw generic proxy
+remains available for conservative discovery and treats every non-read method as
+consequential. Typed adapters remain appropriate when AMOS must normalize a
+business domain, impose provider-specific budgets, or verify a specialized
+upstream identity contract—not merely because an API is new.
 
 Customer names, demo priorities, provider availability, setup status, and
 service maturity must not be encoded in Desktop HTML or JavaScript. A provider
