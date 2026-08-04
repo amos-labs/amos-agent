@@ -281,7 +281,42 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .account-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-copy small { margin-top: 3px; color: var(--muted-2); font-size: 11px; }
 .account-active-mark { color: var(--green); font-size: 11px; font-weight: 800; }
-.account-menu .company-switcher { margin: 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.account-company-switcher {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+.account-company-switcher label {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.account-company-switcher select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: 0;
+  background: var(--field);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.account-company-switcher select:focus { border-color: var(--blue); }
+.account-company-switcher select:disabled { cursor: wait; opacity: .65; }
+.account-company-switcher small {
+  color: var(--muted-2);
+  font-size: 9px;
+  line-height: 1.45;
+}
 .account-menu-actions { align-items: stretch; gap: 8px; }
 .account-menu-actions .button { flex: 1; padding-inline: 11px; }
 .account-update-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }

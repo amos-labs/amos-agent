@@ -217,7 +217,8 @@ test("the identity card opens Google-style account switching outside Intelligenc
   assert.doesNotMatch(settings, /companySwitcherControl|addAccountButton/);
   assert.match(sidebar, /id="accountMenuButton"/);
   assert.match(sidebar, /id="addAccountButton"/);
-  assert.match(sidebar, /id="companySwitcherControl"/);
+  assert.match(sidebar, /id="companySwitcherControl" class="account-company-switcher hidden"/);
+  assert.doesNotMatch(sidebar, /id="companySwitcherControl" class="field company-switcher/);
   assert.match(sidebar, /Platform is never told what other accounts are present/);
   assert.match(controller, /clearEphemeralCompanyBoundary\(\)/);
 });
