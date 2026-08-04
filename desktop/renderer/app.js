@@ -683,6 +683,9 @@ function showWorkTab(tab) {
 function renderConnections() {
   const catalog = state?.connectionsCatalog || {};
   const connections = Array.isArray(catalog.connections) ? catalog.connections : [];
+  const connectedSystems = connections.filter(
+    (connection) => connection.status === "connected"
+  );
   const providers = Array.isArray(catalog.providers)
     ? catalog.providers
     : [
@@ -690,26 +693,26 @@ function renderConnections() {
         ...(Array.isArray(catalog.tenantDefined) ? catalog.tenantDefined : [])
       ];
   const connectionsByProvider = new Map(
-    connections.map((connection) => [connection.provider, connection])
+    connectedSystems.map((connection) => [connection.provider, connection])
   );
   const availableProviders = providers.filter(
     (provider) => provider.provider === "custom" || !connectionsByProvider.has(provider.provider)
   );
-  elements.connectionBadge.textContent = String(connections.length);
-  elements.connectionBadge.classList.toggle("hidden", connections.length === 0);
+  elements.connectionBadge.textContent = String(connectedSystems.length);
+  elements.connectionBadge.classList.toggle("hidden", connectedSystems.length === 0);
   elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
-    ? `${connections.length} connected system${connections.length === 1 ? "" : "s"} · ${availableProviders.length} available connection${availableProviders.length === 1 ? "" : "s"}`
+    ? `${connectedSystems.length} connected system${connectedSystems.length === 1 ? "" : "s"} · ${availableProviders.length} available connection${availableProviders.length === 1 ? "" : "s"}`
     : "Connect your AMOS company to load its credential-free connection catalog.";
 
   elements.connectedSystemList.replaceChildren();
-  if (connections.length === 0) {
+  if (connectedSystems.length === 0) {
     elements.connectedSystemList.append(connectionCatalogEmpty(
       state?.connectionMode === "user"
         ? "No platform connections are visible to this identity yet."
         : "The live catalog appears after company sign-in."
     ));
   } else {
-    for (const connection of connections) {
+    for (const connection of connectedSystems) {
       const card = document.createElement("article");
       card.className = "connection-provider-card";
       const top = document.createElement("div");
