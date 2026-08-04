@@ -126,6 +126,10 @@ test("Connections HTML contains no customer or provider-specific catalog truth",
   assert.match(html, /never added to chat or saved by Desktop/);
   assert.match(
     javascript,
+    /connectedSystems = connections\.filter\([\s\S]*?connection\.status === "connected"/
+  );
+  assert.match(
+    javascript,
     /availableProviders = providers\.filter\([\s\S]*?!connectionsByProvider\.has\(provider\.provider\)/
   );
   assert.match(javascript, /api\.connectProvider\(provider\.provider\)/);

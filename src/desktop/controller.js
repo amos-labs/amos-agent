@@ -1172,7 +1172,8 @@ export class DesktopController {
     }
     const existing = Array.isArray(this.connectionsCatalog?.connections)
       ? this.connectionsCatalog.connections.some(
-          (connection) => connection.provider === providerKey
+          (connection) =>
+            connection.provider === providerKey && connection.status === "connected"
         )
       : false;
     if (existing && providerKey !== "custom") {
