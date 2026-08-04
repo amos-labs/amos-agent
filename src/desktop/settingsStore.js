@@ -29,7 +29,8 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   localApprovalWorkspace: "",
   localApprovalKinds: [],
   amosMcpUrl: "https://app.amoslabs.com/mcp",
-  notifiedApprovalIds: []
+  notifiedApprovalIds: [],
+  deliveredApprovalOutcomeIds: []
 });
 
 export class DesktopSettingsStore {
@@ -160,6 +161,12 @@ export function sanitizeSettings(input = {}) {
     }),
     notifiedApprovalIds: Array.isArray(input.notifiedApprovalIds)
       ? input.notifiedApprovalIds
+          .map((value) => clean(value, 64))
+          .filter(Boolean)
+          .slice(-200)
+      : [],
+    deliveredApprovalOutcomeIds: Array.isArray(input.deliveredApprovalOutcomeIds)
+      ? input.deliveredApprovalOutcomeIds
           .map((value) => clean(value, 64))
           .filter(Boolean)
           .slice(-200)

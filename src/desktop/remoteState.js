@@ -648,7 +648,15 @@ function normalizeApproval(value) {
     last_error: value.last_error ? String(value.last_error) : "",
     agency_origin: String(value.agency_origin || "human_directed"),
     goal_id: value.goal_id ? String(value.goal_id) : "",
-    args: value.args && typeof value.args === "object" ? value.args : {}
+    args: value.args && typeof value.args === "object" ? value.args : {},
+    execution_result:
+      value.execution_result !== undefined && value.execution_result !== null
+        ? value.execution_result
+        : null,
+    execution_result_sha256: value.execution_result_sha256
+      ? String(value.execution_result_sha256)
+      : "",
+    execution_result_truncated: value.execution_result_truncated === true
   };
 }
 

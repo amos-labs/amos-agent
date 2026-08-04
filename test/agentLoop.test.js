@@ -145,6 +145,41 @@ test("restored continuity keeps follow-up model transcripts user-first", async (
   );
 });
 
+test("completed approval outcomes join the next real user turn once without replay authority", async () => {
+  const observed = [];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    systemPrompt: "LOCAL ONLY",
+    kimiClient: {
+      async chat({ messages }) {
+        observed.push(messages);
+        return { message: { role: "assistant", content: `Answer ${observed.length}` } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Start the analysis"), "Answer 1");
+  assert.equal(
+    loop.appendExternalOutcome(
+      '<amos_approval_outcome pending_id="pending-1">Result: {"unique_users":42}</amos_approval_outcome>'
+    ),
+    true
+  );
+  assert.equal(await loop.run("What was the answer?"), "Answer 2");
+  assert.equal(await loop.run("And summarize it"), "Answer 3");
+
+  const secondTurn = observed[1].filter((message) => message.role === "user").at(-1);
+  assert.match(secondTurn.content, /immutable results/);
+  assert.match(secondTurn.content, /unique_users/);
+  assert.match(secondTurn.content, /What was the answer\?/);
+  const thirdTurn = observed[2].filter((message) => message.role === "user").at(-1);
+  assert.doesNotMatch(thirdTurn.content, /amos_completed_external_outcomes/);
+  assert.match(thirdTurn.content, /And summarize it/);
+});
+
 test("ordinary chat defers canvas schemas while an explicit canvas request is honored", async () => {
   const registry = new ToolRegistry();
   registry.register({ name: "read_data", handler: async () => ({ ok: true }) });

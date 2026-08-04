@@ -216,3 +216,20 @@ test("desktop settings retain only a bounded approval-notification history", () 
   assert.equal(sanitized.notifiedApprovalIds[0], notifiedApprovalIds[5]);
   assert.equal(sanitized.notifiedApprovalIds.at(-1), notifiedApprovalIds.at(-1));
 });
+
+test("desktop settings retain only a bounded delivered approval-outcome history", () => {
+  const deliveredApprovalOutcomeIds = Array.from({ length: 205 }, (_, index) =>
+    `outcome-${index}`
+  );
+  const sanitized = sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    deliveredApprovalOutcomeIds
+  });
+
+  assert.equal(sanitized.deliveredApprovalOutcomeIds.length, 200);
+  assert.equal(sanitized.deliveredApprovalOutcomeIds[0], deliveredApprovalOutcomeIds[5]);
+  assert.equal(
+    sanitized.deliveredApprovalOutcomeIds.at(-1),
+    deliveredApprovalOutcomeIds.at(-1)
+  );
+});

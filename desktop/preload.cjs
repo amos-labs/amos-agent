@@ -4,6 +4,7 @@ const eventChannels = new Set([
   "agent:event",
   "agent:status",
   "approval:requested",
+  "approval:completed",
   "activity:changed",
   "canvas:changed",
   "offline:changed",

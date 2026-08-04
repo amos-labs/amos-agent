@@ -68,7 +68,10 @@ test("Desktop remote state resolves the signed-in user and their approvals", asy
             review_summary: "Create Ad: launch the governed campaign",
             approval_url:
               "https://app.amoslabs.com/approvals/22222222-2222-2222-2222-222222222222",
-            args: { name: "Enterprise proof" }
+            args: { name: "Enterprise proof" },
+            execution_result: { unique_users: 42 },
+            execution_result_sha256: "abc123",
+            execution_result_truncated: false
           }
         ]
       });
@@ -83,6 +86,7 @@ test("Desktop remote state resolves the signed-in user and their approvals", asy
   assert.equal(approvals.available, true);
   assert.equal(approvals.decision_mode, "desktop");
   assert.equal(approvals.pending_operations[0].review_summary, "Create Ad: launch the governed campaign");
+  assert.deepEqual(approvals.pending_operations[0].execution_result, { unique_users: 42 });
   assert.equal(requests[1].url, "https://app.amoslabs.com/api/v1/approvals");
   assert.equal(requests[1].options.headers.Authorization, "Bearer user-access-token");
 });
