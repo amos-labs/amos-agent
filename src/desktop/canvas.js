@@ -387,7 +387,7 @@ function normalizeBlockProvenance(input, canvasSource, path) {
 function normalizeSource(input, now) {
   const source = object(input, "source must be an object");
   const references = array(source.references || [], "source.references", MAX_SOURCES);
-  return {
+  const normalized = {
     kind: enumValue(source.kind || "live", [...SOURCE_KINDS], "source.kind"),
     label: optionalText(source.label, "source.label", 160) || "AMOS company data",
     refreshedAt: isoDate(source.refreshed_at || source.refreshedAt || now(), "source.refreshed_at"),
@@ -396,6 +396,31 @@ function normalizeSource(input, now) {
     references: references.map((reference, index) =>
       normalizeReference(reference, `source.references[${index}]`)
     )
+  };
+  const briefing = source.briefing;
+  if (briefing && typeof briefing === "object" && !Array.isArray(briefing)) {
+    normalized.briefing = normalizeBriefingReference(briefing);
+  }
+  return normalized;
+}
+
+function normalizeBriefingReference(input) {
+  const sourcePlan = Array.isArray(input.sourcePlan || input.source_plan)
+    ? structuredClone(input.sourcePlan || input.source_plan).slice(0, 8)
+    : [];
+  return {
+    definitionId: optionalText(input.definitionId || input.definition_id, "source.briefing.definition_id", 120),
+    runId: optionalText(input.runId || input.run_id, "source.briefing.run_id", 120),
+    templateKey: optionalText(input.templateKey || input.template_key, "source.briefing.template_key", 80),
+    title: text(input.title, "source.briefing.title", 160),
+    objective: text(input.objective, "source.briefing.objective", 4_000),
+    sourcePlan,
+    parameters: input.parameters && typeof input.parameters === "object"
+      ? structuredClone(input.parameters)
+      : {},
+    presentation: input.presentation && typeof input.presentation === "object"
+      ? structuredClone(input.presentation)
+      : {}
   };
 }
 

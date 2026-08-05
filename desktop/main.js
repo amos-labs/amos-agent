@@ -353,6 +353,14 @@ function registerIpc() {
   ipcMain.handle("desktop:clear", () => controller.clear());
   ipcMain.handle("desktop:remove-canvas", (_event, id) => controller.removeCanvas(id));
   ipcMain.handle("desktop:save-canvas-view", (_event, id) => controller.saveCanvasView(id));
+  ipcMain.handle("desktop:run-briefing", (_event, input) => controller.runBriefing(input));
+  ipcMain.handle("desktop:open-briefing-run", (_event, runId) => controller.openBriefingRun(runId));
+  ipcMain.handle("desktop:schedule-canvas-view", (_event, input) =>
+    controller.scheduleCanvasView(input?.id, input?.cadence)
+  );
+  ipcMain.handle("desktop:set-briefing-schedule-status", (_event, input) =>
+    controller.setBriefingScheduleStatus(input?.scheduleId, input?.active === true)
+  );
   ipcMain.handle("desktop:remove-saved-view", (_event, id) => controller.removeSavedView(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({

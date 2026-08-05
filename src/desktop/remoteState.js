@@ -43,6 +43,84 @@ export class DesktopRemoteStateClient {
     return current;
   }
 
+  async briefingsLibrary({ signal = null } = {}) {
+    try {
+      const [templatesResult, definitionsResult] = await Promise.all([
+        this.mcp.callTool("list_briefing_templates", {}, { signal }),
+        this.mcp.callTool("list_briefings", {}, { signal })
+      ]);
+      const templates = parseMcpJson(templatesResult, "AMOS Briefing templates");
+      const definitions = parseMcpJson(definitionsResult, "AMOS Briefings");
+      return {
+        supported: true,
+        contractVersion: Number(
+          definitions?.contract_version || templates?.contract_version || 1
+        ),
+        templates: Array.isArray(templates?.templates) ? templates.templates : [],
+        briefings: Array.isArray(definitions?.briefings) ? definitions.briefings : []
+      };
+    } catch (error) {
+      if (
+        isUnknownTool(error, "list_briefing_templates") ||
+        isUnknownTool(error, "list_briefings")
+      ) {
+        return { supported: false, contractVersion: 0, templates: [], briefings: [] };
+      }
+      throw error;
+    }
+  }
+
+  async runBriefing(input, { signal = null } = {}) {
+    const result = await this.mcp.callTool("run_briefing", briefingRunArgs(input), { signal });
+    return parseMcpJson(result, "AMOS Briefing run");
+  }
+
+  async briefingRun(runId, { signal = null } = {}) {
+    const result = await this.mcp.callTool(
+      "get_briefing_run",
+      { run_id: requiredUuid(runId, "Briefing run") },
+      { signal }
+    );
+    return parseMcpJson(result, "AMOS Briefing run");
+  }
+
+  async createBriefing(input, { signal = null } = {}) {
+    const result = await this.mcp.callTool("create_briefing", briefingDefinitionArgs(input), {
+      signal
+    });
+    return parseMcpJson(result, "AMOS saved Briefing");
+  }
+
+  async archiveBriefing(briefingId, { signal = null } = {}) {
+    const result = await this.mcp.callTool(
+      "archive_briefing",
+      { briefing_id: requiredUuid(briefingId, "Briefing") },
+      { signal }
+    );
+    return parseMcpJson(result, "AMOS archived Briefing");
+  }
+
+  async scheduleBriefing(briefingId, cadence, { signal = null } = {}) {
+    const result = await this.mcp.callTool(
+      "schedule_briefing",
+      {
+        briefing_id: requiredUuid(briefingId, "Briefing"),
+        cadence: normalizeBriefingCadence(cadence)
+      },
+      { signal }
+    );
+    return parseMcpJson(result, "AMOS Briefing schedule");
+  }
+
+  async setBriefingScheduleStatus(scheduleId, active, { signal = null } = {}) {
+    const result = await this.mcp.callTool(
+      active ? "resume_briefing_schedule" : "pause_briefing_schedule",
+      { schedule_id: requiredUuid(scheduleId, "Schedule") },
+      { signal }
+    );
+    return parseMcpJson(result, "AMOS Briefing schedule status");
+  }
+
   async receipts({ limit = 50, signal = null } = {}) {
     const boundedLimit = Math.max(1, Math.min(100, Number(limit) || 50));
     try {
@@ -811,6 +889,84 @@ function normalizeCredentialContextField(value) {
     label: String(value.label || "Connection identifier"),
     placeholder: String(value.placeholder || "")
   };
+}
+
+function briefingDefinitionArgs(input = {}) {
+  const title = String(input.title || "").trim();
+  const objective = String(input.objective || "").trim();
+  if (!title || title.length > 160) {
+    throw new Error("A Briefing title must be between 1 and 160 characters");
+  }
+  if (!objective || objective.length > 4_000) {
+    throw new Error("A Briefing objective must be between 1 and 4,000 characters");
+  }
+  const args = { title, objective };
+  if (input.templateKey) args.template_key = String(input.templateKey);
+  if (Array.isArray(input.sourcePlan)) args.source_plan = input.sourcePlan;
+  if (input.parameters && typeof input.parameters === "object") {
+    args.parameters = input.parameters;
+  }
+  if (input.presentation && typeof input.presentation === "object") {
+    args.presentation = input.presentation;
+  }
+  return args;
+}
+
+function briefingRunArgs(input = {}) {
+  if (input.briefingId) {
+    return { briefing_id: requiredUuid(input.briefingId, "Briefing") };
+  }
+  const args = {};
+  if (input.templateKey) args.template_key = String(input.templateKey);
+  if (input.title) args.title = String(input.title);
+  if (input.objective) args.objective = String(input.objective);
+  if (Array.isArray(input.sourcePlan)) args.source_plan = input.sourcePlan;
+  if (input.parameters && typeof input.parameters === "object") {
+    args.parameters = input.parameters;
+  }
+  if (input.presentation && typeof input.presentation === "object") {
+    args.presentation = input.presentation;
+  }
+  if (!args.template_key && !args.title) {
+    throw new Error("Choose a saved Briefing or a platform template to run");
+  }
+  return args;
+}
+
+function normalizeBriefingCadence(input = {}) {
+  const kind = String(input.kind || "");
+  if (kind === "interval") {
+    const everyMinutes = Number(input.everyMinutes ?? input.every_minutes);
+    if (!Number.isInteger(everyMinutes) || everyMinutes < 60 || everyMinutes > 10_080) {
+      throw new Error("Briefing interval must be between 60 and 10,080 minutes");
+    }
+    return { kind, every_minutes: everyMinutes };
+  }
+  const hourUtc = Number(input.hourUtc ?? input.hour_utc);
+  const minuteUtc = Number(input.minuteUtc ?? input.minute_utc ?? 0);
+  if (
+    !Number.isInteger(hourUtc) || hourUtc < 0 || hourUtc > 23 ||
+    !Number.isInteger(minuteUtc) || minuteUtc < 0 || minuteUtc > 59
+  ) {
+    throw new Error("Choose a valid UTC time for this Briefing");
+  }
+  if (kind === "daily") return { kind, hour_utc: hourUtc, minute_utc: minuteUtc };
+  if (kind === "weekly") {
+    const weekday = Number(input.weekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      throw new Error("Choose a weekday for this Briefing");
+    }
+    return { kind, weekday, hour_utc: hourUtc, minute_utc: minuteUtc };
+  }
+  throw new Error("Briefing cadence must be interval, daily, or weekly");
+}
+
+function requiredUuid(value, label) {
+  const id = String(value || "");
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error(`${label} id is invalid`);
+  }
+  return id;
 }
 
 function humanizeVerb(value) {

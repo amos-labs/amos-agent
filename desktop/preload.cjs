@@ -58,6 +58,12 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   clear: () => ipcRenderer.invoke("desktop:clear"),
   removeCanvas: (id) => ipcRenderer.invoke("desktop:remove-canvas", id),
   saveCanvasView: (id) => ipcRenderer.invoke("desktop:save-canvas-view", id),
+  runBriefing: (input) => ipcRenderer.invoke("desktop:run-briefing", input),
+  openBriefingRun: (runId) => ipcRenderer.invoke("desktop:open-briefing-run", runId),
+  scheduleCanvasView: (id, cadence) =>
+    ipcRenderer.invoke("desktop:schedule-canvas-view", { id, cadence }),
+  setBriefingScheduleStatus: (scheduleId, active) =>
+    ipcRenderer.invoke("desktop:set-briefing-schedule-status", { scheduleId, active }),
   removeSavedView: (id) => ipcRenderer.invoke("desktop:remove-saved-view", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),
