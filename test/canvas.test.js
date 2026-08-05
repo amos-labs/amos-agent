@@ -8,7 +8,8 @@ import {
 import {
   createCanvasTool,
   createCanvasUpdateTool,
-  createCompanyViewTool
+  createCompanyViewTool,
+  createWorkSurfaceRequestTool
 } from "../src/tools/canvas.js";
 import { createRegistry } from "../src/runtime.js";
 
@@ -238,4 +239,18 @@ test("company and incremental canvas tools expose narrow deterministic contracts
   assert.equal(updated.state, "partial");
   assert.equal(JSON.stringify(company.parameters).includes("$ref"), false);
   assert.equal(JSON.stringify(update.parameters).includes("$ref"), false);
+});
+
+test("semantic work-surface intent is language-neutral and carries no business authority", async () => {
+  const tool = createWorkSurfaceRequestTool();
+  const result = await tool.handler({
+    intent: "comparison",
+    title: "Comparação de desempenho",
+    reason: "Uma comparação persistente torna as diferenças entre unidades mais claras."
+  });
+  assert.equal(tool.name, "desktop_request_work_surface");
+  assert.equal(result.requested, true);
+  assert.equal(result.intent, "comparison");
+  assert.equal(Object.hasOwn(result, "credential"), false);
+  assert.equal(Object.hasOwn(result, "authority"), false);
 });

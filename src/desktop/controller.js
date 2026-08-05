@@ -13,7 +13,7 @@ import {
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
-import { adaptCompanyResult } from "./canvasAdapters.js";
+import { adaptBriefingRun, adaptCompanyResult } from "./canvasAdapters.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import { DesktopCanvasResultStore } from "./canvasResults.js";
 import {
@@ -49,7 +49,8 @@ import {
 import {
   createCanvasTool,
   createCanvasUpdateTool,
-  createCompanyViewTool
+  createCompanyViewTool,
+  createWorkSurfaceRequestTool
 } from "../tools/canvas.js";
 import { createCompanyCacheTool } from "../tools/companyCache.js";
 import { createOfflineProposalTool } from "../tools/offlineProposal.js";
@@ -99,6 +100,7 @@ export class DesktopController {
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.remoteStatus = {
@@ -177,6 +179,7 @@ export class DesktopController {
       approvalDecisionMode: this.approvalDecisionMode,
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
+      briefings: structuredClone(this.briefings),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -988,6 +991,7 @@ export class DesktopController {
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+      this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -1009,7 +1013,8 @@ export class DesktopController {
       connectionsResult,
       companiesResult,
       receiptsResult,
-      continuityResult
+      continuityResult,
+      briefingsResult
     ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
@@ -1017,7 +1022,8 @@ export class DesktopController {
       remote.connectionsCatalog(),
       oauth.companies(),
       remote.receipts({ limit: 50 }),
-      remote.hydrateContinuity()
+      remote.hydrateContinuity(),
+      remote.briefingsLibrary()
     ]);
 
     const errors = [];
@@ -1066,6 +1072,15 @@ export class DesktopController {
       this.connectionsCatalog = connectionsResult.value;
     } else {
       errors.push(connectionsResult.reason?.message || "Could not load AMOS connections");
+    }
+
+    if (briefingsResult.status === "fulfilled" && briefingsResult.value) {
+      this.briefings = briefingsResult.value;
+    } else {
+      this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
+      if (briefingsResult.status === "rejected") {
+        errors.push(briefingsResult.reason?.message || "Could not load AMOS Briefings");
+      }
     }
 
     if (receiptsResult.status === "fulfilled") {
@@ -1747,9 +1762,38 @@ export class DesktopController {
   }
 
   async saveCanvasView(id) {
-    if (!this.savedViewStore) throw new Error("Saved briefings are unavailable");
     const canvas = this.canvases.list().find((item) => item.id === id);
     if (!canvas) throw new Error("That briefing is no longer open");
+    const briefing = canvas.source?.briefing;
+    if (briefing && !briefing.definitionId) {
+      const settings = await this.settingsStore.read();
+      const remote = await this.personalRemote(settings, "saving this Briefing");
+      const result = await remote.createBriefing(briefing);
+      const saved = result?.briefing;
+      if (!saved?.id) throw new Error("AMOS did not confirm the saved Briefing");
+      const updated = this.canvases.update(id, {
+        source: {
+          briefing: {
+            ...briefing,
+            definitionId: saved.id,
+            title: saved.title || briefing.title,
+            objective: saved.objective || briefing.objective,
+            sourcePlan: saved.source_plan || briefing.sourcePlan,
+            parameters: saved.parameters || briefing.parameters,
+            presentation: saved.presentation || briefing.presentation
+          }
+        }
+      });
+      this.send("canvas:changed", this.canvases.state());
+      this.briefings = await remote.briefingsLibrary();
+      await this.sendRemoteState();
+      this.record("canvas", `Saved governed Briefing ${saved.title}`, {
+        briefingId: saved.id,
+        canvasId: updated.id
+      });
+      return { savedView: saved, savedViews: this.briefings.briefings, briefing: saved };
+    }
+    if (!this.savedViewStore) throw new Error("Saved briefings are unavailable");
     if (!canvas.source.refreshPrompt) {
       throw new Error("This briefing does not include a safe refresh instruction");
     }
@@ -1766,9 +1810,105 @@ export class DesktopController {
   }
 
   async removeSavedView(id) {
+    const platformBriefing = this.briefings.briefings.find((item) => item.id === id);
+    if (platformBriefing) {
+      const settings = await this.settingsStore.read();
+      const remote = await this.personalRemote(settings, "archiving this Briefing");
+      await remote.archiveBriefing(id);
+      this.briefings = await remote.briefingsLibrary();
+      await this.sendRemoteState();
+      return { savedViews: this.briefings.briefings, briefings: this.briefings };
+    }
     if (!this.savedViewStore) throw new Error("Saved briefings are unavailable");
     await this.savedViewStore.remove(id, this.identity);
     return { savedViews: await this.savedViewStore.list(this.identity) };
+  }
+
+  async runBriefing(input = {}) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "running this Briefing");
+    const title = String(input.title || this.briefingTitle(input) || "Company Briefing");
+    const loading = this.canvases.present({
+      version: "1",
+      title,
+      subtitle: "Refreshing current governed company sources…",
+      state: { kind: "loading", message: "AMOS is running this Briefing now." },
+      source: {
+        kind: "live",
+        label: "AMOS governed Briefing",
+        refreshed_at: new Date().toISOString(),
+        references: []
+      },
+      blocks: []
+    });
+    this.send("canvas:changed", this.canvases.state());
+    try {
+      const result = await remote.runBriefing(input);
+      const spec = adaptBriefingRun(result);
+      const canvas = this.canvases.update(loading.id, spec);
+      this.send("canvas:changed", this.canvases.state());
+      this.record("canvas", `Ran governed Briefing ${canvas.title}`, {
+        canvasId: canvas.id,
+        briefingId: canvas.source?.briefing?.definitionId || null,
+        runId: canvas.source?.briefing?.runId || null
+      });
+      return { canvas, ...this.canvases.state() };
+    } catch (error) {
+      this.canvases.update(loading.id, {
+        state: { kind: "error", message: error.message },
+        source: { refreshed_at: new Date().toISOString() },
+        blocks: []
+      });
+      this.send("canvas:changed", this.canvases.state());
+      throw error;
+    }
+  }
+
+  async openBriefingRun(runId) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "opening this Briefing run");
+    const result = await remote.briefingRun(runId);
+    const canvas = this.canvases.present(adaptBriefingRun(result));
+    this.send("canvas:changed", this.canvases.state());
+    this.record("canvas", `Opened immutable Briefing run ${canvas.title}`, {
+      canvasId: canvas.id,
+      runId: canvas.source?.briefing?.runId || runId
+    });
+    return { canvas, ...this.canvases.state() };
+  }
+
+  briefingTitle(input) {
+    if (input.briefingId) {
+      return this.briefings.briefings.find((item) => item.id === input.briefingId)?.title;
+    }
+    if (input.templateKey) {
+      return this.briefings.templates.find((item) => item.key === input.templateKey)?.title;
+    }
+    return "";
+  }
+
+  async scheduleCanvasView(id, cadence) {
+    let canvas = this.canvases.list().find((item) => item.id === id);
+    if (!canvas?.source?.briefing) throw new Error("Run a governed Briefing before scheduling it");
+    if (!canvas.source.briefing.definitionId) {
+      await this.saveCanvasView(id);
+      canvas = this.canvases.list().find((item) => item.id === id);
+    }
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "scheduling this Briefing");
+    const result = await remote.scheduleBriefing(canvas.source.briefing.definitionId, cadence);
+    this.briefings = await remote.briefingsLibrary();
+    await this.sendRemoteState();
+    return { result, briefings: this.briefings };
+  }
+
+  async setBriefingScheduleStatus(scheduleId, active) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, `${active ? "resuming" : "pausing"} this Briefing schedule`);
+    const result = await remote.setBriefingScheduleStatus(scheduleId, active);
+    this.briefings = await remote.briefingsLibrary();
+    await this.sendRemoteState();
+    return { result, briefings: this.briefings };
   }
 
   presentCanvas(spec) {
@@ -2291,6 +2431,7 @@ export class DesktopController {
       throw new Error("Connect AMOS before running company tasks");
     }
     const extraTools = [
+      createWorkSurfaceRequestTool(),
       createCanvasTool({
         present: (spec) => this.presentCanvas(spec)
       }),
@@ -2300,20 +2441,22 @@ export class DesktopController {
     ];
     if (!isOffline && !isPersonal) {
       extraTools.push(createCompanyViewTool({
-        present: ({ result_ref: resultRef, intent, title }) => {
+        present: ({ result_ref: resultRef, intent, title, briefing }) => {
           const captured = this.canvasResults.get(resultRef);
           if (!captured) {
             throw new Error(
               "That AMOS result is no longer available. Refresh the source data before presenting the view."
             );
           }
-          return this.presentCanvas(adaptCompanyResult({
+          const spec = adaptCompanyResult({
             intent,
             title,
             sourceTool: captured.tool,
             result: captured.result,
             observedAt: captured.observedAt
-          }));
+          });
+          if (briefing) spec.source.briefing = briefing;
+          return this.presentCanvas(spec);
         }
       }));
     }
@@ -2541,6 +2684,7 @@ export class DesktopController {
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -2576,6 +2720,7 @@ export class DesktopController {
       approvalDecisionMode: this.approvalDecisionMode,
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
+      briefings: structuredClone(this.briefings),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)

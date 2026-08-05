@@ -273,6 +273,63 @@ test("an already-open Desktop canvas supports natural cross-turn updates", async
   );
 });
 
+test("the model can request a work surface semantically without English regex intent", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "read_data", handler: async () => ({ rows: [1, 2, 3, 4] }) });
+  registry.register({
+    name: "desktop_request_work_surface",
+    handler: async () => ({ requested: true, intent: "comparison", title: "Comparação" })
+  });
+  registry.register({
+    name: "desktop_present_canvas",
+    handler: async () => ({ ok: true, canvas_id: "canvas-pt" })
+  });
+  registry.register({
+    name: "desktop_present_company_view",
+    handler: async () => ({ ok: true, canvas_id: "canvas-company-pt" })
+  });
+
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        turn += 1;
+        if (turn === 1) {
+          assert.deepEqual(toolNames(tools), ["read_data", "desktop_request_work_surface"]);
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "request-surface",
+                function: {
+                  name: "desktop_request_work_surface",
+                  arguments: JSON.stringify({
+                    intent: "comparison",
+                    reason: "A estrutura visual torna as diferenças materiais mais claras."
+                  })
+                }
+              }]
+            }
+          };
+        }
+        assert.ok(toolNames(tools).includes("desktop_present_canvas"));
+        assert.ok(toolNames(tools).includes("desktop_present_company_view"));
+        return { message: { role: "assistant", content: "A comparação está pronta." } };
+      }
+    }
+  });
+
+  assert.equal(
+    await loop.run("Mostre as diferenças mais importantes entre as unidades."),
+    "A comparação está pronta."
+  );
+});
+
 test("explicit code, app, and course preview requests reveal the canvas safely", async () => {
   for (const prompt of [
     "Show me the code in a canvas.",

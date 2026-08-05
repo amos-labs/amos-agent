@@ -103,8 +103,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .brand-copy { min-width: 0; }
 .sidebar-toggle {
   position: absolute;
-  top: 6px;
-  right: -2px;
+  top: 64px;
+  right: 20px;
   display: grid;
   width: 28px;
   height: 28px;
@@ -120,13 +120,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .sidebar-toggle:hover { border-color: var(--blue); color: var(--ink); }
 .app-shell.nav-collapsed .sidebar { padding-inline: 13px; }
-.app-shell.nav-collapsed .brand { justify-content: center; padding-inline: 0; }
+.app-shell.nav-collapsed .brand { justify-content: center; padding: 40px 0 38px; }
 .app-shell.nav-collapsed .brand-copy,
 .app-shell.nav-collapsed .nav-item > span:not(.nav-icon):not(.nav-badge),
 .app-shell.nav-collapsed .connection-card > span:not(.status-dot),
 .app-shell.nav-collapsed .workspace-button > *,
 .app-shell.nav-collapsed .local-approval-button > strong { display: none; }
-.app-shell.nav-collapsed .sidebar-toggle { top: 48px; right: 7px; background: var(--panel); }
+.app-shell.nav-collapsed .sidebar-toggle {
+  top: 54px;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+}
 .app-shell.nav-collapsed .nav-item { justify-content: center; padding-inline: 8px; }
 .app-shell.nav-collapsed .nav-icon { flex: 0 0 23px; }
 .app-shell.nav-collapsed .nav-badge {
@@ -145,9 +151,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .app-shell.nav-collapsed .workspace-button::before { color: var(--blue-2); content: "⌂"; font-size: 18px; }
 .app-shell.nav-collapsed .local-approval-button {
   display: grid;
+  grid-template-columns: 1fr;
   min-height: 38px;
   place-items: center;
   padding: 0;
+}
+.app-shell.nav-collapsed .local-approval-button .local-approval-icon {
+  justify-self: center;
+  margin: 0;
 }
 
 .brand-mark {

@@ -18,10 +18,10 @@
 
     <div id="app" class="app-shell hidden">
       <aside class="sidebar">
+        <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true" title="Collapse navigation">‹</button>
         <div class="brand">
           <span class="brand-mark"><img src="../assets/amos-mark.png" alt=""></span>
           <span class="brand-copy"><strong>AMOS</strong><small>DESKTOP</small></span>
-          <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="Collapse navigation" aria-expanded="true" title="Collapse navigation">‹</button>
         </div>
 
         <nav class="nav" aria-label="AMOS Desktop">
@@ -263,6 +263,7 @@
                   </div>
                   <div class="canvas-actions">
                     <button id="canvasSaveButton" class="button secondary hidden" type="button">Save briefing</button>
+                    <button id="canvasScheduleButton" class="button secondary hidden" type="button">Schedule</button>
                     <button id="canvasRefreshButton" class="button secondary hidden" type="button">Refresh</button>
                     <button id="canvasCloseButton" class="icon-button" type="button" aria-label="Close work surface" title="Close work surface">×</button>
                   </div>
@@ -301,7 +302,7 @@
               <div class="briefing-library-section">
                 <div>
                   <span class="eyebrow">SAVED VIEWS</span>
-                  <p>Definitions are encrypted and identity-pinned. Live company data is refreshed when you run them.</p>
+                  <p>Company Briefing definitions and schedules live in governed AMOS state. Every run refreshes current sources and authority.</p>
                 </div>
                 <div id="savedViewList" class="briefing-card-list"></div>
               </div>
@@ -685,6 +686,51 @@
           <div class="connection-modal-actions">
             <button id="connectionCancelButton" class="button secondary" type="button">Cancel</button>
             <button id="connectionSubmitButton" class="button primary" type="submit">Save and connect</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="briefingScheduleModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="briefingScheduleTitle">
+      <div class="connection-modal briefing-schedule-modal">
+        <form id="briefingScheduleForm">
+          <span class="eyebrow accent">GOVERNED BRIEFING SCHEDULE</span>
+          <h2 id="briefingScheduleTitle">Schedule this Briefing.</h2>
+          <p>AMOS will revalidate the current company, user, scopes, and each source every time it runs. The schedule stores no credential or execution authority.</p>
+          <label class="connection-field">
+            <span>Cadence</span>
+            <select id="briefingScheduleKind">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="interval">Every few hours</option>
+            </select>
+          </label>
+          <label id="briefingWeekdayField" class="connection-field hidden">
+            <span>Weekday</span>
+            <select id="briefingScheduleWeekday">
+              <option value="0">Monday</option><option value="1">Tuesday</option>
+              <option value="2">Wednesday</option><option value="3">Thursday</option>
+              <option value="4">Friday</option><option value="5">Saturday</option>
+              <option value="6">Sunday</option>
+            </select>
+          </label>
+          <label id="briefingTimeField" class="connection-field">
+            <span>Time (UTC)</span>
+            <input id="briefingScheduleTime" type="time" value="08:00" required />
+          </label>
+          <label id="briefingIntervalField" class="connection-field hidden">
+            <span>Repeat every</span>
+            <select id="briefingScheduleInterval">
+              <option value="60">1 hour</option><option value="240">4 hours</option>
+              <option value="480">8 hours</option><option value="720">12 hours</option>
+              <option value="1440">24 hours</option><option value="10080">7 days</option>
+            </select>
+          </label>
+          <div class="connection-modal-boundary">Activating recurring company work may require a governed human decision. A run can read only the sources the current user is still allowed to access.</div>
+          <div id="briefingScheduleError" class="connection-modal-error hidden"></div>
+          <div class="connection-modal-actions">
+            <button id="briefingScheduleCancel" class="button secondary" type="button">Cancel</button>
+            <button id="briefingScheduleSubmit" class="button primary" type="submit">Save schedule</button>
           </div>
         </form>
       </div>

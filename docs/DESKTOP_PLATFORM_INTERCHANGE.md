@@ -69,6 +69,10 @@ the same authorized work conversationally.
   to a bounded summary; durable proof remains under Activity & proof.
 - A dynamic canvas is a contextual work surface beside chat, not a navigation
   destination. It may resize or close without deleting its task-local view.
+- Typed UI actions carry an explicit, language-neutral presentation intent.
+  Free-form conversation uses model judgment through the always-visible,
+  authority-free `desktop_request_work_surface` tool; regex matching is only a
+  defensive hint and never the deciding product contract.
 - Briefings is the library for saved definitions, templates, and reopening
   current work surfaces. It does not own the live company result or replace the
   conversation.
@@ -160,17 +164,26 @@ operation—not by choosing Desktop instead of Claude or Codex.
 
 ## Briefings
 
-“Briefings” is the user-facing name for dynamic company canvases.
+“Briefings” is the user-facing name for reusable governed company work surfaces.
 
-- Templates are reusable questions and layout intentions.
-- Saved views store a title, refresh prompt, and source definition locally,
-  encrypted and pinned to the signed-in tenant/user.
-- Saved views do not cache company results as an alternate system of record.
-- Opening or refreshing a briefing queries the brain again so the result is
-  current, governed, and attributable.
-- A later platform-backed saved-view resource can make definitions portable
-  across the user's devices and available to Claude or Codex without changing
-  the rendering contract.
+- Templates are platform-owned reusable objectives, allowlisted source plans,
+  and presentation intentions. Desktop never substitutes a bundled catalog.
+- A saved `BriefingDefinition` is durable tenant state: title, objective,
+  template/source plan, bounded parameters, presentation preference, version,
+  creator, and lifecycle. It stores neither credentials nor a cached answer.
+- A `BriefingRun` is an immutable, attributable evidence snapshot. Manual and
+  scheduled runs use the same contract, and every declared source re-enters its
+  current tenant, RBAC, policy, and connector gate before it is read.
+- A `BriefingSchedule` stores cadence and in-app delivery metadata only. It
+  stores no bearer token or execution authority. Activating or resuming standing
+  work is governed; every run re-resolves the creator's current active
+  membership and role, so revocation fails closed.
+- Desktop renders a deterministic sidecar and provides Save, Run now, Open
+  latest, Schedule, Pause, and Resume controls. Claude, Codex, and every other
+  authorized MCP client can list, create, run, retrieve, archive, and schedule
+  the same definitions and runs.
+- Local-only work may continue to use encrypted identity-pinned definitions,
+  but online company Briefings are platform-owned and portable across clients.
 
 Initial templates:
 

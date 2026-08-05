@@ -25,6 +25,7 @@ export function createCanvasTool({ present }) {
             refreshed_at: { type: "string" },
             stale_after: { type: "string" },
             refresh_prompt: { type: "string" },
+            briefing: briefingReferenceSchema(),
             references: {
               type: "array",
               maxItems: 100,
@@ -49,6 +50,41 @@ export function createCanvasTool({ present }) {
         block_count: canvas.blocks.length
       };
     }
+  };
+}
+
+export function createWorkSurfaceRequestTool() {
+  return {
+    name: "desktop_request_work_surface",
+    source: "desktop",
+    description:
+      "Request the Desktop work-surface tools when the user's meaning would benefit materially from a visual, persistent, or structured sidecar. Use semantic judgment in the user's language; this records presentation intent only and never creates business data or authority.",
+    parameters: {
+      type: "object",
+      additionalProperties: false,
+      required: ["intent", "reason"],
+      properties: {
+        intent: {
+          type: "string",
+          enum: [
+            "auto", "company_overview", "performance", "learning", "kpi", "funnel",
+            "cohort", "timeline", "comparison", "approvals", "receipts", "live_work"
+          ]
+        },
+        title: { type: "string" },
+        reason: {
+          type: "string",
+          description: "A short explanation of the material visual, persistence, or interaction advantage."
+        }
+      }
+    },
+    handler: async ({ intent, title, reason }) => ({
+      ok: true,
+      requested: true,
+      intent,
+      title: title || null,
+      reason
+    })
   };
 }
 
@@ -87,7 +123,8 @@ export function createCompanyViewTool({ present }) {
             "live_work"
           ]
         },
-        title: { type: "string" }
+        title: { type: "string" },
+        briefing: briefingReferenceSchema()
       }
     },
     handler: async (args) => {
@@ -129,6 +166,7 @@ export function createCanvasUpdateTool({ update }) {
             refreshed_at: { type: "string" },
             stale_after: { type: "string" },
             refresh_prompt: { type: "string" },
+            briefing: briefingReferenceSchema(),
             references: {
               type: "array",
               maxItems: 100,
@@ -158,6 +196,34 @@ export function createCanvasUpdateTool({ update }) {
         state: canvas.state.kind,
         block_count: canvas.blocks.length
       };
+    }
+  };
+}
+
+function briefingReferenceSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["title", "objective", "source_plan"],
+    properties: {
+      template_key: { type: "string" },
+      title: { type: "string" },
+      objective: { type: "string" },
+      source_plan: {
+        type: "array",
+        maxItems: 8,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["tool"],
+          properties: {
+            tool: { type: "string" },
+            arguments: { type: "object" }
+          }
+        }
+      },
+      parameters: { type: "object" },
+      presentation: { type: "object" }
     }
   };
 }

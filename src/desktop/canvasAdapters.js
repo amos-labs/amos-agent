@@ -70,6 +70,109 @@ export function adaptCompanyResult({
   };
 }
 
+export function adaptBriefingRun(payload, { observedAt = new Date().toISOString() } = {}) {
+  const response = payload?.definition && payload?.run && payload?.result
+    ? payload
+    : unwrapResult(payload);
+  const definition = response?.definition && typeof response.definition === "object"
+    ? response.definition
+    : {};
+  const result = response?.result && typeof response.result === "object"
+    ? response.result
+    : {};
+  const run = response?.run && typeof response.run === "object" ? response.run : {};
+  const hint = result?.presentation_hint && typeof result.presentation_hint === "object"
+    ? result.presentation_hint
+    : {};
+  const sources = Array.isArray(result.sources) ? result.sources : [];
+  const blocks = [];
+  const references = [];
+  for (const source of sources) {
+    const tool = cleanText(source?.tool, 120);
+    const sourceObservedAt = source?.observed_at || observedAt;
+    references.push({
+      type: "amos_tool",
+      id: tool,
+      label: humanize(tool || "AMOS source"),
+      observed_at: sourceObservedAt
+    });
+    if (source?.status !== "available") continue;
+    const intent = intentForBriefingSource(tool, hint.intent);
+    const adapted = adaptCompanyResult({
+      intent,
+      title: definition.title || result.title || "Company Briefing",
+      sourceTool: tool,
+      result: source.data,
+      observedAt: sourceObservedAt
+    });
+    for (const block of adapted.blocks || []) {
+      blocks.push({ ...block, id: `${slug(tool || "source")}-${block.id}` });
+      if (blocks.length >= 24) break;
+    }
+    if (blocks.length >= 24) break;
+  }
+  const stateKind = ["ready", "partial", "restricted"].includes(result.state)
+    ? result.state
+    : blocks.length > 0
+      ? "ready"
+      : "empty";
+  return {
+    version: "1",
+    title: cleanText(definition.title || result.title || "Company Briefing", 160),
+    subtitle: cleanText(
+      definition.objective || result.objective || "A governed view refreshed from current company sources.",
+      500
+    ),
+    generated_at: run.completed_at || observedAt,
+    state: {
+      kind: stateKind,
+      message: stateKind === "restricted"
+        ? "Current permissions or source availability did not permit this Briefing to load."
+        : stateKind === "partial"
+          ? "Some governed sources were unavailable; available evidence is shown."
+          : undefined
+    },
+    source: {
+      kind: "live",
+      label: "AMOS governed Briefing",
+      refreshed_at: run.completed_at || observedAt,
+      refresh_prompt: definition.id
+        ? `Run the saved Briefing ${definition.title || result.title || "again"}`
+        : `Refresh ${definition.title || result.title || "this Briefing"}`,
+      references,
+      briefing: {
+        definition_id: definition.id || run.briefing_id || "",
+        run_id: run.id || "",
+        template_key: definition.template_key || result.template_key || "",
+        title: definition.title || result.title || "Company Briefing",
+        objective: definition.objective || result.objective || "Refresh this governed company Briefing.",
+        source_plan: definition.source_plan || [],
+        parameters: definition.parameters || {},
+        presentation: definition.presentation || hint || {}
+      }
+    },
+    blocks: blocks.length > 0
+      ? blocks
+      : stateKind === "ready"
+        ? [{
+            id: "briefing-result",
+            type: "markdown",
+            title: "Briefing result",
+            content: textSummary(result) || "AMOS completed the Briefing without displayable fields.",
+            provenance: provenance({ sourceTool: "run_briefing", observedAt, references })
+          }]
+        : []
+  };
+}
+
+function intentForBriefingSource(tool, requestedIntent) {
+  if (tool === "get_performance_snapshot") return "performance";
+  if (tool === "growth_summary" || tool === "ads_overview") return "funnel";
+  if (tool === "list_pending_operations") return "approvals";
+  if (tool === "list_receipts") return "receipts";
+  return COMPANY_VIEW_INTENTS.includes(requestedIntent) ? requestedIntent : "auto";
+}
+
 function blocksForIntent(intent, payload, context) {
   if (intent === "approvals") return decisionBlocks(payload, "approval", context);
   if (intent === "receipts") return decisionBlocks(payload, "receipt", context);

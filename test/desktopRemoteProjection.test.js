@@ -21,6 +21,12 @@ test("remote state events project every refreshed platform surface into Desktop"
       connections: [{ id: "connection-1", provider: "microsoft_graph" }],
       providers: [{ provider: "microsoft_graph", displayName: "Microsoft 365" }]
     },
+    briefings: {
+      supported: true,
+      contractVersion: 1,
+      templates: [{ key: "daily_company_brief", title: "Daily company brief" }],
+      briefings: [{ id: "briefing-1", title: "Daily company brief" }]
+    },
     companies: {
       currentTenantId: "tenant-1",
       tenants: [{ tenant_id: "tenant-1", tenant_name: "AMOS Labs" }]
@@ -58,6 +64,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     approvalDecisionMode: "desktop",
     companyReceipts: controller.companyReceipts,
     connectionsCatalog: controller.connectionsCatalog,
+    briefings: controller.briefings,
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { adaptCompanyResult } from "../src/desktop/canvasAdapters.js";
+import { adaptBriefingRun, adaptCompanyResult } from "../src/desktop/canvasAdapters.js";
 import { normalizeCanvasSpec } from "../src/desktop/canvas.js";
 
 const observedAt = "2026-07-28T08:00:00.000Z";
@@ -243,4 +243,40 @@ test("adapter emits honest empty, restricted, partial, and error states", () => 
       assert.equal(canvas.blocks.length, 0);
     }
   }
+});
+
+test("governed Briefing runs become saveable typed sidecars with immutable provenance", () => {
+  const canvas = normalized(adaptBriefingRun({
+    definition: {
+      id: null,
+      title: "Portfolio performance",
+      objective: "Compare operating units with current governed evidence.",
+      template_key: "portfolio_performance",
+      source_plan: [{ tool: "get_performance_snapshot", arguments: {} }],
+      parameters: {},
+      presentation: { intent: "performance" }
+    },
+    run: {
+      id: "run-1",
+      completed_at: observedAt,
+      trigger_kind: "manual"
+    },
+    result: {
+      state: "ready",
+      presentation_hint: { kind: "briefing", intent: "performance" },
+      sources: [{
+        tool: "get_performance_snapshot",
+        status: "available",
+        observed_at: observedAt,
+        data: { operating_units: [{ name: "Dallas", metrics: [] }] }
+      }]
+    }
+  }));
+
+  assert.equal(canvas.title, "Portfolio performance");
+  assert.equal(canvas.source.briefing.templateKey, "portfolio_performance");
+  assert.equal(canvas.source.briefing.runId, "run-1");
+  assert.equal(canvas.source.briefing.definitionId, "");
+  assert.equal(canvas.source.briefing.sourcePlan[0].tool, "get_performance_snapshot");
+  assert.ok(canvas.source.references.some((reference) => reference.id === "get_performance_snapshot"));
 });

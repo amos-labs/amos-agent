@@ -81,29 +81,6 @@ const transientTaskMessages = new Set();
 let resumingCheckpointId = null;
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
-const briefingTemplates = Object.freeze([
-  {
-    title: "Daily company brief",
-    description: "The material changes, risks, decisions, and opportunities that need attention today.",
-    prompt: "Create today's company operating brief from the live AMOS company overview. Include the largest cited Company Performance Loop gaps when available, prioritize material changes, risks, decisions, and opportunities, and show the result as a briefing. Clearly label unavailable or sample data."
-  },
-  {
-    title: "Portfolio performance",
-    description: "Compare locations or business units with relevant peers and show the gap to top quartile.",
-    prompt: "Load the AMOS performance engine, call get_performance_snapshot, and present the live result as a Company Performance briefing. Compare each operating unit with its cited relevant peer or target benchmark, show current and prior results and the gap to top quartile where available, then identify the three highest-impact opportunities without claiming causes the evidence does not prove."
-  },
-  {
-    title: "Lead-source ROI",
-    description: "Find acquisition sources that are creating or destroying value.",
-    prompt: "Create a lead-source ROI briefing from live governed company data. Use Company Performance observations when available to compare spend, leads, conversions, revenue, and return by source. Identify material outliers, cite the exact source and period, and distinguish observed gaps from hypotheses about why they exist."
-  },
-  {
-    title: "Goals and progress",
-    description: "Track objectives, progress, blockers, and evidence-backed next actions.",
-    prompt: "Create a goals and progress briefing from live AMOS goals and relevant company signals. Show each active objective, cited baseline, target, progress, leading indicators, blockers, and owner. Recommend the next evidence-backed action. Do not introduce coaching, training, content, or another intervention type unless the user requested it or cited company evidence supports it. Clearly label unavailable data and platform-reported capability states; never describe data, an engine, or a capability as locked unless the platform explicitly reports that state."
-  }
-]);
-
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
@@ -153,14 +130,19 @@ const elements = Object.fromEntries(
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
     "capsulePreviewItems", "capsulePreviewWarning", "capsulePreviewCancelButton",
-    "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton", "canvasSaveButton",
+    "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton", "canvasSaveButton", "canvasScheduleButton",
     "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasEmptyTitle",
     "canvasEmptyMessage", "canvasBlocks", "briefingLibrary", "savedViewList", "briefingTemplateList",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
     "offlineSetupSteps", "offlineSetupRuntime", "offlineSetupModel", "offlineSetupActivate",
     "demoBanner", "demoExpiry", "demoConnectButton", "starterActions",
-    "connectionCatalogSummary", "connectedSystemList", "availableProviderList", "liveCanvasList"
+    "connectionCatalogSummary", "connectedSystemList", "availableProviderList", "liveCanvasList",
+    "briefingScheduleModal", "briefingScheduleForm", "briefingScheduleTitle",
+    "briefingScheduleKind", "briefingScheduleWeekday", "briefingScheduleTime",
+    "briefingScheduleInterval", "briefingWeekdayField", "briefingTimeField",
+    "briefingIntervalField", "briefingScheduleError", "briefingScheduleCancel",
+    "briefingScheduleSubmit"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -276,6 +258,13 @@ function bindActions() {
   });
   elements.canvasCloseButton.addEventListener("click", closeCanvasSidecar);
   elements.canvasSaveButton.addEventListener("click", saveActiveBriefing);
+  elements.canvasScheduleButton.addEventListener("click", openBriefingScheduleModal);
+  elements.briefingScheduleKind.addEventListener("change", renderBriefingScheduleFields);
+  elements.briefingScheduleForm.addEventListener("submit", scheduleActiveBriefing);
+  elements.briefingScheduleCancel.addEventListener("click", closeBriefingScheduleModal);
+  elements.briefingScheduleModal.addEventListener("click", (event) => {
+    if (event.target === elements.briefingScheduleModal) closeBriefingScheduleModal();
+  });
   elements.offlineRefreshButton.addEventListener("click", refreshOfflineModels);
   elements.offlineInstallRuntimeButton.addEventListener("click", refreshOfflineModels);
   elements.memoryExportButton.addEventListener("click", () => openCapsuleFlow("export"));
@@ -354,6 +343,7 @@ function bindEvents() {
     renderCompanyCache();
     renderConnections();
     renderHistory();
+    renderCanvas();
     restoreConversationFromContinuity();
   });
   api.on("update:changed", (nextUpdateState) => {
@@ -974,8 +964,16 @@ function renderCanvas() {
   elements.canvasBlocks.classList.toggle("hidden", !hasBlocks);
   elements.canvasSourceBar.classList.toggle("hidden", !canvas);
   elements.canvasTabs.classList.toggle("hidden", canvases.length < 2);
-  elements.canvasSaveButton.classList.toggle("hidden", !canvas?.source?.refreshPrompt);
-  elements.canvasRefreshButton.classList.toggle("hidden", !canvas?.source?.refreshPrompt);
+  const briefing = canvas?.source?.briefing || null;
+  const canSave = briefing
+    ? !briefing.definitionId
+    : Boolean(canvas?.source?.refreshPrompt);
+  elements.canvasSaveButton.classList.toggle(
+    "hidden",
+    !canSave
+  );
+  elements.canvasScheduleButton.classList.toggle("hidden", !briefing);
+  elements.canvasRefreshButton.classList.toggle("hidden", !briefing && !canvas?.source?.refreshPrompt);
   elements.canvasTabs.replaceChildren();
   elements.canvasBlocks.replaceChildren();
   elements.canvasSourceBar.replaceChildren();
@@ -1018,6 +1016,14 @@ function renderCanvas() {
   for (const block of canvas.blocks) elements.canvasBlocks.append(renderCanvasBlock(block));
 
   elements.canvasRefreshButton.onclick = () => {
+    if (briefing) {
+      runPlatformBriefing({
+        briefingId: briefing.definitionId || undefined,
+        templateKey: briefing.definitionId ? undefined : briefing.templateKey,
+        title: briefing.title
+      });
+      return;
+    }
     showView("operator");
     elements.promptInput.value = canvas.source.refreshPrompt;
     elements.promptInput.focus();
@@ -1025,7 +1031,10 @@ function renderCanvas() {
 }
 
 function renderBriefingLibrary() {
-  const savedViews = Array.isArray(state.savedViews) ? state.savedViews : [];
+  const localSavedViews = Array.isArray(state.savedViews) ? state.savedViews : [];
+  const platformLibrary = state.briefings || {};
+  const platformBriefings = Array.isArray(platformLibrary.briefings) ? platformLibrary.briefings : [];
+  const templates = Array.isArray(platformLibrary.templates) ? platformLibrary.templates : [];
   const canvases = Array.isArray(state.canvases) ? state.canvases : [];
   elements.liveCanvasList.replaceChildren();
   elements.savedViewList.replaceChildren();
@@ -1048,7 +1057,7 @@ function renderBriefingLibrary() {
     }
   }
 
-  if (savedViews.length === 0) {
+  if (platformBriefings.length === 0 && localSavedViews.length === 0) {
     const empty = document.createElement("p");
     empty.className = "briefing-library-empty";
     empty.textContent = state.connectionMode === "user"
@@ -1056,10 +1065,33 @@ function renderBriefingLibrary() {
       : "Connect your company to save identity-pinned live briefings.";
     elements.savedViewList.append(empty);
   } else {
-    for (const view of savedViews) {
+    for (const view of platformBriefings) {
+      const schedules = Array.isArray(view.schedules) ? view.schedules : [];
+      const active = schedules.find((schedule) => schedule.status === "active");
+      const paused = schedules.find((schedule) => schedule.status === "paused");
+      const schedule = active || paused;
       elements.savedViewList.append(briefingCard({
         title: view.title,
-        description: `Definition updated ${relativeTime(view.updatedAt)} · live data refreshes when opened`,
+        description: briefingDefinitionDescription(view, schedule),
+        actionLabel: "Run",
+        onAction: () => runPlatformBriefing({ briefingId: view.id, title: view.title }),
+        onRemove: () => removeSavedBriefing(view.id),
+        extraActions: [
+          ...(view.latest_run?.id ? [{
+            label: "Open latest",
+            onAction: () => openPlatformBriefingRun(view.latest_run.id)
+          }] : []),
+          ...(schedule ? [{
+            label: schedule.status === "active" ? "Pause" : "Resume",
+            onAction: () => changeBriefingScheduleStatus(schedule.id, schedule.status !== "active")
+          }] : [])
+        ]
+      }));
+    }
+    for (const view of localSavedViews) {
+      elements.savedViewList.append(briefingCard({
+        title: view.title,
+        description: `Private local definition updated ${relativeTime(view.updatedAt)} · live data refreshes when opened`,
         actionLabel: "Run",
         onAction: () => stageBriefingPrompt(view.prompt),
         onRemove: () => removeSavedBriefing(view.id)
@@ -1067,16 +1099,25 @@ function renderBriefingLibrary() {
     }
   }
 
-  for (const template of briefingTemplates) {
+  for (const template of templates) {
     elements.briefingTemplateList.append(briefingCard({
-      ...template,
+      title: template.title,
+      description: template.description || template.objective,
       actionLabel: "Create",
-      onAction: () => stageBriefingPrompt(template.prompt)
+      onAction: () => runPlatformBriefing({ templateKey: template.key, title: template.title })
     }));
+  }
+  if (templates.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "briefing-library-empty";
+    empty.textContent = platformLibrary.supported === false
+      ? "This AMOS server does not yet advertise governed Briefing templates."
+      : "No Briefing templates are currently available.";
+    elements.briefingTemplateList.append(empty);
   }
 }
 
-function briefingCard({ title, description, actionLabel, onAction, onRemove = null }) {
+function briefingCard({ title, description, actionLabel, onAction, onRemove = null, extraActions = [] }) {
   const card = document.createElement("article");
   card.className = "briefing-library-card";
   const copy = document.createElement("div");
@@ -1092,6 +1133,14 @@ function briefingCard({ title, description, actionLabel, onAction, onRemove = nu
   action.textContent = `${actionLabel} →`;
   action.addEventListener("click", onAction);
   actions.append(action);
+  for (const extraAction of extraActions) {
+    const secondary = document.createElement("button");
+    secondary.type = "button";
+    secondary.className = "text-button";
+    secondary.textContent = extraAction.label;
+    secondary.addEventListener("click", extraAction.onAction);
+    actions.append(secondary);
+  }
   if (onRemove) {
     const remove = document.createElement("button");
     remove.type = "button";
@@ -1115,7 +1164,10 @@ async function saveActiveBriefing() {
   setButtonBusy(elements.canvasSaveButton, true, "Saving…");
   try {
     const result = await api.saveCanvasView(activeCanvasId);
-    state.savedViews = result.savedViews || [];
+    if (result.briefings) state.briefings = result.briefings;
+    else if (result.briefing) {
+      state.briefings = { ...(state.briefings || {}), briefings: result.savedViews || [] };
+    } else state.savedViews = result.savedViews || [];
     renderBriefingLibrary();
     toast(`Saved “${result.savedView.title}”.`);
   } catch (error) {
@@ -1128,12 +1180,118 @@ async function saveActiveBriefing() {
 async function removeSavedBriefing(id) {
   try {
     const result = await api.removeSavedView(id);
-    state.savedViews = result.savedViews || [];
+    if (result.briefings) state.briefings = result.briefings;
+    else state.savedViews = result.savedViews || [];
     renderBriefingLibrary();
     toast("Saved briefing removed.");
   } catch (error) {
     toast(error.message, true);
   }
+}
+
+async function runPlatformBriefing(input) {
+  showView("operator");
+  canvasSidecarOpen = true;
+  try {
+    const result = await api.runBriefing(input);
+    state.canvases = result.canvases || state.canvases;
+    state.activeCanvasId = result.activeCanvasId || result.canvas?.id || state.activeCanvasId;
+    activeCanvasId = state.activeCanvasId;
+    renderCanvas();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function openPlatformBriefingRun(runId) {
+  showView("operator");
+  canvasSidecarOpen = true;
+  try {
+    const result = await api.openBriefingRun(runId);
+    state.canvases = result.canvases || state.canvases;
+    state.activeCanvasId = result.activeCanvasId || result.canvas?.id || state.activeCanvasId;
+    activeCanvasId = state.activeCanvasId;
+    renderCanvas();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function openBriefingScheduleModal() {
+  const canvas = (state.canvases || []).find((item) => item.id === activeCanvasId);
+  if (!canvas?.source?.briefing) return;
+  elements.briefingScheduleTitle.textContent = `Schedule “${canvas.title}”.`;
+  elements.briefingScheduleError.classList.add("hidden");
+  elements.briefingScheduleError.textContent = "";
+  renderBriefingScheduleFields();
+  elements.briefingScheduleModal.classList.remove("hidden");
+}
+
+function closeBriefingScheduleModal() {
+  elements.briefingScheduleModal.classList.add("hidden");
+}
+
+function renderBriefingScheduleFields() {
+  const kind = elements.briefingScheduleKind.value;
+  elements.briefingWeekdayField.classList.toggle("hidden", kind !== "weekly");
+  elements.briefingTimeField.classList.toggle("hidden", kind === "interval");
+  elements.briefingIntervalField.classList.toggle("hidden", kind !== "interval");
+}
+
+async function scheduleActiveBriefing(event) {
+  event.preventDefault();
+  if (!activeCanvasId) return;
+  const kind = elements.briefingScheduleKind.value;
+  const [hourUtc, minuteUtc] = elements.briefingScheduleTime.value.split(":").map(Number);
+  const cadence = kind === "interval"
+    ? { kind, everyMinutes: Number(elements.briefingScheduleInterval.value) }
+    : {
+        kind,
+        hourUtc,
+        minuteUtc,
+        ...(kind === "weekly" ? { weekday: Number(elements.briefingScheduleWeekday.value) } : {})
+      };
+  setButtonBusy(elements.briefingScheduleSubmit, true, "Saving…");
+  try {
+    const response = await api.scheduleCanvasView(activeCanvasId, cadence);
+    state.briefings = response.briefings || state.briefings;
+    closeBriefingScheduleModal();
+    renderBriefingLibrary();
+    if (pendingOperationId(response.result)) {
+      toast("Schedule saved for governed review. Approve it in Decisions to activate recurring work.");
+    } else {
+      toast("Briefing schedule is active.");
+    }
+  } catch (error) {
+    elements.briefingScheduleError.textContent = error.message;
+    elements.briefingScheduleError.classList.remove("hidden");
+  } finally {
+    setButtonBusy(elements.briefingScheduleSubmit, false, "Save schedule");
+  }
+}
+
+async function changeBriefingScheduleStatus(scheduleId, active) {
+  try {
+    const response = await api.setBriefingScheduleStatus(scheduleId, active);
+    state.briefings = response.briefings || state.briefings;
+    renderBriefingLibrary();
+    toast(pendingOperationId(response.result)
+      ? "The schedule change is waiting for governed approval."
+      : `Briefing schedule ${active ? "resumed" : "paused"}.`);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+function briefingDefinitionDescription(view, schedule) {
+  const updated = relativeTime(view.updated_at || view.updatedAt);
+  if (!schedule) return `Definition updated ${updated} · live data refreshes when run`;
+  const next = schedule.next_run_at ? ` · next ${relativeTime(schedule.next_run_at)}` : "";
+  return `${schedule.status === "active" ? "Scheduled" : "Schedule paused"}${next} · definition updated ${updated}`;
+}
+
+function pendingOperationId(value) {
+  return value?.pending_id || value?.pendingId || value?.pending_operation?.id || value?.pendingOperation?.id || null;
 }
 
 function renderCanvasSource(canvas) {

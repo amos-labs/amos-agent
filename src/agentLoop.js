@@ -12,6 +12,7 @@ const MAX_MODEL_MESSAGE_LIMIT = 120;
 const CANVAS_PRESENT_TOOL = "desktop_present_canvas";
 const COMPANY_VIEW_TOOL = "desktop_present_company_view";
 const CANVAS_UPDATE_TOOL = "desktop_update_canvas";
+const WORK_SURFACE_REQUEST_TOOL = "desktop_request_work_surface";
 
 export class AgentLoop {
   constructor({
@@ -424,6 +425,7 @@ export class AgentLoop {
   availableToolsForModel() {
     return this.registry.openAiTools().filter((tool) => {
       const name = tool?.function?.name;
+      if (name === WORK_SURFACE_REQUEST_TOOL) return true;
       if (name === CANVAS_PRESENT_TOOL) return this.canvasToolState.requested;
       if (name === COMPANY_VIEW_TOOL) return this.canvasToolState.companyOpportunity;
       if (name === CANVAS_UPDATE_TOOL) {
@@ -435,6 +437,12 @@ export class AgentLoop {
 
   observeCanvasToolOutcome({ name, result, failed }) {
     if (failed) return;
+    if (name === WORK_SURFACE_REQUEST_TOOL && result?.requested) {
+      this.canvasToolState.requested = true;
+      this.canvasToolState.companyOpportunity = true;
+      this.canvasToolState.semanticIntent = result.intent || "auto";
+      this.canvasToolState.semanticTitle = result.title || null;
+    }
     if (
       [CANVAS_PRESENT_TOOL, COMPANY_VIEW_TOOL, CANVAS_UPDATE_TOOL].includes(name) &&
       result?.canvas_id
@@ -553,7 +561,9 @@ function emptyCanvasToolState() {
     requested: false,
     updateRequested: false,
     companyOpportunity: false,
-    active: false
+    active: false,
+    semanticIntent: null,
+    semanticTitle: null
   };
 }
 

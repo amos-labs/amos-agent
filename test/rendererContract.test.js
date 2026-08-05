@@ -136,15 +136,18 @@ test("Connections HTML contains no customer or provider-specific catalog truth",
   assert.match(javascript, /api\.connectSecretProvider\(connectionSetupProvider\.provider/);
 });
 
-test("built-in Briefings stay objective-led instead of prescribing coaching", async () => {
-  const javascript = await readFile(
-    new URL("../desktop/renderer/app.js", import.meta.url),
-    "utf8"
-  );
+test("Briefings use the platform catalog and typed actions instead of Desktop prompt injection", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
 
-  assert.match(javascript, /title: "Goals and progress"/);
-  assert.match(javascript, /unless the user requested it or cited company evidence supports it/);
-  assert.match(javascript, /never describe data, an engine, or a capability as locked unless the platform explicitly reports that state/);
+  assert.match(javascript, /const platformLibrary = state\.briefings \|\| \{\}/);
+  assert.match(javascript, /api\.runBriefing\(input\)/);
+  assert.match(javascript, /templateKey: template\.key/);
+  assert.match(javascript, /api\.scheduleCanvasView\(activeCanvasId, cadence\)/);
+  assert.match(html, /Company Briefing definitions and schedules live in governed AMOS state/);
+  assert.doesNotMatch(javascript, /const briefingTemplates\s*=/);
   assert.doesNotMatch(javascript, /title: "Goals and coaching"/);
   assert.doesNotMatch(javascript, /most relevant coaching or learning intervention/);
 });

@@ -151,6 +151,52 @@ test("Desktop projects bounded tenant proof from the canonical AMOS receipt ledg
   assert.equal(receipts[0].outputs, undefined);
 });
 
+test("Desktop Briefings use only platform-owned templates, definitions, runs, and schedules", async () => {
+  const calls = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "briefing-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      calls.push(request.params);
+      const name = request.params.name;
+      const payload = name === "list_briefing_templates"
+        ? { contract_version: 1, templates: [{ key: "daily_company_brief", title: "Daily company brief" }] }
+        : name === "list_briefings"
+          ? { contract_version: 1, briefings: [{ id: "11111111-1111-4111-8111-111111111111", title: "Daily" }] }
+          : name === "run_briefing"
+            ? { run: { id: "run-1" }, result: { state: "ready" } }
+            : name === "get_briefing_run"
+              ? { definition: { title: "Daily" }, run: { id: "22222222-2222-4222-8222-222222222222" }, result: { state: "ready" } }
+            : { schedule: { id: "schedule-1", status: "active" } };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const library = await client.briefingsLibrary();
+  await client.runBriefing({ templateKey: "daily_company_brief" });
+  await client.briefingRun("22222222-2222-4222-8222-222222222222");
+  await client.scheduleBriefing(
+    "11111111-1111-4111-8111-111111111111",
+    { kind: "weekly", weekday: 2, hourUtc: 8, minuteUtc: 30 }
+  );
+
+  assert.equal(library.supported, true);
+  assert.equal(library.templates[0].key, "daily_company_brief");
+  assert.deepEqual(calls.map((call) => call.name), [
+    "list_briefing_templates", "list_briefings", "run_briefing", "get_briefing_run", "schedule_briefing"
+  ]);
+  assert.deepEqual(calls[4].arguments.cadence, {
+    kind: "weekly", weekday: 2, hour_utc: 8, minute_utc: 30
+  });
+});
+
 test("Desktop sends native human decisions only through the dedicated approval endpoint", async () => {
   const requests = [];
   const client = new DesktopRemoteStateClient(
