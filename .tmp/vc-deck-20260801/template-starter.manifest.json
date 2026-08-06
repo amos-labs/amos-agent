@@ -1,0 +1,189 @@
+{
+  "sourcePptx": "/Users/rickbarkley/SW_Projects/ai_co/amos-labs-investor-deck-raise-15-20m-v3-local-intelligence.pptx",
+  "mapPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-frame-map.json",
+  "output": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter.pptx",
+  "outputBytes": 209627,
+  "sourceSlideCount": 16,
+  "slideCount": 16,
+  "previewDir": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview",
+  "layoutDir": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout",
+  "contactSheet": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-contact-sheet.png",
+  "slides": [
+    {
+      "outputSlide": 1,
+      "sourceSlide": 1,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-01.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-01.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-01.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-01.layout.json"
+    },
+    {
+      "outputSlide": 2,
+      "sourceSlide": 2,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-02.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-02.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-02.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-02.layout.json"
+    },
+    {
+      "outputSlide": 3,
+      "sourceSlide": 3,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-03.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-03.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-03.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-03.layout.json"
+    },
+    {
+      "outputSlide": 4,
+      "sourceSlide": 4,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-04.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-04.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-04.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-04.layout.json"
+    },
+    {
+      "outputSlide": 5,
+      "sourceSlide": 5,
+      "narrativeRole": "product architecture with AMOS Desktop highlighted",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 3,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-05.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-05.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-05.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-05.layout.json"
+    },
+    {
+      "outputSlide": 6,
+      "sourceSlide": 6,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-06.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-06.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-06.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-06.layout.json"
+    },
+    {
+      "outputSlide": 7,
+      "sourceSlide": 7,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-07.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-07.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-07.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-07.layout.json"
+    },
+    {
+      "outputSlide": 8,
+      "sourceSlide": 8,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-08.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-08.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-08.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-08.layout.json"
+    },
+    {
+      "outputSlide": 9,
+      "sourceSlide": 9,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-09.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-09.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-09.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-09.layout.json"
+    },
+    {
+      "outputSlide": 10,
+      "sourceSlide": 10,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-10.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-10.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-10.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-10.layout.json"
+    },
+    {
+      "outputSlide": 11,
+      "sourceSlide": 11,
+      "narrativeRole": "current commercial traction separated from strategic pipeline",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 1,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-11.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-11.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-11.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-11.layout.json"
+    },
+    {
+      "outputSlide": 12,
+      "sourceSlide": 12,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-12.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-12.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-12.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-12.layout.json"
+    },
+    {
+      "outputSlide": 13,
+      "sourceSlide": 13,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-13.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-13.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-13.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-13.layout.json"
+    },
+    {
+      "outputSlide": 14,
+      "sourceSlide": 14,
+      "narrativeRole": "competitive position with corrected AMOS sovereign marker",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 1,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-14.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-14.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-14.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-14.layout.json"
+    },
+    {
+      "outputSlide": 15,
+      "sourceSlide": 15,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-15.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-15.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-15.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-15.layout.json"
+    },
+    {
+      "outputSlide": 16,
+      "sourceSlide": 16,
+      "narrativeRole": "preserve-only",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-preview/starter-slide-16.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-16.png",
+      "layoutPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout/starter-slide-16.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-16.layout.json"
+    }
+  ]
+}

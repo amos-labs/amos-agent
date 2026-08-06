@@ -1,0 +1,1572 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/jetc3ut0",
+    "id": "jetc3ut0",
+    "slide": 11,
+    "layoutId": "/ppt/slideLayouts/slideLayout1.xml",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#A7A7A7",
+      "lt2": "#535353",
+      "hlink": "#0000FF",
+      "folHlink": "#FF00FF"
+    },
+    "fontScheme": {
+      "name": "ChatGPT",
+      "majorFont": {
+        "latinTypeface": "Helvetica",
+        "eastAsianTypeface": "Helvetica",
+        "complexScriptTypeface": "Helvetica"
+      },
+      "minorFont": {
+        "latinTypeface": "Helvetica Neue",
+        "eastAsianTypeface": "Helvetica Neue",
+        "complexScriptTypeface": "Helvetica Neue"
+      }
+    },
+    "typefaces": [
+      "Arial",
+      "Helvetica",
+      "Helvetica Neue"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout1.xml",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout1.xml/11",
+          "id": "11",
+          "name": "Slide Number",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "geometry": "rect"
+        }
+      ]
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster1.xml",
+      "type": "master",
+      "backgroundColor": "#FFFFFF",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/2",
+          "id": "2",
+          "name": "Title Text",
+          "bbox": [
+            96,
+            193.67,
+            1088,
+            214.33
+          ],
+          "geometry": "rect",
+          "text": "Title Text",
+          "textPreview": "Title Text",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 4.8,
+              "right": 4.8,
+              "bottom": 4.8,
+              "left": 4.8
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Title Text",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Title Text"
+                }
+              ]
+            }
+          ],
+          "lineWidth": 1.33
+        },
+        {
+          "order": 2,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/3",
+          "id": "3",
+          "name": "Body Level One…",
+          "bbox": [
+            192,
+            408,
+            896,
+            312
+          ],
+          "geometry": "rect",
+          "text": "Body Level One\nBody Level Two\nBody Level Three\nBody Level Four\nBody Level Five",
+          "textPreview": "Body Level One | Body Level Two | Body Level Three | Body Level Four | Body Level Five",
+          "resolvedTextStyle": {
+            "insets": {
+              "top": 4.8,
+              "right": 4.8,
+              "bottom": 4.8,
+              "left": 4.8
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Body Level One",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level One"
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Body Level Two",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Two"
+                }
+              ]
+            },
+            {
+              "index": 3,
+              "text": "Body Level Three",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Three"
+                }
+              ]
+            },
+            {
+              "index": 4,
+              "text": "Body Level Four",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Four"
+                }
+              ]
+            },
+            {
+              "index": 5,
+              "text": "Body Level Five",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Five"
+                }
+              ]
+            }
+          ],
+          "lineWidth": 1.33
+        },
+        {
+          "order": 3,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/4",
+          "id": "4",
+          "name": "Slide Number",
+          "bbox": [
+            888.6,
+            653.2,
+            28.73,
+            28.27
+          ],
+          "geometry": "rect",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "verticalAlignment": "middle",
+            "wrap": "none",
+            "autoFit": "resizeShapeToFitText",
+            "insets": {
+              "top": 4.8,
+              "right": 4.8,
+              "bottom": 4.8,
+              "left": 4.8
+            }
+          },
+          "lineWidth": 1.33
+        }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vups76hg",
+      "id": "206",
+      "name": "eyebrow",
+      "bbox": [
+        64,
+        42,
+        700,
+        26
+      ],
+      "geometry": "rect",
+      "text": "COMMERCIAL TRACTION",
+      "textPreview": "COMMERCIAL TRACTION",
+      "resolvedFontSize": 14.67,
+      "resolvedTextStyle": {
+        "fontSize": 14.67,
+        "typeface": "Arial",
+        "color": "#7A3FF2",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "COMMERCIAL TRACTION"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "COMMERCIAL TRACTION",
+          "runs": [
+            {
+              "index": 1,
+              "text": "COMMERCIAL TRACTION"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/atgbe1gv",
+      "id": "207",
+      "name": "Live, deployed and being used before broad distribution.",
+      "bbox": [
+        64,
+        88,
+        1080,
+        66
+      ],
+      "geometry": "rect",
+      "text": "Revenue is new. The pipeline is already in the millions.",
+      "textPreview": "Revenue is new. The pipeline is already in the millions.",
+      "resolvedFontSize": 38.67,
+      "resolvedTextStyle": {
+        "fontSize": 38.67,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Revenue is new. The pipeline is already in the millions."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Revenue is new. The pipeline is already in the millions.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Revenue is new. The pipeline is already in the millions."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1sbul0zq",
+      "id": "208",
+      "name": "Public proof today",
+      "bbox": [
+        64,
+        186,
+        400,
+        30
+      ],
+      "geometry": "rect",
+      "text": "Real revenue. Real deals. Active partners.",
+      "textPreview": "Real revenue. Real deals. Active partners.",
+      "resolvedFontSize": 17.33,
+      "resolvedTextStyle": {
+        "fontSize": 17.33,
+        "typeface": "Arial",
+        "color": "#5B6474",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Real revenue. Real deals. Active partners."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Real revenue. Real deals. Active partners.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Real revenue. Real deals. Active partners."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gr2tsvy5",
+      "id": "209",
+      "name": "Rectangle",
+      "bbox": [
+        64,
+        248,
+        344,
+        246
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "tx1",
+        "alignment": "right",
+        "textTransform": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#F2F4F7",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/elczqdsb",
+      "id": "210",
+      "name": "Rectangle",
+      "bbox": [
+        468,
+        248,
+        344,
+        246
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "tx1",
+        "alignment": "right",
+        "textTransform": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#F2F4F7",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zml0zitw",
+      "id": "211",
+      "name": "Rectangle",
+      "bbox": [
+        872,
+        248,
+        344,
+        246
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "tx1",
+        "alignment": "right",
+        "textTransform": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#F2F4F7",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0nuhs3ah",
+      "id": "212",
+      "name": "SMILEWISE",
+      "bbox": [
+        92,
+        278,
+        290,
+        24
+      ],
+      "geometry": "rect",
+      "text": "REVENUE TODAY",
+      "textPreview": "REVENUE TODAY",
+      "resolvedFontSize": 14.67,
+      "resolvedTextStyle": {
+        "fontSize": 14.67,
+        "typeface": "Arial",
+        "color": "#7A3FF2",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "REVENUE TODAY"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "REVENUE TODAY",
+          "runs": [
+            {
+              "index": 1,
+              "text": "REVENUE TODAY"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1o3i18b2",
+      "id": "213",
+      "name": "Dental SaaS",
+      "bbox": [
+        92,
+        322,
+        290,
+        36
+      ],
+      "geometry": "rect",
+      "text": "$2,200 MRR",
+      "textPreview": "$2,200 MRR",
+      "resolvedFontSize": 28,
+      "resolvedTextStyle": {
+        "fontSize": 28,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "$2,200 MRR"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "$2,200 MRR",
+          "runs": [
+            {
+              "index": 1,
+              "text": "$2,200 MRR"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/qxszmtsf",
+      "id": "214",
+      "name": "Treatment-planning software using AMOS as a governed build-and-operations environment.",
+      "bbox": [
+        92,
+        378,
+        290,
+        82
+      ],
+      "geometry": "rect",
+      "text": "All added in the last month across more than eight SMB companies.",
+      "textPreview": "All added in the last month across more than eight SMB companies.",
+      "resolvedFontSize": 17.33,
+      "resolvedTextStyle": {
+        "fontSize": 17.33,
+        "typeface": "Arial",
+        "color": "#5B6474",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "All added in the last month across"
+          },
+          {
+            "index": 2,
+            "text": "more than eight SMB companies."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "All added in the last month across more than eight SMB companies.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "All added in the last month across more than eight SMB companies."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ry1gvyt0",
+      "id": "215",
+      "name": "NUVOLA ACADEMY",
+      "bbox": [
+        496,
+        278,
+        290,
+        24
+      ],
+      "geometry": "rect",
+      "text": "ACTIVE DEAL PIPELINE",
+      "textPreview": "ACTIVE DEAL PIPELINE",
+      "resolvedFontSize": 14.67,
+      "resolvedTextStyle": {
+        "fontSize": 14.67,
+        "typeface": "Arial",
+        "color": "#5B8DEF",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "ACTIVE DEAL PIPELINE"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "ACTIVE DEAL PIPELINE",
+          "runs": [
+            {
+              "index": 1,
+              "text": "ACTIVE DEAL PIPELINE"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/czuho3a5",
+      "id": "216",
+      "name": "Compliance platform",
+      "bbox": [
+        496,
+        322,
+        290,
+        36
+      ],
+      "geometry": "rect",
+      "text": "$MM+",
+      "textPreview": "$MM+",
+      "resolvedFontSize": 28,
+      "resolvedTextStyle": {
+        "fontSize": 28,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "$MM+"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "$MM+",
+          "runs": [
+            {
+              "index": 1,
+              "text": "$MM+"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d03yx8bq",
+      "id": "217",
+      "name": "A profitable public-safety training product whose marketing and finance now run through AMOS.",
+      "bbox": [
+        496,
+        378,
+        290,
+        82
+      ],
+      "geometry": "rect",
+      "text": "Includes a large-enterprise pilot; UT and life-sciences conversations remain early-stage.",
+      "textPreview": "Includes a large-enterprise pilot; UT and life-sciences conversations remain early-stage.",
+      "resolvedFontSize": 17.33,
+      "resolvedTextStyle": {
+        "fontSize": 17.33,
+        "typeface": "Arial",
+        "color": "#5B6474",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Includes a large-enterprise pilot; UT"
+          },
+          {
+            "index": 2,
+            "text": "and life-sciences conversations"
+          },
+          {
+            "index": 3,
+            "text": "remain early-stage."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Includes a large-enterprise pilot; UT and life-sciences conversations remain early-stage.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Includes a large-enterprise pilot; UT and life-sciences conversations remain early-stage."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/atwzyxsj",
+      "id": "218",
+      "name": "CHANNEL IN BUILD",
+      "bbox": [
+        900,
+        278,
+        290,
+        24
+      ],
+      "geometry": "rect",
+      "text": "PUBLIC-SECTOR WEDGE",
+      "textPreview": "PUBLIC-SECTOR WEDGE",
+      "resolvedFontSize": 14.67,
+      "resolvedTextStyle": {
+        "fontSize": 14.67,
+        "typeface": "Arial",
+        "color": "#F36C4F",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "PUBLIC-SECTOR WEDGE"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "PUBLIC-SECTOR WEDGE",
+          "runs": [
+            {
+              "index": 1,
+              "text": "PUBLIC-SECTOR WEDGE"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/bu5072t4",
+      "id": "219",
+      "name": "Construction CRM",
+      "bbox": [
+        900,
+        322,
+        290,
+        36
+      ],
+      "geometry": "rect",
+      "text": "Nuvola Academy",
+      "textPreview": "Nuvola Academy",
+      "resolvedFontSize": 28,
+      "resolvedTextStyle": {
+        "fontSize": 28,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Nuvola Academy"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Nuvola Academy",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Nuvola Academy"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7yxwzu9g",
+      "id": "220",
+      "name": "Built with an independent launch partner and designed to resell into a network of similar firms.",
+      "bbox": [
+        900,
+        378,
+        290,
+        82
+      ],
+      "geometry": "rect",
+      "text": "Multiple partners are advancing government contracts focused on law-enforcement training.",
+      "textPreview": "Multiple partners are advancing government contracts focused on law-enforcement training.",
+      "resolvedFontSize": 17.33,
+      "resolvedTextStyle": {
+        "fontSize": 17.33,
+        "typeface": "Arial",
+        "color": "#5B6474",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Multiple partners are advancing"
+          },
+          {
+            "index": 2,
+            "text": "government contracts focused on"
+          },
+          {
+            "index": 3,
+            "text": "law-enforcement training."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Multiple partners are advancing government contracts focused on law-enforcement training.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Multiple partners are advancing government contracts focused on law-enforcement training."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6xovqpsv",
+      "id": "221",
+      "name": "Live playground",
+      "bbox": [
+        64,
+        548,
+        200,
+        28
+      ],
+      "geometry": "rect",
+      "text": "8+ SMBs",
+      "textPreview": "8+ SMBs",
+      "resolvedFontSize": 22.67,
+      "resolvedTextStyle": {
+        "fontSize": 22.67,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "8+ SMBs"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "8+ SMBs",
+          "runs": [
+            {
+              "index": 1,
+              "text": "8+ SMBs"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/t0ze1krm",
+      "id": "222",
+      "name": "Real users + signups",
+      "bbox": [
+        338,
+        548,
+        230,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Large-enterprise pilot",
+      "textPreview": "Large-enterprise pilot",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Large-enterprise pilot"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Large-enterprise pilot",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Large-enterprise pilot"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sz6xsfq1",
+      "id": "223",
+      "name": "Paid acquisition live",
+      "bbox": [
+        648,
+        548,
+        240,
+        28
+      ],
+      "geometry": "rect",
+      "text": "UT + life sciences",
+      "textPreview": "UT + life sciences",
+      "resolvedFontSize": 22.67,
+      "resolvedTextStyle": {
+        "fontSize": 22.67,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "UT + life sciences"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "UT + life sciences",
+          "runs": [
+            {
+              "index": 1,
+              "text": "UT + life sciences"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/f2hw3u9s",
+      "id": "224",
+      "name": "Enterprise conversations",
+      "bbox": [
+        958,
+        548,
+        258,
+        28
+      ],
+      "geometry": "rect",
+      "text": "Partners active in every division",
+      "textPreview": "Partners active in every division",
+      "resolvedFontSize": 16.92,
+      "resolvedTextStyle": {
+        "fontSize": 20,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 0.85,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Partners active in every division"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Partners active in every division",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Partners active in every division"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/u18fup87",
+      "id": "225",
+      "name": "Line",
+      "bbox": [
+        64,
+        600,
+        1152,
+        1
+      ],
+      "geometry": "line",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "tx1",
+        "alignment": "right",
+        "textTransform": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "lineColor": "#C9CFDA",
+      "lineWidth": 2
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/h4ze54ri",
+      "id": "226",
+      "name": "AMOS LABS · CONFIDENTIAL",
+      "bbox": [
+        64,
+        670,
+        360,
+        18
+      ],
+      "geometry": "rect",
+      "text": "AMOS LABS · CONFIDENTIAL",
+      "textPreview": "AMOS LABS · CONFIDENTIAL",
+      "resolvedFontSize": 10.67,
+      "resolvedTextStyle": {
+        "fontSize": 10.67,
+        "typeface": "Arial",
+        "color": "#7B8493",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "AMOS LABS · CONFIDENTIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "AMOS LABS · CONFIDENTIAL",
+          "runs": [
+            {
+              "index": 1,
+              "text": "AMOS LABS · CONFIDENTIAL"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/g3qxwzqx",
+      "id": "227",
+      "name": "Source: amoslabs.com; founder-provided launch status",
+      "bbox": [
+        450,
+        670,
+        690,
+        18
+      ],
+      "geometry": "rect",
+      "text": "Source: founder-provided commercial status, August 2026",
+      "textPreview": "Source: founder-provided commercial status, August 2026",
+      "resolvedFontSize": 9.33,
+      "resolvedTextStyle": {
+        "fontSize": 9.33,
+        "typeface": "Arial",
+        "color": "#7B8493",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Source: founder-provided commercial status, August 2026"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Source: founder-provided commercial status, August 2026",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Source: founder-provided commercial status, August 2026"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/36hw7e9o",
+      "id": "228",
+      "name": "10",
+      "bbox": [
+        1170,
+        670,
+        44,
+        18
+      ],
+      "geometry": "rect",
+      "text": "11",
+      "textPreview": "11",
+      "resolvedFontSize": 10.67,
+      "resolvedTextStyle": {
+        "fontSize": 10.67,
+        "typeface": "Arial",
+        "color": "#7B8493",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "11"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "11",
+          "runs": [
+            {
+              "index": 1,
+              "text": "11"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    }
+  ],
+  "composeRuns": []
+}

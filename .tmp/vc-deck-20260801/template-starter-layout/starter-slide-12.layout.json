@@ -1,0 +1,1429 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/qe4g7p",
+    "id": "qe4g7p",
+    "slide": 12,
+    "layoutId": "/ppt/slideLayouts/slideLayout1.xml",
+    "layoutName": "Title Slide",
+    "layoutType": "title",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+    "backgroundColor": "#F8F9FC",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1280,
+      "height": 720
+    }
+  },
+  "theme": {
+    "colorSchemeName": "ChatGPT",
+    "colors": {
+      "accent1": "#156082",
+      "accent2": "#E97132",
+      "accent3": "#196B24",
+      "accent4": "#0F9ED5",
+      "accent5": "#A02B93",
+      "accent6": "#4EA72E",
+      "dk1": "#000000",
+      "lt1": "#FFFFFF",
+      "dk2": "#A7A7A7",
+      "lt2": "#535353",
+      "hlink": "#0000FF",
+      "folHlink": "#FF00FF"
+    },
+    "fontScheme": {
+      "name": "ChatGPT",
+      "majorFont": {
+        "latinTypeface": "Helvetica",
+        "eastAsianTypeface": "Helvetica",
+        "complexScriptTypeface": "Helvetica"
+      },
+      "minorFont": {
+        "latinTypeface": "Helvetica Neue",
+        "eastAsianTypeface": "Helvetica Neue",
+        "complexScriptTypeface": "Helvetica Neue"
+      }
+    },
+    "typefaces": [
+      "Arial",
+      "Helvetica",
+      "Helvetica Neue"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout1.xml",
+      "name": "Title Slide",
+      "type": "title",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout1.xml/11",
+          "id": "11",
+          "name": "Slide Number",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "geometry": "rect"
+        }
+      ]
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster1.xml",
+      "type": "master",
+      "backgroundColor": "#FFFFFF",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/2",
+          "id": "2",
+          "name": "Title Text",
+          "bbox": [
+            96,
+            193.67,
+            1088,
+            214.33
+          ],
+          "geometry": "rect",
+          "text": "Title Text",
+          "textPreview": "Title Text",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "verticalAlignment": "middle",
+            "insets": {
+              "top": 4.8,
+              "right": 4.8,
+              "bottom": 4.8,
+              "left": 4.8
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Title Text",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Title Text"
+                }
+              ]
+            }
+          ],
+          "lineWidth": 1.33
+        },
+        {
+          "order": 2,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/3",
+          "id": "3",
+          "name": "Body Level One…",
+          "bbox": [
+            192,
+            408,
+            896,
+            312
+          ],
+          "geometry": "rect",
+          "text": "Body Level One\nBody Level Two\nBody Level Three\nBody Level Four\nBody Level Five",
+          "textPreview": "Body Level One | Body Level Two | Body Level Three | Body Level Four | Body Level Five",
+          "resolvedTextStyle": {
+            "insets": {
+              "top": 4.8,
+              "right": 4.8,
+              "bottom": 4.8,
+              "left": 4.8
+            }
+          },
+          "paragraphs": [
+            {
+              "index": 1,
+              "text": "Body Level One",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level One"
+                }
+              ]
+            },
+            {
+              "index": 2,
+              "text": "Body Level Two",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Two"
+                }
+              ]
+            },
+            {
+              "index": 3,
+              "text": "Body Level Three",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Three"
+                }
+              ]
+            },
+            {
+              "index": 4,
+              "text": "Body Level Four",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Four"
+                }
+              ]
+            },
+            {
+              "index": 5,
+              "text": "Body Level Five",
+              "runs": [
+                {
+                  "index": 1,
+                  "text": "Body Level Five"
+                }
+              ]
+            }
+          ],
+          "lineWidth": 1.33
+        },
+        {
+          "order": 3,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/4",
+          "id": "4",
+          "name": "Slide Number",
+          "bbox": [
+            888.6,
+            653.2,
+            28.73,
+            28.27
+          ],
+          "geometry": "rect",
+          "resolvedTextStyle": {
+            "anchor": 2,
+            "verticalAlignment": "middle",
+            "wrap": "none",
+            "autoFit": "resizeShapeToFitText",
+            "insets": {
+              "top": 4.8,
+              "right": 4.8,
+              "bottom": 4.8,
+              "left": 4.8
+            }
+          },
+          "lineWidth": 1.33
+        }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6hwr2l0j",
+      "id": "232",
+      "name": "eyebrow",
+      "bbox": [
+        64,
+        42,
+        700,
+        26
+      ],
+      "geometry": "rect",
+      "text": "BUSINESS MODEL",
+      "textPreview": "BUSINESS MODEL",
+      "resolvedFontSize": 14.67,
+      "resolvedTextStyle": {
+        "fontSize": 14.67,
+        "typeface": "Arial",
+        "color": "#7A3FF2",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "BUSINESS MODEL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "BUSINESS MODEL",
+          "runs": [
+            {
+              "index": 1,
+              "text": "BUSINESS MODEL"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7i58bqho",
+      "id": "233",
+      "name": "Revenue expands as AMOS becomes more of the operating stack.",
+      "bbox": [
+        64,
+        88,
+        1080,
+        66
+      ],
+      "geometry": "rect",
+      "text": "Revenue expands as AMOS becomes more of the operating stack.",
+      "textPreview": "Revenue expands as AMOS becomes more of the operating stack.",
+      "resolvedFontSize": 33.33,
+      "resolvedTextStyle": {
+        "fontSize": 33.33,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Revenue expands as AMOS becomes more of the operating stack."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Revenue expands as AMOS becomes more of the operating stack.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Revenue expands as AMOS becomes more of the operating stack."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gny98vil",
+      "id": "234",
+      "name": "A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.",
+      "bbox": [
+        64,
+        168,
+        1010,
+        56
+      ],
+      "geometry": "rect",
+      "text": "A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.",
+      "textPreview": "A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.",
+      "resolvedFontSize": 21.33,
+      "resolvedTextStyle": {
+        "fontSize": 21.33,
+        "typeface": "Arial",
+        "color": "#5B6474",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "A recurring platform foundation, modular product expansion and metered infrastructure—all visible and"
+          },
+          {
+            "index": 2,
+            "text": "attributable to the customer."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ho7ah0z6",
+      "id": "235",
+      "name": "Rounded Rectangle",
+      "bbox": [
+        64,
+        274,
+        344,
+        294
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "tx1",
+        "alignment": "right",
+        "textTransform": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#C9CFDA",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ulwr6l0f",
+      "id": "236",
+      "name": "Rounded Rectangle",
+      "bbox": [
+        468,
+        274,
+        344,
+        294
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "tx1",
+        "alignment": "right",
+        "textTransform": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#C9CFDA",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/vmp8fqh0",
+      "id": "237",
+      "name": "Rounded Rectangle",
+      "bbox": [
+        872,
+        274,
+        344,
+        294
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Helvetica Neue",
+        "color": "tx1",
+        "alignment": "right",
+        "textTransform": "none",
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#0C1424",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wru9wri1",
+      "id": "238",
+      "name": "01",
+      "bbox": [
+        92,
+        302,
+        48,
+        22
+      ],
+      "geometry": "rect",
+      "text": "01",
+      "textPreview": "01",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#7A3FF2",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "01"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "01",
+          "runs": [
+            {
+              "index": 1,
+              "text": "01"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xs3q5wzm",
+      "id": "239",
+      "name": "Platform subscription",
+      "bbox": [
+        92,
+        348,
+        280,
+        34
+      ],
+      "geometry": "rect",
+      "text": "Platform subscription",
+      "textPreview": "Platform subscription",
+      "resolvedFontSize": 26.67,
+      "resolvedTextStyle": {
+        "fontSize": 26.67,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Platform subscription"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Platform subscription",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Platform subscription"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pkza103i",
+      "id": "240",
+      "name": "Company brain, governed actions, proof, finance and the MCP control plane.",
+      "bbox": [
+        92,
+        408,
+        270,
+        84
+      ],
+      "geometry": "rect",
+      "text": "Company brain, governed actions, proof, finance and the MCP control plane.",
+      "textPreview": "Company brain, governed actions, proof, finance and the MCP control plane.",
+      "resolvedFontSize": 17.33,
+      "resolvedTextStyle": {
+        "fontSize": 17.33,
+        "typeface": "Arial",
+        "color": "#5B6474",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Company brain, governed actions,"
+          },
+          {
+            "index": 2,
+            "text": "proof, finance and the MCP control"
+          },
+          {
+            "index": 3,
+            "text": "plane."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Company brain, governed actions, proof, finance and the MCP control plane.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Company brain, governed actions, proof, finance and the MCP control plane."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ojq9svmx",
+      "id": "241",
+      "name": "LAND",
+      "bbox": [
+        92,
+        518,
+        150,
+        20
+      ],
+      "geometry": "rect",
+      "text": "LAND",
+      "textPreview": "LAND",
+      "resolvedFontSize": 13.33,
+      "resolvedTextStyle": {
+        "fontSize": 13.33,
+        "typeface": "Arial",
+        "color": "#7A3FF2",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "LAND"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "LAND",
+          "runs": [
+            {
+              "index": 1,
+              "text": "LAND"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/nihszqlc",
+      "id": "242",
+      "name": "02",
+      "bbox": [
+        496,
+        302,
+        48,
+        22
+      ],
+      "geometry": "rect",
+      "text": "02",
+      "textPreview": "02",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#5B8DEF",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "02"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "02",
+          "runs": [
+            {
+              "index": 1,
+              "text": "02"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/2x8rql4r",
+      "id": "243",
+      "name": "Modular expansion",
+      "bbox": [
+        496,
+        348,
+        280,
+        34
+      ],
+      "geometry": "rect",
+      "text": "Modular expansion",
+      "textPreview": "Modular expansion",
+      "resolvedFontSize": 26.67,
+      "resolvedTextStyle": {
+        "fontSize": 26.67,
+        "typeface": "Arial",
+        "color": "#0B1020",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Modular expansion"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Modular expansion",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Modular expansion"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1wzaxg36",
+      "id": "244",
+      "name": "Marketing + CRM, industry modules, bespoke apps and additional teams.",
+      "bbox": [
+        496,
+        408,
+        270,
+        84
+      ],
+      "geometry": "rect",
+      "text": "Marketing + CRM, industry modules, bespoke apps and additional teams.",
+      "textPreview": "Marketing + CRM, industry modules, bespoke apps and additional teams.",
+      "resolvedFontSize": 17.33,
+      "resolvedTextStyle": {
+        "fontSize": 17.33,
+        "typeface": "Arial",
+        "color": "#5B6474",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Marketing + CRM, industry"
+          },
+          {
+            "index": 2,
+            "text": "modules, bespoke apps and"
+          },
+          {
+            "index": 3,
+            "text": "additional teams."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Marketing + CRM, industry modules, bespoke apps and additional teams.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Marketing + CRM, industry modules, bespoke apps and additional teams."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/gv69obml",
+      "id": "245",
+      "name": "EXPAND",
+      "bbox": [
+        496,
+        518,
+        150,
+        20
+      ],
+      "geometry": "rect",
+      "text": "EXPAND",
+      "textPreview": "EXPAND",
+      "resolvedFontSize": 13.33,
+      "resolvedTextStyle": {
+        "fontSize": 13.33,
+        "typeface": "Arial",
+        "color": "#5B8DEF",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "EXPAND"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "EXPAND",
+          "runs": [
+            {
+              "index": 1,
+              "text": "EXPAND"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fux8vql0",
+      "id": "246",
+      "name": "03",
+      "bbox": [
+        900,
+        302,
+        48,
+        22
+      ],
+      "geometry": "rect",
+      "text": "03",
+      "textPreview": "03",
+      "resolvedFontSize": 16,
+      "resolvedTextStyle": {
+        "fontSize": 16,
+        "typeface": "Arial",
+        "color": "#26B47E",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "03"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "03",
+          "runs": [
+            {
+              "index": 1,
+              "text": "03"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/etorml4f",
+      "id": "247",
+      "name": "Metered infrastructure",
+      "bbox": [
+        900,
+        348,
+        280,
+        34
+      ],
+      "geometry": "rect",
+      "text": "Metered + sovereign infrastructure",
+      "textPreview": "Metered + sovereign infrastructure",
+      "resolvedFontSize": 16.93,
+      "resolvedTextStyle": {
+        "fontSize": 25.33,
+        "typeface": "Arial",
+        "color": "#FFFFFF",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 0.67,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 2,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Metered + sovereign"
+          },
+          {
+            "index": 2,
+            "text": "infrastructure"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Metered + sovereign infrastructure",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Metered + sovereign infrastructure"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tsfqtg3a",
+      "id": "248",
+      "name": "Managed models, SES, compute and other cloud resources billed back with transparent usage.",
+      "bbox": [
+        900,
+        408,
+        270,
+        84
+      ],
+      "geometry": "rect",
+      "text": "Managed models, sovereign local intelligence pods, SES and compute—billed with transparent usage.",
+      "textPreview": "Managed models, sovereign local intelligence pods, SES and compute—billed with transparent usage.",
+      "resolvedFontSize": 17.33,
+      "resolvedTextStyle": {
+        "fontSize": 17.33,
+        "typeface": "Arial",
+        "color": "#C8D2E5",
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": "Managed models, sovereign local"
+          },
+          {
+            "index": 2,
+            "text": "intelligence pods, SES and"
+          },
+          {
+            "index": 3,
+            "text": "compute—billed with transparent"
+          },
+          {
+            "index": 4,
+            "text": "usage."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "Managed models, sovereign local intelligence pods, SES and compute—billed with transparent usage.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Managed models, sovereign local intelligence pods, SES and compute—billed with transparent usage."
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sr69kbmp",
+      "id": "249",
+      "name": "SCALE",
+      "bbox": [
+        900,
+        518,
+        150,
+        20
+      ],
+      "geometry": "rect",
+      "text": "SCALE",
+      "textPreview": "SCALE",
+      "resolvedFontSize": 13.33,
+      "resolvedTextStyle": {
+        "fontSize": 13.33,
+        "typeface": "Arial",
+        "color": "#26B47E",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "SCALE"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "SCALE",
+          "runs": [
+            {
+              "index": 1,
+              "text": "SCALE"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ix47uhk7",
+      "id": "250",
+      "name": "AMOS LABS · CONFIDENTIAL",
+      "bbox": [
+        64,
+        670,
+        360,
+        18
+      ],
+      "geometry": "rect",
+      "text": "AMOS LABS · CONFIDENTIAL",
+      "textPreview": "AMOS LABS · CONFIDENTIAL",
+      "resolvedFontSize": 10.67,
+      "resolvedTextStyle": {
+        "fontSize": 10.67,
+        "typeface": "Arial",
+        "color": "#7B8493",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "AMOS LABS · CONFIDENTIAL"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "AMOS LABS · CONFIDENTIAL",
+          "runs": [
+            {
+              "index": 1,
+              "text": "AMOS LABS · CONFIDENTIAL"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/jydonm1s",
+      "id": "251",
+      "name": "11",
+      "bbox": [
+        1170,
+        670,
+        44,
+        18
+      ],
+      "geometry": "rect",
+      "text": "12",
+      "textPreview": "12",
+      "resolvedFontSize": 10.67,
+      "resolvedTextStyle": {
+        "fontSize": 10.67,
+        "typeface": "Arial",
+        "color": "#7B8493",
+        "bold": true,
+        "alignment": "right",
+        "textTransform": "none",
+        "autoFit": "shrinkText",
+        "autoFitScale": 1,
+        "autoFitLineSpaceReduction": 0,
+        "insets": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        }
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "12"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "12",
+          "runs": [
+            {
+              "index": 1,
+              "text": "12"
+            }
+          ],
+          "bulletCharacter": "",
+          "marginLeft": 0,
+          "indent": 0,
+          "lineSpacingPercent": 100000
+        }
+      ],
+      "lineWidth": 1.33
+    }
+  ],
+  "composeRuns": []
+}
