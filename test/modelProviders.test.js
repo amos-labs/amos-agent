@@ -63,6 +63,20 @@ test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", (
   assert.equal(config.baseUrl, "https://app.amoslabs.com/v1");
   assert.equal(config.model, "auto");
   assert.equal(config.apiKey, "");
+  assert.equal(config.maxCompletionTokens, 32_768);
+  assert.equal(config.requestTimeoutMs, 660_000);
+});
+
+test("AMOS-hosted long-task limits remain operator configurable and bounded", () => {
+  const config = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "amos-hosted",
+    AMOS_MCP_URL: "https://app.amoslabs.com/mcp",
+    AMOS_MODEL_MAX_COMPLETION_TOKENS: "65536",
+    AMOS_MODEL_REQUEST_TIMEOUT_MS: "1200000"
+  });
+
+  assert.equal(config.maxCompletionTokens, 65_536);
+  assert.equal(config.requestTimeoutMs, 900_000);
 });
 
 test("AMOS-hosted endpoint follows a custom AMOS deployment origin", () => {

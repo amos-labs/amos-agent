@@ -6,9 +6,11 @@ import {
   selectTaskWorkflow
 } from "./workflows.js";
 
-const DEFAULT_COMPLETED_HISTORY_LIMIT = 48;
-const DEFAULT_MODEL_MESSAGE_LIMIT = 112;
-const MAX_MODEL_MESSAGE_LIMIT = 120;
+const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
+// Leave headroom below AMOS Hosted's 256-message boundary while allowing long
+// governed tasks to retain substantially more complete tool/result blocks.
+const DEFAULT_MODEL_MESSAGE_LIMIT = 224;
+const MAX_MODEL_MESSAGE_LIMIT = 240;
 const CANVAS_PRESENT_TOOL = "desktop_present_canvas";
 const COMPANY_VIEW_TOOL = "desktop_present_company_view";
 const CANVAS_UPDATE_TOOL = "desktop_update_canvas";

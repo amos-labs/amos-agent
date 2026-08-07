@@ -1,5 +1,15 @@
 import { OpenAICompatibleClient } from "./openAiCompatibleClient.js";
 
+const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
+const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
+const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 120_000;
+// Hosted tasks routinely span many governed tool cycles before a final model
+// synthesis. Keep the client outside the platform's 10-minute request window
+// so the server can return a precise outcome instead of losing a race with the
+// Desktop abort timer.
+const HOSTED_MODEL_REQUEST_TIMEOUT_MS = 660_000;
+const MAX_MODEL_REQUEST_TIMEOUT_MS = 900_000;
+
 const PROVIDERS = {
   kimi: {
     id: "kimi",
@@ -131,15 +141,15 @@ export function resolveModelConfig(env = process.env) {
     ),
     maxCompletionTokens: boundedInt(
       env.AMOS_MODEL_MAX_COMPLETION_TOKENS || env.KIMI_MAX_COMPLETION_TOKENS,
-      8192,
+      hosted ? HOSTED_MAX_COMPLETION_TOKENS : DEFAULT_MAX_COMPLETION_TOKENS,
       1,
       131_072
     ),
     requestTimeoutMs: boundedInt(
       env.AMOS_MODEL_REQUEST_TIMEOUT_MS || env.KIMI_REQUEST_TIMEOUT_MS,
-      120_000,
+      hosted ? HOSTED_MODEL_REQUEST_TIMEOUT_MS : DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
       1_000,
-      600_000
+      MAX_MODEL_REQUEST_TIMEOUT_MS
     ),
     apiKeyRequired: provider.apiKeyRequired,
     usesAmosIdentity: Boolean(provider.usesAmosIdentity),
