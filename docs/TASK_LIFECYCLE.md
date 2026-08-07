@@ -71,6 +71,14 @@ credentials, raw tool arguments, or replay authority.
 Completed tasks delete their checkpoint. Canceled, failed, or interrupted tasks
 remain visible under **Decisions**.
 
+AMOS-hosted model calls allow up to 11 minutes on Desktop, with the platform
+returning first inside that boundary. Long tasks retain up to 224 complete
+model-message blocks before compacting older tool activity and allow up to
+32,768 completion tokens. These are per-call/context limits rather than a
+license to push bulk records through a prompt: large datasets should run in a
+bounded deterministic job and return compact evidence, aggregates, and
+artifact references to the model.
+
 API-key and machine-principal sessions are intentionally not restart-resumable
 through the personal Desktop flow.
 
