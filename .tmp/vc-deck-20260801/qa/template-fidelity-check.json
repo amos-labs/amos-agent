@@ -1,0 +1,13 @@
+{
+  "status": "pass",
+  "checkedAt": "2026-08-01T22:07:28.799Z",
+  "workspace": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801",
+  "finalPptx": "/Users/rickbarkley/SW_Projects/ai_co/amos-labs-investor-deck-vc-meeting-2026-08-01.pptx",
+  "starterPptx": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter.pptx",
+  "mapPath": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-frame-map.json",
+  "starterLayoutDir": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/template-starter-layout",
+  "finalLayoutDir": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801/final-layout",
+  "editDir": "/Users/rickbarkley/SW_Projects/ai_co/amos-agent/.tmp/vc-deck-20260801",
+  "issueCount": 0,
+  "issues": []
+}

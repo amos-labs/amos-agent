@@ -1,0 +1,47 @@
+{
+  "outputSlides": [
+    { "outputSlide": 1, "sourceSlide": 1, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 2, "sourceSlide": 2, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 3, "sourceSlide": 3, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 4, "sourceSlide": 4, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    {
+      "outputSlide": 5,
+      "sourceSlide": 5,
+      "narrativeRole": "product architecture with AMOS Desktop highlighted",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        { "action": "rewrite", "sourceElementId": "sh/qto36xkf", "reason": "Make AMOS Desktop the architectural takeaway." },
+        { "action": "rewrite", "sourceElementId": "sh/ipo32dk3", "reason": "Clarify that the top layer contains interfaces, not durable company state." },
+        { "action": "rewrite", "sourceElementId": "sh/5sf2xs3u", "reason": "Add AMOS Desktop while preserving first-class external AI and MCP clients." }
+      ]
+    },
+    { "outputSlide": 6, "sourceSlide": 6, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 7, "sourceSlide": 7, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 8, "sourceSlide": 8, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 9, "sourceSlide": 9, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 10, "sourceSlide": 10, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    {
+      "outputSlide": 11,
+      "sourceSlide": 11,
+      "narrativeRole": "current commercial traction separated from strategic pipeline",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        { "action": "rewrite", "sourceElementIds": ["sh/vups76hg", "sh/atgbe1gv", "sh/1sbul0zq", "sh/0nuhs3ah", "sh/1o3i18b2", "sh/qxszmtsf", "sh/ry1gvyt0", "sh/czuho3a5", "sh/d03yx8bq", "sh/atwzyxsj", "sh/bu5072t4", "sh/7yxwzu9g", "sh/6xovqpsv", "sh/t0ze1krm", "sh/sz6xsfq1", "sh/f2hw3u9s", "sh/g3qxwzqx"], "reason": "Replace older launch examples with founder-provided August 2026 revenue, customer, pilot, education, life-sciences, and government-channel status." }
+      ]
+    },
+    { "outputSlide": 12, "sourceSlide": 12, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 13, "sourceSlide": 13, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    {
+      "outputSlide": 14,
+      "sourceSlide": 14,
+      "narrativeRole": "competitive position with corrected AMOS sovereign marker",
+      "reuseMode": "duplicate-slide",
+      "editTargets": [
+        { "action": "rewrite", "sourceElementId": "sh/0vehknex", "reason": "Match the Sovereign marker to the five other AMOS native markers." }
+      ]
+    },
+    { "outputSlide": 15, "sourceSlide": 15, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] },
+    { "outputSlide": 16, "sourceSlide": 16, "narrativeRole": "preserve-only", "reuseMode": "duplicate-slide", "editTargets": [] }
+  ],
+  "omittedSourceSlides": []
+}

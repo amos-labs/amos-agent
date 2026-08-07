@@ -1,0 +1,346 @@
+{"kind":"deck","id":"pr/u5mk13","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"","type":"master","placeholders":[{"name":"title","type":"title","textPreview":"Title Text"},{"name":"body","type":"body","textPreview":"Body Level One | Body Level Two | Body Level Three | Body Level Four | Body Level Five"},{"name":"slideNumber","type":"slideNumber"}]}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"Title Slide","type":"title","placeholders":[{"name":"slideNumber","type":"slideNumber"}]}
+{"kind":"slide","id":"sl/yci4ao","slide":1,"title":"The governed operating layer","textShapes":4}
+{"kind":"shape","id":"sh/sj2tgb65","slide":1,"name":"Rectangle","bbox":[0,0,18,720]}
+{"kind":"textbox","id":"sh/6h0be1oz","slide":1,"name":"cover-title","text":"The governed operating layer\nfor the AI-run company.","textPreview":"The governed operating layer | for the AI-run company.","textChars":52,"textLines":2,"bbox":[69.81,180,1040,230]}
+{"kind":"textbox","id":"sh/ritcn6pk","slide":1,"name":"cover-subtitle","text":"The business lives in AMOS. The AI is the operator.","textPreview":"The business lives in AMOS. The AI is the operator.","textChars":51,"textLines":1,"bbox":[66,448,800,50]}
+{"kind":"shape","id":"sh/4vitcr6t","slide":1,"name":"Line","bbox":[66,552,230,1]}
+{"kind":"textbox","id":"sh/5grulw7e","slide":1,"name":"Seed investor deck · July 2026","text":"Investor deck · July 2026","textPreview":"Investor deck · July 2026","textChars":25,"textLines":1,"bbox":[66,578,450,26]}
+{"kind":"textbox","id":"sh/it0ba183","slide":1,"name":"amoslabs.com","text":"amoslabs.com","textPreview":"amoslabs.com","textChars":12,"textLines":1,"bbox":[1038,622,176,24]}
+{"kind":"image","id":"im/onm94jet","slide":1,"name":"image.png","bbox":[64,52.09,245,67.82]}
+{"kind":"notes","id":"nt/yci4ao","slide":1,"text":"AMOS is not another AI assistant. It is the durable governed operating layer that lets changing AI models safely operate a real company.\nOpen with the category: the models change; the company context, permissions, actions and learning history stay in AMOS."}
+{"kind":"slide","id":"sl/g0lspy","slide":2,"title":"THE PROBLEM","textShapes":14}
+{"kind":"textbox","id":"sh/valgrytw","slide":2,"name":"eyebrow","text":"THE PROBLEM","textPreview":"THE PROBLEM","textChars":11,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/a9sfitsb","slide":2,"name":"AI can reason.…","text":"AI can reason.\nMost companies still can't\nlet it act.","textPreview":"AI can reason. | Most companies still can't | let it act.","textChars":53,"textLines":3,"bbox":[64,106,660,180]}
+{"kind":"textbox","id":"sh/xc3yt8b2","slide":2,"name":"Company truth is scattered across disconnected applications. Every model session starts with partial context, while consequential actions still land on a human desk.","text":"Company truth is scattered across disconnected applications. Every model session starts with partial context, while consequential actions still land on a human desk.","textPreview":"Company truth is scattered across disconnected applications. Every model session starts with partial context, while consequential actions...","textChars":165,"textLines":1,"bbox":[64,322,620,135]}
+{"kind":"shape","id":"sh/wbuxk3ah","slide":2,"name":"Line","bbox":[760,126,1,430]}
+{"kind":"textbox","id":"sh/jelgvit8","slide":2,"name":"01","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[814,128,55,40]}
+{"kind":"textbox","id":"sh/idczmdsn","slide":2,"name":"Fragmented context","text":"Fragmented context","textPreview":"Fragmented context","textChars":18,"textLines":1,"bbox":[884,128,300,36]}
+{"kind":"textbox","id":"sh/5g3yxsby","slide":2,"name":"Data, apps, documents and history live in separate silos.","text":"Data, apps, documents and history live in separate silos.","textPreview":"Data, apps, documents and history live in separate silos.","textChars":57,"textLines":1,"bbox":[884,172,300,60]}
+{"kind":"textbox","id":"sh/kfuhonat","slide":2,"name":"02","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[814,262,55,40]}
+{"kind":"textbox","id":"sh/zihgjeto","slide":2,"name":"No safe action layer","text":"No safe action layer","textPreview":"No safe action layer","textChars":20,"textLines":1,"bbox":[884,262,300,36]}
+{"kind":"textbox","id":"sh/yh8fa9sj","slide":2,"name":"Chat produces insight; humans still translate it into work.","text":"Chat produces insight; humans still translate it into work.","textPreview":"Chat produces insight; humans still translate it into work.","textChars":59,"textLines":1,"bbox":[884,306,300,60]}
+{"kind":"textbox","id":"sh/q1cfqt0z","slide":2,"name":"03","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[814,396,55,40]}
+{"kind":"textbox","id":"sh/r2lgze1k","slide":2,"name":"No durable learning","text":"No durable learning","textPreview":"No durable learning","textChars":19,"textLines":1,"bbox":[884,396,300,36]}
+{"kind":"textbox","id":"sh/c3uhsji5","slide":2,"name":"Intent, approval and outcome disappear into tickets and chats.","text":"Intent, approval and outcome disappear into tickets and chats.","textPreview":"Intent, approval and outcome disappear into tickets and chats.","textChars":62,"textLines":1,"bbox":[884,440,300,60]}
+{"kind":"textbox","id":"sh/dony1ojq","slide":2,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/epwzut0b","slide":2,"name":"02","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/g0lspy","slide":2,"text":"Lead with the practical blocker: intelligence is abundant, but context, authority and accountability are missing.\nThe opportunity is not a better chat window. It is the operating environment around the model."}
+{"kind":"slide","id":"sl/npaicb","slide":3,"title":"THE THESIS","textShapes":10}
+{"kind":"textbox","id":"sh/qtkre1oz","slide":3,"name":"eyebrow","text":"THE THESIS","textPreview":"THE THESIS","textChars":10,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/butsn65k","slide":3,"name":"Models will keep changing.","text":"Models will keep changing.","textPreview":"Models will keep changing.","textChars":26,"textLines":1,"bbox":[64,148,950,86]}
+{"kind":"textbox","id":"sh/lovud07m","slide":3,"name":"The company should not have to.","text":"Your company endures.","textPreview":"Your company endures.","textChars":21,"textLines":1,"bbox":[64,244,950,86]}
+{"kind":"textbox","id":"sh/0nmdkfq1","slide":3,"name":"AMOS holds the durable company memory, connections, rules, permissions, actions and proof. Claude, GPT, Codex—or the next great model—operates through the same governed surface.","text":"AMOS holds the durable company memory, connections, rules, permissions, actions and proof. Claude, GPT, Codex—or the next great model—operates through the same governed surface.","textPreview":"AMOS holds the durable company memory, connections, rules, permissions, actions and proof. Claude, GPT, Codex—or the next great model—ope...","textChars":177,"textLines":1,"bbox":[66,388,930,130]}
+{"kind":"shape","id":"sh/zmdcbapg","slide":3,"name":"Rounded Rectangle","bbox":[1038,158,176,346]}
+{"kind":"textbox","id":"sh/yl4bi58b","slide":3,"name":"CHANGE","text":"CHANGE","textPreview":"CHANGE","textChars":6,"textLines":1,"bbox":[1064,188,128,24]}
+{"kind":"textbox","id":"sh/dkvu907q","slide":3,"name":"the…","text":"the\nintelligence","textPreview":"the | intelligence","textChars":16,"textLines":2,"bbox":[1052,232,152,86]}
+{"kind":"shape","id":"sh/cj2tgvq5","slide":3,"name":"Line","bbox":[1074,342,108,1]}
+{"kind":"textbox","id":"sh/bytc7qpk","slide":3,"name":"KEEP","text":"KEEP","textPreview":"KEEP","textChars":4,"textLines":1,"bbox":[1064,370,128,24]}
+{"kind":"textbox","id":"sh/qxkbel8z","slide":3,"name":"the…","text":"the\ncompany","textPreview":"the | company","textChars":11,"textLines":2,"bbox":[1060,414,136,70]}
+{"kind":"textbox","id":"sh/xgful47u","slide":3,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/wf6dszq9","slide":3,"name":"03","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/npaicb","slide":3,"text":"This is the category-defining line: change the intelligence without reconnecting the company.\nModel choice becomes a feature; durable governed company context becomes the platform."}
+{"kind":"slide","id":"sl/mx7dw8","slide":4,"title":"PRODUCT IN 71 SECONDS","textShapes":9}
+{"kind":"textbox","id":"sh/32tgfipk","slide":4,"name":"eyebrow","text":"PRODUCT IN 71 SECONDS","textPreview":"PRODUCT IN 71 SECONDS","textChars":21,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/srmxsn6h","slide":4,"name":"See the complete loop…","text":"See the complete loop\n\nConnect → understand → act → approve → prove → learn","textPreview":"See the complete loop |  | Connect → understand → act → approve → prove → learn","textChars":75,"textLines":3,"bbox":[64,74.56,1040,97.44]}
+{"kind":"shape","id":"sh/dsvyls72","slide":4,"name":"Rounded Rectangle","bbox":[64,190,850,422]}
+{"kind":"shape","id":"sh/rqdgjipw","slide":4,"name":"Square","bbox":[1000,232,180,180]}
+{"kind":"textbox","id":"sh/twry987i","slide":4,"name":"WATCH","text":"WATCH","textPreview":"WATCH","textChars":5,"textLines":1,"bbox":[1000,438,180,24]}
+{"kind":"textbox","id":"sh/bqh0f690","slide":4,"name":"AMOS Launch Video","text":"AMOS Launch Video","textPreview":"AMOS Launch Video","textChars":17,"textLines":1,"bbox":[966,472,248,32]}
+{"kind":"textbox","id":"sh/ap8jm18f","slide":4,"name":"youtube.com/watch?v=KfWwN2SHEf0","text":"youtube.com/watch?v=KfWwN2SHEf0","textPreview":"youtube.com/watch?v=KfWwN2SHEf0","textChars":31,"textLines":1,"bbox":[952,516,276,45]}
+{"kind":"textbox","id":"sh/xszihgr6","slide":4,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/wrq1obql","slide":4,"name":"Source: AMOS launch video on YouTube","text":"Source: AMOS launch video on YouTube","textPreview":"Source: AMOS launch video on YouTube","textChars":36,"textLines":1,"bbox":[450,670,690,18]}
+{"kind":"textbox","id":"sh/nmx0bm94","slide":4,"name":"05","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"shape","id":"sh/2lojih8j","slide":4,"name":"Rectangle","bbox":[964,563.5,252,34]}
+{"kind":"textbox","id":"sh/pofidwra","slide":4,"name":"Open the 71-second video ↗","text":"Open the 71-second video ↗","textPreview":"Open the 71-second video ↗","textChars":26,"textLines":1,"bbox":[968.8,566.63,242.4,27.74]}
+{"kind":"image","id":"im/jmtwjypo","slide":4,"name":"image2.jpeg","bbox":[72,198,834,406]}
+{"kind":"image","id":"im/wj2x83qx","slide":4,"name":"image3.jpeg","bbox":[1008,240,164,164]}
+{"kind":"notes","id":"nt/mx7dw8","slide":4,"text":"In a live pitch, play the video here. It runs 1 minute 11 seconds.\nIf the deck is forwarded, the thumbnail button and QR code open the exact YouTube URL."}
+{"kind":"slide","id":"sl/8cvw3q","slide":5,"title":"PRODUCT ARCHITECTURE","textShapes":15}
+{"kind":"textbox","id":"sh/14jmx8ba","slide":5,"name":"eyebrow","text":"PRODUCT ARCHITECTURE","textPreview":"PRODUCT ARCHITECTURE","textChars":20,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/03a5o3ap","slide":5,"name":"Change the intelligence without reconnecting the company.","text":"Change the intelligence without reconnecting the company.","textPreview":"Change the intelligence without reconnecting the company.","textChars":57,"textLines":1,"bbox":[64,88,1080,62]}
+{"kind":"shape","id":"sh/f214vyt4","slide":5,"name":"Line","bbox":[640,227,1,57]}
+{"kind":"shape","id":"sh/ehsnmtsj","slide":5,"name":"Line","bbox":[640,420,1,57]}
+{"kind":"shape","id":"sh/dgjmt8by","slide":5,"name":"Rounded Rectangle","bbox":[120,176,1040,78]}
+{"kind":"textbox","id":"sh/sfalk3ad","slide":5,"name":"THE INTELLIGENCE","text":"THE INTELLIGENCE","textPreview":"THE INTELLIGENCE","textChars":16,"textLines":1,"bbox":[150,196,220,22]}
+{"kind":"textbox","id":"sh/reh4ryts","slide":5,"name":"Claude  ·  GPT  ·  Codex  ·  open-weight models  ·  any MCP client","text":"Claude  ·  GPT  ·  Codex  ·  open-weight models  ·  any MCP client","textPreview":"Claude  ·  GPT  ·  Codex  ·  open-weight models  ·  any MCP client","textChars":66,"textLines":1,"bbox":[410,192,690,34]}
+{"kind":"shape","id":"sh/qd83its7","slide":5,"name":"Rounded Rectangle","bbox":[82,284,1116,136]}
+{"kind":"textbox","id":"sh/5czmpob2","slide":5,"name":"AMOS CONTROL PLANE","text":"AMOS CONTROL PLANE","textPreview":"AMOS CONTROL PLANE","textChars":18,"textLines":1,"bbox":[118,308,260,22]}
+{"kind":"textbox","id":"sh/4bqlgjah","slide":5,"name":"Company memory","text":"Company memory","textPreview":"Company memory","textChars":14,"textLines":1,"bbox":[118,350,178,28]}
+{"kind":"textbox","id":"sh/uhojqp8z","slide":5,"name":"Connections","text":"Connections","textPreview":"Connections","textChars":11,"textLines":1,"bbox":[325,350,148,28]}
+{"kind":"textbox","id":"sh/vixkzu9k","slide":5,"name":"Policies","text":"Policies","textPreview":"Policies","textChars":8,"textLines":1,"bbox":[510,350,110,28]}
+{"kind":"textbox","id":"sh/gj61szq5","slide":5,"name":"Actions","text":"Actions","textPreview":"Actions","textChars":7,"textLines":1,"bbox":[660,350,105,28]}
+{"kind":"textbox","id":"sh/hkf214rq","slide":5,"name":"Approvals","text":"Approvals","textPreview":"Approvals","textChars":9,"textLines":1,"bbox":[810,350,125,28]}
+{"kind":"textbox","id":"sh/6d4jmp83","slide":5,"name":"Receipts","text":"Receipts","textPreview":"Receipts","textChars":8,"textLines":1,"bbox":[975,350,120,28]}
+{"kind":"shape","id":"sh/7edkva9o","slide":5,"name":"Rounded Rectangle","bbox":[120,478,1040,86]}
+{"kind":"textbox","id":"sh/8fm1ofq9","slide":5,"name":"THE COMPANY","text":"THE COMPANY","textPreview":"THE COMPANY","textChars":11,"textLines":1,"bbox":[150,500,190,22]}
+{"kind":"textbox","id":"sh/tgf2xkru","slide":5,"name":"CRM  ·  finance  ·  ERP  ·  documents  ·  marketing  ·  databases  ·  bespoke apps","text":"CRM  ·  finance  ·  ERP  ·  documents  ·  marketing  ·  databases  ·  bespoke apps","textPreview":"CRM  ·  finance  ·  ERP  ·  documents  ·  marketing  ·  databases  ·  bespoke apps","textChars":82,"textLines":1,"bbox":[364,496,740,40]}
+{"kind":"textbox","id":"sh/yp4ji587","slide":5,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/jqd0ra9c","slide":5,"name":"06","text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/8cvw3q","slide":5,"text":"AMOS separates intelligence from the business environment.\nThis architecture enables model choice, tenant-scoped access, sovereign deployment and durable organizational memory."}
+{"kind":"slide","id":"sl/aik29m","slide":6,"title":"THE COMPOUNDING MOAT","textShapes":17}
+{"kind":"textbox","id":"sh/mxwjuh4z","slide":6,"name":"eyebrow","text":"THE COMPOUNDING MOAT","textPreview":"THE COMPOUNDING MOAT","textChars":20,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/xo729wnm","slide":6,"name":"Every action leaves proof. Every proof improves the next action.","text":"Every action leaves proof. Every proof improves the next action.","textPreview":"Every action leaves proof. Every proof improves the next action.","textChars":64,"textLines":1,"bbox":[64,86,1100,68]}
+{"kind":"textbox","id":"sh/wnyl0rm1","slide":6,"name":"A receipt binds intent, context, policy checks, approval, evidence and outcome. Over time, that becomes governed organizational learning—not a pile of chat history.","text":"A receipt binds intent, context, policy checks, approval, evidence and outcome. Over time, that becomes governed organizational learning—not a pile of chat history.","textPreview":"A receipt binds intent, context, policy checks, approval, evidence and outcome. Over time, that becomes governed organizational learning—...","textChars":164,"textLines":1,"bbox":[64,174,1040,78]}
+{"kind":"shape","id":"sh/b2pk7m5g","slide":6,"name":"Line","bbox":[150,376,970,1]}
+{"kind":"shape","id":"sh/a1wjyh4b","slide":6,"name":"Line","bbox":[1100,365,20,11]}
+{"kind":"shape","id":"sh/ds32xsni","slide":6,"name":"Line","bbox":[1100,376,20,11]}
+{"kind":"shape","id":"sh/cru1onmx","slide":6,"name":"Circle","bbox":[122,346,60,60]}
+{"kind":"shape","id":"sh/2xszytkv","slide":6,"name":"Circle","bbox":[336,346,60,60]}
+{"kind":"shape","id":"sh/3y1grylg","slide":6,"name":"Circle","bbox":[550,346,60,60]}
+{"kind":"shape","id":"sh/4zah032l","slide":6,"name":"Circle","bbox":[764,346,60,60]}
+{"kind":"shape","id":"sh/p0jit836","slide":6,"name":"Circle","bbox":[978,346,60,60]}
+{"kind":"textbox","id":"sh/q1sz2dkr","slide":6,"name":"1","text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[122,361,60,28]}
+{"kind":"textbox","id":"sh/r2l0vilc","slide":6,"name":"2","text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[336,361,60,28]}
+{"kind":"textbox","id":"sh/c3uh4n2x","slide":6,"name":"3","text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[550,361,60,28]}
+{"kind":"textbox","id":"sh/d43ix83i","slide":6,"name":"4","text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[764,361,60,28]}
+{"kind":"textbox","id":"sh/658zq9kn","slide":6,"name":"5","text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[978,361,60,28]}
+{"kind":"textbox","id":"sh/76hgjel8","slide":6,"name":"BUILD","text":"BUILD","textPreview":"BUILD","textChars":5,"textLines":1,"bbox":[96,430,112,24]}
+{"kind":"textbox","id":"sh/badwra10","slide":6,"name":"MEASURE","text":"MEASURE","textPreview":"MEASURE","textChars":7,"textLines":1,"bbox":[306,430,120,24]}
+{"kind":"textbox","id":"sh/a94vy50f","slide":6,"name":"APPROVE + PROVE","text":"APPROVE + PROVE","textPreview":"APPROVE + PROVE","textChars":15,"textLines":1,"bbox":[506,430,150,24]}
+{"kind":"textbox","id":"sh/xcfetkjq","slide":6,"name":"LEARN","text":"LEARN","textPreview":"LEARN","textChars":5,"textLines":1,"bbox":[738,430,112,24]}
+{"kind":"textbox","id":"sh/wbmd0fi5","slide":6,"name":"IMPROVE","text":"IMPROVE","textPreview":"IMPROVE","textChars":7,"textLines":1,"bbox":[948,430,120,24]}
+{"kind":"textbox","id":"sh/nmdwna1o","slide":6,"name":"The receipt graph compounds across actions, workflows, people and outcomes.","text":"The receipt graph compounds across actions, workflows, people and outcomes.","textPreview":"The receipt graph compounds across actions, workflows, people and outcomes.","textChars":75,"textLines":1,"bbox":[216,520,850,42]}
+{"kind":"textbox","id":"sh/ml4vu503","slide":6,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/98vep0ju","slide":6,"name":"Source: amoslabs.com — governed organizational learning","text":"Source: amoslabs.com — governed organizational learning","textPreview":"Source: amoslabs.com — governed organizational learning","textChars":55,"textLines":1,"bbox":[450,670,690,18]}
+{"kind":"textbox","id":"sh/onmdwfi9","slide":6,"name":"07","text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/aik29m","slide":6,"text":"Most AI products lose the evidence trail at the end of the chat. AMOS keeps it attached to the company.\nThe compounding asset is the governed record of what was attempted, allowed, approved, executed and learned."}
+{"kind":"slide","id":"sl/jxz1ro","slide":7,"title":"LOCAL INTELLIGENCE","textShapes":14}
+{"kind":"textbox","id":"sh/765kz6dk","slide":7,"name":"eyebrow","text":"LOCAL INTELLIGENCE","textPreview":"LOCAL INTELLIGENCE","textChars":18,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/87y1sbu5","slide":7,"name":"Enterprise credibility. AI-native execution. Capital-efficient scale.","text":"The intelligence follows the company home.","textPreview":"The intelligence follows the company home.","textChars":42,"textLines":1,"bbox":[64,88,1120,66]}
+{"kind":"shape","id":"sh/98721gvq","slide":7,"name":"Line","bbox":[640,190,1,396]}
+{"kind":"textbox","id":"sh/yhwjm1c3","slide":7,"name":"RICK BARKLEY","text":"THE MECHANISM","textPreview":"THE MECHANISM","textChars":13,"textLines":1,"bbox":[64,210,440,24]}
+{"kind":"textbox","id":"sh/zi5kvmd8","slide":7,"name":"Founder & CEO","text":"Route locally. Escalate selectively.","textPreview":"Route locally. Escalate selectively.","textChars":36,"textLines":1,"bbox":[64,252,480,42]}
+{"kind":"textbox","id":"sh/kje1orut","slide":7,"name":"Built and sold enterprise software before. Now translating hands-on experience in AI infrastructure, governed workflows and autonomous research loops into a product real companies can adopt.","text":"AMOS qualifies each workflow, handles routine work on owned hardware, and escalates only the hard tail. Every escalation is receipted—and becomes a governed improvement signal.","textPreview":"AMOS qualifies each workflow, handles routine work on owned hardware, and escalates only the hard tail. Every escalation is receipted—and...","textChars":176,"textLines":1,"bbox":[64,320,500,155]}
+{"kind":"textbox","id":"sh/lkn2xwve","slide":7,"name":"“The AI is the operator. AMOS is the governed layer it operates through.”","text":"“The margin curve improves as the measured local share compounds.”","textPreview":"“The margin curve improves as the measured local share compounds.”","textChars":66,"textLines":1,"bbox":[64,506,510,64]}
+{"kind":"textbox","id":"sh/idgjylc7","slide":7,"name":"GO-TO-MARKET","text":"PROOF, NOT PROMISE","textPreview":"PROOF, NOT PROMISE","textChars":18,"textLines":1,"bbox":[704,210,440,24]}
+{"kind":"textbox","id":"sh/3epk7qds","slide":7,"name":"SMB wedge + enterprise pull","text":"120B open intelligence on owned hardware","textPreview":"120B open intelligence on owned hardware","textChars":40,"textLines":1,"bbox":[704,252,500,42]}
+{"kind":"textbox","id":"sh/d8bmxkfu","slide":7,"name":"01  Problem-led campaigns → live playground → signup","text":"01  Full GPT-OSS 120B runs on a 64 GB M1 Max—where stock full-Metal cannot.","textPreview":"01  Full GPT-OSS 120B runs on a 64 GB M1 Max—where stock full-Metal cannot.","textChars":75,"textLines":1,"bbox":[704,326,480,34]}
+{"kind":"textbox","id":"sh/s725ofe9","slide":7,"name":"02  Founder-led sales into regulated and operationally complex companies","text":"02  Local and AWS controls passed the same hidden coding tests: 3/3.","textPreview":"02  Local and AWS controls passed the same hidden coding tests: 3/3.","textChars":68,"textLines":1,"bbox":[704,386,480,58]}
+{"kind":"textbox","id":"sh/r6t4vaxo","slide":7,"name":"03  Builder/reseller path turns one vertical solution into many downstream accounts","text":"03  Bit-exact async prefetch lifted coding-prompt prefill 70%.","textPreview":"03  Bit-exact async prefetch lifted coding-prompt prefill 70%.","textChars":62,"textLines":1,"bbox":[704,470,480,58]}
+{"kind":"textbox","id":"sh/q50nm5w3","slide":7,"name":"Austin + SF commercial ambition · Portugal engineering depth + EU/sovereign expansion","text":"Target: 80–90% local by workflow · frontier escalation stays governed and receipted","textPreview":"Target: 80–90% local by workflow · frontier escalation stays governed and receipted","textChars":83,"textLines":1,"bbox":[704,556,480,56]}
+{"kind":"textbox","id":"sh/54rmtkfy","slide":7,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/43ilkfed","slide":7,"name":"13","text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/jxz1ro","slide":7,"text":"The local-intelligence program turns AMOS’s receipt graph into a compounding runtime advantage: routine work can move onto owned hardware while hard cases remain governed and receipted.\nThe 80–90% figure is a measured target by workflow, not a claim of frontier parity.\n\n[Sources]\n- https://github.com/amos-labs/amos-agent/blob/main/docs/LOCAL_120B_LIVE_BASELINE.md\n- https://github.com/amos-labs/amos-agent/blob/main/docs/EXPERT_CACHE_ZERO_COPY_RESULTS.md\n- https://github.com/amos-labs/amos-agent/pull/43\n[/Sources]"}
+{"kind":"slide","id":"sl/psks9l","slide":8,"title":"GOVERNED AUTONOMY","textShapes":13}
+{"kind":"textbox","id":"sh/gnil0ril","slide":8,"name":"eyebrow","text":"GOVERNED AUTONOMY","textPreview":"GOVERNED AUTONOMY","textChars":17,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/fm9k7mh0","slide":8,"name":"From “do this” to “pursue this goal.”","text":"From “do this” to “pursue this goal.”","textPreview":"From “do this” to “pursue this goal.”","textChars":37,"textLines":1,"bbox":[64,88,1000,72]}
+{"kind":"textbox","id":"sh/ul03yh0f","slide":8,"name":"AMOS can observe the business, propose experiments, park consequential work for approval, act within policy, measure the result and continue the loop.","text":"AMOS can observe the business, propose experiments, park consequential work for approval, act within policy, measure the result and continue the loop.","textPreview":"AMOS can observe the business, propose experiments, park consequential work for approval, act within policy, measure the result and conti...","textChars":150,"textLines":1,"bbox":[64,184,900,78]}
+{"kind":"shape","id":"sh/tkr25czu","slide":8,"name":"Line","bbox":[130,374,1010,1]}
+{"kind":"shape","id":"sh/sji1w7ip","slide":8,"name":"Circle","bbox":[112,352,44,44]}
+{"kind":"shape","id":"sh/7i9k3mh4","slide":8,"name":"Circle","bbox":[310,352,44,44]}
+{"kind":"shape","id":"sh/6hgjuh0j","slide":8,"name":"Circle","bbox":[508,352,44,44]}
+{"kind":"shape","id":"sh/5g721czy","slide":8,"name":"Circle","bbox":[706,352,44,44]}
+{"kind":"shape","id":"sh/kvy1s7id","slide":8,"name":"Circle","bbox":[904,352,44,44]}
+{"kind":"shape","id":"sh/kzqt8bi9","slide":8,"name":"Circle","bbox":[1102,352,44,44]}
+{"kind":"textbox","id":"sh/lkza1gzu","slide":8,"name":"GOAL","text":"GOAL","textPreview":"GOAL","textChars":4,"textLines":1,"bbox":[84,414,100,22]}
+{"kind":"textbox","id":"sh/yx8b610j","slide":8,"name":"OBSERVE","text":"OBSERVE","textPreview":"OBSERVE","textChars":7,"textLines":1,"bbox":[270,414,120,22]}
+{"kind":"textbox","id":"sh/jyhsz6h4","slide":8,"name":"PROPOSE","text":"PROPOSE","textPreview":"PROPOSE","textChars":7,"textLines":1,"bbox":[468,414,120,22]}
+{"kind":"textbox","id":"sh/8natcvil","slide":8,"name":"APPROVE / ACT","text":"APPROVE / ACT","textPreview":"APPROVE / ACT","textChars":13,"textLines":1,"bbox":[656,414,150,22]}
+{"kind":"textbox","id":"sh/toja5gz6","slide":8,"name":"MEASURE","text":"MEASURE","textPreview":"MEASURE","textChars":7,"textLines":1,"bbox":[866,414,120,22]}
+{"kind":"textbox","id":"sh/6lsbal0f","slide":8,"name":"CONTINUE","text":"CONTINUE","textPreview":"CONTINUE","textChars":8,"textLines":1,"bbox":[1064,414,120,22]}
+{"kind":"shape","id":"sh/7m1s3qh0","slide":8,"name":"Rounded Rectangle","bbox":[92,512,1096,86]}
+{"kind":"textbox","id":"sh/or6t0rih","slide":8,"name":"Humans set goals, budgets and boundaries.","text":"Humans set goals, budgets and boundaries.","textPreview":"Humans set goals, budgets and boundaries.","textChars":41,"textLines":1,"bbox":[124,534,470,30]}
+{"kind":"textbox","id":"sh/9sfatwzm","slide":8,"name":"Agency can tighten policy; it can never loosen it.","text":"Agency can tighten policy; it can never loosen it.","textPreview":"Agency can tighten policy; it can never loosen it.","textChars":50,"textLines":1,"bbox":[650,534,494,30]}
+{"kind":"textbox","id":"sh/rm5wzu14","slide":8,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/qlwv6pkz","slide":8,"name":"08","text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/psks9l","slide":8,"text":"This is the step beyond repeated prompts: self-directed work toward a measurable goal.\nConsequential work never self-approves. The loop parks for a human; reversible actions can run inside explicit budgets and policy."}
+{"kind":"slide","id":"sl/ri94ze","slide":9,"title":"MARKET ENTRY","textShapes":18}
+{"kind":"textbox","id":"sh/fqxo3id4","slide":9,"name":"eyebrow","text":"MARKET ENTRY","textPreview":"MARKET ENTRY","textChars":12,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/gr65cnep","slide":9,"name":"Land with one urgent workflow. Expand into the operating stack.","text":"Land with one urgent workflow. Expand into the operating stack.","textPreview":"Land with one urgent workflow. Expand into the operating stack.","textChars":63,"textLines":1,"bbox":[64,88,1080,66]}
+{"kind":"textbox","id":"sh/1sf65sva","slide":9,"name":"SMB is the fast-adoption beachhead; the same governed primitives scale into mid-market and enterprise problems.","text":"Start with a bounded pilot. Prove the outcome, then expand across workflows and the network.","textPreview":"Start with a bounded pilot. Prove the outcome, then expand across workflows and the network.","textChars":92,"textLines":1,"bbox":[64,149,980,56]}
+{"kind":"shape","id":"sh/2donexwv","slide":9,"name":"Rounded Rectangle","bbox":[64,278,256,272]}
+{"kind":"shape","id":"sh/3exo72d0","slide":9,"name":"Rounded Rectangle","bbox":[352,248,256,332]}
+{"kind":"shape","id":"sh/zih4v2t8","slide":9,"name":"Rounded Rectangle","bbox":[640,218,256,392]}
+{"kind":"shape","id":"sh/yh8n2xsn","slide":9,"name":"Rounded Rectangle","bbox":[928,188,256,452]}
+{"kind":"textbox","id":"sh/lkzmxcbe","slide":9,"name":"01","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[88,302,54,28]}
+{"kind":"textbox","id":"sh/0jq547at","slide":9,"name":"Understand","text":"Understand","textPreview":"Understand","textChars":10,"textLines":1,"bbox":[88,346,190,34]}
+{"kind":"textbox","id":"sh/bux4ritc","slide":9,"name":"Ask across finance, customers, documents and operations.","text":"Ask across finance, customers, documents and operations.","textPreview":"Ask across finance, customers, documents and operations.","textChars":56,"textLines":1,"bbox":[88,404,190,76]}
+{"kind":"textbox","id":"sh/qto3yxsr","slide":9,"name":"02","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[376,272,54,28]}
+{"kind":"textbox","id":"sh/dgfmtsb2","slide":9,"name":"Act","text":"Act","textPreview":"Act","textChars":3,"textLines":1,"bbox":[376,316,190,34]}
+{"kind":"textbox","id":"sh/cf650nax","slide":9,"name":"Create campaigns, update systems and publish—with approval.","text":"Create campaigns, update systems and publish—with approval.","textPreview":"Create campaigns, update systems and publish—with approval.","textChars":59,"textLines":1,"bbox":[376,374,190,82]}
+{"kind":"textbox","id":"sh/3qx4nit0","slide":9,"name":"03","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[664,242,54,28]}
+{"kind":"textbox","id":"sh/2po3udsf","slide":9,"name":"Automate","text":"Automate","textPreview":"Automate","textChars":8,"textLines":1,"bbox":[664,286,190,34]}
+{"kind":"textbox","id":"sh/sv21ojqd","slide":9,"name":"Run governed workflows across existing systems and bespoke apps.","text":"Run governed workflows across existing systems and bespoke apps.","textPreview":"Run governed workflows across existing systems and bespoke apps.","textChars":64,"textLines":1,"bbox":[664,344,190,86]}
+{"kind":"textbox","id":"sh/twb2xory","slide":9,"name":"04","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[952,212,54,28]}
+{"kind":"textbox","id":"sh/6tkjm987","slide":9,"name":"Own the layer","text":"Own the layer","textPreview":"Own the layer","textChars":13,"textLines":1,"bbox":[952,256,200,34]}
+{"kind":"textbox","id":"sh/rutkve9s","slide":9,"name":"Company memory, policies, proof and learning remain portable across models.","text":"Company memory, policies, proof and learning remain portable across models.","textPreview":"Company memory, policies, proof and learning remain portable across models.","textChars":75,"textLines":1,"bbox":[952,314,190,105]}
+{"kind":"textbox","id":"sh/gzm1sjqp","slide":9,"name":"SMB → MID-MARKET → ENTERPRISE","text":"SMB → MID-MARKET → ENTERPRISE","textPreview":"SMB → MID-MARKET → ENTERPRISE","textChars":29,"textLines":1,"bbox":[952,522,190,62]}
+{"kind":"textbox","id":"sh/10v21oru","slide":9,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/ex4jqt8j","slide":9,"name":"09","text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/ri94ze","slide":9,"text":"The customer can start with a single painful workflow and expand without rebuilding context or governance.\nAMOS also supports a builder path: create a vertical app once and resell it to a network of downstream businesses."}
+{"kind":"slide","id":"sl/cxmjzb","slide":10,"title":"MARKET OPPORTUNITY","textShapes":19}
+{"kind":"textbox","id":"sh/ilkzel4f","slide":10,"name":"eyebrow","text":"MARKET OPPORTUNITY","textPreview":"MARKET OPPORTUNITY","textChars":18,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/jmtg7q50","slide":10,"name":"Land with one urgent workflow. Expand into the operating stack.","text":"Beyond SaaS: building the backbone of the AI economy.","textPreview":"Beyond SaaS: building the backbone of the AI economy.","textChars":53,"textLines":1,"bbox":[64,88,1080,66]}
+{"kind":"textbox","id":"sh/4n2hgvml","slide":10,"name":"SMB is the fast-adoption beachhead; the same governed primitives scale into mid-market and enterprise problems.","text":"1M companies × $10K = $10B ARR—before infrastructure and marketplace upside.","textPreview":"1M companies × $10K = $10B ARR—before infrastructure and marketplace upside.","textChars":76,"textLines":1,"bbox":[64,149,980,56]}
+{"kind":"shape","id":"sh/5oby90n6","slide":10,"name":"Rounded Rectangle","bbox":[64,278,256,272]}
+{"kind":"shape","id":"sh/uh0fal4j","slide":10,"name":"Rounded Rectangle","bbox":[352,248,256,332]}
+{"kind":"shape","id":"sh/vitg3q54","slide":10,"name":"Rounded Rectangle","bbox":[640,218,256,392]}
+{"kind":"shape","id":"sh/wj2xcvmp","slide":10,"name":"Rounded Rectangle","bbox":[928,188,256,452]}
+{"kind":"textbox","id":"sh/hkby5gnu","slide":10,"name":"01","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[88,302,54,28]}
+{"kind":"textbox","id":"sh/mt0f6147","slide":10,"name":"Understand","text":"Operating layer","textPreview":"Operating layer","textChars":15,"textLines":1,"bbox":[88,346,190,34]}
+{"kind":"textbox","id":"sh/7u9gz65s","slide":10,"name":"Ask across finance, customers, documents and operations.","text":"70M+ U.S. + European SMBs; governed memory, actions and proof.","textPreview":"70M+ U.S. + European SMBs; governed memory, actions and proof.","textChars":62,"textLines":1,"bbox":[88,404,190,76]}
+{"kind":"textbox","id":"sh/p8z2l47a","slide":10,"name":"02","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[376,272,54,28]}
+{"kind":"textbox","id":"sh/o761cj6p","slide":10,"name":"Act","text":"Smart infrastructure","textPreview":"Smart infrastructure","textChars":20,"textLines":1,"bbox":[376,316,190,34]}
+{"kind":"textbox","id":"sh/n6x0jepk","slide":10,"name":"Create campaigns, update systems and publish—with approval.","text":"Govern cloud through MCP today; own compute + data centers when scale justifies it.","textPreview":"Govern cloud through MCP today; own compute + data centers when scale justifies it.","textChars":83,"textLines":1,"bbox":[376,374,190,82]}
+{"kind":"textbox","id":"sh/2loja9oz","slide":10,"name":"03","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[664,242,54,28]}
+{"kind":"textbox","id":"sh/1kfih47e","slide":10,"name":"Automate","text":"AMOS Protocol","textPreview":"AMOS Protocol","textChars":13,"textLines":1,"bbox":[664,286,190,34]}
+{"kind":"textbox","id":"sh/0j618z6t","slide":10,"name":"Run governed workflows across existing systems and bespoke apps.","text":"Makes capabilities discoverable, governed and billable across agents.","textPreview":"Makes capabilities discoverable, governed and billable across agents.","textChars":69,"textLines":1,"bbox":[664,344,190,86]}
+{"kind":"textbox","id":"sh/fix0fup8","slide":10,"name":"04","text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[952,212,54,28]}
+{"kind":"textbox","id":"sh/ehoj6pon","slide":10,"name":"Own the layer","text":"Marketplace","textPreview":"Marketplace","textChars":11,"textLines":1,"bbox":[952,256,200,34]}
+{"kind":"textbox","id":"sh/tgvidk72","slide":10,"name":"Company memory, policies, proof and learning remain portable across models.","text":"Builders sell connections, workflows, goal adapters and vertical apps.","textPreview":"Builders sell connections, workflows, goal adapters and vertical apps.","textChars":70,"textLines":1,"bbox":[952,314,190,105]}
+{"kind":"textbox","id":"sh/sfm14f6x","slide":10,"name":"SMB → MID-MARKET → ENTERPRISE","text":"TAKE RATE + NETWORK\n1.4% BASE PENETRATION","textPreview":"TAKE RATE + NETWORK | 1.4% BASE PENETRATION","textChars":41,"textLines":2,"bbox":[952,522,190,62]}
+{"kind":"textbox","id":"sh/lgf65k7y","slide":10,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/0vm5wfqd","slide":10,"name":"09","text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"textbox","id":"sh/zudo3aps","slide":10,"name":"tam-source","text":"Sources: U.S. SBA (2026); European Commission (2026). Illustrative case; not a forecast.","textPreview":"Sources: U.S. SBA (2026); European Commission (2026). Illustrative case; not a forecast.","textChars":88,"textLines":1,"bbox":[454.8,670,680.4,18.63]}
+{"kind":"notes","id":"nt/cxmjzb","slide":10,"text":"The customer can start with a single painful workflow and expand without rebuilding context or governance.\nAMOS also supports a builder path: create a vertical app once and resell it to a network of downstream businesses."}
+{"kind":"slide","id":"sl/ra02n5","slide":11,"title":"ALREADY RUNNING","textShapes":19}
+{"kind":"textbox","id":"sh/9cfah4fa","slide":11,"name":"eyebrow","text":"ALREADY RUNNING","textPreview":"ALREADY RUNNING","textChars":15,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/or69oze5","slide":11,"name":"Live, deployed and being used before broad distribution.","text":"Live, deployed and being used before broad distribution.","textPreview":"Live, deployed and being used before broad distribution.","textChars":56,"textLines":1,"bbox":[64,88,1080,66]}
+{"kind":"textbox","id":"sh/7m1sredo","slide":11,"name":"Public proof today","text":"Public proof today","textPreview":"Public proof today","textChars":18,"textLines":1,"bbox":[64,186,400,30]}
+{"kind":"shape","id":"sh/6lsby9w3","slide":11,"name":"Rectangle","bbox":[64,248,344,246]}
+{"kind":"shape","id":"sh/4r2psbul","slide":11,"name":"Rectangle","bbox":[468,248,344,246]}
+{"kind":"shape","id":"sh/psb6lgv6","slide":11,"name":"Rectangle","bbox":[872,248,344,246]}
+{"kind":"textbox","id":"sh/2pk7q1cf","slide":11,"name":"SMILEWISE","text":"SMILEWISE","textPreview":"SMILEWISE","textChars":9,"textLines":1,"bbox":[92,278,290,24]}
+{"kind":"textbox","id":"sh/3qtoj6d0","slide":11,"name":"Dental SaaS","text":"Dental SaaS","textPreview":"Dental SaaS","textChars":11,"textLines":1,"bbox":[92,322,290,36]}
+{"kind":"textbox","id":"sh/cvmpwvux","slide":11,"name":"Treatment-planning software using AMOS as a governed build-and-operations environment.","text":"Treatment-planning software using AMOS as a governed build-and-operations environment.","textPreview":"Treatment-planning software using AMOS as a governed build-and-operations environment.","textChars":86,"textLines":1,"bbox":[92,378,290,82]}
+{"kind":"textbox","id":"sh/dwvqp0b2","slide":11,"name":"NUVOLA ACADEMY","text":"NUVOLA ACADEMY","textPreview":"NUVOLA ACADEMY","textChars":14,"textLines":1,"bbox":[496,278,290,24]}
+{"kind":"textbox","id":"sh/qtk7ulcr","slide":11,"name":"Compliance platform","text":"Compliance platform","textPreview":"Compliance platform","textChars":19,"textLines":1,"bbox":[496,322,290,36]}
+{"kind":"textbox","id":"sh/rudonqdc","slide":11,"name":"A profitable public-safety training product whose marketing and finance now run through AMOS.","text":"A public-safety training product whose marketing and finance now run through AMOS.","textPreview":"A public-safety training product whose marketing and finance now run through AMOS.","textChars":82,"textLines":1,"bbox":[496,378,290,82]}
+{"kind":"textbox","id":"sh/0jmp0vut","slide":11,"name":"CHANNEL IN BUILD","text":"PILOT STARTS NEXT WEEK","textPreview":"PILOT STARTS NEXT WEEK","textChars":22,"textLines":1,"bbox":[900,278,290,24]}
+{"kind":"textbox","id":"sh/1kvqt0be","slide":11,"name":"Construction CRM","text":"Network operations","textPreview":"Network operations","textChars":18,"textLines":1,"bbox":[900,322,290,36]}
+{"kind":"textbox","id":"sh/9gb6d03i","slide":11,"name":"Built with an independent launch partner and designed to resell into a network of similar firms.","text":"A local franchise pilot with a defined path to wider network rollout if the measured outcome is proven.","textPreview":"A local franchise pilot with a defined path to wider network rollout if the measured outcome is proven.","textChars":103,"textLines":1,"bbox":[900,378,290,82]}
+{"kind":"textbox","id":"sh/8fipkvmx","slide":11,"name":"Live playground","text":"Live playground","textPreview":"Live playground","textChars":15,"textLines":1,"bbox":[64,548,200,28]}
+{"kind":"textbox","id":"sh/ne9obqlc","slide":11,"name":"Real users + signups","text":"Real users + signups","textPreview":"Real users + signups","textChars":20,"textLines":1,"bbox":[338,548,230,28]}
+{"kind":"textbox","id":"sh/md07il4r","slide":11,"name":"Paid acquisition live","text":"Paid acquisition live","textPreview":"Paid acquisition live","textChars":21,"textLines":1,"bbox":[648,548,240,28]}
+{"kind":"textbox","id":"sh/x4b6h03e","slide":11,"name":"Enterprise conversations","text":"Enterprise pipeline active","textPreview":"Enterprise pipeline active","textChars":26,"textLines":1,"bbox":[958,548,258,28]}
+{"kind":"shape","id":"sh/w32pofm9","slide":11,"name":"Line","bbox":[64,600,1152,1]}
+{"kind":"textbox","id":"sh/v2tofalo","slide":11,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/ahk7m543","slide":11,"name":"Source: amoslabs.com; founder-provided launch status","text":"Source: amoslabs.com; founder-provided launch status","textPreview":"Source: amoslabs.com; founder-provided launch status","textChars":52,"textLines":1,"bbox":[450,670,690,18]}
+{"kind":"textbox","id":"sh/d8765g3a","slide":11,"name":"10","text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/ra02n5","slide":11,"text":"Do not overstate traction. The strongest claim is that the product is real, live and already operating real businesses.\nReplace this slide with quantified ARR, paid accounts, activation and pipeline as the launch data matures."}
+{"kind":"slide","id":"sl/qe4g7p","slide":12,"title":"BUSINESS MODEL","textShapes":17}
+{"kind":"textbox","id":"sh/6hwr2l0j","slide":12,"name":"eyebrow","text":"BUSINESS MODEL","textPreview":"BUSINESS MODEL","textChars":14,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/7i58bqho","slide":12,"name":"Revenue expands as AMOS becomes more of the operating stack.","text":"Revenue expands as AMOS becomes more of the operating stack.","textPreview":"Revenue expands as AMOS becomes more of the operating stack.","textChars":60,"textLines":1,"bbox":[64,88,1080,66]}
+{"kind":"textbox","id":"sh/gny98vil","slide":12,"name":"A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.","text":"A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.","textPreview":"A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.","textChars":131,"textLines":1,"bbox":[64,168,1010,56]}
+{"kind":"shape","id":"sh/ho7ah0z6","slide":12,"name":"Rounded Rectangle","bbox":[64,274,344,294]}
+{"kind":"shape","id":"sh/ulwr6l0f","slide":12,"name":"Rounded Rectangle","bbox":[468,274,344,294]}
+{"kind":"shape","id":"sh/vmp8fqh0","slide":12,"name":"Rounded Rectangle","bbox":[872,274,344,294]}
+{"kind":"textbox","id":"sh/wru9wri1","slide":12,"name":"01","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[92,302,48,22]}
+{"kind":"textbox","id":"sh/xs3q5wzm","slide":12,"name":"Platform subscription","text":"Platform subscription","textPreview":"Platform subscription","textChars":21,"textLines":1,"bbox":[92,348,280,34]}
+{"kind":"textbox","id":"sh/pkza103i","slide":12,"name":"Company brain, governed actions, proof, finance and the MCP control plane.","text":"Company brain, governed actions, proof, finance and the MCP control plane.","textPreview":"Company brain, governed actions, proof, finance and the MCP control plane.","textChars":74,"textLines":1,"bbox":[92,408,270,84]}
+{"kind":"textbox","id":"sh/ojq9svmx","slide":12,"name":"LAND","text":"LAND","textPreview":"LAND","textChars":4,"textLines":1,"bbox":[92,518,150,20]}
+{"kind":"textbox","id":"sh/nihszqlc","slide":12,"name":"02","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[496,302,48,22]}
+{"kind":"textbox","id":"sh/2x8rql4r","slide":12,"name":"Modular expansion","text":"Modular expansion","textPreview":"Modular expansion","textChars":17,"textLines":1,"bbox":[496,348,280,34]}
+{"kind":"textbox","id":"sh/1wzaxg36","slide":12,"name":"Marketing + CRM, industry modules, bespoke apps and additional teams.","text":"Marketing + CRM, industry modules, bespoke apps and additional teams.","textPreview":"Marketing + CRM, industry modules, bespoke apps and additional teams.","textChars":69,"textLines":1,"bbox":[496,408,270,84]}
+{"kind":"textbox","id":"sh/gv69obml","slide":12,"name":"EXPAND","text":"EXPAND","textPreview":"EXPAND","textChars":6,"textLines":1,"bbox":[496,518,150,20]}
+{"kind":"textbox","id":"sh/fux8vql0","slide":12,"name":"03","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[900,302,48,22]}
+{"kind":"textbox","id":"sh/etorml4f","slide":12,"name":"Metered infrastructure","text":"Metered + sovereign infrastructure","textPreview":"Metered + sovereign infrastructure","textChars":34,"textLines":1,"bbox":[900,348,280,34]}
+{"kind":"textbox","id":"sh/tsfqtg3a","slide":12,"name":"Managed models, SES, compute and other cloud resources billed back with transparent usage.","text":"Managed models, sovereign local intelligence pods, SES and compute—billed with transparent usage.","textPreview":"Managed models, sovereign local intelligence pods, SES and compute—billed with transparent usage.","textChars":97,"textLines":1,"bbox":[900,408,270,84]}
+{"kind":"textbox","id":"sh/sr69kbmp","slide":12,"name":"SCALE","text":"SCALE","textPreview":"SCALE","textChars":5,"textLines":1,"bbox":[900,518,150,20]}
+{"kind":"textbox","id":"sh/ix47uhk7","slide":12,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/jydonm1s","slide":12,"name":"11","text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/qe4g7p","slide":12,"text":"The economic model aligns with customer value: start with the control plane, then expand into workflows, software and infrastructure.\nCustomers can bring their own model keys or use managed infrastructure. Cloud resources are metered and billed back."}
+{"kind":"slide","id":"sl/bfrqkn","slide":13,"title":"CAPITAL DEPLOYMENT","textShapes":17}
+{"kind":"textbox","id":"sh/b6d4v6xo","slide":13,"name":"eyebrow","text":"CAPITAL DEPLOYMENT","textPreview":"CAPITAL DEPLOYMENT","textChars":18,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/w7m5obet","slide":13,"name":"Revenue expands as AMOS becomes more of the operating stack.","text":"$15–20M converts early pull into category speed.","textPreview":"$15–20M converts early pull into category speed.","textChars":48,"textLines":1,"bbox":[64,88,1080,66]}
+{"kind":"textbox","id":"sh/x8vmxgfe","slide":13,"name":"A recurring platform foundation, modular product expansion and metered infrastructure—all visible and attributable to the customer.","text":"At $17.5M, we can deepen the platform, deliver enterprise deployments, and build repeatable distribution in parallel.","textPreview":"At $17.5M, we can deepen the platform, deliver enterprise deployments, and build repeatable distribution in parallel.","textChars":117,"textLines":1,"bbox":[64,168,1010,56]}
+{"kind":"shape","id":"sh/i94nqlwz","slide":13,"name":"Rounded Rectangle","bbox":[64,274,344,294]}
+{"kind":"shape","id":"sh/jud4zqxk","slide":13,"name":"Rounded Rectangle","bbox":[468,274,344,294]}
+{"kind":"shape","id":"sh/fyx47qds","slide":13,"name":"Rounded Rectangle","bbox":[872,274,344,294]}
+{"kind":"textbox","id":"sh/uxo3elc7","slide":13,"name":"01","text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[92,302,48,22]}
+{"kind":"textbox","id":"sh/h0fm9gvi","slide":13,"name":"Platform subscription","text":"Build + trust","textPreview":"Build + trust","textChars":13,"textLines":1,"bbox":[92,348,280,34]}
+{"kind":"textbox","id":"sh/gz6lgvud","slide":13,"name":"Company brain, governed actions, proof, finance and the MCP control plane.","text":"Product + platform — $5.0M\nSecurity + compliance — $2.0M","textPreview":"Product + platform — $5.0M | Security + compliance — $2.0M","textChars":56,"textLines":2,"bbox":[92,408,270,84]}
+{"kind":"textbox","id":"sh/7ad436dg","slide":13,"name":"LAND","text":"40% · $7.0M","textPreview":"40% · $7.0M","textChars":11,"textLines":1,"bbox":[92,518,150,20]}
+{"kind":"textbox","id":"sh/6943a1cv","slide":13,"name":"02","text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[496,302,48,22]}
+{"kind":"textbox","id":"sh/twfm5gvm","slide":13,"name":"Modular expansion","text":"Deploy + operate","textPreview":"Deploy + operate","textChars":16,"textLines":1,"bbox":[496,348,280,34]}
+{"kind":"textbox","id":"sh/sb6lcbu1","slide":13,"name":"Marketing + CRM, industry modules, bespoke apps and additional teams.","text":"FDE + customer success — $3.4M\nEnterprise onboarding — $1.0M","textPreview":"FDE + customer success — $3.4M | Enterprise onboarding — $1.0M","textChars":60,"textLines":2,"bbox":[496,408,270,84]}
+{"kind":"textbox","id":"sh/j6dkz6dk","slide":13,"name":"EXPAND","text":"25% · $4.4M","textPreview":"25% · $4.4M","textChars":11,"textLines":1,"bbox":[496,518,150,20]}
+{"kind":"textbox","id":"sh/i54361cz","slide":13,"name":"03","text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[900,302,48,22]}
+{"kind":"textbox","id":"sh/obi1g7ax","slide":13,"name":"Metered infrastructure","text":"Distribute + reserve","textPreview":"Distribute + reserve","textChars":20,"textLines":1,"bbox":[900,348,280,34]}
+{"kind":"textbox","id":"sh/9cbi9cbi","slide":13,"name":"Managed models, SES, compute and other cloud resources billed back with transparent usage.","text":"GTM + partnerships — $4.1M\nLocal intelligence + compute — $2.0M","textPreview":"GTM + partnerships — $4.1M | Local intelligence + compute — $2.0M","textChars":63,"textLines":2,"bbox":[900,408,270,84]}
+{"kind":"textbox","id":"sh/m90jexsr","slide":13,"name":"SCALE","text":"35% · $6.1M","textPreview":"35% · $6.1M","textChars":11,"textLines":1,"bbox":[900,518,150,20]}
+{"kind":"textbox","id":"sh/na9072tc","slide":13,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/wf21k7at","slide":13,"name":"11","text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/bfrqkn","slide":13,"text":"The economic model aligns with customer value: start with the control plane, then expand into workflows, software and infrastructure.\nCustomers can bring their own model keys or use managed infrastructure. Cloud resources are metered and billed back."}
+{"kind":"slide","id":"sl/vfymhb","slide":14,"title":"COMPETITIVE POSITION","textShapes":40}
+{"kind":"textbox","id":"sh/87yx0rux","slide":14,"name":"eyebrow","text":"COMPETITIVE POSITION","textPreview":"COMPETITIVE POSITION","textChars":20,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/987e9cvi","slide":14,"name":"Others provide pieces. AMOS owns the operating layer between AI and the company.","text":"Others provide pieces. AMOS owns the operating layer between AI and the company.","textPreview":"Others provide pieces. AMOS owns the operating layer between AI and the company.","textChars":80,"textLines":1,"bbox":[64,88,1120,70]}
+{"kind":"textbox","id":"sh/14bmd4v6","slide":14,"name":"CATEGORY","text":"CATEGORY","textPreview":"CATEGORY","textChars":8,"textLines":1,"bbox":[64,202,270,22]}
+{"kind":"textbox","id":"sh/gj25kzel","slide":14,"name":"CONTEXT","text":"CONTEXT","textPreview":"CONTEXT","textChars":7,"textLines":1,"bbox":[385,202,110,22]}
+{"kind":"textbox","id":"sh/fit4bed0","slide":14,"name":"ACTION","text":"ACTION","textPreview":"ACTION","textChars":6,"textLines":1,"bbox":[515,202,110,22]}
+{"kind":"textbox","id":"sh/ehkni9wf","slide":14,"name":"GOVERNANCE","text":"GOVERNANCE","textPreview":"GOVERNANCE","textChars":10,"textLines":1,"bbox":[645,202,110,22]}
+{"kind":"textbox","id":"sh/p8vmhov2","slide":14,"name":"PORTABLE","text":"PORTABLE","textPreview":"PORTABLE","textChars":8,"textLines":1,"bbox":[775,202,110,22]}
+{"kind":"textbox","id":"sh/o725ojex","slide":14,"name":"LEARNS","text":"LEARNS","textPreview":"LEARNS","textChars":6,"textLines":1,"bbox":[905,202,110,22]}
+{"kind":"shape","id":"sh/36t4fedc","slide":14,"name":"Line","bbox":[64,238,1150,1]}
+{"kind":"textbox","id":"sh/25knm9wr","slide":14,"name":"Chat assistants","text":"Chat assistants","textPreview":"Chat assistants","textChars":15,"textLines":1,"bbox":[64,266,300,30]}
+{"kind":"textbox","id":"sh/dcvmlove","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[420,264,40,34]}
+{"kind":"textbox","id":"sh/cbm5sjet","slide":14,"name":"○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[550,264,40,34]}
+{"kind":"textbox","id":"sh/uhgj6lcb","slide":14,"name":"○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[680,264,40,34]}
+{"kind":"textbox","id":"sh/vipkfqtw","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[810,264,40,34]}
+{"kind":"textbox","id":"sh/wjy18vuh","slide":14,"name":"○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[940,264,40,34]}
+{"kind":"shape","id":"sh/hk72h0b2","slide":14,"name":"Line","bbox":[64,314,1150,1]}
+{"kind":"textbox","id":"sh/ilgja5c7","slide":14,"name":"Point automation","text":"Point automation","textPreview":"Point automation","textChars":16,"textLines":1,"bbox":[64,338,300,30]}
+{"kind":"textbox","id":"sh/jmpkjats","slide":14,"name":"○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[420,336,40,34]}
+{"kind":"textbox","id":"sh/4ny1cfud","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[550,336,40,34]}
+{"kind":"textbox","id":"sh/5or2l0by","slide":14,"name":"△","text":"△","textPreview":"△","textChars":1,"textLines":1,"bbox":[680,336,40,34]}
+{"kind":"textbox","id":"sh/6p0je5cj","slide":14,"name":"○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[810,336,40,34]}
+{"kind":"textbox","id":"sh/ra9knat4","slide":14,"name":"○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[940,336,40,34]}
+{"kind":"shape","id":"sh/s3y1gze9","slide":14,"name":"Line","bbox":[64,386,1150,1]}
+{"kind":"textbox","id":"sh/t47i94fu","slide":14,"name":"Enterprise data platforms","text":"Enterprise data platforms","textPreview":"Enterprise data platforms","textChars":25,"textLines":1,"bbox":[64,410,330,30]}
+{"kind":"textbox","id":"sh/61wje9w3","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[420,408,40,34]}
+{"kind":"textbox","id":"sh/72p07exo","slide":14,"name":"△","text":"△","textPreview":"△","textChars":1,"textLines":1,"bbox":[550,408,40,34]}
+{"kind":"textbox","id":"sh/gry1kje5","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[680,408,40,34]}
+{"kind":"textbox","id":"sh/hs72dofq","slide":14,"name":"○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[810,408,40,34]}
+{"kind":"textbox","id":"sh/upgji9wz","slide":14,"name":"△","text":"△","textPreview":"△","textChars":1,"textLines":1,"bbox":[940,408,40,34]}
+{"kind":"shape","id":"sh/fqpkbexk","slide":14,"name":"Line","bbox":[64,458,1150,1]}
+{"kind":"shape","id":"sh/4vi1ojeh","slide":14,"name":"Rounded Rectangle","bbox":[48,476,1176,90]}
+{"kind":"textbox","id":"sh/pwr2hofm","slide":14,"name":"AMOS","text":"AMOS","textPreview":"AMOS","textChars":4,"textLines":1,"bbox":[78,504,300,34]}
+{"kind":"textbox","id":"sh/z2dc3ml0","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[420,500,40,34]}
+{"kind":"textbox","id":"sh/y14vuhkv","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[550,500,40,34]}
+{"kind":"textbox","id":"sh/l4vu5w36","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[680,500,40,34]}
+{"kind":"textbox","id":"sh/03mdwr2l","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[810,500,40,34]}
+{"kind":"textbox","id":"sh/bydczml4","slide":14,"name":"●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[940,500,40,34]}
+{"kind":"textbox","id":"sh/qxkvqhkj","slide":14,"name":"● native  ·  △ partial  ·  ○ not the core product","text":"● native  ·  △ partial  ·  ○ not the core product","textPreview":"● native  ·  △ partial  ·  ○ not the core product","textChars":49,"textLines":1,"bbox":[64,606,420,22]}
+{"kind":"textbox","id":"sh/d0vu1c3a","slide":14,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/czmds72p","slide":14,"name":"12","text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"textbox","id":"sh/vuxwb6l8","slide":14,"name":"SOVEREIGN","text":"SOVEREIGN","textPreview":"SOVEREIGN","textChars":9,"textLines":1,"bbox":[1035,202,110,22]}
+{"kind":"textbox","id":"sh/utov21kn","slide":14,"name":"Sovereign ○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[1070,264,40,34]}
+{"kind":"textbox","id":"sh/6psfu54v","slide":14,"name":"Sovereign ○","text":"○","textPreview":"○","textChars":1,"textLines":1,"bbox":[1070,336,40,34]}
+{"kind":"textbox","id":"sh/rq1g3a5g","slide":14,"name":"Sovereign △","text":"△","textPreview":"△","textChars":1,"textLines":1,"bbox":[1070,408,40,34]}
+{"kind":"textbox","id":"sh/sraxwfm1","slide":14,"name":"Sovereign ●","text":"●","textPreview":"●","textChars":1,"textLines":1,"bbox":[1070,500,40,34]}
+{"kind":"notes","id":"nt/vfymhb","slide":14,"text":"The competitors are not wrong; they solve narrower layers.\nAMOS is differentiated by combining durable context, governed action, portability and the receipt-driven learning loop in one operating surface."}
+{"kind":"slide","id":"sl/zk0ktb","slide":15,"title":"WHY THIS TEAM, WHY THIS ROUTE","textShapes":14}
+{"kind":"textbox","id":"sh/vi18zu9o","slide":15,"name":"eyebrow","text":"WHY THIS TEAM, WHY THIS ROUTE","textPreview":"WHY THIS TEAM, WHY THIS ROUTE","textChars":29,"textLines":1,"bbox":[64,42,700,26]}
+{"kind":"textbox","id":"sh/wjupszq9","slide":15,"name":"Enterprise credibility. AI-native execution. Capital-efficient scale.","text":"Enterprise credibility. AI-native execution. Capital-efficient scale.","textPreview":"Enterprise credibility. AI-native execution. Capital-efficient scale.","textChars":69,"textLines":1,"bbox":[64,88,1120,66]}
+{"kind":"shape","id":"sh/xk3q14ru","slide":15,"name":"Line","bbox":[640,190,1,396]}
+{"kind":"textbox","id":"sh/i5c7u98f","slide":15,"name":"RICK BARKLEY","text":"RICK BARKLEY","textPreview":"RICK BARKLEY","textChars":12,"textLines":1,"bbox":[64,210,440,24]}
+{"kind":"textbox","id":"sh/j6l83u90","slide":15,"name":"Founder & CEO","text":"Founder & CEO","textPreview":"Founder & CEO","textChars":13,"textLines":1,"bbox":[64,252,480,42]}
+{"kind":"textbox","id":"sh/k7upwzql","slide":15,"name":"Built and sold enterprise software before. Now translating hands-on experience in AI infrastructure, governed workflows and autonomous research loops into a product real companies can adopt.","text":"Built and sold enterprise software before. Now translating hands-on experience in AI infrastructure, governed workflows and autonomous research loops into a product real companies can adopt.","textPreview":"Built and sold enterprise software before. Now translating hands-on experience in AI infrastructure, governed workflows and autonomous re...","textChars":190,"textLines":1,"bbox":[64,320,500,155]}
+{"kind":"textbox","id":"sh/583q54r6","slide":15,"name":"“The AI is the operator. AMOS is the governed layer it operates through.”","text":"“The AI is the operator. AMOS is the governed layer it operates through.”","textPreview":"“The AI is the operator. AMOS is the governed layer it operates through.”","textChars":73,"textLines":1,"bbox":[64,506,510,64]}
+{"kind":"textbox","id":"sh/69c7y98b","slide":15,"name":"GO-TO-MARKET","text":"GO-TO-MARKET","textPreview":"GO-TO-MARKET","textChars":12,"textLines":1,"bbox":[704,210,440,24]}
+{"kind":"textbox","id":"sh/7a587e9w","slide":15,"name":"SMB wedge + enterprise pull","text":"SMB wedge + enterprise pull","textPreview":"SMB wedge + enterprise pull","textChars":27,"textLines":1,"bbox":[704,252,500,42]}
+{"kind":"textbox","id":"sh/h47ax8be","slide":15,"name":"01  Problem-led campaigns → live playground → signup","text":"01  Problem-led campaigns → live playground → signup","textPreview":"01  Problem-led campaigns → live playground → signup","textChars":52,"textLines":1,"bbox":[704,326,480,34]}
+{"kind":"textbox","id":"sh/g3yto3at","slide":15,"name":"02  Founder-led sales into regulated and operationally complex companies","text":"02  Founder-led sales into regulated and operationally complex companies","textPreview":"02  Founder-led sales into regulated and operationally complex companies","textChars":72,"textLines":1,"bbox":[704,386,480,58]}
+{"kind":"textbox","id":"sh/f2psvyt8","slide":15,"name":"03  Builder/reseller path turns one vertical solution into many downstream accounts","text":"03  Builder/reseller path turns one vertical solution into many downstream accounts","textPreview":"03  Builder/reseller path turns one vertical solution into many downstream accounts","textChars":83,"textLines":1,"bbox":[704,470,480,58]}
+{"kind":"textbox","id":"sh/u1wbmtsn","slide":15,"name":"Austin + SF commercial ambition · Portugal engineering depth + EU/sovereign expansion","text":"Engineering across SF · Austin · Lisbon | US HQ: Austin · European HQ + EU/sovereign expansion: Lisbon","textPreview":"Engineering across SF · Austin · Lisbon | US HQ: Austin · European HQ + EU/sovereign expansion: Lisbon","textChars":102,"textLines":1,"bbox":[704,556,480,56]}
+{"kind":"textbox","id":"sh/p87a1sba","slide":15,"name":"AMOS LABS · CONFIDENTIAL","text":"AMOS LABS · CONFIDENTIAL","textPreview":"AMOS LABS · CONFIDENTIAL","textChars":24,"textLines":1,"bbox":[64,670,360,18]}
+{"kind":"textbox","id":"sh/47ytsnap","slide":15,"name":"13","text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[1170,670,44,18]}
+{"kind":"notes","id":"nt/zk0ktb","slide":15,"text":"The story is not labor arbitrage. Portugal provides exceptional engineering talent, capital-efficient building and a credible European/sovereign path.\nThe funnel is measurable end-to-end: campaign message, landing page, playground, signup and onboarding campaign."}
+{"kind":"slide","id":"sl/encdnv","slide":16,"title":"The governed operating layer","textShapes":10}
+{"kind":"textbox","id":"sh/4vu58ba9","slide":16,"name":"Build the governed operating layer…","text":"The governed operating layer\nevery company needs.","textPreview":"The governed operating layer | every company needs.","textChars":49,"textLines":2,"bbox":[64,150,1020,152]}
+{"kind":"textbox","id":"sh/5w3mhgbu","slide":16,"name":"Seeking a seed lead to scale product, distribution and enterprise readiness.","text":"Raising $15–20M to turn early pull into the category-defining governed operating layer.","textPreview":"Raising $15–20M to turn early pull into the category-defining governed operating layer.","textChars":87,"textLines":1,"bbox":[64,338,930,50]}
+{"kind":"shape","id":"sh/itc361sj","slide":16,"name":"Rounded Rectangle","bbox":[64,458,330,102]}
+{"kind":"shape","id":"sh/jul4f6t4","slide":16,"name":"Rounded Rectangle","bbox":[424,458,330,102]}
+{"kind":"shape","id":"sh/wral4rad","slide":16,"name":"Rounded Rectangle","bbox":[784,458,430,102]}
+{"kind":"textbox","id":"sh/xs3mdwby","slide":16,"name":"PRODUCT","text":"PRODUCT","textPreview":"PRODUCT","textChars":7,"textLines":1,"bbox":[88,480,120,20]}
+{"kind":"textbox","id":"sh/aps321s7","slide":16,"name":"Harden autonomy + enterprise controls","text":"Harden product + enterprise trust","textPreview":"Harden product + enterprise trust","textChars":33,"textLines":1,"bbox":[88,512,270,30]}
+{"kind":"textbox","id":"sh/vq14bmts","slide":16,"name":"DISTRIBUTION","text":"DISTRIBUTION","textPreview":"DISTRIBUTION","textChars":12,"textLines":1,"bbox":[448,480,140,20]}
+{"kind":"textbox","id":"sh/gne5gvah","slide":16,"name":"Scale campaigns, sales + channels","text":"Turn pilots into repeatable expansion","textPreview":"Turn pilots into repeatable expansion","textChars":37,"textLines":1,"bbox":[448,512,270,30]}
+{"kind":"textbox","id":"sh/1onmp0b2","slide":16,"name":"ROUND SIGNAL","text":"ROUND SIGNAL","textPreview":"ROUND SIGNAL","textChars":12,"textLines":1,"bbox":[808,480,140,20]}
+{"kind":"textbox","id":"sh/bip8fud4","slide":16,"name":"Active Capital interested in participating, subject to a lead","text":"$15–20M · seeking lead · Active Capital follow-on interest","textPreview":"$15–20M · seeking lead · Active Capital follow-on interest","textChars":58,"textLines":1,"bbox":[808,512,395.22,34]}
+{"kind":"textbox","id":"sh/qhg76pcz","slide":16,"name":"amoslabs.com  ·  app.amoslabs.com/playground","text":"amoslabs.com  ·  app.amoslabs.com/playground","textPreview":"amoslabs.com  ·  app.amoslabs.com/playground","textChars":44,"textLines":1,"bbox":[690,628,524,24]}
+{"kind":"textbox","id":"sh/dkrqh4va","slide":16,"name":"email-link","text":"Rick Barkley · rick@amoslabs.com","textPreview":"Rick Barkley · rick@amoslabs.com","textChars":32,"textLines":1,"bbox":[68.8,628,420.4,27.74]}
+{"kind":"image","id":"im/pc7uh0n6","slide":16,"name":"image.png","bbox":[64,46.17,230,63.67]}
+{"kind":"notes","id":"nt/encdnv","slide":16,"text":"Close by asking for a next meeting, not generic feedback.\nActive Capital interest is non-binding and contingent on securing a lead. Do not describe it as committed capital.\nAdd the exact round size and milestone plan once finalized."}
