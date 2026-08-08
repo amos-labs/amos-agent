@@ -4,6 +4,7 @@ import {
   aggregateIntegrationResults,
   buildIntegrationPrompt,
   evaluateAnswer,
+  expandIntegrationCases,
   parseStructuredAnswer,
   summarizeCaseResult
 } from "../src/research/knowledgeIntegration.js";
@@ -60,4 +61,24 @@ test("summary distinguishes missing knowledge, integration failure, and recovery
   assert.equal(aggregate.baseline_conditional_accuracy, 0);
   assert.equal(aggregate.assisted_conditional_accuracy, 1);
   assert.equal(aggregate.recovery_rate, 1);
+});
+
+test("counterfactual variants inherit atomic probes and replace the integration target", () => {
+  const expanded = expandIntegrationCases([{
+    id: "lease",
+    category: "temporal",
+    atomic: [{ id: "fencing", prompt: "probe", expected_label: "YES" }],
+    integration: { prompt: "base", expected_label: "B" },
+    variants: [{
+      id: "no-fencing",
+      integration: { prompt: "variant", expected_label: "A" }
+    }]
+  }]);
+  assert.equal(expanded.length, 2);
+  assert.equal(expanded[0].family_id, "lease");
+  assert.equal(expanded[0].variant_id, "base");
+  assert.equal(expanded[1].id, "lease--no-fencing");
+  assert.equal(expanded[1].atomic[0].id, "fencing");
+  assert.equal(expanded[1].integration.prompt, "variant");
+  assert.equal(expanded[1].integration.expected_label, "A");
 });

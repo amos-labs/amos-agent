@@ -79,3 +79,38 @@ at least one of:
 The next target is 50 audited cases across at least five categories. Development
 failures used to design the engine must remain separate from the later frozen
 evaluation set.
+
+## 2026-08-08 — counterfactual development pass
+
+Version 1 added five paired families in which one isolated condition changes
+the correct answer: fencing enforcement, diagnostic-test independence,
+collider selection, consumer idempotency, and current policy/receipt authority.
+The five base cases and five counterfactuals were run through both arms.
+
+| Metric | Result |
+| --- | ---: |
+| Total combined cases | 10 |
+| Cases passing every atomic probe | 8/10 |
+| Baseline conditional integration accuracy | 8/8 |
+| Assisted conditional integration accuracy | 8/8 |
+| Baseline paired-family consistency | 5/5 |
+| Assisted paired-family consistency | 4/5 |
+| Atomic-eligible integration failures | 0 |
+
+The assisted inconsistency was not a wrong final choice. Its longer prompt used
+the complete 768-token allowance in the model's reasoning channel and returned
+no final content on the no-fencing counterfactual. This is an integration-cost
+failure and reinforces the need to measure completion budgets, retry policy,
+and wall time rather than quality alone.
+
+The two ineligible cases belonged to the same fencing family. GPT-OSS answered
+that an expired-lease process could not resume and issue a write, while also
+correctly answering a near-equivalent probe that lease expiry does not
+physically stop paused code. The first probe has been rewritten to separate
+physical possibility from authorization. The observed inconsistency remains a
+useful development finding but is not promoted into the frozen score.
+
+The second pass again found that compact, explicit multiple-choice scenarios
+are too easy. The next development pool must use longer dependency structures,
+distributed evidence, intermediate-state scoring, misleading but individually
+true facts, and transfer to a surface form not used by the atomic probes.

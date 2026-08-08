@@ -57,6 +57,29 @@ export function buildIntegrationPrompt(testCase, atomicResults) {
   ].join("\n");
 }
 
+export function expandIntegrationCases(cases) {
+  return cases.flatMap((testCase) => {
+    const base = {
+      ...testCase,
+      family_id: testCase.id,
+      variant_id: "base"
+    };
+    delete base.variants;
+    const variants = (testCase.variants || []).map((variant) => ({
+      ...testCase,
+      id: `${testCase.id}--${variant.id}`,
+      family_id: testCase.id,
+      variant_id: variant.id,
+      integration: {
+        ...testCase.integration,
+        ...variant.integration
+      }
+    }));
+    for (const variant of variants) delete variant.variants;
+    return [base, ...variants];
+  });
+}
+
 export function summarizeCaseResult({ atomicResults, baseline, assisted }) {
   const atomicPassed = atomicResults.filter((result) => result.evaluation.passed).length;
   const atomicMaximum = atomicResults.length;
@@ -84,6 +107,24 @@ export function aggregateIntegrationResults(cases) {
   ).length;
   const failures = eligible.filter((item) => item.summary.integration_failure);
   const recovered = failures.filter((item) => item.summary.integration_recovered).length;
+  const families = new Map();
+  for (const item of cases) {
+    const familyId = item.family_id || item.id;
+    const family = families.get(familyId) || [];
+    family.push(item);
+    families.set(familyId, family);
+  }
+  const variantFamilies = [...families.values()].filter((family) => family.length > 1);
+  const baselineConsistentFamilies = variantFamilies.filter((family) =>
+    family.every((item) => item.summary.baseline_passed)
+  ).length;
+  const assistedConsistentFamilies = variantFamilies.filter((family) =>
+    family.every((item) => item.summary.assisted_passed === true)
+  ).length;
+  const baselineEmptyResponses = cases.filter((item) => !item.baseline?.response?.trim()).length;
+  const assistedEmptyResponses = cases.filter(
+    (item) => item.assisted && !item.assisted.response?.trim()
+  ).length;
   return {
     total_cases: cases.length,
     atomic_eligible_cases: eligible.length,
@@ -91,7 +132,12 @@ export function aggregateIntegrationResults(cases) {
     assisted_conditional_accuracy: ratio(assistedPassed, assistedEvaluated.length),
     observed_integration_failures: failures.length,
     recovered_integration_failures: recovered,
-    recovery_rate: ratio(recovered, failures.length)
+    recovery_rate: ratio(recovered, failures.length),
+    variant_families: variantFamilies.length,
+    baseline_variant_consistency: ratio(baselineConsistentFamilies, variantFamilies.length),
+    assisted_variant_consistency: ratio(assistedConsistentFamilies, variantFamilies.length),
+    baseline_empty_responses: baselineEmptyResponses,
+    assisted_empty_responses: assistedEmptyResponses
   };
 }
 

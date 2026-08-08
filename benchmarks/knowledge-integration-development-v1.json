@@ -1,0 +1,188 @@
+{
+  "schema": "amos.knowledge-integration-suite",
+  "version": 1,
+  "status": "development",
+  "description": "Counterfactual case families for discovering atomic-pass and combined-fail behavior. This is not a frozen evaluation set.",
+  "cases": [
+    {
+      "id": "stale-writer-fencing",
+      "category": "temporal-distributed-systems",
+      "atomic": [
+        {
+          "id": "lease-expiry",
+          "prompt": "Ignoring what the process is authorized to do, is it physically possible for an OS-paused process to resume and issue a write after its distributed lease expired? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "monotonic-fencing",
+          "prompt": "Can a storage service reject stale writers by requiring every accepted write to carry a fencing token greater than the last accepted token? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "lease-is-not-revocation",
+          "prompt": "Does expiry of a coordination-service lease physically revoke credentials or stop code already running in a paused client? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "NO"
+        }
+      ],
+      "integration": {
+        "prompt": "Worker L obtains lease token 41 and pauses for 90 seconds. Its lease expires. Worker N obtains token 42 and writes value N. Worker L then resumes and attempts to write value L with token 41. The storage service atomically rejects any token that is not greater than its last accepted token. What is the final result? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: L overwrites N because it writes last; B: L is rejected and N remains; C: both values are accepted; D: lease expiry makes the result unknowable.",
+        "expected_label": "B",
+        "required_reason_terms": ["41", "42", "reject"]
+      },
+      "variants": [
+        {
+          "id": "no-storage-fencing",
+          "integration": {
+            "prompt": "Worker L obtains lease token 41 and pauses for 90 seconds. Its lease expires. Worker N obtains token 42 and writes value N. Worker L then resumes and writes value L. The storage service does not inspect fencing tokens and uses ordinary last-write-wins behavior. What is the final result? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: L overwrites N because it writes last; B: L is rejected and N remains; C: both writes are rejected; D: lease expiry physically stops L.",
+            "expected_label": "A",
+            "required_reason_terms": ["last", "no fencing"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "correlated-diagnostic-evidence",
+      "category": "bayesian-causal",
+      "atomic": [
+        {
+          "id": "likelihood-independence",
+          "prompt": "When combining two diagnostic test results, is multiplying their likelihood ratios justified without adjustment only when the results are conditionally independent given disease state? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "shared-error",
+          "prompt": "If two tests use the same biomarker and calibration pipeline, can their errors be strongly correlated? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "base-rate",
+          "prompt": "Can a low prior prevalence keep the probability of disease after a positive test far below the test's sensitivity? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "A rare condition has 1% prevalence. Two software tests each report 90% sensitivity and 95% specificity, but both derive their result from the same sensor and the same calibration model; an audit says their false positives are strongly correlated. Both tests are positive. Which conclusion is justified from the supplied data? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: disease probability is exactly 77%; B: disease probability is exactly 95%; C: the tests prove disease; D: an exact combined posterior cannot be computed by treating the positives as independent.",
+        "expected_label": "D",
+        "required_reason_terms": ["correlat", "independent"]
+      },
+      "variants": [
+        {
+          "id": "independent-labs",
+          "integration": {
+            "prompt": "A rare condition has 1% prevalence. Two laboratories use conditionally independent assays. Each has 90% sensitivity and 95% specificity. Both tests are positive. Assuming the stated conditional independence, which is closest to the posterior probability of disease? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: 15%; B: 50%; C: 77%; D: 95%.",
+            "expected_label": "C",
+            "required_reason_terms": ["independent", "77"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "collider-selection",
+      "category": "causal-transfer",
+      "atomic": [
+        {
+          "id": "collider-conditioning",
+          "prompt": "Can conditioning on a common effect of two otherwise independent causes induce an association between those causes? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "association-causality",
+          "prompt": "Does an observed negative association by itself prove that increasing one variable causally decreases the other? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "NO"
+        },
+        {
+          "id": "selection-common-effect",
+          "prompt": "If admission occurs when either technical skill or influential connections are high, is admission a common effect of skill and connections? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "In the full applicant population, technical skill and influential connections are independently distributed. A selective program admits applicants when either skill is very high or connections are very strong. Among admitted applicants, analysts observe that stronger connections predict lower technical skill. What is the best interpretation? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: connections reduce skill biologically; B: skill destroys connections; C: conditioning on admission can induce the negative association; D: the original independence statement is mathematically impossible.",
+        "expected_label": "C",
+        "required_reason_terms": ["admission", "condition"]
+      },
+      "variants": [
+        {
+          "id": "unselected-population",
+          "integration": {
+            "prompt": "In the full applicant population, technical skill and influential connections are independently distributed. Analysts now measure every applicant rather than conditioning on admission. Under the stated data-generating process, what association should they expect before sampling error? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: strong negative; B: strong positive; C: perfect inverse relationship; D: no association.",
+            "expected_label": "D",
+            "required_reason_terms": ["independent"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "transactional-outbox-replay",
+      "category": "temporal-tool-work",
+      "atomic": [
+        {
+          "id": "atomic-outbox",
+          "prompt": "Can writing a business record and an outbox event in one database transaction prevent the record from committing without its event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "publisher-crash",
+          "prompt": "Can an outbox publisher that crashes after sending but before marking an event sent publish that event again after restart? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "consumer-idempotency",
+          "prompt": "Can a consumer keyed by event ID suppress repeated side effects from duplicate deliveries of the same event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "A transaction commits order O and outbox event E together. The publisher sends E, then crashes before marking E sent. After restart it sends E again. The downstream consumer records processed event IDs atomically with its effect and E was already recorded on the first delivery. What outcome follows? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: order O disappears; B: two downstream effects must occur; C: E may be delivered twice but the downstream effect occurs once; D: the outbox prevents the second delivery.",
+        "expected_label": "C",
+        "required_reason_terms": ["twice", "once"]
+      },
+      "variants": [
+        {
+          "id": "non-idempotent-consumer",
+          "integration": {
+            "prompt": "A transaction commits order O and outbox event E together. The publisher sends E, then crashes before marking E sent. After restart it sends E again. The downstream consumer performs the side effect on every delivery and stores no event ID or idempotency key. What outcome is possible? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: order O disappears; B: the downstream side effect occurs twice; C: the outbox makes the consumer idempotent; D: the second delivery is impossible.",
+            "expected_label": "B",
+            "required_reason_terms": ["duplicate", "non-idempot"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "current-authority-and-receipt",
+      "category": "authority-temporal-integration",
+      "atomic": [
+        {
+          "id": "current-policy",
+          "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "receipt-over-prose",
+          "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "pending-state",
+          "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "A cache says campaigns above $2,000 need approval. The currently authenticated policy response says campaigns above $1,000 need approval. A $1,500 campaign tool call returns {\"proposal_id\":\"P9\",\"status\":\"pending_approval\",\"executed\":false}. The draft assistant prose says 'campaign launched.' What is accurate? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: launched because the cached threshold controls; B: launched because prose is newer; C: proposal P9 is pending and the campaign did not execute; D: no proposal exists.",
+        "expected_label": "C",
+        "required_reason_terms": ["current", "pending", "not execute"]
+      },
+      "variants": [
+        {
+          "id": "current-policy-allows-execution",
+          "integration": {
+            "prompt": "A cache says campaigns above $1,000 need approval. The currently authenticated policy response says campaigns above $2,000 need approval. A $1,500 campaign tool call returns {\"campaign_id\":\"C9\",\"status\":\"executed\",\"executed\":true}. Older draft prose says 'waiting for approval.' What is accurate? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: still pending because the cache controls; B: campaign C9 executed under the current policy; C: both pending and executed; D: no campaign exists.",
+            "expected_label": "B",
+            "required_reason_terms": ["current", "executed"]
+          }
+        }
+      ]
+    }
+  ]
+}

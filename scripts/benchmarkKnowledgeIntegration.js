@@ -6,6 +6,7 @@ import { performance } from "node:perf_hooks";
 import {
   aggregateIntegrationResults,
   buildIntegrationPrompt,
+  expandIntegrationCases,
   evaluateAnswer,
   summarizeCaseResult
 } from "../src/research/knowledgeIntegration.js";
@@ -34,7 +35,9 @@ if (!model) {
 }
 
 const suite = JSON.parse(await readFile(suitePath, "utf8"));
-const selectedCases = suite.cases.filter((item) => only.size === 0 || only.has(item.id));
+const selectedCases = expandIntegrationCases(suite.cases).filter((item) =>
+  only.size === 0 || only.has(item.id) || only.has(item.family_id)
+);
 const results = [];
 
 for (const testCase of selectedCases) {
@@ -68,6 +71,8 @@ for (const testCase of selectedCases) {
 
   results.push({
     id: testCase.id,
+    family_id: testCase.family_id,
+    variant_id: testCase.variant_id,
     category: testCase.category,
     atomic: atomicResults,
     baseline,
@@ -111,15 +116,18 @@ async function chat(prompt) {
     options: { temperature: 0, num_ctx: contextLength, num_predict: maxTokens }
   };
   const payload = await postJson(endpoint, body, timeoutMs);
-  const content = protocol === "openai"
-    ? payload?.choices?.[0]?.message?.content
-    : payload?.message?.content;
+  const choice = protocol === "openai" ? payload?.choices?.[0] : null;
+  const message = protocol === "openai" ? choice?.message : payload?.message;
+  const content = message?.content;
+  const reasoning = message?.reasoning_content || message?.reasoning || "";
   return {
     content: String(content || ""),
     timing: {
       wall_seconds: (performance.now() - started) / 1000,
       prompt_tokens: payload?.prompt_eval_count || payload?.usage?.prompt_tokens || null,
-      completion_tokens: payload?.eval_count || payload?.usage?.completion_tokens || null
+      completion_tokens: payload?.eval_count || payload?.usage?.completion_tokens || null,
+      finish_reason: choice?.finish_reason || payload?.done_reason || null,
+      reasoning_characters: String(reasoning).length
     }
   };
 }
