@@ -1,0 +1,154 @@
+{
+  "schema": "amos.knowledge-integration-suite",
+  "version": 0,
+  "status": "diagnostic",
+  "description": "Initial hand-authored fixtures for validating the atomic-knowledge versus integration benchmark contract.",
+  "cases": [
+    {
+      "id": "retry-storm",
+      "category": "cross-domain-causal",
+      "atomic": [
+        {
+          "id": "queue-overload",
+          "prompt": "When requests arrive at a service faster than it can complete them for a sustained period, does its queue tend to shrink or grow? Return only JSON: {\"label\":\"SHRINKS_OR_GROWS\"}.",
+          "expected_label": "GROWS"
+        },
+        {
+          "id": "synchronized-retries",
+          "prompt": "When thousands of failed clients retry at exactly the same fixed interval, are their next requests spread out or synchronized? Return only JSON: {\"label\":\"SPREAD_OR_SYNCHRONIZED\"}.",
+          "expected_label": "SYNCHRONIZED"
+        },
+        {
+          "id": "jitter",
+          "prompt": "Does adding random jitter to exponential retry backoff make retry timing more synchronized or less synchronized? Return only JSON: {\"label\":\"MORE_OR_LESS_SYNCHRONIZED\"}.",
+          "expected_label": "LESS_SYNCHRONIZED"
+        }
+      ],
+      "integration": {
+        "prompt": "A dependency slows below its normal service rate. Every client immediately retries failures every two seconds with no limit. Traffic spikes become increasingly sharp and the dependency never recovers even though original user traffic is falling. Which intervention best addresses the feedback loop? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: increase retry frequency; B: exponential backoff with jitter and a retry budget; C: synchronize all clients to a longer fixed interval; D: remove request timeouts.",
+        "expected_label": "B",
+        "required_reason_terms": ["retry", "jitter"]
+      }
+    },
+    {
+      "id": "duplicate-charge",
+      "category": "distributed-systems",
+      "atomic": [
+        {
+          "id": "at-least-once",
+          "prompt": "Can an at-least-once delivery system deliver the same message more than once? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "non-idempotent",
+          "prompt": "If the same non-idempotent charge operation executes twice, can it create two charges? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "idempotency-key",
+          "prompt": "Can a server-side idempotency key let repeated identical payment requests return one recorded result without charging again? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "A worker reads payment commands from an at-least-once queue. It charges the card successfully, crashes before acknowledging the message, then receives the message again. What is the most direct correctness control? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: acknowledge before processing; B: use a server-enforced idempotency key tied to the payment command; C: increase worker concurrency; D: retry the charge more quickly.",
+        "expected_label": "B",
+        "required_reason_terms": ["duplicate", "idempot"]
+      }
+    },
+    {
+      "id": "base-rate-test",
+      "category": "quantitative-composition",
+      "atomic": [
+        {
+          "id": "true-positives",
+          "prompt": "In 10,000 people, a condition has 1% prevalence and a test has 90% sensitivity. How many true positives are expected? Return only JSON: {\"label\":\"NUMBER\"}.",
+          "expected_label": "90"
+        },
+        {
+          "id": "false-positives",
+          "prompt": "Among 9,900 people without a condition, a test has a 5% false-positive rate. How many false positives are expected? Return only JSON: {\"label\":\"NUMBER\"}.",
+          "expected_label": "495"
+        }
+      ],
+      "integration": {
+        "prompt": "A condition has 1% prevalence. A test has 90% sensitivity and 95% specificity. For a randomly selected person who tests positive, which is closest to the probability they actually have the condition? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: 1%; B: 15%; C: 50%; D: 90%.",
+        "expected_label": "B",
+        "required_reason_terms": ["false", "positive"]
+      }
+    },
+    {
+      "id": "approval-is-not-outcome-label",
+      "category": "causal-governance",
+      "atomic": [
+        {
+          "id": "selection-bias",
+          "prompt": "If humans selectively review only unusual or high-risk proposals, is the reviewed set a random sample of all proposals? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "NO"
+        },
+        {
+          "id": "approval-causality",
+          "prompt": "By itself, does a human approval prove that a proposed action caused a later favorable business outcome? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "NO"
+        },
+        {
+          "id": "correction-signal",
+          "prompt": "Can a human edit reveal a preference about a proposal without proving that every unchanged part was optimal? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "AMOS has receipts showing that humans approved 80% of reviewed campaign proposals and revenue later rose for many approved campaigns. The reviewed proposals were disproportionately novel and high-risk, and seasonality was not controlled. Which training rule is justified? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: treat every approval as a fully correct causal label; B: treat every revenue increase as caused by the model; C: retain approvals, edits, and outcomes as separate evidence with selection and attribution limits; D: discard every reviewed example.",
+        "expected_label": "C",
+        "required_reason_terms": ["selection", "caus"]
+      }
+    },
+    {
+      "id": "pending-is-not-executed",
+      "category": "temporal-state-integration",
+      "atomic": [
+        {
+          "id": "receipt-state",
+          "prompt": "A tool receipt says executed=false and status=pending_approval. Has the consequential action executed? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "NO"
+        },
+        {
+          "id": "proposal-state",
+          "prompt": "Can a proposal exist while its proposed consequential action has not yet executed? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "A model called create_campaign. The tool returned {\"proposal_id\":\"p-42\",\"status\":\"pending_approval\",\"executed\":false}. Which report is accurate? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: the campaign was launched; B: the campaign was created and is already live; C: proposal p-42 was staged and the campaign awaits approval without execution; D: the tool failed and created nothing.",
+        "expected_label": "C",
+        "required_reason_terms": ["approval", "not executed"]
+      }
+    },
+    {
+      "id": "cache-thrashing",
+      "category": "systems-composition",
+      "atomic": [
+        {
+          "id": "working-set",
+          "prompt": "If a repeatedly accessed working set is much larger than available fast memory and access has weak locality, is cache miss pressure generally low or high? Return only JSON: {\"label\":\"LOW_OR_HIGH\"}.",
+          "expected_label": "HIGH"
+        },
+        {
+          "id": "duplicate-cache",
+          "prompt": "On a memory-constrained system, can copying file-backed data into a second application cache increase total memory pressure? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        },
+        {
+          "id": "prefetch-locality",
+          "prompt": "Is prefetch most useful when future accesses have enough predictability to overlap useful I/O with computation? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+          "expected_label": "YES"
+        }
+      ],
+      "integration": {
+        "prompt": "A sparse model uses file-backed expert weights on unified memory. A new LRU copies every recently used expert into separate application-owned slots. The routed working set remains larger than RAM, route locality is weak, and swap increases. What is the best interpretation? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: the LRU must help because every cache improves locality; B: duplicated residency can worsen pressure, so retain direct views and test bounded predictive prefetch; C: copy wider cold expert blocks; D: disable routing and execute every expert.",
+        "expected_label": "B",
+        "required_reason_terms": ["duplicat", "pressure"]
+      }
+    }
+  ]
+}

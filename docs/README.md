@@ -19,6 +19,8 @@
 ## Product direction
 
 - [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)
+- [Local frontier intelligence research roadmap](LOCAL_FRONTIER_INTELLIGENCE_ROADMAP.md)
+- [Knowledge integration experimental results](KNOWLEDGE_INTEGRATION_RESULTS.md)
 - [ExpertCache research boundary](EXPERTCACHE.md)
 - [AMOS model program](AMOS_MODEL_PROGRAM.md)
 
