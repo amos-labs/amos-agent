@@ -149,10 +149,22 @@ Build a versioned benchmark in which every integration case contains:
   counterfactual, or tool planning; and
 - latency, generated-token, and inference-pass accounting.
 
-The primary metric is **conditional integration accuracy**: combined-task
-accuracy on the subset where all required atomic probes passed. Report atomic
-coverage separately. Never claim an integration failure when the prerequisite
-knowledge was not recovered.
+Atomic recovery must be reliable rather than a one-prompt recognition event.
+Development cases should use repeated probes and semantically equivalent
+surface forms. A frozen case declares its atomic reliability threshold before
+the combined-task run.
+
+The primary cross-model metric uses the same full-suite denominator. Also report
+**conditional integration accuracy** on the subset where the target model
+reliably recovered all required atomic components, but label that subset as a
+within-model diagnostic because different models may qualify different cases.
+Never infer cross-model parity from model-specific conditional denominators.
+
+Stage B0 contains a deliberately small **elicited-note arm**: independently
+probe components, pass the raw responses back without evaluator feedback, and
+ask the model to reconcile them. This tests activation and externalization but
+is not the full integration engine. It provides a lower-complexity control for
+Stage B1.
 
 ### Stage B1 — inference-time integration engine
 
@@ -170,6 +182,20 @@ Start without training:
 
 The workspace contains model beliefs, not AMOS facts or authority. Company
 truth continues to come from current authenticated state and receipts.
+
+The explicit workspace engine must be evaluated separately from the
+elicited-note control. Its working graph should expose claims, dependencies,
+conflicts, open questions, predicted consequences, and verification outcomes;
+simply appending correct atomic answers to the final prompt does not satisfy
+this stage.
+
+Engine v0 uses a gated, schema-constrained workspace. Every elicited probe must
+appear as evidence, every derived claim must name its claim dependencies, and
+every claim must distinguish its origin from its applicability to the exact
+problem. Structural validation and repair may use parser errors, missing-probe
+coverage, and dangling-reference errors, but never answer-key feedback. A final
+answer produced from an invalid workspace does not count as a workspace-arm
+success.
 
 ### Stage B2 — distillation
 
@@ -199,7 +225,8 @@ Every benchmark release should compare at least:
 | Arm | Question answered |
 | --- | --- |
 | Resident 20B baseline | What does ordinary local decoding achieve? |
-| Resident 20B + explicit integration | How much recoverable knowledge can a better inference procedure unlock? |
+| Resident 20B + raw elicited notes | Does component activation alone improve composition? |
+| Resident 20B + explicit workspace integration | How much do relation construction, reconciliation, prediction, and verification add beyond elicitation? |
 | ExpertCache 120B | How much does additional compressed capacity contribute? |
 | 20B integration + 120B verification | Do the two research directions compound? |
 | Qualified frontier control | What practical gap remains? |
@@ -207,7 +234,9 @@ Every benchmark release should compare at least:
 Required measurements include atomic coverage, conditional integration
 accuracy, verified task outcome, consistency, latency, tokens, memory, thermal
 state, and escalation rate. Raw-model, scaffolded-system, and governed-product
-results remain separate columns.
+results remain separate columns. Model version, reasoning effort, completion
+budget, stage-specific reasoning budget, structural repairs, and empty-final
+behavior are experimental treatments, not incidental settings.
 
 ## Milestones and gates
 
@@ -215,7 +244,7 @@ results remain separate columns.
 | --- | --- | --- |
 | M0 | Thesis, roadmap, and benchmark contract | Claims and boundaries reviewed; benchmark schema versioned |
 | M1 | Integration benchmark v0 | At least 50 audited cases across five categories, with atomic and combined evaluators |
-| M2 | Explicit integration engine v0 | Statistically useful lift in conditional integration accuracy with full latency accounting |
+| M2 | Explicit integration engine v0 | Paired lift over both baseline and elicited-note controls on a frozen denominator, with a 95% interval and full latency accounting |
 | M3 | ExpertCache speculative verifier | Acceptance-adjusted workflow latency beats the resident-plus-existing-review control |
 | M4 | Combined local controller | 20B integration + local 120B review closes at least half the measured resident-to-frontier gap on selected workflows |
 | M5 | Distilled integration controller | Retains most measured lift with fewer passes and acceptable interactive latency |
@@ -249,5 +278,9 @@ result and redirects the next experiment.
 - Publish negative results and inference cost alongside gains.
 - Treat stronger-model judgments as labels only when independently audited or
   deterministically verified.
+- Never expose evaluator pass/fail status, expected labels, or hidden rationale
+  checks to an intervention arm.
+- Pre-register the primary denominator and paired analysis before running the
+  final comparison models; conditional subsets remain diagnostic.
 - Require tenant consent and isolation before operational traces enter any
   training corpus.

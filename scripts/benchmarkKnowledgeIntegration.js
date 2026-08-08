@@ -5,10 +5,17 @@ import https from "node:https";
 import { performance } from "node:perf_hooks";
 import {
   aggregateIntegrationResults,
+  atomicPrompts,
   buildIntegrationPrompt,
+  buildWorkspaceIntegrationPrompt,
+  buildWorkspacePrompt,
+  buildWorkspaceRepairPrompt,
   expandIntegrationCases,
   evaluateAnswer,
-  summarizeCaseResult
+  parseWorkspace,
+  summarizeCaseResult,
+  validateIntegrationSuite,
+  workspaceJsonSchema
 } from "../src/research/knowledgeIntegration.js";
 
 const args = process.argv.slice(2);
@@ -25,29 +32,75 @@ const only = new Set((readOption(args, "--only") || "").split(",").filter(Boolea
 const timeoutMs = boundedInteger(readOption(args, "--request-timeout-seconds"), 30, 7200, 600) * 1000;
 const maxTokens = boundedInteger(readOption(args, "--max-tokens"), 32, 4096, 768);
 const contextLength = boundedInteger(readOption(args, "--context"), 4096, 131072, 32768);
+const reasoningEffort = normalizeReasoningEffort(readOption(args, "--reasoning-effort"));
+const reasoningBudget = optionalBoundedInteger(
+  readOption(args, "--reasoning-budget"),
+  0,
+  8192
+);
+const workspaceReasoningEffort = normalizeReasoningEffort(
+  readOption(args, "--workspace-reasoning-effort")
+) || reasoningEffort;
+const workspaceReasoningBudget = optionalBoundedInteger(
+  readOption(args, "--workspace-reasoning-budget"),
+  0,
+  8192
+) ?? reasoningBudget;
+const workspaceMaxTokens = boundedInteger(
+  readOption(args, "--workspace-max-tokens"),
+  32,
+  8192,
+  maxTokens
+);
+const workspaceMaxRepairs = boundedInteger(
+  readOption(args, "--workspace-max-repairs"),
+  0,
+  3,
+  1
+);
 
 if (!model) {
   console.error(
-    "Usage: npm run benchmark:integration -- MODEL [--arm baseline|assisted|all] " +
-    "[--protocol ollama|openai] [--url URL] [--only ID,...] [--output REPORT.json]"
+    "Usage: npm run benchmark:integration -- MODEL [--arm baseline|elicited|workspace|all] " +
+    "[--protocol ollama|openai] [--url URL] [--reasoning-effort none|low|medium|high] " +
+    "[--reasoning-budget N] [--workspace-reasoning-effort none|low|medium|high] " +
+    "[--workspace-reasoning-budget N] [--workspace-max-tokens N] [--workspace-max-repairs N] " +
+    "[--atomic-repetitions N] [--atomic-pass-threshold 0.5-1] " +
+    "[--only ID,...] [--output REPORT.json]"
   );
   process.exit(2);
 }
 
-const suite = JSON.parse(await readFile(suitePath, "utf8"));
+const suite = validateIntegrationSuite(JSON.parse(await readFile(suitePath, "utf8")));
+const atomicRepetitions = boundedInteger(
+  readOption(args, "--atomic-repetitions") || suite.atomic_repetitions,
+  1,
+  10,
+  1
+);
+const atomicPassThreshold = boundedNumber(
+  readOption(args, "--atomic-pass-threshold") || suite.atomic_pass_threshold,
+  0.5,
+  1,
+  1
+);
 const selectedCases = expandIntegrationCases(suite.cases).filter((item) =>
   only.size === 0 || only.has(item.id) || only.has(item.family_id)
 );
+if (selectedCases.length === 0) {
+  throw new Error(`No benchmark cases matched --only=${[...only].join(",")}`);
+}
 const results = [];
+const atomicFamilies = new Map();
 
 for (const testCase of selectedCases) {
   console.log(`\n=== ${testCase.id} ===`);
-  const atomicResults = [];
-  for (const probe of testCase.atomic) {
-    const response = await chat(probe.prompt);
-    const evaluation = evaluateAnswer(response.content, probe);
-    atomicResults.push({ id: probe.id, response: response.content, evaluation, timing: response.timing });
-    console.log(`  ${evaluation.passed ? "✓" : "✗"} atomic ${probe.id}: ${evaluation.label || "invalid"}`);
+  let atomicResults = atomicFamilies.get(testCase.family_id);
+  if (!atomicResults) {
+    atomicResults = await runAtomicProbes(testCase);
+    atomicFamilies.set(testCase.family_id, atomicResults);
+  } else {
+    console.log(`  ↳ reusing ${atomicResults.length} family-level atomic probe results`);
   }
 
   const baselineResponse = await chat(testCase.integration.prompt);
@@ -58,15 +111,78 @@ for (const testCase of selectedCases) {
   };
   console.log(`  ${baseline.evaluation.passed ? "✓" : "✗"} baseline integration`);
 
-  let assisted = null;
-  if (arm !== "baseline") {
-    const assistedResponse = await chat(buildIntegrationPrompt(testCase, atomicResults));
-    assisted = {
-      response: assistedResponse.content,
-      evaluation: evaluateAnswer(assistedResponse.content, testCase.integration),
-      timing: assistedResponse.timing
+  let elicited = null;
+  if (["elicited", "all"].includes(arm)) {
+    const elicitedResponse = await chat(buildIntegrationPrompt(testCase, atomicResults));
+    elicited = {
+      response: elicitedResponse.content,
+      evaluation: evaluateAnswer(elicitedResponse.content, testCase.integration),
+      timing: elicitedResponse.timing
     };
-    console.log(`  ${assisted.evaluation.passed ? "✓" : "✗"} assisted integration`);
+    console.log(`  ${elicited.evaluation.passed ? "✓" : "✗"} elicited-note integration`);
+  }
+
+  let workspace = null;
+  if (["workspace", "all"].includes(arm)) {
+    const workspaceRequestOptions = {
+      reasoningEffort: workspaceReasoningEffort,
+      reasoningBudget: workspaceReasoningBudget,
+      maxTokens: workspaceMaxTokens,
+      responseFormat: workspaceResponseFormat()
+    };
+    const constructionAttempts = [];
+    let constructionResponse = await chat(
+      buildWorkspacePrompt(testCase, atomicResults),
+      workspaceRequestOptions
+    );
+    let parsedWorkspace = parseWorkspace(constructionResponse.content, testCase);
+    constructionAttempts.push({
+      repair: false,
+      response: constructionResponse.content,
+      workspace: parsedWorkspace,
+      timing: constructionResponse.timing
+    });
+    for (let repair = 1; !parsedWorkspace.valid && repair <= workspaceMaxRepairs; repair += 1) {
+      constructionResponse = await chat(buildWorkspaceRepairPrompt(
+        testCase,
+        atomicResults,
+        constructionResponse.content,
+        parsedWorkspace.errors
+      ), workspaceRequestOptions);
+      parsedWorkspace = parseWorkspace(constructionResponse.content, testCase);
+      constructionAttempts.push({
+        repair: true,
+        repair_number: repair,
+        response: constructionResponse.content,
+        workspace: parsedWorkspace,
+        timing: constructionResponse.timing
+      });
+    }
+    const construction = {
+      attempts: constructionAttempts,
+      response: constructionResponse.content,
+      workspace: parsedWorkspace,
+      timing: constructionResponse.timing
+    };
+    let integration = null;
+    if (construction.workspace.valid) {
+      const integrationResponse = await chat(
+        buildWorkspaceIntegrationPrompt(testCase, constructionResponse.content)
+      );
+      integration = {
+        response: integrationResponse.content,
+        evaluation: evaluateAnswer(integrationResponse.content, testCase.integration),
+        timing: integrationResponse.timing
+      };
+    }
+    workspace = { construction, integration };
+    const workspaceArmPassed = construction.workspace.valid &&
+      integration?.evaluation?.passed === true;
+    console.log(
+      `  ${workspaceArmPassed ? "✓" : "✗"} workspace integration ` +
+      `(${construction.workspace.valid ? "valid graph" : "invalid graph"}, ` +
+      `${constructionAttempts.length - 1} repair${constructionAttempts.length === 2 ? "" : "s"})`
+    );
   }
 
   results.push({
@@ -76,21 +192,38 @@ for (const testCase of selectedCases) {
     category: testCase.category,
     atomic: atomicResults,
     baseline,
-    assisted,
-    summary: summarizeCaseResult({ atomicResults, baseline, assisted })
+    elicited,
+    workspace,
+    summary: summarizeCaseResult({ atomicResults, baseline, elicited, workspace })
   });
 }
 
 const report = {
   schema: "amos.knowledge-integration-report",
-  version: 0,
+  version: 1,
   created_at: new Date().toISOString(),
-  diagnostic: true,
+  diagnostic: suite.status !== "frozen",
   suite: { schema: suite.schema, version: suite.version, status: suite.status },
   model,
   endpoint: baseUrl,
   protocol,
   arm,
+  configuration: {
+    context_length: contextLength,
+    max_tokens: maxTokens,
+    reasoning_effort: reasoningEffort,
+    reasoning_budget_tokens: reasoningBudget,
+    workspace_max_tokens: workspaceMaxTokens,
+    workspace_reasoning_effort: workspaceReasoningEffort,
+    workspace_reasoning_budget_tokens: workspaceReasoningBudget,
+    workspace_max_repairs: workspaceMaxRepairs,
+    openai_reasoning_effort_forwarded_to_chat_template: protocol === "openai",
+    workspace_json_schema_constrained: protocol === "openai",
+    atomic_repetitions: atomicRepetitions,
+    atomic_pass_threshold: atomicPassThreshold,
+    atomic_results_shared_across_family_variants: true,
+    evaluator_feedback_exposed_to_model: false
+  },
   summary: aggregateIntegrationResults(results),
   cases: results
 };
@@ -99,21 +232,64 @@ console.log("\n=== Knowledge integration summary ===");
 console.log(JSON.stringify(report.summary, null, 2));
 if (output) await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
 
-async function chat(prompt) {
+async function runAtomicProbes(testCase) {
+  const results = [];
+  for (const probe of testCase.atomic) {
+    const attempts = [];
+    for (const prompt of atomicPrompts(probe)) {
+      for (let repetition = 0; repetition < atomicRepetitions; repetition += 1) {
+        const response = await chat(prompt);
+        attempts.push({
+          prompt,
+          repetition,
+          response: response.content,
+          evaluation: evaluateAnswer(response.content, probe),
+          timing: response.timing
+        });
+      }
+    }
+    const passedAttempts = attempts.filter((attempt) => attempt.evaluation.passed).length;
+    const passRate = attempts.length > 0 ? passedAttempts / attempts.length : 0;
+    const evaluation = {
+      passed: passRate >= atomicPassThreshold,
+      pass_rate: passRate,
+      passed_attempts: passedAttempts,
+      total_attempts: attempts.length,
+      threshold: atomicPassThreshold
+    };
+    results.push({ id: probe.id, attempts, evaluation });
+    console.log(
+      `  ${evaluation.passed ? "✓" : "✗"} atomic ${probe.id}: ` +
+      `${passedAttempts}/${attempts.length} (${Math.round(passRate * 100)}%)`
+    );
+  }
+  return results;
+}
+
+async function chat(prompt, overrides = {}) {
   const started = performance.now();
+  const requestMaxTokens = overrides.maxTokens ?? maxTokens;
+  const requestReasoningEffort = overrides.reasoningEffort ?? reasoningEffort;
+  const requestReasoningBudget = overrides.reasoningBudget ?? reasoningBudget;
   const endpoint = `${baseUrl.replace(/\/$/, "")}${protocol === "openai" ? "/v1/chat/completions" : "/api/chat"}`;
   const body = protocol === "openai" ? {
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0,
-    max_tokens: maxTokens,
+    max_tokens: requestMaxTokens,
+    reasoning_effort: requestReasoningEffort || undefined,
+    reasoning_budget_tokens: requestReasoningBudget ?? undefined,
+    chat_template_kwargs: requestReasoningEffort && requestReasoningEffort !== "none"
+      ? { reasoning_effort: requestReasoningEffort }
+      : undefined,
+    response_format: overrides.responseFormat,
     stream: false
   } : {
     model,
     messages: [{ role: "user", content: prompt }],
     stream: false,
-    think: false,
-    options: { temperature: 0, num_ctx: contextLength, num_predict: maxTokens }
+    think: Boolean(requestReasoningEffort && requestReasoningEffort !== "none"),
+    options: { temperature: 0, num_ctx: contextLength, num_predict: requestMaxTokens }
   };
   const payload = await postJson(endpoint, body, timeoutMs);
   const choice = protocol === "openai" ? payload?.choices?.[0] : null;
@@ -183,7 +359,13 @@ function positional(values) {
 }
 
 function optionNames() {
-  return ["--suite", "--url", "--protocol", "--arm", "--output", "--only", "--request-timeout-seconds", "--max-tokens", "--context"];
+  return [
+    "--suite", "--url", "--protocol", "--arm", "--output", "--only",
+    "--request-timeout-seconds", "--max-tokens", "--context",
+    "--reasoning-effort", "--reasoning-budget", "--workspace-reasoning-effort",
+    "--workspace-reasoning-budget", "--workspace-max-tokens", "--workspace-max-repairs",
+    "--atomic-repetitions", "--atomic-pass-threshold"
+  ];
 }
 
 function readOption(values, name) {
@@ -197,6 +379,21 @@ function boundedInteger(value, minimum, maximum, fallback) {
   return Number.isInteger(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
 }
 
+function boundedNumber(value, minimum, maximum, fallback) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+}
+
+function optionalBoundedInteger(value, minimum, maximum) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`Expected an integer between ${minimum} and ${maximum}, received: ${value}`);
+  }
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
 function normalizeProtocol(value) {
   const normalized = String(value).toLowerCase();
   if (["ollama", "openai"].includes(normalized)) return normalized;
@@ -205,6 +402,21 @@ function normalizeProtocol(value) {
 
 function normalizeArm(value) {
   const normalized = String(value).toLowerCase();
-  if (["baseline", "assisted", "all"].includes(normalized)) return normalized;
+  if (normalized === "assisted") return "elicited";
+  if (["baseline", "elicited", "workspace", "all"].includes(normalized)) return normalized;
   throw new Error(`Unsupported arm: ${value}`);
+}
+
+function normalizeReasoningEffort(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (["none", "low", "medium", "high"].includes(normalized)) return normalized;
+  throw new Error(`Unsupported reasoning effort: ${value}`);
+}
+
+function workspaceResponseFormat() {
+  return {
+    type: "json_schema",
+    schema: workspaceJsonSchema()
+  };
 }
