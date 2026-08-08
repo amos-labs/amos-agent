@@ -2,6 +2,8 @@
   "schema": "amos.knowledge-integration-suite",
   "version": 1,
   "status": "development",
+  "atomic_repetitions": 2,
+  "atomic_pass_threshold": 1,
   "description": "Counterfactual case families for discovering atomic-pass and combined-fail behavior. This is not a frozen evaluation set.",
   "cases": [
     {

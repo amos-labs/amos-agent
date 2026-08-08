@@ -16,8 +16,8 @@ useful capability benchmark.
 - Temperature: 0
 - Suite: `amos.knowledge-integration-suite` version 0, diagnostic
 - Cases: 6 hand-authored calibration cases
-- Arms: ordinary combined-task prompt and atomic-elicitation-assisted
-  integration prompt
+- Arms: ordinary combined-task prompt and the original atomic-elicitation
+  prototype
 
 Command shape:
 
@@ -44,9 +44,15 @@ npm run benchmark:integration -- gpt-oss-20b \
 
 The result does not support or refute the knowledge-integration hypothesis. It
 shows that the endpoint, structured evaluator, atomic eligibility rule,
-assisted prompt construction, aggregation, and latency/token capture execute
+elicitation prompt construction, aggregation, and latency/token capture execute
 end to end. The cases are too easy for GPT-OSS 20B and cannot measure an
 integration lift.
+
+The original elicitation prototype included evaluator-derived `passed` or
+`unverified` status next to each atomic response. That leaked information from
+the expected labels into the intervention prompt. Although every atomic probe
+passed in this calibration, the arm is methodologically invalid as a clean
+comparison and has been replaced by a raw-response-only elicited-note arm.
 
 Version 0 must not be quoted as a model-quality result. It was run on one warm
 local process, has only six development-visible cases, contains no paraphrase
@@ -97,7 +103,7 @@ The five base cases and five counterfactuals were run through both arms.
 | Assisted paired-family consistency | 4/5 |
 | Atomic-eligible integration failures | 0 |
 
-The assisted inconsistency was not a wrong final choice. Its longer prompt used
+The original elicitation inconsistency was not a wrong final choice. Its longer prompt used
 the complete 768-token allowance in the model's reasoning channel and returned
 no final content on the no-fencing counterfactual. This is an integration-cost
 failure and reinforces the need to measure completion budgets, retry policy,
@@ -114,3 +120,63 @@ The second pass again found that compact, explicit multiple-choice scenarios
 are too easy. The next development pool must use longer dependency structures,
 distributed evidence, intermediate-state scoring, misleading but individually
 true facts, and transfer to a surface form not used by the atomic probes.
+
+As in the first calibration, the historical intervention prompt exposed
+evaluator-derived status. Its quality numbers are retained as a harness history,
+not evidence for elicitation lift. Report schema version 1 removes that field,
+renames the arm `elicited`, validates suite structure, records reasoning effort,
+shares repeated atomic measurements across family variants, and reports full-
+denominator accuracy plus arm-level wall-time and token totals.
+
+## 2026-08-08 — explicit-workspace foundation smoke pass
+
+One development counterfactual was used to exercise the first real workspace
+engine: the independent-laboratory variant of the correlated-diagnostic-evidence
+family. This was a development-visible implementation probe, not a capability
+result.
+
+The first high-effort workspace attempt exhausted all 1,536 completion tokens
+inside the reasoning channel, took 27.18 seconds, and returned no graph. The
+downstream model still solved the easy final question. That exposed and fixed a
+scoring bug: the workspace arm now passes only when graph construction is valid
+and the final answer passes. Final-answer inference is skipped entirely when
+the workspace remains invalid.
+
+Inspection of the pinned local `llama.cpp` runtime also showed that the
+OpenAI-compatible `reasoning_effort=low|medium|high` field alone has no effect.
+The harness now forwards effort through GPT-OSS chat-template parameters and
+supports an explicit reasoning-token budget. Workspace construction also uses
+a JSON Schema constraint.
+
+The final smoke configuration used high answer-solving effort capped at 768
+reasoning tokens, low workspace effort capped at 256 reasoning tokens, one
+atomic repetition, and at most one structural repair. Its outcome was:
+
+| Metric | Result |
+| --- | ---: |
+| Atomic probes passed | 3/3 |
+| Baseline final answer | pass |
+| Initial workspace | invalid; omitted 2 of 3 probe sources |
+| Structural repair | 1; produced a structurally valid graph |
+| Gated workspace final answer | pass |
+| Baseline inference | 8.50 s; 517 completion tokens |
+| Full workspace arm, including atomic probes and repair | 52.78 s; 3,088 completion tokens |
+| Measured quality lift | 0 on one easy case |
+
+The repair loop received only structural errors such as missing probe coverage;
+it never received expected labels or evaluator pass/fail state. It successfully
+separated probe provenance from claim-to-claim derivation and made the graph
+referentially complete.
+
+The repaired graph still labeled a general shared-error claim as applicable to
+the independent-laboratory scenario. The final answer was correct because the
+other claims dominated, but this is a substantive unresolved failure: schema
+validity is not semantic reconciliation. The next engine iteration needs an
+applicability verifier or targeted counterfactual challenge, and the next
+development cases must be hard enough that baseline success cannot mask whether
+the workspace contributed.
+
+The result justifies the measurement and execution architecture—not an
+intelligence claim. It also quantifies the current cost problem: the explicit
+workspace path used roughly six times the wall time and completion tokens of the
+baseline on this single serial run.
