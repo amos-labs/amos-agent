@@ -1,4 +1,7 @@
 import { OpenAICompatibleClient } from "./openAiCompatibleClient.js";
+import { OpenAIResponsesClient } from "./openAiResponsesClient.js";
+import { AnthropicMessagesClient } from "./anthropicMessagesClient.js";
+import { MODEL_PROTOCOLS, normalizeModelProtocol } from "./protocol.js";
 
 const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
 const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
@@ -16,6 +19,7 @@ const PROVIDERS = {
     displayName: "Moonshot / Kimi API",
     description: "Use your own Moonshot API key and choose a Kimi model directly.",
     deployment: "cloud",
+    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "https://api.moonshot.ai/v1",
     defaultModel: "kimi-k3",
     models: [
@@ -31,6 +35,7 @@ const PROVIDERS = {
     displayName: "AMOS Intelligence",
     description: "Choose the capability you need; AMOS routes the best available intelligence without model lock-in.",
     deployment: "amos",
+    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "",
     defaultModel: "auto",
     apiKeyEnv: ["AMOS_MODEL_API_KEY"],
@@ -43,6 +48,7 @@ const PROVIDERS = {
     displayName: "Amazon Bedrock",
     description: "Customer or AMOS AWS inference through Bedrock's OpenAI-compatible API.",
     deployment: "customer-cloud",
+    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "",
     defaultModel: "openai.gpt-oss-120b-1:0",
     models: [
@@ -58,6 +64,7 @@ const PROVIDERS = {
     displayName: "AMOS Local",
     description: "Private intelligence on this computer with an AMOS-managed runtime and guided model setup.",
     deployment: "local",
+    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "http://127.0.0.1:11434/v1",
     defaultModel: "gpt-oss:20b",
     defaultApiKey: "ollama",
@@ -69,6 +76,7 @@ const PROVIDERS = {
     displayName: "Local model · llama.cpp",
     description: "A GGUF model served locally through llama-server.",
     deployment: "local",
+    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "http://127.0.0.1:8080/v1",
     defaultModel: "local-model",
     defaultApiKey: "local",
@@ -80,11 +88,37 @@ const PROVIDERS = {
     displayName: "Compatible endpoint",
     description: "Any customer-controlled OpenAI-compatible endpoint.",
     deployment: "custom",
+    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "",
     defaultModel: "",
     apiKeyEnv: ["MODEL_API_KEY"],
     apiKeyRequired: false,
     capabilities: { tools: true, vision: false, reasoning: true }
+  },
+  openai: {
+    id: "openai",
+    displayName: "OpenAI",
+    description: "Direct OpenAI intelligence using the native Responses protocol.",
+    deployment: "cloud",
+    protocol: MODEL_PROTOCOLS.OPENAI_RESPONSES,
+    defaultBaseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-5.6-terra",
+    apiKeyEnv: ["OPENAI_API_KEY"],
+    apiKeyRequired: true,
+    capabilities: { tools: true, vision: true, reasoning: true }
+  },
+  anthropic: {
+    id: "anthropic",
+    displayName: "Anthropic",
+    description: "Direct Claude intelligence using the native Messages protocol.",
+    deployment: "cloud",
+    protocol: MODEL_PROTOCOLS.ANTHROPIC_MESSAGES,
+    defaultBaseUrl: "https://api.anthropic.com/v1",
+    defaultModel: "claude-sonnet-5",
+    apiKeyEnv: ["ANTHROPIC_API_KEY"],
+    apiKeyRequired: true,
+    defaultApiVersion: "2023-06-01",
+    capabilities: { tools: true, vision: true, reasoning: true }
   }
 };
 
@@ -114,12 +148,20 @@ export function resolveModelConfig(env = process.env) {
       provider.defaultApiKey ||
       "";
 
-  const model = hosted ? "auto" : env.AMOS_MODEL || env.KIMI_MODEL || provider.defaultModel;
+  const model = hosted
+    ? "auto"
+    : env.AMOS_MODEL || (provider.id === "kimi" ? env.KIMI_MODEL : "") || provider.defaultModel;
   const requestedReasoningEffort =
-    env.AMOS_MODEL_REASONING_EFFORT || env.KIMI_REASONING_EFFORT || "max";
+    env.AMOS_MODEL_REASONING_EFFORT ||
+    (provider.id === "kimi" ? env.KIMI_REASONING_EFFORT : "") ||
+    "max";
 
   return {
     provider: provider.id,
+    protocol: normalizeModelProtocol(
+      provider.id === "openai-compatible" ? env.AMOS_MODEL_PROTOCOL : "",
+      provider.protocol
+    ),
     displayName: provider.displayName,
     deployment: provider.deployment,
     apiKey,
@@ -129,24 +171,26 @@ export function resolveModelConfig(env = process.env) {
     // routing.
     baseUrl: hosted
       ? hostedBaseUrl
-      : env.AMOS_MODEL_BASE_URL ||
-        env.MOONSHOT_BASE_URL ||
-        env.KIMI_BASE_URL ||
-        (provider.id === "bedrock" ? bedrockBaseUrl : provider.defaultBaseUrl),
+      : env.AMOS_MODEL_BASE_URL || providerBaseUrl(provider, env, bedrockBaseUrl),
     model,
+    apiVersion: env.AMOS_MODEL_API_VERSION ||
+      (provider.id === "anthropic" ? env.ANTHROPIC_VERSION : "") ||
+      provider.defaultApiVersion,
     reasoningEffort: normalizeReasoningEffort(
       provider,
       model,
       requestedReasoningEffort
     ),
     maxCompletionTokens: boundedInt(
-      env.AMOS_MODEL_MAX_COMPLETION_TOKENS || env.KIMI_MAX_COMPLETION_TOKENS,
+      env.AMOS_MODEL_MAX_COMPLETION_TOKENS ||
+        (provider.id === "kimi" ? env.KIMI_MAX_COMPLETION_TOKENS : ""),
       hosted ? HOSTED_MAX_COMPLETION_TOKENS : DEFAULT_MAX_COMPLETION_TOKENS,
       1,
       131_072
     ),
     requestTimeoutMs: boundedInt(
-      env.AMOS_MODEL_REQUEST_TIMEOUT_MS || env.KIMI_REQUEST_TIMEOUT_MS,
+      env.AMOS_MODEL_REQUEST_TIMEOUT_MS ||
+        (provider.id === "kimi" ? env.KIMI_REQUEST_TIMEOUT_MS : ""),
       hosted ? HOSTED_MODEL_REQUEST_TIMEOUT_MS : DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
       1_000,
       MAX_MODEL_REQUEST_TIMEOUT_MS
@@ -193,7 +237,22 @@ export function validateModelConfig(config) {
 }
 
 export function createModelClient(config, fetchImpl) {
+  const protocol = normalizeModelProtocol(config.protocol);
+  if (protocol === MODEL_PROTOCOLS.OPENAI_RESPONSES) {
+    return new OpenAIResponsesClient(config, fetchImpl);
+  }
+  if (protocol === MODEL_PROTOCOLS.ANTHROPIC_MESSAGES) {
+    return new AnthropicMessagesClient(config, fetchImpl);
+  }
   return new OpenAICompatibleClient(config, fetchImpl);
+}
+
+function providerBaseUrl(provider, env, bedrockBaseUrl) {
+  if (provider.id === "kimi") {
+    return env.MOONSHOT_BASE_URL || env.KIMI_BASE_URL || provider.defaultBaseUrl;
+  }
+  if (provider.id === "bedrock") return bedrockBaseUrl;
+  return provider.defaultBaseUrl;
 }
 
 export const AMOS_INTELLIGENCE_PROFILES = Object.freeze([

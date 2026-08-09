@@ -54,8 +54,8 @@ business database or move shared integration secrets onto the user's device.
 
 ## Intelligence boundary
 
-The runtime uses an OpenAI-compatible Chat Completions boundary. A provider
-profile supplies:
+The runtime uses a provider-neutral internal model contract with native
+protocol adapters. A provider profile supplies:
 
 - base URL;
 - model identifier;
@@ -64,21 +64,26 @@ profile supplies:
 - text, vision, tool-use, and reasoning capabilities; and
 - optional AMOS-backed short-lived identity.
 
-The same agent and AMOS tool surface can use managed AWS inference, Amazon
-Bedrock, a model-provider API, a customer-controlled compatible endpoint, or a
-model running locally.
+The same agent and AMOS tool surface can use OpenAI Responses, Anthropic
+Messages, OpenAI-compatible Chat Completions, managed AWS inference, Amazon
+Bedrock, a customer-controlled endpoint, or a model running locally.
 
 Changing the model does not change AMOS tenant, role, policy, or proof. A model
 that cannot reliably emit structured tool calls should remain in
 observe-and-draft mode.
 
 Complete assistant messages are preserved between tool turns because reasoning
-models may return structured fields in addition to visible content.
+models may return structured fields in addition to visible content. Each native
+adapter can retain opaque provider continuation state without exposing hidden
+reasoning to the UI or teaching the agent loop provider-specific behavior.
 
-When supported by the configured OpenAI-compatible endpoint, Desktop consumes
-SSE deltas and incrementally assembles both visible text and structured tool
-calls. One task-level abort signal is linked to the model request, AMOS MCP
-requests, public web requests, and spawned local process trees.
+Desktop consumes each protocol's native SSE events and incrementally assembles
+both visible text and structured tool calls. One task-level abort signal is
+linked to the model request, AMOS MCP requests, public web requests, and spawned
+local process trees.
+
+See [Intelligence protocol adapters](INTELLIGENCE_PROTOCOL_ADAPTERS.md) for the
+normalized message contract, continuation rules, and adapter test requirements.
 
 There is no fixed productive-tool-turn ceiling. A task continues while it is
 making progress. Desktop guards only against repeated identical tool/result

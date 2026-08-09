@@ -14,7 +14,9 @@ identity or authority.
 | AMOS Intelligence | AMOS-managed infrastructure | AMOS-backed identity | Zero-config routed intelligence with included credits and metered overage |
 | Amazon Bedrock | Customer or AMOS AWS | Bedrock credential adapter | AWS-standardized and sovereign deployments |
 | Compatible endpoint | Customer-selected HTTPS service | Endpoint credential | Existing model gateways or private serving |
-| Provider API | Provider cloud | Provider API key | Frontier capability without infrastructure |
+| OpenAI | OpenAI cloud | OpenAI API key | Native Responses streaming, tools, and stateless reasoning continuation |
+| Anthropic | Anthropic cloud | Anthropic API key | Native Messages streaming, tools, and signed thinking continuation |
+| Moonshot/Kimi | Moonshot cloud | Moonshot API key | Named OpenAI-compatible provider profile |
 | Ollama | User computer | Usually none | Supported local development/offline work |
 | llama.cpp | User computer | Usually none | Direct GGUF/local serving |
 
@@ -60,11 +62,12 @@ default; it does not overwrite a working user-selected intelligence profile.
 ## Amazon Bedrock
 
 Bedrock supports customer-controlled or AMOS-controlled AWS inference through
-its compatible endpoint. The current Desktop adapter exposes Bedrock's
-Chat-Completions-compatible GPT OSS models as a verified dropdown. Anthropic
-Messages and OpenAI Responses models require their corresponding protocol
-adapters; AMOS should not imply that every Bedrock model shares one wire
-protocol.
+its compatible endpoint. The current Desktop profile exposes Bedrock's
+Chat-Completions-compatible GPT OSS models as a verified dropdown. Native
+OpenAI Responses and Anthropic Messages adapters exist, but a future Bedrock
+profile must still pair the correct protocol with Bedrock-specific endpoint and
+credential handling; AMOS does not imply that every Bedrock model shares one
+wire protocol.
 
 ```dotenv
 AMOS_MODEL_PROVIDER=bedrock
@@ -83,9 +86,30 @@ Bearer authentication is supported now. AWS profile and SigV4 support belongs
 in a dedicated credential adapter so the model-provider boundary stays
 unchanged.
 
-## Provider APIs
+## Native provider APIs
 
-Moonshot/Kimi is the first named provider API profile:
+OpenAI uses its native Responses protocol:
+
+```dotenv
+AMOS_MODEL_PROVIDER=openai
+OPENAI_API_KEY=...
+AMOS_MODEL=gpt-5.6-terra
+```
+
+Anthropic uses its native Messages protocol:
+
+```dotenv
+AMOS_MODEL_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+AMOS_MODEL=claude-sonnet-5
+```
+
+Both profiles translate native streaming and tool calls into the same AMOS
+agent contract. OpenAI's encrypted reasoning output items and Anthropic's
+signed thinking blocks are preserved between tool turns while remaining hidden
+from user-visible streaming.
+
+Moonshot/Kimi remains a named compatible provider profile:
 
 ```dotenv
 AMOS_MODEL_PROVIDER=kimi
@@ -96,8 +120,9 @@ AMOS_MODEL=kimi-k3
 Provider keys remain local and encrypted in Desktop. They are removed from
 child-process environments and never become AMOS connector credentials.
 
-Additional providers should use either a named adapter when behavior differs or
-the compatible-endpoint profile when the standard boundary is sufficient.
+Additional providers should use either a named native adapter when behavior
+differs or the compatible-endpoint profile when Chat Completions is sufficient.
+See [Intelligence protocol adapters](INTELLIGENCE_PROTOCOL_ADAPTERS.md).
 
 ## Compatible endpoint
 
@@ -231,7 +256,7 @@ A provider adapter should define:
 3. credential source and secure-storage behavior;
 4. default model only when it is stable and honest;
 5. text, vision, tool-use, and reasoning capabilities;
-6. request normalization;
+6. native wire protocol and request normalization;
 7. response/tool-call normalization; and
 8. tests proving credentials do not leak into prompts or child commands.
 
