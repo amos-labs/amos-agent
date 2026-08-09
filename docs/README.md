@@ -18,6 +18,8 @@
 
 ## Product direction
 
+- [AMOS $100M ARR execution strategy](100M_ARR_EXECUTION_STRATEGY_2026_2027.md)
+- [Deterministic metrics, scorecard, and initiative engine](DETERMINISTIC_METRICS_SCORECARD_ENGINE.md)
 - [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Local frontier intelligence research roadmap](LOCAL_FRONTIER_INTELLIGENCE_ROADMAP.md)
 - [Knowledge integration experimental results](KNOWLEDGE_INTEGRATION_RESULTS.md)
