@@ -69,110 +69,36 @@ The pilot must produce more than a customer logo. It must create:
 6. A franchisee onboarding, provisioning, support, and billing machine.
 7. A reference architecture, security package, case study, and deployment timeline that can be reused in the next network.
 
-### Neighborly data and intelligence architecture
+### Product architecture required by the revenue plan
 
-The winning product is a hybrid operating engine, not an LLM reading thousands
-of location records inside a chat context. It should combine a deterministic
-data plane with a governed intelligence plane:
+The revenue plan depends on one reusable governed operating platform—not an LLM
+repeatedly reading thousands of location records and not a custom analytics
+project for every customer.
 
-1. **Organization and asset graph.** Represent corporate, brand, region,
-   franchisee, location, team, system, KPI, goal, intervention, learning asset,
-   and outcome as reusable governed entities.
-2. **Canonical data contracts.** Map each source into versioned contracts for
-   sales, leads, operations, finance, customer experience, staffing, marketing,
-   learning, and other approved domains. A new company supplies mappings and
-   policy—not a new product fork.
-3. **Deterministic computation.** Use SQL, columnar processing, statistical
-   routines, rules, and bounded jobs to calculate KPIs, cohorts, baselines,
-   trends, benchmark gaps, anomalies, attribution inputs, data-quality scores,
-   and intervention lift. Results must be reproducible from the same snapshot.
-4. **Evidence and lineage.** Every metric and exception carries its source,
-   time window, mapping version, algorithm version, completeness, and relevant
-   caveats. Large result sets live as governed artifacts; the model receives
-   compact aggregates and references.
-5. **AI interpretation.** Models assist with source mapping, investigate ranked
-   exceptions, distinguish evidence from hypotheses, explain findings for each
-   role, propose bounded actions, draft relevant learning, and answer follow-up
-   questions. AI does not become the system of record or arithmetic engine.
-6. **Governed intervention loop.** Detect -> explain -> recommend -> approve ->
-   act/train -> measure. Consequential actions retain human or policy approval
-   and produce receipts.
-7. **Reusable operating recipes.** Package the full loop as versioned recipes,
-   such as lead conversion, marketing efficiency, technician productivity,
-   customer retention, training readiness, and location turnaround. The common
-   recipe should cover roughly 80% of a deployment; tenant-specific mappings,
-   thresholds, benchmarks, and authority rules cover the remaining 20%.
+The non-negotiable platform invariant is:
 
-This architecture is fungible across franchise networks, corporate retail,
-clinics, dealerships, PE portfolios, and multi-business-unit enterprises. The
-commercial unit becomes a reusable performance pack plus connectors and
-configuration—not an open-ended analytics services engagement.
+> If every LLM provider is unavailable, AMOS continues to ingest approved data,
+> calculate official metrics and scorecards, run published automations, route
+> approvals, and deliver a usable base report.
 
-Operational design rules:
+| Product capability | Commercial reason | Neighborly proof |
+| --- | --- | --- |
+| Organization and asset graph | One parent contract can govern brands, franchises, locations, teams, and assets | Corporate-to-location hierarchy supports rollout and rollups |
+| Canonical connectors and mappings | The next network is configuration, not a new product fork | Approved source mappings run incrementally across representative brands |
+| Deterministic operating runtime | Reliable automation and analysis without inference on every row | Scheduled data-to-scorecard-to-exception-to-report loop runs with models disabled |
+| Configurable KPI, scorecard, and initiative engine | Corporate initiatives become reusable product configuration | Exact seven initiatives plus roughly 15-25 component KPIs reconcile to historical outputs |
+| Governed intervention and learning loop | Insights produce measurable value and expansion revenue | Detect -> explain -> approve -> act/train -> measure produces one referenceable outcome |
+| Versioned performance packs | Deployment effort and FDE hours decline with every network | Second parent pilot reuses most of the Neighborly package |
 
-- move compute to governed data rather than copying raw records into prompts;
-- process incrementally and persist versioned aggregates instead of recomputing
-  every location on every conversation;
-- use AI to generate mappings only as reviewed drafts, then run approved
-  mappings deterministically;
-- separate observed correlation, statistical confidence, and causal claims;
-- benchmark comparable cohorts rather than ranking incomparable locations;
-- return data-quality and missing-data warnings as first-class results; and
-- measure gross margin and analyst/FDE hours for every operating recipe.
+This is the connective layer between product and revenue: the architecture must
+turn Neighborly into a reusable performance pack that can sell into franchises,
+corporate multi-location networks, and multi-business-unit enterprises while
+preserving enterprise gross margin.
 
-### Configurable deterministic KPI and initiative engine
+Hardcore system design is maintained separately:
 
-This should be a core AMOS product capability, not a Neighborly-specific data
-project. Corporate users need to define financial KPIs, operating scorecards,
-and their initiative framework once, test it against historical data, approve
-it, and then execute it repeatedly across every eligible unit without paying
-for LLM inference on every row.
-
-For Neighborly, the reported seven corporate initiatives should be represented
-as configuration—not hard-coded product logic. AMOS should import the exact
-initiative names, definitions, weights, targets, gates, and evidence rules once
-Neighborly supplies them. The reusable hierarchy is:
-
-> initiative -> objective -> metric -> deterministic recipe -> threshold or
-> target -> score -> exception -> governed intervention
-
-The product surface should be a **Metric and Initiative Studio** with three
-ways to configure the engine:
-
-1. AMOS-owned templates for common financial and operating measures.
-2. A visual formula, cohort, threshold, weighting, and missing-data builder.
-3. Natural-language drafting by AI, always compiled, backtested, reviewed, and
-   explicitly published by an authorized human before it can run.
-
-Once published, a recipe executes without an LLM. Each version must capture its
-input contract, formula graph, units and currency policy, period/window,
-dimensions, comparable cohort, directionality, target, thresholds, weights,
-minimum sample size, missing/late-data treatment, outlier policy, owner,
-approval, effective dates, test fixtures, and compute schedule.
-
-The execution loop is:
-
-> validated data snapshot -> metric dependency graph -> materialized KPI values
-> -> scorecard and initiative rollup -> ranked exceptions -> compact evidence
-> packet -> AI explanation or recommendation -> approved action -> measured
-> outcome
-
-This creates a clean division of labor:
-
-| Deterministic engine | AI layer |
-| --- | --- |
-| Reconcile source data and calculate metrics | Draft source mappings and recipes for review |
-| Apply windows, cohorts, targets, weights, and gates | Explain material exceptions in role-appropriate language |
-| Produce reproducible scores and initiative status | Investigate likely drivers using bounded evidence |
-| Backtest versions and quantify changes | Recommend interventions and relevant learning |
-| Persist lineage, quality, and calculation receipts | Answer follow-up questions without becoming the arithmetic system |
-
-Financial calculations require extra controls: currency and minor-unit
-normalization, fiscal-calendar awareness, period-close state, reconciliation to
-the approved ledger or ERP source, explicit denominator minimums, comparable
-cohorts, and immutable source snapshots. A score cannot be labeled reliable
-when its required data is incomplete; `not scored`, `provisional`, and
-`reconciled` must be distinct states.
+- [Deterministic operating runtime](DETERMINISTIC_OPERATING_RUNTIME.md)
+- [Deterministic metrics, scorecard, and initiative engine](DETERMINISTIC_METRICS_SCORECARD_ENGINE.md)
 
 The first Neighborly release should support the exact seven initiatives plus
 roughly 15-25 component KPIs, historical backtesting, per-location and roll-up
@@ -180,9 +106,6 @@ views, version comparison, evidence drill-down, and exception delivery. The
 second release should expose the guarded self-service studio. Later releases
 can package anonymized or permissioned benchmark cohorts and reusable vertical
 scorecard packs.
-
-The detailed technical design is maintained in
-[`DETERMINISTIC_METRICS_SCORECARD_ENGINE.md`](DETERMINISTIC_METRICS_SCORECARD_ENGINE.md).
 
 ## The enterprise offer
 

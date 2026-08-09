@@ -21,6 +21,15 @@ Neighborly's seven initiatives are the first configuration pack, not seven
 hard-coded product features. Their exact names and scoring rules remain open
 inputs until Neighborly provides the authoritative definitions.
 
+This engine is one package type on the broader
+[AMOS Deterministic Operating Runtime](DETERMINISTIC_OPERATING_RUNTIME.md). It
+must reuse the platform's existing declarative connector runtime, resumable
+ingestion scheduler, automation enrollment/state-machine patterns, governed
+Briefing definitions and schedules, policy/action gate, and proof receipts.
+With all model routes disabled, scheduled ingestion, KPI calculation,
+scorecards, exceptions, deterministic base reports, and already-authorized
+automation steps must still complete.
+
 ## 2. Outcomes and non-goals
 
 ### Outcomes
@@ -33,6 +42,8 @@ inputs until Neighborly provides the authoritative definitions.
 - One approved corporate pack can run across thousands of locations and roll up
   through the organization hierarchy.
 - The engine can backtest a draft version before it changes a live scorecard.
+- Scheduled calculations and usable base reports complete when every LLM
+  provider is unavailable.
 - AI use is concentrated on mapping assistance, exception investigation,
   explanation, recommended interventions, and relevant learning.
 - Tenant isolation, authorization, approval, and receipts match the rest of the
