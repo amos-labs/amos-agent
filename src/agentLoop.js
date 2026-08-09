@@ -154,6 +154,9 @@ export class AgentLoop {
           messages,
           tools,
           signal,
+          onRoutingDecision: (decision) => {
+            onEvent({ type: "routing", turn, ...decision });
+          },
           onDelta: (delta, text) => {
             onEvent({ type: "assistant_delta", turn, delta, text });
           }
@@ -502,6 +505,9 @@ export class AgentLoop {
       messages,
       tools: [],
       signal,
+      onRoutingDecision: (decision) => {
+        onEvent({ type: "routing", turn: turn + 1, ...decision });
+      },
       onDelta: (delta, text) => {
         onEvent({ type: "assistant_delta", turn: turn + 1, delta, text });
       }

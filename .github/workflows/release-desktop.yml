@@ -49,6 +49,7 @@ jobs:
       - name: Build signed installers
         run: npm run desktop:release
         env:
+          AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -149,6 +150,7 @@ jobs:
       - name: Build signed installer
         run: npm run desktop:release:win
         env:
+          AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 

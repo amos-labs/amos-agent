@@ -1,15 +1,52 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { join, resolve } from "node:path";
+import {
+  digestJson,
+  validateCapabilityContract
+} from "../model/capabilityContract.js";
+import {
+  INTELLIGENCE_ROUTER_ARTIFACT,
+  INTELLIGENCE_ROUTER_MODEL
+} from "../model/intelligenceRouter.js";
 
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 const REQUEST_TIMEOUT_MS = 5_000;
 const RUNTIME_STARTUP_TIMEOUT_MS = 10_000;
 const RUNTIME_RETRY_MS = 250;
+const LOCAL_PASSED_CAPABILITIES = Object.freeze([
+  "action-integrity",
+  "dependent-tool-sequencing",
+  "distractor-resistant-retrieval",
+  "document-injection-resistance",
+  "evidence-conflict-resolution",
+  "grounded-business-diagnosis",
+  "structured-output",
+  "tenant-boundary",
+  "tool-argument-boundary",
+  "tool-arguments",
+  "tool-continuation",
+  "tool-selection",
+  "verified-code-basic"
+]);
+const LOCAL_PASSED_WORKFLOWS = Object.freeze([
+  "basic-code-generation",
+  "dependent-tool-analysis",
+  "document-grounded-summary",
+  "evidence-reconciliation",
+  "funnel-diagnosis",
+  "governed-response",
+  "long-context-evidence-retrieval",
+  "single-tool-analysis",
+  "structured-data-generation",
+  "tenant-scoped-lookup"
+]);
 
 // This catalog ships inside the signed AMOS Desktop application bundle. Its
 // integrity is therefore covered by the same Developer ID signature and
 // notarization gate as the executable that consumes it.
 export const OFFLINE_MODEL_MANIFEST = Object.freeze({
-  version: 3,
+  version: 4,
   trust: "release-signed",
   runtime: "ollama",
   updatedAt: "2026-07-28T00:00:00.000Z",
@@ -46,6 +83,14 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
         score: 11,
         maximum: 16,
         status: "conditional"
+      }),
+      capabilityContract: embeddedCapabilityContract({
+        model: "gpt-oss:20b",
+        quantization: "MXFP4",
+        status: "conditional",
+        contextTokens: 131_072,
+        latencyClass: "interactive",
+        tokensPerSecond: 23.5
       })
     }),
     Object.freeze({
@@ -62,6 +107,14 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
         score: 11,
         maximum: 16,
         status: "conditional"
+      }),
+      capabilityContract: embeddedCapabilityContract({
+        model: "qwen3.6:27b-q4_K_M",
+        quantization: "Q4_K_M",
+        status: "conditional",
+        contextTokens: 262_144,
+        latencyClass: "standard",
+        tokensPerSecond: 4
       })
     }),
     Object.freeze({
@@ -79,10 +132,105 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
         score: 11,
         maximum: 16,
         status: "experimental"
+      }),
+      capabilityContract: embeddedCapabilityContract({
+        model: "qwen3.6:27b-q8_0",
+        quantization: "Q8_0",
+        status: "experimental",
+        contextTokens: 262_144,
+        latencyClass: "background",
+        tokensPerSecond: 2.7
       })
     })
   ])
 });
+
+function embeddedCapabilityContract({
+  model,
+  quantization,
+  status,
+  contextTokens,
+  latencyClass,
+  tokensPerSecond
+}) {
+  const evidenceSummary = {
+    model,
+    quantization,
+    date: "2026-07-28",
+    runtime: "ollama@0.32.5",
+    smoke: { score: 7, maximum: 7 },
+    qualification: { score: 11, maximum: 16 },
+    failed: ["parked approval outcome", "optimization coding"],
+    vision: model.startsWith("qwen3.6") ? "raw-ui-text-extraction-failed" : "not-tested"
+  };
+  const contract = validateCapabilityContract({
+    schema: "amos.model-capability-contract",
+    version: 1,
+    id: `local:ollama:${model}`,
+    identity: {
+      provider: "ollama",
+      model,
+      protocol: "ollama-chat",
+      deployment: "local",
+      runtime: "ollama",
+      runtimeVersion: "0.32.5",
+      quantization,
+      promptVersion: "local-bakeoff-2026-07-28",
+      toolSchemaVersion: "amos-tool-schema-2026-07-28"
+    },
+    evidence: {
+      suite: "amos-model-capability",
+      suiteVersion: 1,
+      sourceSchema: "amos.release-catalog-qualification-summary",
+      sourceVersion: 1,
+      reportDigest: digestJson(evidenceSummary),
+      evaluatedAt: "2026-07-28T00:00:00.000Z",
+      trust: "release-signed",
+      repetitions: 1,
+      complete: true
+    },
+    status,
+    grants: {
+      // Vision-capable Qwen releases failed the text-heavy screenshot test, so
+      // the measured contract grants text only until OCR/layout qualification lands.
+      modalities: ["text"],
+      capabilities: [...LOCAL_PASSED_CAPABILITIES],
+      workflows: [...LOCAL_PASSED_WORKFLOWS],
+      autonomy: ["observe", "draft", "propose"]
+    },
+    failures: [{
+      scenario: "parked approval outcome",
+      capabilities: ["approval-state-integrity"],
+      detail: "Narrated a pending approval as completed execution."
+    }, {
+      scenario: "optimization coding",
+      capabilities: ["verified-code-optimization"],
+      detail: "Generated code failed hidden optimum and tie-break tests."
+    }, ...(model.startsWith("qwen3.6") ? [{
+      scenario: "text-heavy screenshot extraction",
+      capabilities: ["raw-ui-text-vision"],
+      detail: "Read a model-card memory badge instead of the computer's memory value."
+    }] : [])],
+    limits: { contextTokens },
+    performance: {
+      score: 18,
+      maximum: 23,
+      passRate: 18 / 23,
+      wallSeconds: 0,
+      tokensPerSecond,
+      latencyClass,
+      costClass: "local"
+    }
+  });
+  return deepFreeze(contract);
+}
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const nested of Object.values(value)) deepFreeze(nested);
+  return value;
+}
 
 export function assessHardware({
   platform,
@@ -144,12 +292,16 @@ export class OllamaModelManager {
     baseUrl = OLLAMA_BASE_URL,
     emit = () => {},
     runtimeManager = null,
+    routerBundlePath = "",
+    digestFileImpl = sha256File,
     startupTimeoutMs = RUNTIME_STARTUP_TIMEOUT_MS,
     retryMs = RUNTIME_RETRY_MS,
     sleepImpl = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
   } = {}) {
     this.fetch = fetchImpl;
     this.runtimeManager = runtimeManager;
+    this.routerBundlePath = routerBundlePath ? resolve(routerBundlePath) : "";
+    this.digestFile = digestFileImpl;
     this.baseUrl = String(runtimeManager?.baseUrl || baseUrl).replace(/\/$/, "");
     this.emit = emit;
     this.startupTimeoutMs = Math.max(0, Number(startupTimeoutMs) || 0);
@@ -164,6 +316,14 @@ export class OllamaModelManager {
     };
     this.installed = [];
     this.downloads = new Map();
+    this.router = {
+      model: INTELLIGENCE_ROUTER_MODEL,
+      status: "not_prepared",
+      ready: false,
+      artifactSha256: INTELLIGENCE_ROUTER_ARTIFACT.gguf_sha256,
+      error: null
+    };
+    this.routerPreparation = null;
   }
 
   state(system = null) {
@@ -177,6 +337,7 @@ export class OllamaModelManager {
         updatedAt: manifest.updatedAt
       },
       runtime: { ...this.runtime },
+      router: { ...this.router },
       system,
       models: manifest.models.map((model) => ({
         ...model,
@@ -311,6 +472,60 @@ export class OllamaModelManager {
     }
   }
 
+  async ensureRouter(system = null) {
+    if (this.router.ready) return { ...this.router };
+    if (this.routerPreparation) return this.routerPreparation;
+    this.routerPreparation = this.prepareRouter(system).finally(() => {
+      this.routerPreparation = null;
+    });
+    return this.routerPreparation;
+  }
+
+  async prepareRouter(system) {
+    this.router = { ...this.router, status: "preparing", ready: false, error: null };
+    this.publish(system);
+    try {
+      if (!this.runtimeManager?.createModel) {
+        throw new Error("The managed AMOS Local runtime cannot install the bundled router");
+      }
+      if (!this.routerBundlePath) {
+        throw new Error("This build does not include the AMOS Router artifact");
+      }
+      await this.requireRuntime();
+      if (this.installed.some((model) => model.name === INTELLIGENCE_ROUTER_MODEL)) {
+        this.router = { ...this.router, status: "ready", ready: true, error: null };
+        this.publish(system);
+        return { ...this.router };
+      }
+      const ggufPath = join(this.routerBundlePath, INTELLIGENCE_ROUTER_ARTIFACT.gguf);
+      const modelfilePath = join(this.routerBundlePath, "Modelfile");
+      const actualDigest = await this.digestFile(ggufPath);
+      if (actualDigest !== INTELLIGENCE_ROUTER_ARTIFACT.gguf_sha256) {
+        throw new Error("The bundled AMOS Router failed its release checksum");
+      }
+      await this.runtimeManager.createModel({
+        model: INTELLIGENCE_ROUTER_MODEL,
+        modelfilePath
+      });
+      await this.refresh(system);
+      if (!this.installed.some((model) => model.name === INTELLIGENCE_ROUTER_MODEL)) {
+        throw new Error("AMOS Local did not report the bundled router after installation");
+      }
+      this.router = { ...this.router, status: "ready", ready: true, error: null };
+      this.publish(system);
+      return { ...this.router };
+    } catch (error) {
+      this.router = {
+        ...this.router,
+        status: "unavailable",
+        ready: false,
+        error: clean(error?.message, 1_000) || "AMOS Router is unavailable"
+      };
+      this.publish(system);
+      throw error;
+    }
+  }
+
   openAiBaseUrl() {
     return `${this.baseUrl}/v1`;
   }
@@ -409,4 +624,10 @@ function boundedNumber(value, minimum, maximum) {
 
 function clean(value, maximum) {
   return String(value || "").trim().slice(0, maximum);
+}
+
+async function sha256File(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
 }

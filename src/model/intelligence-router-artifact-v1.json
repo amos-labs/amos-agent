@@ -1,0 +1,18 @@
+{
+  "schema": "amos.intelligence-router-artifact",
+  "version": 1,
+  "model": "amos-router:0.8b-pilot003-v2",
+  "classifier_contract": "amos-router:2026-08-09",
+  "base_model": "Qwen/Qwen3.5-0.8B",
+  "base_model_revision": "2fc06364715b967f1860aea9cf38778875588b17",
+  "quantization": "Q4_K_M",
+  "gguf": "amos-router-q4_k_m.gguf",
+  "gguf_sha256": "cbe690bd7550f8f8e6597681bde03d72ad783216c1446bef5386ee44a0da9305",
+  "gguf_size_bytes": 529296768,
+  "prompt": "intelligence-router-v1.txt",
+  "prompt_sha256": "fa38ebea6ea41711216ceb8adfed6d570887be136376dbb2b88683ad42e642d7",
+  "development_accuracy": 0.9,
+  "untuned_2b_development_accuracy": 0.85,
+  "qualified": false,
+  "default_rollout_mode": "shadow"
+}

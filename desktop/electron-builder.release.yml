@@ -7,6 +7,7 @@ extraMetadata:
 
 files:
   - desktop/**/*
+  - "!desktop/vendor/**/*"
   - src/**/*
   - package.json
   - LICENSE
@@ -14,6 +15,10 @@ files:
 extraResources:
   - from: desktop/vendor/ollama
     to: ollama
+    filter:
+      - "**/*"
+  - from: desktop/vendor/router
+    to: router
     filter:
       - "**/*"
 

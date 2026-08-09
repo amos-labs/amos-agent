@@ -549,14 +549,16 @@ app.whenReady().then(async () => {
     decrypt
   });
   await accountStore.initialize();
+  const localResourcesPath = app.isPackaged ? process.resourcesPath : join(here, "vendor");
   const managedOllamaRuntime = new ManagedOllamaRuntime({
     platform: process.platform,
     arch: process.arch,
-    resourcesPath: app.isPackaged ? process.resourcesPath : join(here, "vendor"),
+    resourcesPath: localResourcesPath,
     userDataPath: app.getPath("userData")
   });
   offlineManager = new OllamaModelManager({
     runtimeManager: managedOllamaRuntime,
+    routerBundlePath: join(localResourcesPath, "router"),
     emit: (payload) => send("offline:changed", payload)
   });
   const telemetry = new DesktopTelemetry({

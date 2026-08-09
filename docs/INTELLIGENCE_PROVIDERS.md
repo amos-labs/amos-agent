@@ -1,4 +1,4 @@
-# Intelligence and infrastructure profiles
+# Intelligence and infrastructure
 
 AMOS separates the intelligence from the company being operated. The same
 company context, connected applications, policy, approvals, and receipts can be
@@ -7,7 +7,7 @@ used from different models and deployment boundaries.
 Provider choice changes where inference happens. It does not change AMOS
 identity or authority.
 
-## Profile summary
+## Infrastructure summary
 
 | Profile | Inference location | Credential | Best fit |
 | --- | --- | --- | --- |
@@ -22,9 +22,9 @@ identity or authority.
 
 ## AMOS Intelligence
 
-AMOS-managed intelligence is for customers who want a managed model
-deployment without reconnecting company systems or operating serving
-infrastructure. It is the default Desktop profile after AMOS sign-in.
+AMOS-managed intelligence is the normal product experience. Customers ask AMOS
+to perform work without selecting a provider, model, or reasoning tier. It is
+the default after AMOS sign-in.
 
 ```dotenv
 AMOS_MODEL_PROVIDER=amos-hosted
@@ -44,20 +44,20 @@ platform—not the client—selects the actual provider and model. The exact mod
 provider, and hardware profile may therefore evolve independently from AMOS
 Desktop.
 
-Desktop presents four capability profiles rather than provider model names:
+Desktop presents one **AMOS Intelligence · Automatic** route. It sends no
+managed reasoning-tier hint. The platform evaluates each task step against its
+modality, workflow, context, consequence, privacy, latency, cost, and measured
+capability requirements. It selects the least expensive qualified route and
+escalates only when a stronger model or reviewer is required.
 
-- **Efficient** for fast, economical routine work;
-- **Balanced** for everyday company operation;
-- **Deep** for harder research, coding, and planning; and
-- **Frontier** for the highest-capability route available to AMOS.
+The underlying provider and model remain available in private diagnostics and
+receipts, but they are not routine product choices. The business remains
+connected to AMOS while the underlying intelligence changes.
 
-The profile is a routing and cost preference, not a promise that a particular
-vendor model will remain underneath it. The business remains connected to AMOS
-while the underlying intelligence changes.
-
-An explicit BYOK, compatible-endpoint, customer-cloud, or local profile always
-remains available. Connecting AMOS only migrates the legacy unconfigured Kimi
-default; it does not overwrite a working user-selected intelligence profile.
+Explicit BYOK, compatible-endpoint, customer-cloud, and local infrastructure
+remain available under Desktop's advanced intelligence disclosure. Connecting
+AMOS only migrates the legacy unconfigured Kimi default; it does not overwrite
+a working user-selected infrastructure configuration.
 
 ## Amazon Bedrock
 

@@ -2,6 +2,7 @@ import { OpenAICompatibleClient } from "./openAiCompatibleClient.js";
 import { OpenAIResponsesClient } from "./openAiResponsesClient.js";
 import { AnthropicMessagesClient } from "./anthropicMessagesClient.js";
 import { MODEL_PROTOCOLS, normalizeModelProtocol } from "./protocol.js";
+import { normalizeIntelligenceRouterRolloutMode } from "./intelligenceRouter.js";
 
 const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
 const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
@@ -33,7 +34,7 @@ const PROVIDERS = {
   "amos-hosted": {
     id: "amos-hosted",
     displayName: "AMOS Intelligence",
-    description: "Choose the capability you need; AMOS routes the best available intelligence without model lock-in.",
+    description: "AMOS automatically routes every step to the most efficient qualified intelligence without model lock-in.",
     deployment: "amos",
     protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "",
@@ -151,10 +152,11 @@ export function resolveModelConfig(env = process.env) {
   const model = hosted
     ? "auto"
     : env.AMOS_MODEL || (provider.id === "kimi" ? env.KIMI_MODEL : "") || provider.defaultModel;
-  const requestedReasoningEffort =
-    env.AMOS_MODEL_REASONING_EFFORT ||
-    (provider.id === "kimi" ? env.KIMI_REASONING_EFFORT : "") ||
-    "max";
+  const requestedReasoningEffort = hosted
+    ? ""
+    : env.AMOS_MODEL_REASONING_EFFORT ||
+      (provider.id === "kimi" ? env.KIMI_REASONING_EFFORT : "") ||
+      "max";
 
   return {
     provider: provider.id,
@@ -173,6 +175,10 @@ export function resolveModelConfig(env = process.env) {
       ? hostedBaseUrl
       : env.AMOS_MODEL_BASE_URL || providerBaseUrl(provider, env, bedrockBaseUrl),
     model,
+    routingMode: hosted ? "automatic" : "pinned",
+    localRouterMode: hosted
+      ? normalizeIntelligenceRouterRolloutMode(env.AMOS_LOCAL_ROUTER_MODE)
+      : "disabled",
     apiVersion: env.AMOS_MODEL_API_VERSION ||
       (provider.id === "anthropic" ? env.ANTHROPIC_VERSION : "") ||
       provider.defaultApiVersion,
@@ -255,43 +261,11 @@ function providerBaseUrl(provider, env, bedrockBaseUrl) {
   return provider.defaultBaseUrl;
 }
 
-export const AMOS_INTELLIGENCE_PROFILES = Object.freeze([
-  Object.freeze({
-    id: "efficient",
-    label: "Efficient",
-    reasoningEffort: "low",
-    description: "Fast, economical routing for routine drafting, extraction, and summaries."
-  }),
-  Object.freeze({
-    id: "balanced",
-    label: "Balanced",
-    reasoningEffort: "medium",
-    description: "The default blend of speed, cost, and capability for everyday company work."
-  }),
-  Object.freeze({
-    id: "deep",
-    label: "Deep",
-    reasoningEffort: "high",
-    description: "Stronger reasoning for research, coding, planning, and complex operating work."
-  }),
-  Object.freeze({
-    id: "frontier",
-    label: "Frontier",
-    reasoningEffort: "max",
-    description: "Highest-capability routing for the hardest work; use when quality matters most."
-  })
-]);
-
-export function intelligenceProfile(id) {
-  return AMOS_INTELLIGENCE_PROFILES.find((profile) => profile.id === id) || null;
-}
-
-export function intelligenceProfileForReasoning(reasoningEffort) {
-  if (reasoningEffort === "max") return intelligenceProfile("frontier");
-  if (reasoningEffort === "high") return intelligenceProfile("deep");
-  if (["none", "low"].includes(reasoningEffort)) return intelligenceProfile("efficient");
-  return intelligenceProfile("balanced");
-}
+export const AMOS_INTELLIGENCE_ROUTING = Object.freeze({
+  id: "auto",
+  label: "Automatic",
+  description: "AMOS selects the least expensive qualified intelligence for each task step and escalates only when required."
+});
 
 function booleanValue(value) {
   return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());

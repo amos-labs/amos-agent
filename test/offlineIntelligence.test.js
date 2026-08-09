@@ -5,7 +5,12 @@ import {
   OllamaModelManager,
   releaseSignedManifest
 } from "../src/desktop/offlineIntelligence.js";
+import { routeModelStep } from "../src/model/capabilityRouter.js";
 import { createRegistry } from "../src/runtime.js";
+import {
+  INTELLIGENCE_ROUTER_ARTIFACT,
+  INTELLIGENCE_ROUTER_MODEL
+} from "../src/model/intelligenceRouter.js";
 
 test("hardware assessment recommends a bounded curated profile", () => {
   const compact = assessHardware({
@@ -65,6 +70,33 @@ test("curated model manifest is release-signed and content-addressed", () => {
       "qwen3.6:27b-q8_0"
     ]
   );
+});
+
+test("release-signed local contracts expose qualified grants instead of marketing claims", () => {
+  const manifest = releaseSignedManifest();
+  const gptOss = manifest.models.find((model) => model.id === "gpt-oss:20b");
+  const vision = manifest.models.find((model) => model.id === "qwen3.6:27b-q4_K_M");
+  assert.equal(gptOss.capabilityContract.status, "conditional");
+  assert.deepEqual(gptOss.capabilityContract.grants.autonomy, ["observe", "draft", "propose"]);
+  assert.equal(
+    gptOss.capabilityContract.grants.capabilities.includes("approval-state-integrity"),
+    false
+  );
+  assert.ok(vision.capabilities.includes("vision"));
+  assert.equal(vision.capabilityContract.grants.modalities.includes("vision"), false);
+
+  const executionRoute = routeModelStep({
+    requirements: { autonomy: "execute" },
+    candidates: manifest.models
+      .filter((model) => model.capabilityContract)
+      .map((model) => model.capabilityContract)
+  });
+  assert.equal(executionRoute.selected, null);
+  assert.ok(executionRoute.rejected.every((item) =>
+    item.reasons.some((reason) =>
+      ["autonomy-not-qualified", "status-not-allowed"].includes(reason.code)
+    )
+  ));
 });
 
 test("offline registry omits all AMOS and public-web tools", () => {
@@ -197,6 +229,66 @@ test("managed local runtime starts before probing and owns the inference endpoin
   assert.equal(markedReady, true);
   assert.equal(manager.openAiBaseUrl(), "http://127.0.0.1:11435/v1");
   assert.ok(attempts >= 3);
+});
+
+test("Ollama manager verifies and installs the bundled router exactly once", async () => {
+  let routerInstalled = false;
+  const created = [];
+  const runtimeManager = {
+    baseUrl: "http://127.0.0.1:11435",
+    state: () => ({ installed: true, status: "stopped", error: null }),
+    start: async () => ({ installed: true, status: "starting", error: null }),
+    markReady: () => ({ installed: true, status: "ready", error: null }),
+    createModel: async (input) => {
+      created.push(input);
+      routerInstalled = true;
+    }
+  };
+  const manager = new OllamaModelManager({
+    runtimeManager,
+    routerBundlePath: "/bundle/router",
+    digestFileImpl: async () => INTELLIGENCE_ROUTER_ARTIFACT.gguf_sha256,
+    sleepImpl: async () => {},
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      return jsonResponse({
+        models: routerInstalled ? [{ name: INTELLIGENCE_ROUTER_MODEL, size: 1 }] : []
+      });
+    }
+  });
+
+  const state = await manager.ensureRouter();
+  assert.equal(state.ready, true);
+  assert.deepEqual(created, [{
+    model: INTELLIGENCE_ROUTER_MODEL,
+    modelfilePath: "/bundle/router/Modelfile"
+  }]);
+  await manager.ensureRouter();
+  assert.equal(created.length, 1);
+});
+
+test("Ollama manager blocks a router whose release checksum does not match", async () => {
+  let created = false;
+  const runtimeManager = {
+    baseUrl: "http://127.0.0.1:11435",
+    state: () => ({ installed: true, status: "stopped", error: null }),
+    start: async () => ({ installed: true, status: "starting", error: null }),
+    markReady: () => ({ installed: true, status: "ready", error: null }),
+    createModel: async () => { created = true; }
+  };
+  const manager = new OllamaModelManager({
+    runtimeManager,
+    routerBundlePath: "/bundle/router",
+    digestFileImpl: async () => "0".repeat(64),
+    sleepImpl: async () => {},
+    fetchImpl: async (url) => jsonResponse(
+      new URL(url).pathname === "/api/version" ? { version: "0.32.5" } : { models: [] }
+    )
+  });
+
+  await assert.rejects(() => manager.ensureRouter(), /release checksum/);
+  assert.equal(created, false);
 });
 
 function jsonResponse(value) {

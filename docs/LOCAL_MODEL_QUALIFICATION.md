@@ -110,3 +110,17 @@ For the tested 64 GB Mac:
 
 Every future runtime, quantization, prompt, skill, workflow, or tool-schema
 change must be requalified before it inherits these contracts.
+
+## Machine-enforced contracts
+
+Offline catalog version 4 converts these results into release-signed
+[model capability contracts](MODEL_CAPABILITY_CONTRACT.md). The 11/16 aggregate
+score is retained for display, but routing uses the individual grants and
+failures. GPT-OSS 20B and Qwen 3.6 27B therefore qualify for observed text,
+retrieval, drafting, proposal, and measured tool-sequencing work; none qualifies
+for authoritative execution narration, hidden-test optimization code, or raw
+text-heavy screenshot extraction.
+
+The Qwen 4B and 8B profiles do not yet have measured contracts. They may remain
+available as user-selected local inference profiles, but the deterministic
+router does not admit them to governed workflows until they complete the suite.

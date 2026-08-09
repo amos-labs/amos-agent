@@ -62,6 +62,23 @@ test("AMOS Hosted turns an unauthenticated intelligence test into account onboar
   assert.match(javascript, /Error invoking remote method/);
 });
 
+test("AMOS Intelligence is one automatic experience with infrastructure controls disclosed", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /AMOS Intelligence routes automatically/);
+  assert.match(html, /id="managedProfileField" class="amos-routing-card hidden"/);
+  assert.match(html, /id="advancedInfrastructureDetails"/);
+  assert.match(html, /Advanced intelligence infrastructure/);
+  assert.doesNotMatch(html, /Efficient —|Balanced —|Deep —|Frontier —/);
+  assert.doesNotMatch(html, /id="intelligenceProfileInput"/);
+  assert.match(javascript, /intelligenceProfile: "auto"/);
+  assert.match(javascript, /reasoningEffort: managed\s*\? ""/);
+  assert.match(javascript, /advancedInfrastructureDetails\.open = !managed/);
+});
+
 test("routine approval review stays inside Desktop", async () => {
   const [javascript, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),

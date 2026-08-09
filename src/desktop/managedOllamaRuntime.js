@@ -8,6 +8,7 @@ import { OLLAMA_RUNTIME_RELEASE, ollamaRuntimeAsset } from "./ollamaRuntimeManif
 export const AMOS_LOCAL_HOST = "127.0.0.1:11435";
 export const AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH = 32_768;
 export const AMOS_LOCAL_MAX_CONTEXT_LENGTH = 262_144;
+const MODEL_CREATE_TIMEOUT_MS = 5 * 60_000;
 
 export class ManagedOllamaRuntime {
   constructor({
@@ -108,17 +109,7 @@ export class ManagedOllamaRuntime {
     const runtimeDirectory = dirname(this.binaryPath);
     const child = this.spawn(this.binaryPath, ["serve"], {
       cwd: runtimeDirectory,
-      env: {
-        ...this.environment,
-        OLLAMA_HOST: this.host,
-        OLLAMA_MODELS: this.modelsPath,
-        OLLAMA_NO_CLOUD: "1",
-        OLLAMA_CONTEXT_LENGTH: String(
-          contextLength(this.environment.AMOS_LOCAL_CONTEXT_LENGTH, this.totalMemoryBytes)
-        ),
-        HOME: this.runtimeHomePath,
-        ...(this.platform === "win32" ? { USERPROFILE: this.runtimeHomePath } : {})
-      },
+      env: this.runtimeEnvironment(),
       stdio: "ignore",
       windowsHide: true
     });
@@ -158,6 +149,66 @@ export class ManagedOllamaRuntime {
     return this.publish();
   }
 
+  async createModel({ model, modelfilePath }) {
+    const name = String(model || "").trim();
+    const filePath = resolve(String(modelfilePath || ""));
+    if (!/^[a-z0-9._/-]+:[a-z0-9._-]+$/i.test(name)) {
+      throw new Error("AMOS Local router model name is invalid");
+    }
+    if (!this.exists(filePath)) {
+      throw new Error("AMOS Local router Modelfile is missing from this build");
+    }
+    if (!this.state().installed) {
+      throw new Error("AMOS Local runtime is unavailable");
+    }
+    await Promise.all([
+      this.mkdir(this.modelsPath, { recursive: true }),
+      this.mkdir(this.runtimeHomePath, { recursive: true })
+    ]);
+    return new Promise((resolveCreate, rejectCreate) => {
+      let stderr = "";
+      let settled = false;
+      let timeout = null;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        callback(value);
+      };
+      const child = this.spawn(this.binaryPath, ["create", name, "-f", filePath], {
+        cwd: dirname(filePath),
+        env: this.runtimeEnvironment(),
+        stdio: ["ignore", "ignore", "pipe"],
+        windowsHide: true
+      });
+      timeout = setTimeout(() => {
+        child.kill?.();
+        finish(rejectCreate, new Error("AMOS Local router installation timed out"));
+      }, MODEL_CREATE_TIMEOUT_MS);
+      timeout.unref?.();
+      child.stderr?.on?.("data", (chunk) => {
+        stderr = `${stderr}${chunk}`.slice(-2_000);
+      });
+      child.once?.("error", (error) => {
+        finish(
+          rejectCreate,
+          new Error(`AMOS Local router installation failed: ${safeMessage(error)}`)
+        );
+      });
+      child.once?.("exit", (code) => {
+        if (code === 0) finish(resolveCreate, { model: name, installed: true });
+        else {
+          finish(
+            rejectCreate,
+            new Error(
+              `AMOS Local router installation failed (${code ?? "unknown"}): ${safeMessage(stderr)}`
+            )
+          );
+        }
+      });
+    });
+  }
+
   async stop() {
     const child = this.child;
     if (!child) {
@@ -174,6 +225,20 @@ export class ManagedOllamaRuntime {
     const state = this.state();
     this.emit(state);
     return state;
+  }
+
+  runtimeEnvironment() {
+    return {
+      ...this.environment,
+      OLLAMA_HOST: this.host,
+      OLLAMA_MODELS: this.modelsPath,
+      OLLAMA_NO_CLOUD: "1",
+      OLLAMA_CONTEXT_LENGTH: String(
+        contextLength(this.environment.AMOS_LOCAL_CONTEXT_LENGTH, this.totalMemoryBytes)
+      ),
+      HOME: this.runtimeHomePath,
+      ...(this.platform === "win32" ? { USERPROFILE: this.runtimeHomePath } : {})
+    };
   }
 }
 

@@ -7,6 +7,7 @@
 - [Architecture and trust boundaries](ARCHITECTURE.md)
 - [Context compiler and information-dense working sets](CONTEXT_COMPILER.md)
 - [Evidence-driven model routing](MODEL_ROUTING.md)
+- [Model capability contracts](MODEL_CAPABILITY_CONTRACT.md)
 - [Local model qualification](LOCAL_MODEL_QUALIFICATION.md)
 - [Authentication and identity](AUTHENTICATION.md)
 - [Intelligence and infrastructure profiles](INTELLIGENCE_PROVIDERS.md)

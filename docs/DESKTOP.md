@@ -29,9 +29,9 @@ Desktop guides the user through three independent grants:
 
 1. **Connect the company** — browser-based AMOS OAuth identifies the user,
    company, role, and effective scopes.
-2. **Use AMOS Hosted or choose intelligence** — AMOS Hosted works immediately
-   with the AMOS sign-in and existing credit/overage billing; AWS/customer
-   cloud, provider API, compatible endpoint, and local runtime remain available.
+2. **Use AMOS Intelligence** — automatic routing works immediately with the
+   AMOS sign-in and existing credit/overage billing; AWS/customer cloud,
+   provider API, compatible endpoint, and local runtime remain advanced options.
 3. **Choose a workspace** — optional local folder that AMOS may inspect and
    change through visible approval gates.
 
@@ -219,6 +219,13 @@ the fail-closed production release configuration.
 
 Pushing a tag matching `package.json`, such as `v0.12.0`, starts
 `.github/workflows/release-desktop.yml`.
+
+The protected release environment must also define
+`AMOS_ROUTER_GGUF_URL` as an HTTPS URL for the version pinned by
+`src/model/intelligence-router-artifact-v1.json`. The release builder streams
+that artifact with a 20-minute bound, rejects any byte beyond the signed size,
+and verifies the exact SHA-256 before packaging. Local release development may
+instead set `AMOS_ROUTER_GGUF_SOURCE` to the qualified GGUF path.
 
 The workflow:
 
