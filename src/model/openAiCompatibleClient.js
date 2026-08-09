@@ -20,7 +20,7 @@ export class OpenAICompatibleClient {
     throwIfAborted(signal);
     const body = {
       model: this.config.model,
-      messages
+      messages: messages.map(({ provider_state: _providerState, ...message }) => message)
     };
 
     if (this.config.reasoningEffort && this.config.capabilities?.reasoning !== false) {

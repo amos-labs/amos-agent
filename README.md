@@ -111,12 +111,15 @@ contract and tenant-extension safety model.
 
 ## Choose where intelligence runs
 
-AMOS Desktop uses a provider-neutral, OpenAI-compatible model boundary.
+AMOS Desktop uses a provider-neutral model boundary with native protocol
+adapters.
 Supported profiles include:
 
 - **AMOS Intelligence (default)** — zero-config AMOS-managed, capability-routed inference;
   included plan credits apply first and additional usage is metered
 - **Amazon Bedrock** — customer- or AMOS-controlled AWS inference
+- **OpenAI** — native Responses API with streaming, tools, and reasoning continuation
+- **Anthropic** — native Messages API with streaming, tools, and signed thinking continuation
 - **Compatible endpoint** — a customer-controlled HTTPS endpoint
 - **Provider API** — including the Moonshot/Kimi API
 - **AMOS Local** — a bundled, managed local runtime with hardware-aware models
@@ -220,7 +223,8 @@ frontier route. Users can still choose an exact model through a customer
 Bedrock or provider-key profile. This keeps routine coding, summarization,
 extraction, and tool work from paying frontier cost by default.
 
-See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md).
+See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md) and the
+[protocol adapter contract](docs/INTELLIGENCE_PROTOCOL_ADAPTERS.md).
 
 ## Security model
 

@@ -9,16 +9,57 @@ import {
   resolveModelConfig,
   validateModelConfig
 } from "../src/model/providers.js";
+import { OpenAICompatibleClient } from "../src/model/openAiCompatibleClient.js";
+import { OpenAIResponsesClient } from "../src/model/openAiResponsesClient.js";
+import { AnthropicMessagesClient } from "../src/model/anthropicMessagesClient.js";
 
 test("provider catalog exposes managed, customer-cloud, and local deployment modes", () => {
   const providers = listModelProviders();
   assert.ok(providers.some((provider) => provider.id === "amos-hosted" && provider.deployment === "amos"));
   assert.ok(providers.some((provider) => provider.id === "bedrock" && provider.deployment === "customer-cloud"));
   assert.ok(providers.some((provider) => provider.id === "ollama" && provider.deployment === "local"));
+  assert.ok(providers.some((provider) => provider.id === "openai" && provider.protocol === "openai-responses"));
+  assert.ok(providers.some((provider) => provider.id === "anthropic" && provider.protocol === "anthropic-messages"));
   const bedrock = providers.find((provider) => provider.id === "bedrock");
   assert.deepEqual(
     bedrock.models.map((model) => model.id),
     ["openai.gpt-oss-20b-1:0", "openai.gpt-oss-120b-1:0"]
+  );
+});
+
+test("native providers resolve their protocol, current default, endpoint, and credential", () => {
+  const openai = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "openai",
+    OPENAI_API_KEY: "openai-key"
+  });
+  assert.equal(openai.protocol, "openai-responses");
+  assert.equal(openai.baseUrl, "https://api.openai.com/v1");
+  assert.equal(openai.model, "gpt-5.6-terra");
+  assert.equal(openai.apiKey, "openai-key");
+
+  const anthropic = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "anthropic",
+    ANTHROPIC_API_KEY: "anthropic-key"
+  });
+  assert.equal(anthropic.protocol, "anthropic-messages");
+  assert.equal(anthropic.baseUrl, "https://api.anthropic.com/v1");
+  assert.equal(anthropic.model, "claude-sonnet-5");
+  assert.equal(anthropic.apiVersion, "2023-06-01");
+  assert.equal(anthropic.apiKey, "anthropic-key");
+});
+
+test("model factory selects the protocol adapter and rejects unknown protocols", () => {
+  const base = {
+    baseUrl: "https://models.example/v1",
+    model: "test",
+    capabilities: {}
+  };
+  assert.ok(createModelClient({ ...base, protocol: "openai-chat-completions" }) instanceof OpenAICompatibleClient);
+  assert.ok(createModelClient({ ...base, protocol: "openai-responses" }) instanceof OpenAIResponsesClient);
+  assert.ok(createModelClient({ ...base, protocol: "anthropic-messages" }) instanceof AnthropicMessagesClient);
+  assert.throws(
+    () => createModelClient({ ...base, protocol: "imaginary-protocol" }),
+    /Unsupported model protocol/
   );
 });
 
@@ -93,11 +134,32 @@ test("AMOS-hosted inference ignores stale BYOK routing values", () => {
     AMOS_MODEL_BASE_URL: "https://api.moonshot.ai/v1",
     MOONSHOT_BASE_URL: "https://attacker.invalid/v1",
     KIMI_MODEL: "kimi-k3",
-    AMOS_MODEL: "some-provider-model"
+    AMOS_MODEL: "some-provider-model",
+    AMOS_MODEL_PROTOCOL: "anthropic-messages"
   });
 
   assert.equal(config.baseUrl, "https://platform.custom.amoslabs.com/v1");
   assert.equal(config.model, "auto");
+  assert.equal(config.protocol, "openai-chat-completions");
+});
+
+test("only a controlled compatible endpoint accepts an explicit protocol override", () => {
+  const config = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "openai-compatible",
+    AMOS_MODEL_PROTOCOL: "openai-responses",
+    AMOS_MODEL_BASE_URL: "https://gateway.example/v1",
+    AMOS_MODEL: "routed-model"
+  });
+  assert.equal(config.protocol, "openai-responses");
+  assert.throws(
+    () => resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "openai-compatible",
+      AMOS_MODEL_PROTOCOL: "imaginary",
+      AMOS_MODEL_BASE_URL: "https://gateway.example/v1",
+      AMOS_MODEL: "routed-model"
+    }),
+    /Unsupported model protocol/
+  );
 });
 
 test("OpenAI-compatible client omits reasoning for runtimes without that capability", async () => {
@@ -126,11 +188,16 @@ test("OpenAI-compatible client omits reasoning for runtimes without that capabil
   );
 
   const result = await client.chat({
-    messages: [{ role: "user", content: "test" }],
+    messages: [{
+      role: "user",
+      content: "test",
+      provider_state: { protocol: "anthropic-messages", content: [{ type: "thinking" }] }
+    }],
     tools: [{ type: "function", function: { name: "noop", parameters: { type: "object" } } }]
   });
 
   assert.equal(body.reasoning_effort, undefined);
+  assert.equal(body.messages[0].provider_state, undefined);
   assert.equal(body.tools[0].function.name, "noop");
   assert.equal(result.message.content, "ready");
 });

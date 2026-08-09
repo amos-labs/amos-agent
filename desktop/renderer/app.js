@@ -19,6 +19,16 @@ const providerDefaults = {
     baseUrl: "https://bedrock-mantle.us-east-1.api.aws/v1",
     credential: "Amazon Bedrock API key"
   },
+  openai: {
+    model: "gpt-5.6-terra",
+    baseUrl: "https://api.openai.com/v1",
+    credential: "OpenAI API key"
+  },
+  anthropic: {
+    model: "claude-sonnet-5",
+    baseUrl: "https://api.anthropic.com/v1",
+    credential: "Anthropic API key"
+  },
   ollama: {
     model: "gpt-oss:20b",
     baseUrl: "http://127.0.0.1:11435/v1",

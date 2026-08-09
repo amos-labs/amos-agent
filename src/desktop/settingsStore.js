@@ -6,6 +6,8 @@ const PROVIDER_IDS = new Set([
   "kimi",
   "amos-hosted",
   "bedrock",
+  "openai",
+  "anthropic",
   "ollama",
   "llama-cpp",
   "openai-compatible"

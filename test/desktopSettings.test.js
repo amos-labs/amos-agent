@@ -79,6 +79,27 @@ test("personal workspace mode allows a cloud model without AMOS company access",
   assert.equal(settings.operatingMode, "personal");
 });
 
+test("desktop settings accept native OpenAI and Anthropic providers", () => {
+  const openai = sanitizeSettings({
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "openai-key",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  const anthropic = sanitizeSettings({
+    provider: "anthropic",
+    model: "claude-sonnet-5",
+    baseUrl: "https://api.anthropic.com/v1",
+    apiKey: "anthropic-key",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(openai.provider, "openai");
+  assert.equal(openai.apiKey, "openai-key");
+  assert.equal(anthropic.provider, "anthropic");
+  assert.equal(anthropic.apiKey, "anthropic-key");
+});
+
 test("desktop settings encrypt provider credentials at rest", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-desktop-settings-"));
   const path = join(directory, "settings.json");
