@@ -496,16 +496,33 @@
           <div class="section-heading settings-heading">
             <div>
               <span class="eyebrow">INTELLIGENCE &amp; INFRASTRUCTURE</span>
-              <h1>AMOS Hosted works out of the box.</h1>
-              <p>Included credits apply first, then usage is metered to your AMOS account. You can still bring your own provider, private endpoint, or local model at any time.</p>
+              <h1>AMOS Intelligence routes automatically.</h1>
+              <p>Ask AMOS to do the work. It selects the most efficient qualified intelligence for each step, escalates when necessary, and keeps model choice out of your workflow.</p>
             </div>
             <div id="systemCard" class="system-card"></div>
           </div>
 
           <form id="settingsForm" class="settings-layout">
             <div class="provider-column">
-              <h2>Deployment profile</h2>
-              <div id="providerCards" class="provider-cards"></div>
+              <div id="managedProfileField" class="amos-routing-card hidden">
+                <span class="eyebrow accent">AUTOMATIC ROUTING</span>
+                <h2>AMOS Intelligence</h2>
+                <p>
+                  Qualification, task requirements, privacy, latency, and cost determine
+                  the route. AMOS uses the least expensive model that has proven it can
+                  safely complete each step.
+                </p>
+                <ul>
+                  <li>Models are filtered by measured capability.</li>
+                  <li>Difficult or consequential steps escalate automatically.</li>
+                  <li>Underlying routes remain available in diagnostics and receipts.</li>
+                </ul>
+              </div>
+              <details id="advancedInfrastructureDetails" class="intelligence-advanced">
+                <summary>Advanced intelligence infrastructure</summary>
+                <p>Bring your own provider, private endpoint, or explicitly selected local model.</p>
+                <div id="providerCards" class="provider-cards"></div>
+              </details>
             </div>
 
             <div class="configuration-card">
@@ -526,16 +543,6 @@
                   <option value="offline">Local-only — no company or public-network tools</option>
                 </select>
                 <small>Personal mode can use your chosen cloud model without company access. Local-only never uses network tools.</small>
-              </div>
-              <div id="managedProfileField" class="field hidden">
-                <label for="intelligenceProfileInput">Capability</label>
-                <select id="intelligenceProfileInput" name="intelligenceProfile">
-                  <option value="efficient">Efficient — fastest and most economical</option>
-                  <option value="balanced">Balanced — recommended for everyday work</option>
-                  <option value="deep">Deep — stronger research, coding, and reasoning</option>
-                  <option value="frontier">Frontier — maximum capability for the hardest work</option>
-                </select>
-                <small id="intelligenceProfileHelp">AMOS selects and can change the underlying model without reconnecting your company.</small>
               </div>
               <div id="localSetupField" class="local-setup-callout hidden">
                 <div>
@@ -596,7 +603,7 @@
               <div class="configuration-actions">
                 <button id="disconnectButton" class="button secondary hidden" type="button">Disconnect AMOS</button>
                 <button id="testButton" class="button secondary" type="button">Test intelligence</button>
-                <button class="button primary" type="submit">Save profile</button>
+                <button class="button primary" type="submit">Save settings</button>
               </div>
             </div>
           </form>

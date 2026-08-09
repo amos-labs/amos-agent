@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  AMOS_INTELLIGENCE_PROFILES,
+  AMOS_INTELLIGENCE_ROUTING,
   createModelClient,
   hostedInferenceBaseUrl,
-  intelligenceProfileForReasoning,
   listModelProviders,
   resolveModelConfig,
   validateModelConfig
@@ -63,18 +62,13 @@ test("model factory selects the protocol adapter and rejects unknown protocols",
   );
 });
 
-test("AMOS Intelligence exposes capability profiles without exposing routed models", () => {
-  assert.deepEqual(
-    AMOS_INTELLIGENCE_PROFILES.map((profile) => profile.id),
-    ["efficient", "balanced", "deep", "frontier"]
-  );
-  assert.equal(intelligenceProfileForReasoning("low").id, "efficient");
-  assert.equal(intelligenceProfileForReasoning("medium").id, "balanced");
-  assert.equal(intelligenceProfileForReasoning("high").id, "deep");
-  assert.equal(intelligenceProfileForReasoning("max").id, "frontier");
+test("AMOS Intelligence exposes one automatic route without exposing routed models", () => {
+  assert.equal(AMOS_INTELLIGENCE_ROUTING.id, "auto");
+  assert.equal(AMOS_INTELLIGENCE_ROUTING.label, "Automatic");
   const managed = listModelProviders().find((provider) => provider.id === "amos-hosted");
   assert.equal(managed.displayName, "AMOS Intelligence");
   assert.equal(managed.models, undefined);
+  assert.match(managed.description, /automatically routes every step/i);
 });
 
 test("Kimi K3 stays on its currently supported max effort while other routes stay flexible", () => {
@@ -88,9 +82,11 @@ test("Kimi K3 stays on its currently supported max effort while other routes sta
   const hosted = resolveModelConfig({
     AMOS_MODEL_PROVIDER: "amos-hosted",
     AMOS_MCP_URL: "https://app.amoslabs.com/mcp",
-    AMOS_MODEL_REASONING_EFFORT: "medium"
+    AMOS_MODEL_REASONING_EFFORT: "max"
   });
-  assert.equal(hosted.reasoningEffort, "medium");
+  assert.equal(hosted.reasoningEffort, "");
+  assert.equal(hosted.routingMode, "automatic");
+  assert.equal(hosted.localRouterMode, "shadow");
 });
 
 test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", () => {
@@ -103,9 +99,26 @@ test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", (
   assert.equal(config.usesAmosIdentity, true);
   assert.equal(config.baseUrl, "https://app.amoslabs.com/v1");
   assert.equal(config.model, "auto");
+  assert.equal(config.routingMode, "automatic");
+  assert.equal(config.reasoningEffort, "");
   assert.equal(config.apiKey, "");
   assert.equal(config.maxCompletionTokens, 32_768);
   assert.equal(config.requestTimeoutMs, 660_000);
+  assert.equal(config.localRouterMode, "shadow");
+});
+
+test("AMOS Local Router rollout is configurable only for automatic hosted routing", () => {
+  const active = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "amos-hosted",
+    AMOS_MCP_URL: "https://app.amoslabs.com/mcp",
+    AMOS_LOCAL_ROUTER_MODE: "active"
+  });
+  const pinned = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "ollama",
+    AMOS_LOCAL_ROUTER_MODE: "active"
+  });
+  assert.equal(active.localRouterMode, "active");
+  assert.equal(pinned.localRouterMode, "disabled");
 });
 
 test("AMOS-hosted long-task limits remain operator configurable and bounded", () => {
@@ -229,3 +242,104 @@ test("model client can obtain a short-lived AMOS identity at request time", asyn
   await client.chat({ messages: [{ role: "user", content: "test" }] });
   assert.equal(authorization, "Bearer fresh-amos-token");
 });
+
+test("automatic routing sends a local decision in shadow mode without exposing prompt text", async () => {
+  let body;
+  const events = [];
+  const client = new OpenAICompatibleClient({
+    displayName: "AMOS Intelligence",
+    baseUrl: "https://app.amoslabs.com/v1",
+    model: "auto",
+    routingMode: "automatic",
+    localRouterMode: "shadow",
+    requestTimeoutMs: 1_000,
+    capabilities: { tools: true },
+    intelligenceRouter: {
+      classify: async () => ({
+        minimumClass: "deep",
+        source: "local",
+        model: "amos-router:0.8b-pilot003-v2",
+        contract: "amos-router:2026-08-09",
+        artifactSha256: "a".repeat(64),
+        latencyMs: 42
+      })
+    }
+  }, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonModelResponse("ready", {
+      routed_tier: "routine",
+      local_router_shadow_status: "compared",
+      local_router_shadow_class: "deep",
+      local_router_shadow_agreement: false
+    });
+  });
+
+  await client.chat({
+    messages: [{ role: "user", content: "private customer task" }],
+    tools: [{ type: "function", function: { name: "lookup" } }],
+    onRoutingDecision: (decision) => { events.push(decision); }
+  });
+
+  assert.equal(body.amos_routing, undefined);
+  assert.equal(body.amos_routing_shadow.minimum_class, "deep");
+  assert.equal(events[0].minimumClass, "deep");
+  assert.equal(events[1].status, "compared");
+  assert.equal(events[1].hostedClass, "routine");
+  assert.equal(events[1].agreement, false);
+  assert.doesNotMatch(JSON.stringify(events), /private customer task/);
+});
+
+test("active local routing controls the envelope and failures fall back to hosted", async () => {
+  const bodies = [];
+  const events = [];
+  const fetchImpl = async (_url, options) => {
+    bodies.push(JSON.parse(options.body));
+    return jsonModelResponse("ready");
+  };
+  const active = new OpenAICompatibleClient({
+    baseUrl: "https://app.amoslabs.com/v1",
+    model: "auto",
+    routingMode: "automatic",
+    localRouterMode: "active",
+    requestTimeoutMs: 1_000,
+    capabilities: {},
+    intelligenceRouter: { classify: async () => ({ minimumClass: "routine" }) }
+  }, fetchImpl);
+  await active.chat({
+    messages: [{ role: "user", content: "hello" }],
+    onRoutingDecision: (event) => events.push(event)
+  });
+
+  const fallback = new OpenAICompatibleClient({
+    baseUrl: "https://app.amoslabs.com/v1",
+    model: "auto",
+    routingMode: "automatic",
+    localRouterMode: "shadow",
+    requestTimeoutMs: 1_000,
+    capabilities: {},
+    intelligenceRouter: { classify: async () => { throw new Error("invalid class"); } }
+  }, fetchImpl);
+  await fallback.chat({
+    messages: [{ role: "user", content: "hello" }],
+    onRoutingDecision: (event) => events.push(event)
+  });
+
+  assert.equal(bodies[0].amos_routing.minimum_class, "routine");
+  assert.equal(bodies[0].amos_routing_shadow, undefined);
+  assert.equal(bodies[1].amos_routing, undefined);
+  assert.equal(bodies[1].amos_routing_shadow, undefined);
+  assert.equal(events[1].reason, "local_router_invalid_output");
+});
+
+function jsonModelResponse(content, amos = undefined) {
+  return {
+    ok: true,
+    status: 200,
+    async text() {
+      return JSON.stringify({
+        choices: [{ message: { role: "assistant", content } }],
+        ...(amos ? { amos } : {})
+      });
+    }
+  };
+}

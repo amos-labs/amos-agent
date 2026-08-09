@@ -46,29 +46,6 @@ const providerDefaults = {
   }
 };
 
-const intelligenceProfiles = {
-  efficient: {
-    label: "Efficient",
-    reasoningEffort: "low",
-    description: "Fast, economical routing for routine drafting, extraction, and summaries."
-  },
-  balanced: {
-    label: "Balanced",
-    reasoningEffort: "medium",
-    description: "The default blend of speed, cost, and capability for everyday company work."
-  },
-  deep: {
-    label: "Deep",
-    reasoningEffort: "high",
-    description: "Stronger reasoning for research, coding, planning, and complex operating work."
-  },
-  frontier: {
-    label: "Frontier",
-    reasoningEffort: "max",
-    description: "Highest-capability routing for the hardest work; use when quality matters most."
-  }
-};
-
 let state = null;
 let currentView = "operator";
 let currentWorkTab = "open";
@@ -110,7 +87,7 @@ const elements = Object.fromEntries(
     "canvasSidecar", "contextResizeHandle",
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
-    "managedProfileField", "intelligenceProfileInput", "intelligenceProfileHelp",
+    "managedProfileField", "advancedInfrastructureDetails",
     "managedConnectionCallout", "managedConnectButton",
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
@@ -257,7 +234,6 @@ function bindActions() {
   );
   elements.updateButton.addEventListener("click", handleUpdate);
   elements.appearanceToggle.addEventListener("change", toggleAppearance);
-  elements.intelligenceProfileInput.addEventListener("change", renderManagedProfileHelp);
   elements.localSetupButton.addEventListener("click", () =>
     elements.offlineIntelligenceCard.scrollIntoView({ behavior: "smooth", block: "start" })
   );
@@ -2838,19 +2814,12 @@ function renderStep(element, complete) {
 
 function providerStatusLabel() {
   if (state.provider.id === "amos-hosted") {
-    return `AMOS Intelligence · ${state.provider.profileLabel || "Balanced"}`;
+    return "AMOS Intelligence · Automatic";
   }
   if (state.provider.deployment === "local") {
     return `Local · ${state.provider.model}`;
   }
   return `${state.provider.displayName} · ${state.provider.model}`;
-}
-
-function renderManagedProfileHelp() {
-  const profile = intelligenceProfiles[elements.intelligenceProfileInput.value] ||
-    intelligenceProfiles.balanced;
-  elements.intelligenceProfileHelp.textContent =
-    `${profile.description} AMOS chooses and can change the underlying model without reconnecting your company.`;
 }
 
 function modelCatalog(provider) {
@@ -2901,8 +2870,6 @@ function renderSettings() {
     elements.providerCards.append(card);
   }
 
-  elements.intelligenceProfileInput.value = settings.intelligenceProfile || "balanced";
-  renderManagedProfileHelp();
   if (document.activeElement !== elements.customModelInput) {
     elements.customModelInput.value = settings.model || "";
   }
@@ -3057,10 +3024,6 @@ function selectProvider(providerId) {
     elements.customModelInput.value = defaults.model || "";
     elements.baseUrlInput.value = defaults.baseUrl || "";
     elements.apiKeyInput.value = "";
-    if (providerId === "amos-hosted") {
-      elements.intelligenceProfileInput.value = "balanced";
-      renderManagedProfileHelp();
-    }
   }
   renderProviderSelection();
   elements.apiKeyHelp.textContent = defaults.credential || "Provider credential";
@@ -3075,6 +3038,7 @@ function renderProviderFields(modelValue = "") {
   const catalogModel = !managed && catalog.length > 0;
   const local = provider?.deployment === "local";
   elements.managedProfileField.classList.toggle("hidden", !managed);
+  elements.advancedInfrastructureDetails.open = !managed;
   elements.localSetupField.classList.toggle("hidden", selectedProvider !== "ollama");
   elements.modelSelectField.classList.toggle("hidden", !catalogModel);
   elements.customModelField.classList.toggle("hidden", managed || catalogModel);
@@ -3239,7 +3203,7 @@ async function saveSettings(event) {
   elements.settingsError.classList.add("hidden");
   try {
     await persistSettings();
-    toast("Intelligence profile saved.");
+    toast("Intelligence settings saved.");
     render();
   } catch (error) {
     elements.settingsError.textContent = error.message;
@@ -3249,7 +3213,6 @@ async function saveSettings(event) {
 
 async function persistSettings() {
   const managed = selectedProvider === "amos-hosted";
-  const profile = elements.intelligenceProfileInput.value || "balanced";
   const catalogModel = !elements.modelSelectField.classList.contains("hidden");
   const selectedModel = catalogModel ? elements.modelInput.value : elements.customModelInput.value;
   if (selectedProvider === "ollama") {
@@ -3266,9 +3229,9 @@ async function persistSettings() {
       ? "auto"
       : selectedModel,
     baseUrl: managed ? "" : elements.baseUrlInput.value,
-    intelligenceProfile: profile,
+    intelligenceProfile: "auto",
     reasoningEffort: managed
-      ? intelligenceProfiles[profile]?.reasoningEffort || "medium"
+      ? ""
       : elements.reasoningInput.value,
     operatingMode: elements.operatingModeInput.value,
     appearance: elements.appearanceInput.value,

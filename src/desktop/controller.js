@@ -6,10 +6,8 @@ import { loadConfig, validateConfig } from "../config.js";
 import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
-import {
-  intelligenceProfileForReasoning,
-  listModelProviders
-} from "../model/providers.js";
+import { listModelProviders } from "../model/providers.js";
+import { LocalIntelligenceRouter } from "../model/intelligenceRouter.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
@@ -187,7 +185,7 @@ export class DesktopController {
       accounts,
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
       remoteStatus: { ...this.remoteStatus },
-      provider: publicProvider(config.model, settings),
+      provider: publicProvider(config.model),
       providers: listModelProviders(),
       settings: redactSettings(settings),
       system,
@@ -231,7 +229,7 @@ export class DesktopController {
       this.resetRuntime();
       if (intelligenceSettingsChanged(current, saved)) {
         const intelligence = saved.provider === "amos-hosted"
-          ? `AMOS Intelligence · ${profileLabel(saved.intelligenceProfile)}`
+          ? "AMOS Intelligence · Automatic"
           : `${saved.provider} · ${saved.model}`;
         this.record(
           "settings",
@@ -620,8 +618,8 @@ export class DesktopController {
       provider: "amos-hosted",
       model: "auto",
       baseUrl: "",
-      intelligenceProfile: "balanced",
-      reasoningEffort: "medium",
+      intelligenceProfile: "auto",
+      reasoningEffort: "",
       operatingMode: "online",
       workspace: demoWorkspace
     });
@@ -828,8 +826,8 @@ export class DesktopController {
         provider: "amos-hosted",
         model: "auto",
         baseUrl: "",
-        intelligenceProfile: "balanced",
-        reasoningEffort: "medium"
+        intelligenceProfile: "auto",
+        reasoningEffort: ""
       });
     }
     await this.settingsStore.write(nextSettings);
@@ -2430,6 +2428,27 @@ export class DesktopController {
     if (requireAmos && !useOAuth && !config.amos.apiKey) {
       throw new Error("Connect AMOS before running company tasks");
     }
+    let intelligenceRouter = null;
+    if (
+      requestedBoundary === "online" &&
+      config.model.routingMode === "automatic" &&
+      config.model.localRouterMode !== "disabled"
+    ) {
+      try {
+        const routerState = await this.offlineManager?.ensureRouter?.();
+        if (routerState?.ready) {
+          intelligenceRouter = new LocalIntelligenceRouter({
+            baseUrl: this.offlineManager.baseUrl
+          });
+        }
+      } catch (error) {
+        this.record(
+          "routing",
+          "AMOS Local Router is unavailable; AMOS Hosted will classify this task step",
+          { reason: localRouterFailureCode(error) }
+        );
+      }
+    }
     const extraTools = [
       createWorkSurfaceRequestTool(),
       createCanvasTool({
@@ -2494,6 +2513,7 @@ export class DesktopController {
         useOAuth,
         includeAmos: !isOffline && !isPersonal,
         includeWeb: !isOffline,
+        intelligenceRouter,
         systemPrompt: desktopSystemPrompt(isOffline
           ? OFFLINE_SYSTEM_PROMPT
           : isPersonal
@@ -2986,28 +3006,18 @@ export function shouldUseDesktopOAuth(config, credentials, now = Date.now()) {
   return Number.isFinite(expiresAt) && expiresAt > now;
 }
 
-function publicProvider(config, settings) {
-  const managedProfile = config.provider === "amos-hosted"
-    ? intelligenceProfileForReasoning(config.reasoningEffort)
-    : null;
+function publicProvider(config) {
+  const managed = config.provider === "amos-hosted";
   return {
     id: config.provider,
     displayName: config.displayName,
     deployment: config.deployment,
-    model: config.provider === "amos-hosted" ? "" : config.model,
-    baseUrl: config.provider === "amos-hosted" ? "" : config.baseUrl,
-    profile: managedProfile?.id || settings?.intelligenceProfile || null,
-    profileLabel: managedProfile?.label || ""
+    model: managed ? "" : config.model,
+    baseUrl: managed ? "" : config.baseUrl,
+    routingMode: managed ? "automatic" : "pinned",
+    profile: managed ? "auto" : null,
+    profileLabel: managed ? "Automatic" : ""
   };
-}
-
-function profileLabel(profile) {
-  return {
-    efficient: "Efficient",
-    balanced: "Balanced",
-    deep: "Deep",
-    frontier: "Frontier"
-  }[profile] || "Balanced";
 }
 
 function continuityModelIdentity(settings) {
@@ -3156,6 +3166,30 @@ function sanitizeAgentEvent(event) {
       doneWhen: String(event.doneWhen || "").slice(0, 500)
     };
   }
+  if (event.type === "routing") {
+    return {
+      type: "routing",
+      turn: Number(event.turn || 0),
+      rolloutMode: String(event.rolloutMode || "disabled").slice(0, 32),
+      status: String(event.status || "fallback").slice(0, 32),
+      source: String(event.source || "hosted").slice(0, 64),
+      minimumClass: event.minimumClass
+        ? String(event.minimumClass).slice(0, 32)
+        : null,
+      hostedClass: event.hostedClass ? String(event.hostedClass).slice(0, 32) : null,
+      agreement: typeof event.agreement === "boolean" ? event.agreement : null,
+      model: event.model ? String(event.model).slice(0, 160) : null,
+      contract: event.contract ? String(event.contract).slice(0, 160) : null,
+      artifactSha256: event.artifactSha256
+        ? String(event.artifactSha256).slice(0, 64)
+        : null,
+      latencyMs: Math.max(0, Number(event.latencyMs || 0)),
+      phase: String(event.phase || "plan").slice(0, 32),
+      messageCount: Math.max(0, Number(event.messageCount || 0)),
+      toolCount: Math.max(0, Number(event.toolCount || 0)),
+      reason: event.reason ? String(event.reason).slice(0, 160) : null
+    };
+  }
   if (event.type === "tool_start") {
     return { type: event.type, name: event.name, args: event.args };
   }
@@ -3188,6 +3222,16 @@ function receiptEvent(event) {
   if (event.type === "phase") {
     return { type: "phase", name: event.phase, outcome: event.summary };
   }
+  if (event.type === "routing") {
+    const comparison = event.hostedClass
+      ? `:${event.hostedClass}:${event.agreement === true ? "agree" : event.agreement === false ? "disagree" : "unknown"}`
+      : "";
+    return {
+      type: "routing",
+      name: event.minimumClass || event.reason || "hosted_fallback",
+      outcome: `${event.rolloutMode}:${event.status}${comparison}`
+    };
+  }
   if (event.type === "tool_start") {
     return { type: "tool_start", name: event.name, outcome: "started" };
   }
@@ -3215,7 +3259,23 @@ function toolEventSummary(event) {
   if (event.type === "workflow") return `Selected workflow: ${event.title}`;
   if (event.type === "phase") return event.summary || `Task ${event.phase}`;
   if (event.type === "assistant_delta") return "Streaming response";
+  if (event.type === "routing") {
+    if (event.hostedClass) {
+      return `Local ${event.minimumClass || "invalid"} vs hosted ${event.hostedClass}: ${event.agreement ? "agreement" : "disagreement"}`;
+    }
+    return event.minimumClass
+      ? `Local routing classified this step as ${event.minimumClass} (${event.rolloutMode})`
+      : `Local routing used hosted fallback (${event.reason || "unavailable"})`;
+  }
   if (event.type === "tool_start") return `Started ${event.name}`;
   if (event.type === "tool_error") return `${event.name} failed: ${event.error}`;
   return `Completed ${event.name}`;
+}
+
+function localRouterFailureCode(error) {
+  const message = String(error?.message || "").toLowerCase();
+  if (message.includes("checksum")) return "artifact_checksum_failed";
+  if (message.includes("missing") || message.includes("include")) return "artifact_missing";
+  if (message.includes("timed out")) return "installation_timeout";
+  return "router_unavailable";
 }

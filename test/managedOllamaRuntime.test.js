@@ -157,3 +157,38 @@ test("runtime host is restricted to explicit non-privileged IPv4 loopback", () =
     /non-privileged/
   );
 });
+
+test("managed runtime installs a verified router with the bundled Ollama CLI", async () => {
+  const calls = [];
+  const runtime = new ManagedOllamaRuntime({
+    platform: "darwin",
+    arch: "arm64",
+    resourcesPath: "/resources",
+    userDataPath: "/user-data",
+    existsImpl: () => true,
+    mkdirImpl: async () => {},
+    spawnImpl: (binary, args, options) => {
+      calls.push({ binary, args, options });
+      const child = new EventEmitter();
+      child.stderr = new EventEmitter();
+      queueMicrotask(() => child.emit("exit", 0));
+      return child;
+    }
+  });
+
+  const result = await runtime.createModel({
+    model: "amos-router:0.8b-pilot003-v2",
+    modelfilePath: "/resources/router/Modelfile"
+  });
+  assert.deepEqual(result, {
+    model: "amos-router:0.8b-pilot003-v2",
+    installed: true
+  });
+  assert.deepEqual(calls[0].args, [
+    "create",
+    "amos-router:0.8b-pilot003-v2",
+    "-f",
+    "/resources/router/Modelfile"
+  ]);
+  assert.equal(calls[0].options.env.OLLAMA_NO_CLOUD, "1");
+});

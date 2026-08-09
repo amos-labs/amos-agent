@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -14,8 +14,8 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.provider, "amos-hosted");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.model, "auto");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.baseUrl, "");
-  assert.equal(DEFAULT_DESKTOP_SETTINGS.intelligenceProfile, "balanced");
-  assert.equal(DEFAULT_DESKTOP_SETTINGS.reasoningEffort, "medium");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.intelligenceProfile, "auto");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.reasoningEffort, "");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalMode, "ask");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalWorkspace, "");
   assert.deepEqual(DEFAULT_DESKTOP_SETTINGS.localApprovalKinds, []);
@@ -39,7 +39,7 @@ test("local auto-approve is pinned to one exact selected workspace", () => {
   assert.equal(localAutoApproveEnabled(changed), false);
 });
 
-test("AMOS Intelligence stores a capability profile and strips provider-specific routing", () => {
+test("AMOS Intelligence always stores automatic routing and strips provider-specific routing", () => {
   const settings = sanitizeSettings({
     provider: "amos-hosted",
     model: "kimi-k3",
@@ -53,18 +53,46 @@ test("AMOS Intelligence stores a capability profile and strips provider-specific
   assert.equal(settings.model, "auto");
   assert.equal(settings.baseUrl, "");
   assert.equal(settings.apiKey, "");
-  assert.equal(settings.intelligenceProfile, "frontier");
-  assert.equal(settings.reasoningEffort, "max");
+  assert.equal(settings.intelligenceProfile, "auto");
+  assert.equal(settings.reasoningEffort, "");
 });
 
-test("legacy AMOS Intelligence reasoning migrates into the matching capability profile", () => {
+test("legacy AMOS Intelligence tiers migrate into automatic routing", () => {
   const settings = sanitizeSettings({
     provider: "amos-hosted",
     reasoningEffort: "high",
     amosMcpUrl: "https://app.amoslabs.com/mcp"
   });
-  assert.equal(settings.intelligenceProfile, "deep");
-  assert.equal(settings.reasoningEffort, "high");
+  assert.equal(settings.intelligenceProfile, "auto");
+  assert.equal(settings.reasoningEffort, "");
+});
+
+test("stored managed tiers and provider keys migrate before reaching the runtime", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-managed-migration-"));
+  const path = join(directory, "settings.json");
+  await writeFile(path, JSON.stringify({
+    version: 1,
+    settings: {
+      ...DEFAULT_DESKTOP_SETTINGS,
+      intelligenceProfile: "frontier",
+      reasoningEffort: "max",
+      model: "provider-model",
+      baseUrl: "https://provider.example/v1"
+    },
+    encryptedApiKey: "legacy-provider-key"
+  }));
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => value,
+    decrypt: (value) => value
+  });
+
+  const settings = await store.read();
+  assert.equal(settings.model, "auto");
+  assert.equal(settings.intelligenceProfile, "auto");
+  assert.equal(settings.reasoningEffort, "");
+  assert.equal(settings.baseUrl, "");
+  assert.equal(settings.apiKey, "");
 });
 
 test("personal workspace mode allows a cloud model without AMOS company access", () => {
@@ -211,7 +239,7 @@ test("local-only mode requires a local intelligence provider", () => {
         baseUrl: "https://api.moonshot.ai/v1",
         amosMcpUrl: "https://app.amoslabs.com/mcp"
       }),
-    /requires an Ollama or llama.cpp/
+    /requires Ollama or llama.cpp infrastructure/
   );
 
   const settings = sanitizeSettings({

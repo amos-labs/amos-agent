@@ -37,7 +37,8 @@ export function createRuntime({
   includeAmos = true,
   includeWeb = true,
   systemPrompt,
-  onToolResult = null
+  onToolResult = null,
+  intelligenceRouter = null
 }) {
   const registry = createRegistry({ extraTools, includeAmos, includeWeb });
   const modelConfig = {
@@ -46,7 +47,8 @@ export function createRuntime({
       ? useOAuth
         ? (options) => oauth.getAccessToken(options)
         : async () => config.amos.apiKey || config.model.apiKey
-      : null
+      : null,
+    intelligenceRouter
   };
   const modelClient = createModelClient(modelConfig, fetchImpl);
   const amosClient = new AmosMcpClient(

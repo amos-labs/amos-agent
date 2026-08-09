@@ -97,8 +97,8 @@ Shared business state, integrations, governance, and receipts remain in AMOS.
    compatible endpoint. No AMOS account or company tools are required.
 5. For the demo, the browser creates a bounded sample company and securely
    returns it to Desktop without placing its short-lived key in a URL.
-6. For your company, sign in and use AMOS Hosted immediately—or choose another
-   intelligence profile.
+6. For your company, sign in and use automatically routed AMOS Intelligence.
+   Alternative infrastructure remains available under advanced settings.
 7. Grant only the local workspace you want AMOS to inspect and operate.
 
 The app checks for signed updates after launch and every six hours. It notifies
@@ -131,10 +131,10 @@ observe-and-draft workflows.
 
 AMOS Intelligence uses the same short-lived AMOS identity as the company connection.
 Desktop requests the stable `auto` model alias, while the managed platform owns
-provider/model routing. Desktop exposes Efficient, Balanced, Deep, and Frontier
-capability profiles rather than leaking the current implementation model. That
-lets AMOS move from Bedrock to an AMOS-hosted model or route by workload without
-shipping a new desktop build. Explicit provider
+provider/model routing. Users do not choose a managed reasoning tier: AMOS
+selects the least expensive qualified intelligence for every step and escalates
+when necessary. That lets AMOS move between providers or route by workload
+without shipping a new desktop build. Explicit provider
 keys, private compatible endpoints, customer Bedrock, and local models remain
 available and are never overwritten after the user selects them.
 
@@ -216,12 +216,11 @@ company. The client requests only the stable `auto` alias so provider/model
 routing can evolve server-side. Existing BYOK, private endpoint, Bedrock, and
 local profiles remain explicit alternatives.
 
-New installations default to the Balanced profile rather than maximum
-reasoning. AMOS Intelligence accepts the stable `auto` alias and a capability
-hint, while the managed platform owns the actual routine, balanced, deep, or
-frontier route. Users can still choose an exact model through a customer
-Bedrock or provider-key profile. This keeps routine coding, summarization,
-extraction, and tool work from paying frontier cost by default.
+New installations default to AMOS Intelligence automatic routing. Desktop sends
+the stable `auto` alias without a reasoning-tier hint, while the managed
+platform selects the most efficient configuration that satisfies the task's
+measured requirements. Users can still choose exact infrastructure through an
+advanced customer Bedrock, provider-key, private-endpoint, or local setup.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md) and the
 [protocol adapter contract](docs/INTELLIGENCE_PROTOCOL_ADAPTERS.md).

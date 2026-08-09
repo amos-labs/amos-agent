@@ -5,6 +5,7 @@ import {
   linkAbortSignal,
   throwIfAborted
 } from "../util/abort.js";
+import { intelligenceRoutingEnvelope } from "./intelligenceRouter.js";
 
 function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item != null && item !== ""));
@@ -16,12 +17,27 @@ export class OpenAICompatibleClient {
     this.fetch = fetchImpl;
   }
 
-  async chat({ messages, tools = [], onDelta = null, signal = null }) {
+  async chat({
+    messages,
+    tools = [],
+    onDelta = null,
+    onRoutingDecision = null,
+    signal = null
+  }) {
     throwIfAborted(signal);
     const body = {
       model: this.config.model,
       messages: messages.map(({ provider_state: _providerState, ...message }) => message)
     };
+
+    const localRouting = await this.applyLocalRouting({
+      body,
+      messages,
+      tools,
+      signal,
+      onRoutingDecision
+    });
+    throwIfAborted(signal);
 
     if (this.config.reasoningEffort && this.config.capabilities?.reasoning !== false) {
       body.reasoning_effort = this.config.reasoningEffort;
@@ -46,6 +62,7 @@ export class OpenAICompatibleClient {
     let response;
     try {
       const apiKey = this.config.apiKey || (await this.config.getAccessToken?.());
+      throwIfAborted(signal);
       response = await this.fetch(`${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: compactObject({
@@ -78,11 +95,13 @@ export class OpenAICompatibleClient {
       }
 
       if (typeof onDelta === "function") {
-        return await readStreamingResponse(response, {
+        const result = await readStreamingResponse(response, {
           onDelta,
           signal,
           displayName: this.config.displayName || "Model"
         });
+        this.emitHostedRoutingOutcome({ localRouting, raw: result.raw, onRoutingDecision });
+        return result;
       }
 
       const text = await response.text();
@@ -97,11 +116,13 @@ export class OpenAICompatibleClient {
         throw new Error(`${this.config.displayName || "Model"} response did not include choices[0].message`);
       }
 
-      return {
+      const result = {
         message: choice.message,
         usage: payload.usage || null,
         raw: payload
       };
+      this.emitHostedRoutingOutcome({ localRouting, raw: payload, onRoutingDecision });
+      return result;
     } catch (error) {
       if (signal?.aborted) throw createAbortError();
       if (timedOut || isAbortError(error)) {
@@ -113,6 +134,90 @@ export class OpenAICompatibleClient {
       unlink();
     }
   }
+
+  async applyLocalRouting({ body, messages, tools, signal, onRoutingDecision }) {
+    const rolloutMode = this.config.localRouterMode || "disabled";
+    if (this.config.routingMode !== "automatic" || rolloutMode === "disabled") return null;
+    const phase = messages.some((message) => message?.role === "tool") ? "continue" : "plan";
+    const publicFacts = {
+      rolloutMode,
+      phase,
+      messageCount: messages.length,
+      toolCount: tools.length
+    };
+    if (!this.config.intelligenceRouter) {
+      const event = {
+        ...publicFacts,
+        status: "fallback",
+        source: "hosted",
+        reason: "local_router_unavailable"
+      };
+      onRoutingDecision?.(event);
+      return event;
+    }
+    try {
+      const decision = await this.config.intelligenceRouter.classify({
+        messages,
+        tools,
+        phase,
+        signal
+      });
+      const envelope = intelligenceRoutingEnvelope({
+        minimumClass: decision.minimumClass,
+        phase
+      });
+      if (rolloutMode === "active") body.amos_routing = envelope;
+      else body.amos_routing_shadow = envelope;
+      const event = {
+        ...publicFacts,
+        status: "classified",
+        source: decision.source,
+        minimumClass: decision.minimumClass,
+        model: decision.model,
+        contract: decision.contract,
+        artifactSha256: decision.artifactSha256,
+        latencyMs: decision.latencyMs
+      };
+      onRoutingDecision?.(event);
+      return event;
+    } catch (error) {
+      if (signal?.aborted) throw createAbortError();
+      const event = {
+        ...publicFacts,
+        status: "fallback",
+        source: "hosted",
+        reason: routerFailureCode(error)
+      };
+      onRoutingDecision?.(event);
+      return event;
+    }
+  }
+
+  emitHostedRoutingOutcome({ localRouting, raw, onRoutingDecision }) {
+    const amos = raw?.amos;
+    if (
+      localRouting?.rolloutMode !== "shadow" ||
+      !["compared", "invalid"].includes(amos?.local_router_shadow_status)
+    ) {
+      return;
+    }
+    onRoutingDecision?.({
+      ...localRouting,
+      status: amos.local_router_shadow_status,
+      source: "platform",
+      hostedClass: typeof amos.routed_tier === "string" ? amos.routed_tier : null,
+      agreement: typeof amos.local_router_shadow_agreement === "boolean"
+        ? amos.local_router_shadow_agreement
+        : null
+    });
+  }
+}
+
+function routerFailureCode(error) {
+  const message = String(error?.message || "").toLowerCase();
+  if (message.includes("timed out")) return "local_router_timeout";
+  if (message.includes("invalid")) return "local_router_invalid_output";
+  return "local_router_unavailable";
 }
 
 async function readStreamingResponse(response, { onDelta, signal, displayName }) {

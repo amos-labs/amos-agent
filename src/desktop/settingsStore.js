@@ -22,8 +22,8 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   provider: "amos-hosted",
   model: "auto",
   baseUrl: "",
-  intelligenceProfile: "balanced",
-  reasoningEffort: "medium",
+  intelligenceProfile: "auto",
+  reasoningEffort: "",
   operatingMode: "online",
   appearance: "system",
   workspace: "",
@@ -59,6 +59,13 @@ export class DesktopSettingsStore {
     if (stored.encryptedApiKey) {
       settings.apiKey = this.decrypt(stored.encryptedApiKey);
     } else {
+      settings.apiKey = "";
+    }
+    settings.intelligenceProfile = "auto";
+    if (settings.provider === "amos-hosted") {
+      settings.model = "auto";
+      settings.baseUrl = "";
+      settings.reasoningEffort = "";
       settings.apiKey = "";
     }
     return settings;
@@ -113,13 +120,8 @@ export function sanitizeSettings(input = {}) {
     ? input.operatingMode
     : "online";
   if (operatingMode === "offline" && !["ollama", "llama-cpp"].includes(provider)) {
-    throw new Error("Local-only mode requires an Ollama or llama.cpp intelligence profile");
+    throw new Error("Local-only mode requires Ollama or llama.cpp infrastructure");
   }
-  const intelligenceProfile = ["efficient", "balanced", "deep", "frontier"].includes(
-    input.intelligenceProfile
-  )
-    ? input.intelligenceProfile
-    : profileForReasoning(input.reasoningEffort);
   const managed = provider === "amos-hosted";
   const workspace = clean(input.workspace, 4096);
   const requestedApprovalWorkspace = clean(input.localApprovalWorkspace, 4096);
@@ -144,9 +146,9 @@ export function sanitizeSettings(input = {}) {
     provider,
     model: managed ? "auto" : clean(input.model, 256),
     baseUrl: managed ? "" : validateEndpoint(input.baseUrl),
-    intelligenceProfile,
+    intelligenceProfile: "auto",
     reasoningEffort: managed
-      ? reasoningForProfile(intelligenceProfile)
+      ? ""
       : ["none", "low", "medium", "high", "max"].includes(input.reasoningEffort)
         ? input.reasoningEffort
         : "medium",
@@ -192,22 +194,6 @@ export function localApprovalKindEnabled(settings = {}, kind) {
     Array.isArray(settings.localApprovalKinds) &&
     settings.localApprovalKinds.includes(kind)
   );
-}
-
-function profileForReasoning(reasoningEffort) {
-  if (reasoningEffort === "max") return "frontier";
-  if (reasoningEffort === "high") return "deep";
-  if (["none", "low"].includes(reasoningEffort)) return "efficient";
-  return "balanced";
-}
-
-function reasoningForProfile(profile) {
-  return {
-    efficient: "low",
-    balanced: "medium",
-    deep: "high",
-    frontier: "max"
-  }[profile] || "medium";
 }
 
 function validateEndpoint(value, { requireHttps = false } = {}) {

@@ -48,7 +48,7 @@ scoping, policy, budgets, approval gates, or receipt generation.
 The likely end state is:
 
 - **AMOS Router** — a small model or classifier that selects workflow, skills,
-  context budget, and qualified intelligence profile;
+  context budget, and qualified intelligence configuration;
 - **AMOS Operator** — a 20B-class tool and company-work model;
 - **AMOS Evidence** — retrieval, contradiction, provenance, and receipt
   interpretation;
@@ -57,9 +57,28 @@ The likely end state is:
   backed by [ExpertCache](https://github.com/amos-labs/expertcache) or a private
   inference pool.
 
-The first release can combine Router, Operator, and Evidence in one fine-tuned
-20B model. Split models only when measurements show a quality, latency, privacy,
-or deployment advantage.
+AMOS Router should be independently deployable as a tiny classifier so routing
+remains fast, inexpensive, local-capable, and available when larger models are
+offline. It may be trained or distilled with help from Operator and Reviewer
+traces, but its product output is only a bounded task-requirement envelope. The
+Operator and Evidence roles may share a 20B checkpoint until measurements show
+a quality, latency, privacy, or deployment advantage from splitting them.
+
+### Router pilot status — August 9, 2026
+
+Desktop now bundles the 0.8B Pilot 003 Q4_K_M artifact with the conservative v2
+prompt. The exact packaged combination reproduced 36/40 (90%) on the 40-case
+development fixture with zero invalid outputs. Its four remaining errors are
+systematic under-routes in constrained deterministic architecture,
+multilingual Deep work, formal causal simulation, and formally assured
+enterprise-scale systems.
+
+The candidate runs in shadow mode. AMOS Hosted still chooses the production
+route, the platform collects class-agreement aggregates without prompt text,
+and Desktop stores the comparison only in its encrypted local task receipt.
+Production use is not shared-training consent. The next Router dataset must
+come from synthetic boundary expansion plus explicitly opted-in and reviewed
+corrections, followed by a sealed qualification run.
 
 ## Training data contract
 

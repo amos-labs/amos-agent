@@ -58,11 +58,11 @@ workspace remain independent of the company connection.
 
 ## Intelligence cost posture
 
-New installations start at **Balanced** reasoning. The user may choose lower or
-higher reasoning per profile. AMOS Hosted sends only the `auto` model alias;
-the managed platform maps the reasoning hint to a routine, balanced, or deep
-tier and records the exact routed model and cost without retaining prompt or
-response content.
+New installations use **AMOS Intelligence · Automatic**. Desktop sends the
+stable `auto` model alias without a user-selected reasoning tier. The managed
+platform selects the least expensive qualified intelligence for each step,
+escalates when requirements demand it, and records the exact routed model and
+cost without retaining prompt or response content.
 
 ## Local proof
 
