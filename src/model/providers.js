@@ -2,7 +2,11 @@ import { OpenAICompatibleClient } from "./openAiCompatibleClient.js";
 import { OpenAIResponsesClient } from "./openAiResponsesClient.js";
 import { AnthropicMessagesClient } from "./anthropicMessagesClient.js";
 import { MODEL_PROTOCOLS, normalizeModelProtocol } from "./protocol.js";
-import { normalizeIntelligenceRouterRolloutMode } from "./intelligenceRouter.js";
+import {
+  INTELLIGENCE_ROUTING_OWNERS,
+  isAmosDesktopRoutingConfig,
+  normalizeIntelligenceRouterRolloutMode
+} from "./intelligenceRouter.js";
 
 const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
 const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
@@ -175,6 +179,9 @@ export function resolveModelConfig(env = process.env) {
       ? hostedBaseUrl
       : env.AMOS_MODEL_BASE_URL || providerBaseUrl(provider, env, bedrockBaseUrl),
     model,
+    routingOwner: hosted
+      ? INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP
+      : INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER,
     routingMode: hosted ? "automatic" : "pinned",
     localRouterMode: hosted
       ? normalizeIntelligenceRouterRolloutMode(env.AMOS_LOCAL_ROUTER_MODE)
@@ -244,13 +251,22 @@ export function validateModelConfig(config) {
 
 export function createModelClient(config, fetchImpl) {
   const protocol = normalizeModelProtocol(config.protocol);
+  const clientConfig = isAmosDesktopRoutingConfig(config)
+    ? config
+    : {
+        ...config,
+        routingOwner: INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER,
+        routingMode: "pinned",
+        localRouterMode: "disabled",
+        intelligenceRouter: null
+      };
   if (protocol === MODEL_PROTOCOLS.OPENAI_RESPONSES) {
-    return new OpenAIResponsesClient(config, fetchImpl);
+    return new OpenAIResponsesClient(clientConfig, fetchImpl);
   }
   if (protocol === MODEL_PROTOCOLS.ANTHROPIC_MESSAGES) {
-    return new AnthropicMessagesClient(config, fetchImpl);
+    return new AnthropicMessagesClient(clientConfig, fetchImpl);
   }
-  return new OpenAICompatibleClient(config, fetchImpl);
+  return new OpenAICompatibleClient(clientConfig, fetchImpl);
 }
 
 function providerBaseUrl(provider, env, bedrockBaseUrl) {

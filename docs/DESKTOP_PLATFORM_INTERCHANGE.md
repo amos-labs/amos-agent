@@ -31,6 +31,28 @@ This is not a second implementation of AMOS in Electron:
 - No company capability is implemented only inside Desktop. Desktop-specific
   conveniences compose public, governed platform capabilities.
 
+## Implementation status — August 10, 2026
+
+The first major Desktop-harness foundations are shipped: the conversation-first
+shell, inline governed progress, dynamic canvas, encrypted restart continuity,
+mid-task steering, native OpenAI Responses and Anthropic Messages adapters,
+managed local intelligence, and local-primary AMOS Router integration.
+
+The current hardening slice makes routing ownership explicit. Only the official
+Desktop `amos-hosted` profile can receive the local classifier; selected-provider
+and external-client paths are structurally excluded and covered by negative
+tests.
+
+The next product slices, in order, are:
+
+1. finish qualified provider and Bedrock protocol parity rather than merely
+   exposing direct-provider foundations;
+2. add consent-aware Router corrections/export and a sealed qualification gate;
+3. deliver the searchable task manager and governed task-forking/lineage
+   experience tracked in issue 47; and
+4. add enterprise device inventory, revocation, and environment grants tracked
+   in issue 17.
+
 ## Client parity
 
 The platform contract is the product. Desktop, Claude, Codex, and future clients
@@ -49,6 +71,13 @@ are presentations of that contract.
   authorized clients.
 - New features are not complete until they have a client-neutral MCP/API
   contract, proof behavior, and at least one non-Desktop path.
+
+Inference routing is intentionally not part of client parity. The local tiny
+classifier is a first-party Desktop implementation detail for the managed AMOS
+Intelligence request path. Claude, Codex, and other MCP-controlled clients keep
+their controller's model choice and never receive, invoke, configure, or emit
+Desktop routing state. Direct-provider profiles inside Desktop are likewise
+pinned and pass through their native adapter without local classification.
 
 Desktop can enhance the experience with local intelligence, richer visuals,
 notifications, secure operating-system dialogs, offline drafts, and persistent

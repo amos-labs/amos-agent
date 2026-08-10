@@ -21,6 +21,10 @@ export const INTELLIGENCE_ROUTER_ROLLOUT_MODES = Object.freeze([
   "shadow",
   "active"
 ]);
+export const INTELLIGENCE_ROUTING_OWNERS = Object.freeze({
+  AMOS_DESKTOP: "amos-desktop",
+  SELECTED_PROVIDER: "selected-provider"
+});
 export const INTELLIGENCE_ROUTER_FORMAT = Object.freeze({
   type: "object",
   properties: Object.freeze({
@@ -32,6 +36,16 @@ export const INTELLIGENCE_ROUTER_FORMAT = Object.freeze({
   required: Object.freeze(["minimum_class"]),
   additionalProperties: false
 });
+
+export function isAmosDesktopRoutingConfig(config) {
+  return Boolean(
+    config?.provider === "amos-hosted" &&
+    config?.protocol === "openai-chat-completions" &&
+    config?.usesAmosIdentity === true &&
+    config?.routingOwner === INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP &&
+    config?.routingMode === "automatic"
+  );
+}
 
 export function intelligenceRouterPayload({
   messages = [],

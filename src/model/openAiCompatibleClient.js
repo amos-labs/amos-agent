@@ -5,7 +5,10 @@ import {
   linkAbortSignal,
   throwIfAborted
 } from "../util/abort.js";
-import { intelligenceRoutingEnvelope } from "./intelligenceRouter.js";
+import {
+  intelligenceRoutingEnvelope,
+  isAmosDesktopRoutingConfig
+} from "./intelligenceRouter.js";
 
 function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item != null && item !== ""));
@@ -137,7 +140,7 @@ export class OpenAICompatibleClient {
 
   async applyLocalRouting({ body, messages, tools, signal, onRoutingDecision }) {
     const rolloutMode = this.config.localRouterMode || "disabled";
-    if (this.config.routingMode !== "automatic" || rolloutMode === "disabled") return null;
+    if (!isAmosDesktopRoutingConfig(this.config) || rolloutMode === "disabled") return null;
     const phase = messages.some((message) => message?.role === "tool") ? "continue" : "plan";
     const publicFacts = {
       rolloutMode,
