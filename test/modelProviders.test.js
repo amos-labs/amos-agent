@@ -86,7 +86,7 @@ test("Kimi K3 stays on its currently supported max effort while other routes sta
   });
   assert.equal(hosted.reasoningEffort, "");
   assert.equal(hosted.routingMode, "automatic");
-  assert.equal(hosted.localRouterMode, "shadow");
+  assert.equal(hosted.localRouterMode, "active");
 });
 
 test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", () => {
@@ -104,7 +104,7 @@ test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", (
   assert.equal(config.apiKey, "");
   assert.equal(config.maxCompletionTokens, 32_768);
   assert.equal(config.requestTimeoutMs, 660_000);
-  assert.equal(config.localRouterMode, "shadow");
+  assert.equal(config.localRouterMode, "active");
 });
 
 test("AMOS Local Router rollout is configurable only for automatic hosted routing", () => {
@@ -289,7 +289,7 @@ test("automatic routing sends a local decision in shadow mode without exposing p
   assert.doesNotMatch(JSON.stringify(events), /private customer task/);
 });
 
-test("active local routing controls the envelope and failures fall back to hosted", async () => {
+test("local-primary routing controls the envelope and local failures fall back to hosted", async () => {
   const bodies = [];
   const events = [];
   const fetchImpl = async (_url, options) => {
@@ -314,7 +314,7 @@ test("active local routing controls the envelope and failures fall back to hoste
     baseUrl: "https://app.amoslabs.com/v1",
     model: "auto",
     routingMode: "automatic",
-    localRouterMode: "shadow",
+    localRouterMode: "active",
     requestTimeoutMs: 1_000,
     capabilities: {},
     intelligenceRouter: { classify: async () => { throw new Error("invalid class"); } }

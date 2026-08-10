@@ -102,7 +102,7 @@ intelligence configuration for each step. A small local Router should normally
 handle this classification even when hosted models are unavailable; the larger
 ExpertCache-backed model can remain a planner, teacher, or reviewer.
 
-### Current local shadow rollout
+### Current local-primary rollout
 
 The August 9, 2026 Desktop integration bundles
 `amos-router:0.8b-pilot003-v2` as a release-pinned Q4_K_M artifact. The build
@@ -112,26 +112,29 @@ and registers it with the bundled Ollama 0.32.5 runtime on AMOS's private
 loopback endpoint.
 
 This candidate scored 36/40 (90%) on the development fixture, with no invalid
-outputs and 100% accuracy on the Routine and Balanced cases. It is not yet a
-qualified production router: four systematic Deep/Frontier under-routes remain,
-and no sealed qualification partition has been run. The default rollout is
-therefore `shadow`.
+outputs and 100% accuracy on the Routine and Balanced cases. Four systematic
+Deep/Frontier under-routes remain and no sealed qualification partition has
+been run, so the model program still records it as development-qualified rather
+than a finished training artifact. The product rollout is nevertheless
+local-primary: running a second classifier for every healthy local decision
+would add avoidable latency and hosted inference cost.
 
-In shadow mode:
+In the default `active` mode:
 
 1. Desktop classifies each hosted task step locally.
-2. Desktop sends a separate `amos_routing_shadow` envelope.
-3. AMOS Hosted independently classifies and controls the production route.
-4. The platform records only fixed-cardinality class agreement metrics; it does
-   not log task text.
-5. Desktop correlates the local and hosted classes in the existing encrypted
-   local task receipt alongside the locally held task objective.
+2. A valid local decision is sent under `amos_routing`.
+3. AMOS Hosted validates the bounded envelope and routes the request without
+   invoking its classifier.
+4. A missing artifact, checksum mismatch, installation failure, timeout, or
+   invalid local output causes Desktop to omit the envelope.
+5. Only then does AMOS Hosted run its classifier as the availability fallback.
 
-Any missing artifact, checksum mismatch, installation failure, timeout, or
-invalid model output simply omits the shadow envelope and uses the hosted
-classifier. It does not fail the user's main task. `AMOS_LOCAL_ROUTER_MODE=active`
-supports a later controlled graduation without another protocol change, but it
-must not become the release default before the qualification gate passes.
+Clients without the managed local runtime also use the hosted classifier.
+`AMOS_LOCAL_ROUTER_MODE=shadow` remains an explicit diagnostic setting for
+short, deliberate comparison runs; it is not the normal request path. Shadow
+mode records only fixed-cardinality agreement metrics without logging task
+text, and Desktop keeps any task-level correlation inside its encrypted local
+receipt.
 
 ### Expansion without application releases
 

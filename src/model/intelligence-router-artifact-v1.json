@@ -14,5 +14,5 @@
   "development_accuracy": 0.9,
   "untuned_2b_development_accuracy": 0.85,
   "qualified": false,
-  "default_rollout_mode": "shadow"
+  "default_rollout_mode": "active"
 }
