@@ -2769,6 +2769,7 @@ const CONTINUITY_LOCAL_TOOLS = new Set([
   "list_files",
   "read_file",
   "write_file",
+  "desktop_create_document",
   "search_files",
   "git_status",
   "apply_patch"
@@ -2864,6 +2865,7 @@ function continuityArtifactReferences(name, result, workspace) {
   };
   addPath(result.path);
   for (const path of Array.isArray(result.files) ? result.files : []) addPath(path);
+  for (const artifact of Array.isArray(result.artifacts) ? result.artifacts : []) addPath(artifact?.path);
   for (const path of Array.isArray(result.manifests) ? result.manifests : []) addPath(path);
   addPath(result.readme?.path);
   for (const match of Array.isArray(result.matches) ? result.matches : []) addPath(match?.path);

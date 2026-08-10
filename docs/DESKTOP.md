@@ -84,6 +84,20 @@ open the existing signed-in AMOS approval flow.
 Canvas history is session-only in 0.6.0; Desktop does not silently persist a
 second offline copy of company data. See [Typed company canvas](CANVAS.md).
 
+### Document artifacts
+
+Desktop can create polished DOCX and PDF files from one bounded, versioned
+document specification. The selected model authors the structure and content;
+local deterministic renderers own typography, pagination, tables, file safety,
+and format generation. Before any file is written, Desktop renders both formats
+in memory, reopens them through the normal attachment extractor, and verifies
+their title and file signatures. A single local file-write approval covers the
+explicit workspace-relative outputs.
+
+Document creation remains available in local-only mode and does not require a
+hosted rendering service. See
+[Deterministic document artifacts](DOCUMENT_ARTIFACT_ENGINE.md).
+
 ### Private memory
 
 - encrypted locally with operating-system protection (Keychain on macOS and
@@ -355,11 +369,14 @@ proof govern any resulting action. See
 The next product layers build on the signed distribution foundation:
 
 1. signed device identity and policy-controlled environment grants;
-2. richer typed canvas blocks and managed AMOS result adapters;
-3. richer private-memory retrieval and sharing proposals;
-4. richer retrieval within the bounded signed company briefing;
-5. richer offline-draft conflict explanations and lifecycle controls;
-6. enterprise/MDM packaging; and
-7. Windows on Arm and managed-store distribution.
+2. document images, charts, reusable templates, and deterministic previews;
+3. existing-document editing, redlines, comments, and approval-safe export;
+4. spreadsheet and presentation artifact engines on the same typed contract;
+5. richer typed canvas blocks and managed AMOS result adapters;
+6. richer private-memory retrieval and sharing proposals;
+7. richer retrieval within the bounded signed company briefing;
+8. richer offline-draft conflict explanations and lifecycle controls;
+9. enterprise/MDM packaging; and
+10. Windows on Arm and managed-store distribution.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

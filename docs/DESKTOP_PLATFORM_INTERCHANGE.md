@@ -43,14 +43,21 @@ Desktop `amos-hosted` profile can receive the local classifier; selected-provide
 and external-client paths are structurally excluded and covered by negative
 tests.
 
+The first local artifact slice is also implemented: a versioned document spec
+now drives deterministic DOCX and PDF renderers, output approval, hashing, and
+reopen verification. It is a Desktop-local engine, not a company capability or
+an inference-routing concern.
+
 The next product slices, in order, are:
 
 1. finish qualified provider and Bedrock protocol parity rather than merely
    exposing direct-provider foundations;
-2. add consent-aware Router corrections/export and a sealed qualification gate;
-3. deliver the searchable task manager and governed task-forking/lineage
+2. add images, charts, reusable templates, editing, and preview to the local
+   artifact engine, followed by spreadsheet and presentation contracts;
+3. add consent-aware Router corrections/export and a sealed qualification gate;
+4. deliver the searchable task manager and governed task-forking/lineage
    experience tracked in issue 47; and
-4. add enterprise device inventory, revocation, and environment grants tracked
+5. add enterprise device inventory, revocation, and environment grants tracked
    in issue 17.
 
 ## Client parity
