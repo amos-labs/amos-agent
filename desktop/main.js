@@ -469,6 +469,20 @@ function registerIpc() {
     controller.allowLocalApprovalKind(kind)
   );
   ipcMain.handle("desktop:open-approvals", () => controller.openApprovals());
+  ipcMain.handle("desktop:open-document-artifact", async (_event, input) => {
+    const mode = input?.mode || "open";
+    if (!["open", "reveal"].includes(mode)) {
+      throw new Error("AMOS blocked an unsupported document artifact action");
+    }
+    const artifactPath = await controller.resolveDocumentArtifactPath(input?.path);
+    if (mode === "reveal") {
+      shell.showItemInFolder(artifactPath);
+      return { ok: true, mode };
+    }
+    const error = await shell.openPath(artifactPath);
+    if (error) throw new Error(`AMOS could not open that document artifact: ${error}`);
+    return { ok: true, mode };
+  });
   ipcMain.handle("desktop:open-external", async (_event, value) => {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error("AMOS blocked an invalid external link");

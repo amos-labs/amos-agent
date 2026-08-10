@@ -1314,6 +1314,7 @@ function renderCanvasBlock(block) {
   else if (block.type === "timeseries") card = renderCanvasTimeseries(block);
   else if (block.type === "markdown") card = renderCanvasMarkdown(block);
   else if (block.type === "code") card = renderCanvasCode(block);
+  else if (block.type === "document") card = renderCanvasDocument(block);
   else if (block.type === "link") card = renderCanvasLink(block);
   else if (block.type === "sources") card = renderCanvasSources(block);
   else card = renderCanvasDecision(block);
@@ -1540,6 +1541,210 @@ function renderCanvasCode(block) {
   pre.append(code);
   card.append(meta, pre);
   return card;
+}
+
+function renderCanvasDocument(block) {
+  const card = canvasCard(block, `canvas-document-block wide document-style-${block.document.style}`);
+  const summary = document.createElement("div");
+  summary.className = "document-preview-summary";
+  const status = document.createElement("span");
+  status.className = `document-layout-status ${block.diagnostics.length ? "attention" : "ready"}`;
+  status.textContent = block.diagnostics.length
+    ? `${block.diagnostics.length} layout ${block.diagnostics.length === 1 ? "note" : "notes"}`
+    : "Layout checks passed";
+  const estimate = document.createElement("span");
+  estimate.textContent = `About ${block.estimatedPages} ${block.estimatedPages === 1 ? "page" : "pages"}`;
+  const verification = document.createElement("span");
+  verification.textContent = block.artifacts.every((artifact) => artifact.verified)
+    ? "Reopened and verified"
+    : "Verification incomplete";
+  summary.append(status, estimate, verification);
+  card.append(summary);
+
+  if (block.diagnostics.length > 0) {
+    const diagnostics = document.createElement("div");
+    diagnostics.className = "document-diagnostics";
+    for (const item of block.diagnostics) {
+      const row = document.createElement("div");
+      row.className = `document-diagnostic ${item.severity}`;
+      const mark = document.createElement("span");
+      mark.textContent = item.severity === "error" ? "×" : item.severity === "warning" ? "!" : "i";
+      const copy = document.createElement("div");
+      const code = document.createElement("strong");
+      code.textContent = item.code.replaceAll("-", " ");
+      const message = document.createElement("p");
+      message.textContent = item.message;
+      copy.append(code, message);
+      row.append(mark, copy);
+      diagnostics.append(row);
+    }
+    card.append(diagnostics);
+  }
+
+  const previewLabel = document.createElement("div");
+  previewLabel.className = "document-preview-label";
+  previewLabel.textContent = block.previewTruncated
+    ? `Structured preview · showing ${block.document.blocks.length} of ${block.totalBlocks} blocks`
+    : "Structured preview · final pagination is preserved in the verified files";
+  card.append(previewLabel);
+
+  const pages = [[]];
+  for (const documentBlock of block.document.blocks) {
+    if (documentBlock.type === "page_break") pages.push([]);
+    else pages.at(-1).push(documentBlock);
+  }
+  const deck = document.createElement("div");
+  deck.className = "document-page-deck";
+  pages.forEach((pageBlocks, pageIndex) => {
+    const page = document.createElement("section");
+    page.className = "document-preview-page";
+    if (pageIndex === 0) {
+      const title = document.createElement("h3");
+      title.className = "document-preview-title";
+      title.textContent = block.document.title;
+      page.append(title);
+      if (block.document.subtitle) {
+        const subtitle = document.createElement("p");
+        subtitle.className = "document-preview-subtitle";
+        subtitle.textContent = block.document.subtitle;
+        page.append(subtitle);
+      }
+      if (block.document.author) {
+        const author = document.createElement("p");
+        author.className = "document-preview-author";
+        author.textContent = block.document.author;
+        page.append(author);
+      }
+    }
+    for (const documentBlock of pageBlocks) {
+      page.append(renderDocumentPreviewBlock(documentBlock));
+    }
+    const pageMarker = document.createElement("footer");
+    pageMarker.textContent = pages.length > 1
+      ? `Explicit section ${pageIndex + 1} of ${pages.length}`
+      : "Document preview";
+    page.append(pageMarker);
+    deck.append(page);
+  });
+  card.append(deck);
+
+  const artifacts = document.createElement("div");
+  artifacts.className = "document-artifacts";
+  for (const artifact of block.artifacts) {
+    const row = document.createElement("div");
+    row.className = "document-artifact-row";
+    const copy = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = artifact.path;
+    const detail = document.createElement("small");
+    detail.textContent = `${artifact.format.toUpperCase()} · ${formatBytes(artifact.bytes)} · SHA-256 ${artifact.sha256.slice(0, 12)}…`;
+    copy.append(name, detail);
+    const actions = document.createElement("div");
+    const open = actionButton("Open", "primary");
+    open.addEventListener("click", () => openDocumentArtifact(artifact.path, "open", open));
+    const reveal = actionButton("Show in folder", "secondary");
+    reveal.addEventListener("click", () => openDocumentArtifact(artifact.path, "reveal", reveal));
+    actions.append(open, reveal);
+    row.append(copy, actions);
+    artifacts.append(row);
+  }
+  const refine = actionButton("Refine with AMOS", "secondary");
+  refine.classList.add("document-refine-button");
+  refine.addEventListener("click", () => {
+    showView("operator");
+    elements.promptInput.value = block.diagnostics.length
+      ? `Refine “${block.document.title}” using the visible layout diagnostics, then regenerate the same document files.`
+      : `Revise “${block.document.title}” and regenerate the same document files. Preserve the verified structure unless I specify a change.`;
+    elements.promptInput.focus();
+  });
+  artifacts.append(refine);
+  card.append(artifacts);
+  return card;
+}
+
+function renderDocumentPreviewBlock(block) {
+  if (block.type === "heading") {
+    const heading = document.createElement(block.level === 1 ? "h4" : "h5");
+    heading.className = `document-preview-heading level-${block.level}`;
+    heading.textContent = block.text;
+    return heading;
+  }
+  if (block.type === "paragraph") {
+    const paragraph = document.createElement("p");
+    paragraph.className = "document-preview-paragraph";
+    paragraph.textContent = block.text;
+    return paragraph;
+  }
+  if (block.type === "list") {
+    const list = document.createElement(block.style === "numbered" ? "ol" : "ul");
+    list.className = "document-preview-list";
+    for (const value of block.items) {
+      const item = document.createElement("li");
+      item.textContent = value;
+      list.append(item);
+    }
+    return list;
+  }
+  if (block.type === "table") {
+    const scroll = document.createElement("div");
+    scroll.className = "document-preview-table-scroll";
+    const table = document.createElement("table");
+    const head = document.createElement("thead");
+    const headerRow = document.createElement("tr");
+    for (const value of block.headers) {
+      const header = document.createElement("th");
+      header.textContent = value;
+      headerRow.append(header);
+    }
+    head.append(headerRow);
+    const body = document.createElement("tbody");
+    for (const values of block.rows) {
+      const row = document.createElement("tr");
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = value;
+        row.append(cell);
+      }
+      body.append(row);
+    }
+    table.append(head, body);
+    scroll.append(table);
+    return scroll;
+  }
+  if (block.type === "callout") {
+    const callout = document.createElement("aside");
+    callout.className = "document-preview-callout";
+    if (block.label) {
+      const label = document.createElement("strong");
+      label.textContent = `${block.label}: `;
+      callout.append(label);
+    }
+    callout.append(document.createTextNode(block.text));
+    return callout;
+  }
+  const sources = document.createElement("section");
+  sources.className = "document-preview-sources";
+  const heading = document.createElement("h5");
+  heading.textContent = "Sources";
+  const list = document.createElement("ol");
+  for (const source of block.sources) {
+    const item = document.createElement("li");
+    item.textContent = `${source.label} — ${source.url || source.source_ref}`;
+    list.append(item);
+  }
+  sources.append(heading, list);
+  return sources;
+}
+
+async function openDocumentArtifact(path, mode, button) {
+  setButtonBusy(button, true, mode === "open" ? "Opening…" : "Finding…");
+  try {
+    await api.openDocumentArtifact(path, mode);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(button, false, mode === "open" ? "Open" : "Show in folder");
+  }
 }
 
 function renderCanvasLink(block) {

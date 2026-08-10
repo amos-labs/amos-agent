@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { normalizeDocumentSpec } from "../artifacts/documentSpec.js";
 
 export const CANVAS_VERSION = "1";
 export const CANVAS_BLOCK_TYPES = Object.freeze([
@@ -7,6 +8,7 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "timeseries",
   "markdown",
   "code",
+  "document",
   "link",
   "sources",
   "decision"
@@ -28,6 +30,8 @@ const MAX_SERIES = 6;
 const MAX_POINTS = 300;
 const MAX_SOURCES = 100;
 const MAX_DECISION_DETAILS = 20;
+const MAX_DOCUMENT_ARTIFACTS = 2;
+const MAX_DOCUMENT_DIAGNOSTICS = 20;
 const SOURCE_KINDS = new Set(["live", "cached", "private", "local"]);
 const DECISION_KINDS = new Set(["approval", "receipt"]);
 const DECISION_STATUSES = new Set([
@@ -295,6 +299,45 @@ function normalizeBlock(input, index, canvasSource) {
     };
   }
 
+  if (type === "document") {
+    const artifacts = array(
+      block.artifacts || [],
+      `blocks[${index}].artifacts`,
+      MAX_DOCUMENT_ARTIFACTS
+    );
+    if (artifacts.length === 0) throw new Error(`blocks[${index}].artifacts cannot be empty`);
+    const diagnostics = array(
+      block.diagnostics || [],
+      `blocks[${index}].diagnostics`,
+      MAX_DOCUMENT_DIAGNOSTICS
+    );
+    return {
+      ...common,
+      document: normalizeDocumentSpec(block.document),
+      artifacts: artifacts.map((artifact, artifactIndex) => normalizeDocumentArtifact(
+        artifact,
+        `blocks[${index}].artifacts[${artifactIndex}]`
+      )),
+      diagnostics: diagnostics.map((diagnostic, diagnosticIndex) => normalizeDocumentDiagnostic(
+        diagnostic,
+        `blocks[${index}].diagnostics[${diagnosticIndex}]`
+      )),
+      estimatedPages: boundedInteger(
+        block.estimated_pages || block.estimatedPages || 1,
+        `blocks[${index}].estimated_pages`,
+        1,
+        10_000
+      ),
+      previewTruncated: block.preview_truncated === true || block.previewTruncated === true,
+      totalBlocks: boundedInteger(
+        block.total_blocks || block.totalBlocks || block.document?.blocks?.length || 1,
+        `blocks[${index}].total_blocks`,
+        1,
+        300
+      )
+    };
+  }
+
   if (type === "link") {
     return {
       ...common,
@@ -434,6 +477,44 @@ function normalizeReference(input, path) {
   };
 }
 
+function normalizeDocumentArtifact(input, path) {
+  const artifact = object(input, `${path} must be an object`);
+  const format = enumValue(artifact.format, ["docx", "pdf"], `${path}.format`);
+  const artifactPath = text(artifact.path, `${path}.path`, 1_000);
+  const portablePath = artifactPath.replaceAll("\\", "/");
+  if (
+    portablePath.startsWith("/") ||
+    /^[a-z]:\//i.test(portablePath) ||
+    portablePath.split("/").includes("..") ||
+    !portablePath.toLowerCase().endsWith(`.${format}`)
+  ) {
+    throw new Error(`${path}.path must be a workspace-relative ${format.toUpperCase()} path`);
+  }
+  const sha256 = text(artifact.sha256, `${path}.sha256`, 64).toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error(`${path}.sha256 must be a SHA-256 digest`);
+  return {
+    path: portablePath,
+    format,
+    bytes: boundedInteger(artifact.bytes, `${path}.bytes`, 1, Number.MAX_SAFE_INTEGER),
+    sha256,
+    verified: artifact.verified === true
+  };
+}
+
+function normalizeDocumentDiagnostic(input, path) {
+  const diagnostic = object(input, `${path} must be an object`);
+  const normalized = {
+    severity: enumValue(diagnostic.severity || "warning", ["info", "warning", "error"], `${path}.severity`),
+    code: text(diagnostic.code, `${path}.code`, 80),
+    message: text(diagnostic.message, `${path}.message`, 500)
+  };
+  const blockIndex = diagnostic.block_index ?? diagnostic.blockIndex;
+  if (blockIndex != null) {
+    normalized.blockIndex = boundedInteger(blockIndex, `${path}.block_index`, 0, 299);
+  }
+  return normalized;
+}
+
 function object(value, message) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(message);
   return value;
@@ -458,6 +539,14 @@ function text(value, path, limit) {
 function optionalText(value, path, limit) {
   if (value === undefined || value === null || value === "") return "";
   return text(value, path, limit);
+}
+
+function boundedInteger(value, path, minimum, maximum) {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < minimum || number > maximum) {
+    throw new Error(`${path} must be an integer from ${minimum} to ${maximum}`);
+  }
+  return number;
 }
 
 function preservedText(value, path, limit) {

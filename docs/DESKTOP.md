@@ -94,6 +94,13 @@ in memory, reopens them through the normal attachment extractor, and verifies
 their title and file signatures. A single local file-write approval covers the
 explicit workspace-relative outputs.
 
+After verification, the normalized document opens automatically in the typed
+canvas beside chat. Desktop shows a bounded inert preview, deterministic layout
+diagnostics, page estimate, hashes, and explicit **Open** and **Show in folder**
+actions. Regenerating the same artifact refreshes that canvas in place. The
+preview does not pretend to be the final pagination; the reopened DOCX and PDF
+remain authoritative.
+
 Document creation remains available in local-only mode and does not require a
 hosted rendering service. See
 [Deterministic document artifacts](DOCUMENT_ARTIFACT_ENGINE.md).
@@ -369,7 +376,7 @@ proof govern any resulting action. See
 The next product layers build on the signed distribution foundation:
 
 1. signed device identity and policy-controlled environment grants;
-2. document images, charts, reusable templates, and deterministic previews;
+2. document images, charts, reusable templates, and page-faithful thumbnails;
 3. existing-document editing, redlines, comments, and approval-safe export;
 4. spreadsheet and presentation artifact engines on the same typed contract;
 5. richer typed canvas blocks and managed AMOS result adapters;

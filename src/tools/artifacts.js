@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, extname, relative } from "node:path";
+import { analyzeDocumentLayout } from "../artifacts/documentDiagnostics.js";
 import { renderDocumentArtifact } from "../artifacts/documentRenderer.js";
 import {
   DOCUMENT_BLOCK_TYPES,
@@ -12,7 +13,7 @@ import {
 import { extractDocumentText } from "../desktop/attachments.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 
-export function createArtifactTools() {
+export function createArtifactTools({ present = null } = {}) {
   return [{
     name: "desktop_create_document",
     source: "local",
@@ -87,14 +88,15 @@ export function createArtifactTools() {
       additionalProperties: false
     },
     async handler(args, context) {
-      return createDocumentArtifacts(args, context);
+      return createDocumentArtifacts(args, context, { present });
     }
   }];
 }
 
-export async function createDocumentArtifacts(args, context) {
+export async function createDocumentArtifacts(args, context, { present = null } = {}) {
   const spec = normalizeDocumentSpec(args.document);
   const formats = normalizeDocumentFormats(args.formats);
+  const layout = analyzeDocumentLayout(spec);
   const root = context.config.safety.workspaceRoot;
   const basePath = normalizedBasePath(args.path);
   const targets = formats.map((format) => {
@@ -137,19 +139,39 @@ export async function createDocumentArtifacts(args, context) {
     await writeFile(artifact.absolutePath, artifact.buffer);
   }
 
+  const artifacts = rendered.map((artifact) => ({
+    path: relative(root, artifact.absolutePath),
+    format: artifact.format,
+    bytes: artifact.buffer.length,
+    sha256: createHash("sha256").update(artifact.buffer).digest("hex"),
+    verified: true,
+    extracted_characters: artifact.verification.extractedCharacters
+  }));
+  let preview = null;
+  if (typeof present === "function") {
+    try {
+      const canvas = await present({ document: spec, artifacts, layout });
+      preview = {
+        available: true,
+        canvas_id: canvas.id,
+        revision: canvas.revision
+      };
+    } catch (error) {
+      preview = {
+        available: false,
+        error: String(error?.message || "Document preview is unavailable").slice(0, 500)
+      };
+    }
+  }
+
   return {
     ok: true,
     contract: "amos.document-spec:1",
     title: spec.title,
     style: spec.style,
-    artifacts: rendered.map((artifact) => ({
-      path: relative(root, artifact.absolutePath),
-      format: artifact.format,
-      bytes: artifact.buffer.length,
-      sha256: createHash("sha256").update(artifact.buffer).digest("hex"),
-      verified: true,
-      extracted_characters: artifact.verification.extractedCharacters
-    }))
+    layout,
+    preview,
+    artifacts
   };
 }
 

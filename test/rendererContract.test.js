@@ -248,13 +248,22 @@ test("the identity card opens Google-style account switching outside Intelligenc
 });
 
 test("canvas code and previews stay typed, inert, and outside the privileged renderer", async () => {
-  const javascript = await readFile(
-    new URL("../desktop/renderer/app.js", import.meta.url),
-    "utf8"
-  );
+  const [javascript, preload, main] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
+  ]);
   assert.match(javascript, /function renderCanvasCode[\s\S]*?code\.textContent = block\.content/);
   assert.match(javascript, /function renderCanvasLink[\s\S]*?api\.openExternal\(block\.url\)/);
   assert.doesNotMatch(javascript, /renderCanvasLink[\s\S]{0,900}createElement\("iframe"\)/);
+  assert.match(javascript, /function renderCanvasDocument[\s\S]*?title\.textContent = block\.document\.title/);
+  assert.match(javascript, /function renderDocumentPreviewBlock[\s\S]*?paragraph\.textContent = block\.text/);
+  assert.match(javascript, /api\.openDocumentArtifact\(path, mode\)/);
+  assert.doesNotMatch(javascript, /renderCanvasDocument[\s\S]{0,6000}(?:innerHTML|createElement\("iframe"\))/);
+  assert.match(preload, /desktop:open-document-artifact/);
+  assert.match(main, /controller\.resolveDocumentArtifactPath\(input\?\.path\)/);
+  assert.match(main, /shell\.openPath\(artifactPath\)/);
+  assert.match(main, /shell\.showItemInFolder\(artifactPath\)/);
 });
 
 test("chat renders only typed Platform-authorized connect actions", async () => {
