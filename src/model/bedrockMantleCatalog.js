@@ -103,6 +103,11 @@ export const BEDROCK_MANTLE_CATALOG = Object.freeze({
       supportedReasoningEfforts: ["low", "medium", "high", "max"],
       defaultReasoningEffort: "medium",
       regions: CLAUDE_5_VERIFIED_REGIONS,
+      dataRetention: {
+        requiredMode: "provider_data_share",
+        dataSharedWithProvider: true,
+        maximumRetentionDays: 30
+      },
       capabilities: { tools: true, vision: true, reasoning: true }
     }),
     model({
@@ -140,6 +145,7 @@ function model(input) {
     aliases: Object.freeze([...(input.aliases || [])]),
     regions: Object.freeze([...(input.regions || [])]),
     supportedReasoningEfforts: Object.freeze([...(input.supportedReasoningEfforts || [])]),
+    dataRetention: input.dataRetention ? Object.freeze({ ...input.dataRetention }) : null,
     capabilities: Object.freeze({ ...(input.capabilities || {}) })
   });
 }

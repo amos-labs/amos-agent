@@ -675,6 +675,14 @@
                 <input id="baseUrlInput" name="baseUrl" autocomplete="off" placeholder="https://…/v1">
                 <small id="baseUrlHelp">HTTPS required except for localhost runtimes.</small>
               </div>
+              <div id="bedrockAuthField" class="field hidden">
+                <label for="bedrockAuthInput">Bedrock authentication</label>
+                <select id="bedrockAuthInput" name="bedrockAuthMode">
+                  <option value="sigv4">AWS credential chain · SigV4 (recommended)</option>
+                  <option value="api-key">Amazon Bedrock API key</option>
+                </select>
+                <small>SigV4 uses an AWS profile, SSO session, environment credentials, or attached IAM role in the Desktop main process. Credentials never enter chat or the renderer.</small>
+              </div>
               <div class="field">
                 <label for="apiKeyInput">Provider credential</label>
                 <input id="apiKeyInput" name="apiKey" type="password" autocomplete="new-password" placeholder="Protected by this operating system">

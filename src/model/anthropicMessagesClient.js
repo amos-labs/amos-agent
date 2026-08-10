@@ -40,7 +40,7 @@ export class AnthropicMessagesClient {
       fetchImpl: this.fetch,
       path: "/messages",
       headers: {
-        "x-api-key": apiKey,
+        "x-api-key": this.config.authMode === "sigv4" ? null : apiKey,
         "anthropic-version": this.config.apiVersion || "2023-06-01",
         ...this.config.headers
       },

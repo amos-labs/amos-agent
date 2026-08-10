@@ -343,11 +343,11 @@ as the AMOS platform grows.
 
 The near-term product path is:
 
-1. signed device identity and policy-controlled environment grants;
-2. richer typed canvases and managed result adapters for company data and active work;
-3. richer private-memory retrieval and portable continuity;
-4. enterprise deployment and fleet-management controls; and
-5. Windows on Arm and managed-store distribution when customer demand warrants them.
+1. complete document artifacts with visual content, templates, editing, spreadsheets, and presentations;
+2. add governed JavaScript browser automation and bounded computer-use fallback;
+3. finish consent-aware Router learning and richer typed company work surfaces;
+4. add signed device identity, revocable environment grants, and fleet-management controls; and
+5. deliver Windows on Arm and managed-store distribution when customer demand warrants them.
 
 The governing principle is constant: **local intelligence may observe, reason,
 draft, and execute within explicit grants; AMOS remains authoritative for

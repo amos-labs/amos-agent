@@ -39,7 +39,9 @@ export class OpenAIResponsesClient {
       fetchImpl: this.fetch,
       path: "/responses",
       headers: {
-        Authorization: apiKey ? `Bearer ${apiKey}` : null,
+        Authorization: this.config.authMode === "sigv4"
+          ? null
+          : apiKey ? `Bearer ${apiKey}` : null,
         ...this.config.headers
       },
       body,

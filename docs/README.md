@@ -16,6 +16,8 @@
 - [Offline draft reconciliation](OFFLINE_RECONCILIATION.md)
 - [Typed company canvas](CANVAS.md)
 - [Deterministic document artifacts](DOCUMENT_ARTIFACT_ENGINE.md)
+- [Bedrock Mantle live qualification](BEDROCK_LIVE_QUALIFICATION.md)
+- [Governed browser and computer use](BROWSER_AND_COMPUTER_USE.md)
 - [Desktop and platform interchange](DESKTOP_PLATFORM_INTERCHANGE.md)
 
 ## Product direction

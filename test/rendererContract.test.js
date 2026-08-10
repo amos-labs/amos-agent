@@ -80,10 +80,15 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   assert.doesNotMatch(javascript, /advancedInfrastructureDetails\.open = !managed/);
   assert.match(html, /id="modelInput"[^>]*><\/select>/);
   assert.match(html, /id="baseUrlHelp"/);
+  assert.match(html, /id="bedrockAuthInput"/);
+  assert.match(html, /AWS credential chain · SigV4 \(recommended\)/);
   assert.match(javascript, /modelInput\.addEventListener\("change", syncSelectedModelEndpoint\)/);
+  assert.match(javascript, /bedrockAuthMode: selectedProvider === "bedrock"/);
   assert.match(javascript, /model\.aliases\?\.includes\(selectedModel\)/);
   assert.match(javascript, /endpoint\.pathname = model\.endpointPath/);
   assert.match(javascript, /syncProviderReasoning\(provider, model\)/);
+  assert.match(javascript, /data sharing required/);
+  assert.match(javascript, /opt into provider data sharing/);
 });
 
 test("routine approval review stays inside Desktop", async () => {

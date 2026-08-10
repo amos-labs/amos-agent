@@ -22,6 +22,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   provider: "amos-hosted",
   model: "auto",
   baseUrl: "",
+  bedrockAuthMode: "auto",
   intelligenceProfile: "auto",
   reasoningEffort: "",
   operatingMode: "online",
@@ -103,6 +104,7 @@ export class DesktopSettingsStore {
       AMOS_MODEL: settings.model,
       AMOS_MODEL_BASE_URL: settings.baseUrl,
       AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
+      AMOS_BEDROCK_AUTH_MODE: settings.bedrockAuthMode,
       AMOS_MODEL_REASONING_EFFORT: settings.reasoningEffort,
       AMOS_AGENT_WORKSPACE: settings.workspace || process.cwd(),
       AMOS_AGENT_AUTO_APPROVE_BASH: autoApproveLocal ? "true" : "false",
@@ -146,6 +148,9 @@ export function sanitizeSettings(input = {}) {
     provider,
     model: managed ? "auto" : clean(input.model, 256),
     baseUrl: managed ? "" : validateEndpoint(input.baseUrl),
+    bedrockAuthMode: ["auto", "sigv4", "api-key"].includes(input.bedrockAuthMode)
+      ? input.bedrockAuthMode
+      : "auto",
     intelligenceProfile: "auto",
     reasoningEffort: managed
       ? ""

@@ -80,7 +80,7 @@ than a model-family branch in the agent loop.
 ```dotenv
 AMOS_MODEL_PROVIDER=bedrock
 AWS_REGION=us-west-2
-AWS_BEARER_TOKEN_BEDROCK=...
+AMOS_BEDROCK_AUTH_MODE=sigv4
 AMOS_MODEL=openai.gpt-5.6-terra
 ```
 
@@ -90,11 +90,33 @@ The default compatible endpoint is:
 https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1
 ```
 
-Bedrock API-key authentication is supported now: Responses uses a bearer header
-and Messages uses `x-api-key`. Keys remain encrypted locally and are accepted
-only for canonical Bedrock Mantle origins. AWS profile and SigV4 support belongs
-in a dedicated credential adapter so the model-provider boundary stays
-unchanged.
+SigV4 is the recommended enterprise authentication mode. The Desktop main
+process resolves the standard AWS credential chain (environment, SSO/profile,
+web identity, shared configuration, or attached EC2/ECS role) and signs the
+exact request with service name `bedrock-mantle`. AWS credentials never enter
+the renderer, model context, settings file, child-process environment, or
+request body. The signer rejects every non-canonical host and mismatched region
+before resolving credentials.
+
+Bedrock API-key authentication remains available explicitly with
+`AMOS_BEDROCK_AUTH_MODE=api-key`: Responses uses a bearer header and Messages
+uses `x-api-key`. Existing stored keys migrate through `auto` mode; new Desktop
+configuration defaults to SigV4. Keys remain encrypted locally and are accepted
+only for canonical Bedrock Mantle origins.
+
+The live qualification command is:
+
+```bash
+npm run qualification:bedrock -- --region us-east-1
+```
+
+It discovers account-specific availability and exercises text, normalized
+usage, native two-turn tools, streaming, vision, cancellation, and structured
+errors without printing credentials. Model availability can still depend on
+AWS Marketplace setup and account/project retention policy. In particular,
+Claude Fable 5 currently requires explicit `provider_data_share`; the catalog
+and Desktop disclose that requirement and AMOS never changes retention policy.
+See [Bedrock live qualification](BEDROCK_LIVE_QUALIFICATION.md).
 
 ## Native provider APIs
 

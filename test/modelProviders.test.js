@@ -44,6 +44,14 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   );
   assert.ok(bedrock.models.every((model) => model.protocol && model.endpointPath));
   assert.equal(bedrock.defaultModel, "openai.gpt-5.6-terra");
+  assert.deepEqual(
+    bedrock.models.find((model) => model.id === "anthropic.claude-fable-5").dataRetention,
+    {
+      requiredMode: "provider_data_share",
+      dataSharedWithProvider: true,
+      maximumRetentionDays: 30
+    }
+  );
 });
 
 test("native providers resolve their protocol, current default, endpoint, and credential", () => {
@@ -129,6 +137,18 @@ test("reasoning effort is normalized to each provider or model contract", () => 
     AMOS_MODEL_REASONING_EFFORT: "none"
   });
   assert.equal(bedrockClaude.reasoningEffort, "medium");
+
+  const bedrockFable = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "bedrock",
+    AMOS_MODEL: "anthropic.claude-fable-5",
+    AMOS_BEDROCK_AUTH_MODE: "sigv4",
+    AWS_REGION: "us-east-1"
+  });
+  assert.deepEqual(bedrockFable.modelProfile.dataRetention, {
+    requiredMode: "provider_data_share",
+    dataSharedWithProvider: true,
+    maximumRetentionDays: 30
+  });
 });
 
 test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", () => {

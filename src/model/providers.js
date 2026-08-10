@@ -2,6 +2,11 @@ import { OpenAICompatibleClient } from "./openAiCompatibleClient.js";
 import { OpenAIResponsesClient } from "./openAiResponsesClient.js";
 import { AnthropicMessagesClient } from "./anthropicMessagesClient.js";
 import { BEDROCK_MANTLE_CATALOG } from "./bedrockMantleCatalog.js";
+import {
+  BEDROCK_AUTH_MODES,
+  createBedrockSigV4Signer,
+  resolveBedrockAuthMode
+} from "./bedrockSigV4.js";
 import { MODEL_PROTOCOLS, normalizeModelProtocol } from "./protocol.js";
 import {
   INTELLIGENCE_ROUTING_OWNERS,
@@ -67,7 +72,9 @@ const PROVIDERS = {
       sources: BEDROCK_MANTLE_CATALOG.sources
     },
     apiKeyEnv: ["AWS_BEARER_TOKEN_BEDROCK", "BEDROCK_API_KEY"],
-    apiKeyRequired: true,
+    apiKeyRequired: false,
+    authModes: [BEDROCK_AUTH_MODES.SIGV4, BEDROCK_AUTH_MODES.API_KEY],
+    defaultAuthMode: BEDROCK_AUTH_MODES.SIGV4,
     capabilities: { tools: true, vision: false, reasoning: true },
     catalogRequired: true
   },
@@ -175,11 +182,17 @@ export function resolveModelConfig(env = process.env) {
     : env.AMOS_MODEL || (provider.id === "kimi" ? env.KIMI_MODEL : "") || provider.defaultModel;
   const modelProfile = resolveProviderModel(provider, requestedModel);
   const model = modelProfile?.id || requestedModel;
+  const authMode = provider.id === "bedrock"
+    ? resolveBedrockAuthMode(env.AMOS_BEDROCK_AUTH_MODE, apiKey)
+    : "api-key";
   const requestedReasoningEffort = hosted
     ? ""
     : env.AMOS_MODEL_REASONING_EFFORT ||
       (provider.id === "kimi" ? env.KIMI_REASONING_EFFORT : "") ||
       "max";
+  const baseUrl = hosted
+    ? hostedBaseUrl
+    : providerBaseUrl(provider, env, { modelProfile, region });
 
   return {
     provider: provider.id,
@@ -189,14 +202,13 @@ export function resolveModelConfig(env = process.env) {
     ),
     displayName: provider.displayName,
     deployment: provider.deployment,
+    authMode,
     apiKey,
     // AMOS Hosted is a first-party trust boundary. Never let a stale BYOK
     // endpoint redirect the user's AMOS bearer token away from the connected
     // AMOS origin, and never let a provider-specific model bypass server-side
     // routing.
-    baseUrl: hosted
-      ? hostedBaseUrl
-      : providerBaseUrl(provider, env, { modelProfile, region }),
+    baseUrl,
     model,
     routingOwner: hosted
       ? INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP
@@ -228,7 +240,12 @@ export function resolveModelConfig(env = process.env) {
       1_000,
       MAX_MODEL_REQUEST_TIMEOUT_MS
     ),
-    apiKeyRequired: provider.apiKeyRequired,
+    apiKeyRequired: provider.id === "bedrock"
+      ? authMode === BEDROCK_AUTH_MODES.API_KEY
+      : provider.apiKeyRequired,
+    awsRegion: provider.id === "bedrock"
+      ? bedrockRegionFromBaseUrl(baseUrl, provider.endpoint)
+      : null,
     usesAmosIdentity: Boolean(provider.usesAmosIdentity),
     modelProfile: modelProfile ? publicModelProfile(modelProfile) : null,
     capabilities: {
@@ -279,7 +296,7 @@ export function validateModelConfig(config) {
 
 export function createModelClient(config, fetchImpl) {
   const protocol = normalizeModelProtocol(config.protocol);
-  const clientConfig = isAmosDesktopRoutingConfig(config)
+  let clientConfig = isAmosDesktopRoutingConfig(config)
     ? config
     : {
         ...config,
@@ -288,6 +305,15 @@ export function createModelClient(config, fetchImpl) {
         localRouterMode: "disabled",
         intelligenceRouter: null
       };
+  if (config.provider === "bedrock" && config.authMode === BEDROCK_AUTH_MODES.SIGV4) {
+    clientConfig = {
+      ...clientConfig,
+      signRequest: createBedrockSigV4Signer({
+        region: config.awsRegion,
+        credentials: config.awsCredentialProvider
+      })
+    };
+  }
   if (protocol === MODEL_PROTOCOLS.OPENAI_RESPONSES) {
     return new OpenAIResponsesClient(clientConfig, fetchImpl);
   }
@@ -361,6 +387,10 @@ function bedrockMantleRegion(url, endpoint) {
   return region;
 }
 
+function bedrockRegionFromBaseUrl(baseUrl, endpoint) {
+  return bedrockMantleRegion(new URL(baseUrl), endpoint || BEDROCK_MANTLE_CATALOG);
+}
+
 function publicModelProfile(profile) {
   return {
     id: profile.id,
@@ -371,6 +401,7 @@ function publicModelProfile(profile) {
     authScheme: profile.authScheme,
     supportedReasoningEfforts: [...(profile.supportedReasoningEfforts || [])],
     defaultReasoningEffort: profile.defaultReasoningEffort,
+    dataRetention: profile.dataRetention ? { ...profile.dataRetention } : null,
     regions: [...(profile.regions || [])]
   };
 }

@@ -50,12 +50,29 @@ test("Desktop persists the canonical endpoint path for the selected Bedrock mode
     model: "anthropic.claude-sonnet-5",
     baseUrl: "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
     apiKey: "bedrock-key",
+    bedrockAuthMode: "api-key",
     reasoningEffort: "medium"
   });
   assert.equal(harness.writes(), 1);
   assert.equal(harness.current().model, "anthropic.claude-sonnet-5");
+  assert.equal(harness.current().bedrockAuthMode, "api-key");
   assert.equal(
     harness.current().baseUrl,
     "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1"
   );
+});
+
+test("Desktop accepts Bedrock SigV4 without storing a provider credential", async () => {
+  const harness = controllerHarness();
+  await harness.controller.saveSettings({
+    provider: "bedrock",
+    model: "openai.gpt-5.6-terra",
+    baseUrl: "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
+    apiKey: "",
+    bedrockAuthMode: "sigv4",
+    reasoningEffort: "medium"
+  });
+  assert.equal(harness.writes(), 1);
+  assert.equal(harness.current().bedrockAuthMode, "sigv4");
+  assert.equal(harness.current().apiKey, "");
 });
