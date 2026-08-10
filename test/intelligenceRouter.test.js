@@ -45,7 +45,7 @@ test("local router uses the narrow 0.8B class-only contract", async () => {
 test("local router release pins the champion artifact and conservative prompt", () => {
   assert.equal(INTELLIGENCE_ROUTER_MODEL, "amos-router:0.8b-pilot003-v2");
   assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.qualified, false);
-  assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.default_rollout_mode, "shadow");
+  assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.default_rollout_mode, "active");
   assert.equal(
     createHash("sha256").update(readFileSync(
       new URL("../src/model/intelligence-router-v1.txt", import.meta.url)
@@ -54,10 +54,11 @@ test("local router release pins the champion artifact and conservative prompt", 
   );
 });
 
-test("router rollout and platform envelope are deterministic and bounded", () => {
-  assert.equal(normalizeIntelligenceRouterRolloutMode(), "shadow");
+test("router rollout defaults local-primary and the platform envelope stays bounded", () => {
+  assert.equal(normalizeIntelligenceRouterRolloutMode(), "active");
   assert.equal(normalizeIntelligenceRouterRolloutMode("active"), "active");
-  assert.equal(normalizeIntelligenceRouterRolloutMode("unknown"), "shadow");
+  assert.equal(normalizeIntelligenceRouterRolloutMode("shadow"), "shadow");
+  assert.equal(normalizeIntelligenceRouterRolloutMode("unknown"), "active");
   assert.deepEqual(intelligenceRoutingEnvelope({ minimumClass: "deep", phase: "continue" }), {
     version: 1,
     source: "amos-router",

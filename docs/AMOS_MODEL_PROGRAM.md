@@ -73,12 +73,15 @@ systematic under-routes in constrained deterministic architecture,
 multilingual Deep work, formal causal simulation, and formally assured
 enterprise-scale systems.
 
-The candidate runs in shadow mode. AMOS Hosted still chooses the production
-route, the platform collects class-agreement aggregates without prompt text,
-and Desktop stores the comparison only in its encrypted local task receipt.
-Production use is not shared-training consent. The next Router dataset must
-come from synthetic boundary expansion plus explicitly opted-in and reviewed
-corrections, followed by a sealed qualification run.
+The candidate is the default local production classifier. A valid local
+envelope controls the route without invoking the hosted classifier; AMOS Hosted
+classifies only when the local runtime is unavailable, times out, abstains, or
+returns invalid output, and for clients that do not have a local runtime.
+`AMOS_LOCAL_ROUTER_MODE=shadow` remains available for explicit diagnostic
+cohorts but is not the normal request path. Production use is not shared-
+training consent. The next Router dataset must come from synthetic boundary
+expansion plus explicitly opted-in and reviewed corrections, followed by a
+sealed qualification run.
 
 ## Training data contract
 

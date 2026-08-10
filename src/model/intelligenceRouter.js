@@ -78,8 +78,11 @@ export function normalizeIntelligenceRouterRolloutMode(
   value,
   fallback = INTELLIGENCE_ROUTER_ARTIFACT.default_rollout_mode
 ) {
-  const mode = String(value || fallback || "shadow").trim().toLowerCase();
-  return INTELLIGENCE_ROUTER_ROLLOUT_MODES.includes(mode) ? mode : "shadow";
+  const defaultMode = INTELLIGENCE_ROUTER_ROLLOUT_MODES.includes(fallback)
+    ? fallback
+    : "active";
+  const mode = String(value || defaultMode).trim().toLowerCase();
+  return INTELLIGENCE_ROUTER_ROLLOUT_MODES.includes(mode) ? mode : defaultMode;
 }
 
 export function intelligenceRoutingEnvelope({
