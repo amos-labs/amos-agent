@@ -379,11 +379,12 @@ The next product layers build on the signed distribution foundation:
 2. document images, charts, reusable templates, and page-faithful thumbnails;
 3. existing-document editing, redlines, comments, and approval-safe export;
 4. spreadsheet and presentation artifact engines on the same typed contract;
-5. richer typed canvas blocks and managed AMOS result adapters;
-6. richer private-memory retrieval and sharing proposals;
-7. richer retrieval within the bounded signed company briefing;
-8. richer offline-draft conflict explanations and lifecycle controls;
-9. enterprise/MDM packaging; and
-10. Windows on Arm and managed-store distribution.
+5. governed JavaScript browser automation and bounded visual computer use;
+6. richer typed canvas blocks and managed AMOS result adapters;
+7. richer private-memory retrieval and sharing proposals;
+8. richer retrieval within the bounded signed company briefing;
+9. richer offline-draft conflict explanations and lifecycle controls;
+10. enterprise/MDM packaging; and
+11. Windows on Arm and managed-store distribution.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

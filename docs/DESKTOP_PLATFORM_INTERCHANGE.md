@@ -47,9 +47,12 @@ Bedrock protocol binding is now model-qualified rather than provider-wide. A
 signed descriptor catalog selects OpenAI Responses or Anthropic Messages plus
 the exact Mantle base path, API-key header, capabilities, reasoning controls,
 and verified regions. Invalid model, region, path, and credential-origin
-combinations fail before settings are persisted. Live account qualification and
-future SigV4 credentials remain explicit follow-on gates rather than guessed
-support.
+combinations fail before settings are persisted. The enterprise SigV4 adapter
+uses the standard AWS credential chain entirely in the main process and has
+passed live text, usage, two-turn tools, streaming, vision, cancellation, and
+provider-error qualification. API-key mode remains available explicitly.
+Account-specific Marketplace and data-retention policy remain external gates;
+AMOS discovers and reports them without changing account policy.
 
 The first local artifact slice is also implemented: a versioned document spec
 now drives deterministic DOCX and PDF renderers, output approval, hashing, and
@@ -61,16 +64,14 @@ pagination remains authoritative.
 
 The next product slices, in order, are:
 
-1. seal live Bedrock account qualification and add the enterprise SigV4
-   credential adapter on top of the model-qualified protocol catalog;
-2. add images, charts, reusable templates, page-faithful thumbnails, and editing
+1. add images, charts, reusable templates, page-faithful thumbnails, and editing
    to the local artifact engine, followed by spreadsheet and presentation
    contracts;
+2. add the governed browser runtime for JavaScript pages, authenticated web
+   workflows, deterministic browser recipes, and bounded computer-use fallback;
 3. add consent-aware Router corrections/export and a sealed qualification gate;
-4. surface the existing platform Automation engine as a first-class Desktop
-   operating page, with authoring launched into isolated task lanes; then
-   deliver the searchable task manager and governed task-forking/lineage
-   experience tracked in issue 47; and
+4. complete the acceptance audit for the shipped Automations, Tasks, and
+   governed forking surfaces and close issue 47; and
 5. add enterprise device inventory, revocation, and environment grants tracked
    in issue 17.
 

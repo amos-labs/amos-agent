@@ -17,7 +17,8 @@ const providerDefaults = {
   bedrock: {
     model: "openai.gpt-5.6-terra",
     baseUrl: "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
-    credential: "Amazon Bedrock API key"
+    credential: "AWS credential chain or Amazon Bedrock API key",
+    authMode: "sigv4"
   },
   openai: {
     model: "gpt-5.6-terra",
@@ -94,7 +95,8 @@ const elements = Object.fromEntries(
     "managedConnectionCallout", "managedConnectButton",
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
-    "baseUrlInput", "baseUrlHelp", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
+    "baseUrlInput", "baseUrlHelp", "bedrockAuthField", "bedrockAuthInput",
+    "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "alwaysApproveButton", "autoApproveFolderButton",
     "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
@@ -223,6 +225,9 @@ function bindActions() {
   elements.settingsForm.addEventListener("submit", saveSettings);
   elements.modelInput.addEventListener("change", syncSelectedModelEndpoint);
   elements.baseUrlInput.addEventListener("change", syncSelectedModelEndpoint);
+  elements.bedrockAuthInput.addEventListener("change", () =>
+    renderProviderFields(elements.modelInput.value)
+  );
   elements.testButton.addEventListener("click", testModel);
   elements.managedConnectButton.addEventListener("click", connectManagedIntelligence);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
@@ -3641,7 +3646,9 @@ function populateModelOptions(catalog, selectedModel) {
     const option = document.createElement("option");
     option.value = model.id;
     option.textContent = model.protocol
-      ? `${model.label} · ${modelProtocolLabel(model.protocol)}`
+      ? `${model.label} · ${modelProtocolLabel(model.protocol)}${
+          model.dataRetention?.dataSharedWithProvider ? " · data sharing required" : ""
+        }`
       : model.label;
     elements.modelInput.append(option);
   }
@@ -3674,6 +3681,10 @@ function renderSettings() {
   }
   if (document.activeElement !== elements.baseUrlInput) elements.baseUrlInput.value = settings.baseUrl || "";
   elements.reasoningInput.value = settings.reasoningEffort || "max";
+  elements.bedrockAuthInput.value = settings.bedrockAuthMode === "api-key" ||
+    (settings.bedrockAuthMode === "auto" && settings.hasApiKey)
+    ? "api-key"
+    : "sigv4";
   elements.operatingModeInput.value = settings.operatingMode || "online";
   elements.appearanceInput.value = settings.appearance || "system";
   elements.mcpInput.value = settings.amosMcpUrl;
@@ -3823,6 +3834,7 @@ function selectProvider(providerId) {
     elements.customModelInput.value = defaults.model || "";
     elements.baseUrlInput.value = defaults.baseUrl || "";
     elements.apiKeyInput.value = "";
+    elements.bedrockAuthInput.value = defaults.authMode || "sigv4";
   }
   renderProviderSelection();
   elements.apiKeyHelp.textContent = defaults.credential || "Provider credential";
@@ -3836,6 +3848,8 @@ function renderProviderFields(modelValue = "") {
   const catalog = modelCatalog(provider);
   const catalogModel = !managed && catalog.length > 0;
   const local = provider?.deployment === "local";
+  const bedrock = selectedProvider === "bedrock";
+  const bedrockApiKey = bedrock && elements.bedrockAuthInput.value === "api-key";
   elements.managedProfileField.classList.toggle("hidden", !managed);
   if (!managed) elements.advancedInfrastructureDetails.open = true;
   elements.localSetupField.classList.toggle("hidden", selectedProvider !== "ollama");
@@ -3845,7 +3859,11 @@ function renderProviderFields(modelValue = "") {
     "hidden",
     managed || selectedProvider === "ollama"
   );
-  elements.apiKeyInput.closest(".field")?.classList.toggle("hidden", managed || local);
+  elements.bedrockAuthField.classList.toggle("hidden", !bedrock);
+  elements.apiKeyInput.closest(".field")?.classList.toggle(
+    "hidden",
+    managed || local || (bedrock && !bedrockApiKey)
+  );
   elements.reasoningInput.closest(".field")?.classList.toggle("hidden", managed);
   elements.managedConnectionCallout.classList.toggle("hidden", !managedConnectionRequired);
   elements.testButton.textContent = managedConnectionRequired
@@ -3891,8 +3909,15 @@ function providerModelProfile(provider, modelId) {
 function renderModelEndpointHelp(provider, selectedModel = null) {
   const model = selectedModel || providerModelProfile(provider, elements.modelInput.value);
   if (provider?.id === "bedrock" && model) {
+    const retention = model.dataRetention?.dataSharedWithProvider
+      ? ` This model requires the AWS account or project to opt into provider data sharing${
+          model.dataRetention.maximumRetentionDays
+            ? ` for up to ${model.dataRetention.maximumRetentionDays} days`
+            : ""
+        }.`
+      : "";
     elements.baseUrlHelp.textContent =
-      `${modelProtocolLabel(model.protocol)} uses ${model.endpointPath}. Qualified regions: ${model.regions.join(", ")}. AMOS keeps the path aligned with the selected model.`;
+      `${modelProtocolLabel(model.protocol)} uses ${model.endpointPath}. Qualified regions: ${model.regions.join(", ")}. AMOS keeps the path aligned with the selected model.${retention}`;
     return;
   }
   elements.baseUrlHelp.textContent = "HTTPS required except for localhost runtimes.";
@@ -4087,6 +4112,9 @@ async function persistSettings() {
       ? "auto"
       : selectedModel,
     baseUrl: managed ? "" : elements.baseUrlInput.value,
+    bedrockAuthMode: selectedProvider === "bedrock"
+      ? elements.bedrockAuthInput.value
+      : "auto",
     intelligenceProfile: "auto",
     reasoningEffort: managed
       ? ""

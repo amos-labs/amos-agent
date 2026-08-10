@@ -83,6 +83,13 @@ path. Credentials therefore cannot be redirected by editing a named-provider
 endpoint, and a Claude model cannot accidentally reach a Responses path (or
 vice versa).
 
+Bedrock authentication is transport-level and does not alter either native
+protocol adapter. API-key mode supplies the descriptor's bearer or `x-api-key`
+header. SigV4 mode removes those headers, resolves the standard AWS credential
+chain in the main process, and signs the exact method, host, path, headers, and
+serialized body for service `bedrock-mantle`. The renderer and canonical AMOS
+message contract never receive AWS credentials.
+
 ## Provider continuation state
 
 Reasoning providers return structured state that must survive a tool round

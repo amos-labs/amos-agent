@@ -65,11 +65,24 @@ export async function executeModelRequest({
   const displayName = config.displayName || "Model";
 
   try {
-    const response = await fetchImpl(`${config.baseUrl.replace(/\/$/, "")}${path}`, {
+    const url = `${config.baseUrl.replace(/\/$/, "")}${path}`;
+    let request = {
       method: "POST",
       headers: compactObject({ "Content-Type": "application/json", ...headers }),
-      signal: controller.signal,
       body: JSON.stringify(body)
+    };
+    if (typeof config.signRequest === "function") {
+      request = {
+        ...request,
+        ...(await config.signRequest({ url, ...request }))
+      };
+    }
+    throwIfAborted(signal);
+    const response = await fetchImpl(url, {
+      method: request.method,
+      headers: request.headers,
+      signal: controller.signal,
+      body: request.body
     });
     if (!response.ok) {
       const text = await response.text();
