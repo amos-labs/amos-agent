@@ -94,6 +94,24 @@ Public fetch blocks:
 
 Native search is optional and uses its own configured provider credential.
 
+The Desktop JavaScript browser adds a narrower local boundary:
+
+- each browser session is ephemeral and bound to one operating mode, user,
+  tenant, and task;
+- every HTTP(S) request is checked against the public-network policy, while
+  popups, downloads, permissions, unsupported schemes, and credential-like
+  main-frame URLs are denied;
+- page inspection executes in an isolated JavaScript world and returns opaque,
+  page-revision-bound element references rather than raw selectors;
+- form extraction returns structure, never entered values or password content;
+- screenshots remain local opaque frames rendered by the typed canvas and are
+  not serialized into model tool text; and
+- closing or changing account/task/runtime revokes the page, references, and
+  frame. Browser execution capabilities are never copied into a task fork.
+
+Authenticated actions, file transfer, user takeover, and visual pointer control
+remain unavailable until their exact approval and credential boundaries land.
+
 ## Intelligence providers
 
 The configured provider receives the conversation and task context needed for

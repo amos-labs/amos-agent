@@ -1924,6 +1924,67 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .document-refine-button { padding: 8px 10px; font-size: 8px; }
 .document-refine-button { justify-self: start; margin-top: 2px; }
 .canvas-document-block .canvas-block-provenance { margin: 0; padding: 10px 22px 14px; }
+.canvas-browser-block { padding: 0; overflow: hidden; }
+.canvas-browser-block > h2 { margin: 0; padding: 18px 20px 0; }
+.canvas-browser-chrome {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted-2);
+  font: 8px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.canvas-browser-origin {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-browser-chrome > span:last-child { margin-left: auto; flex-shrink: 0; }
+.canvas-browser-status {
+  flex-shrink: 0;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(59,213,143,.1);
+  color: var(--green);
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.canvas-browser-status.closed,
+.canvas-browser-status.error { background: rgba(255,117,87,.1); color: #ff9c86; }
+.canvas-browser-status.loading { background: rgba(255,202,105,.1); color: var(--warning); }
+.canvas-browser-frame {
+  display: grid;
+  max-height: 650px;
+  overflow: auto;
+  place-items: start center;
+  background: #e8edf3;
+}
+.canvas-browser-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+}
+.canvas-browser-frame.unavailable,
+.canvas-browser-frame.load-error { min-height: 300px; place-items: center; color: #64748b; }
+.canvas-browser-frame.load-error img { display: none; }
+.canvas-browser-frame.load-error::after { content: "The local browser frame expired. Ask AMOS to refresh the page."; }
+.canvas-browser-frame p { max-width: 440px; padding: 40px; text-align: center; }
+.canvas-browser-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+.canvas-browser-actions p { margin: 0; color: var(--muted-2); font-size: 9px; line-height: 1.5; }
+.canvas-browser-actions .button { flex-shrink: 0; padding: 8px 10px; font-size: 8px; }
+.canvas-browser-block .canvas-block-provenance { margin: 0; padding: 10px 20px 14px; }
 .canvas-link-block { display: flex; flex-direction: column; align-items: flex-start; }
 .canvas-link-block > strong { font-size: 14px; line-height: 1.4; }
 .canvas-link-block > p { margin: 8px 0 16px; color: var(--muted); font-size: 10px; line-height: 1.55; }

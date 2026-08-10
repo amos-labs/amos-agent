@@ -18,6 +18,7 @@
 - [Deterministic document artifacts](DOCUMENT_ARTIFACT_ENGINE.md)
 - [Bedrock Mantle live qualification](BEDROCK_LIVE_QUALIFICATION.md)
 - [Governed browser and computer use](BROWSER_AND_COMPUTER_USE.md)
+- [Browser and computer-use gap analysis](BROWSER_CUA_GAP_ANALYSIS.md)
 - [Desktop and platform interchange](DESKTOP_PLATFORM_INTERCHANGE.md)
 
 ## Product direction

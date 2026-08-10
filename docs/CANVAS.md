@@ -11,6 +11,7 @@ Chat remains the command surface. The canvas is a presentation surface for:
 - Markdown briefs;
 - inert, syntax-labelled code;
 - safe browser destinations for app, page, and course previews;
+- task-bound public browser observations with opaque local screenshot frames;
 - source and evidence lists; and
 - approval or receipt cards.
 
@@ -55,6 +56,12 @@ The v1 limits are intentionally bounded:
 
 Unknown block types, non-finite numeric values, oversized content, and malformed
 timestamps fail closed.
+
+The `browser` block is runtime-owned rather than model-authored. It carries an
+opaque browser session ID, page revision, frame ID, public URL, viewport, and
+bounded observation metadata. The renderer can request only the exact current
+frame attached to a visible browser canvas. It never receives cookies, DOM
+selectors, debugging handles, credentials, or base64 through model context.
 
 ## Data and authority
 

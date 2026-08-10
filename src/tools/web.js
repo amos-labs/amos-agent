@@ -1,8 +1,9 @@
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { truncateText } from "../util/pathSafety.js";
 import { fetchCompat } from "../util/fetchCompat.js";
 import { linkAbortSignal } from "../util/abort.js";
+import { assertPublicUrl } from "../util/publicUrl.js";
+
+export { assertPublicUrl, isPrivateAddress } from "../util/publicUrl.js";
 
 export function createWebTools() {
   return [
@@ -106,40 +107,6 @@ export async function fetchPublicUrl(value, { signal, maxRedirects = 5, fetchImp
     url = new URL(location, url);
   }
   throw new Error("Too many redirects");
-}
-
-export async function assertPublicUrl(url) {
-  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Only http and https URLs are allowed");
-  if (url.username || url.password) throw new Error("URLs containing credentials are not allowed");
-  const hostname = url.hostname.toLowerCase();
-  if (["localhost", "localhost.localdomain"].includes(hostname) || hostname.endsWith(".local")) {
-    throw new Error("Private or local network URLs are not allowed");
-  }
-  const addresses = isIP(hostname) ? [{ address: hostname }] : await lookup(hostname, { all: true, verbatim: true });
-  if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
-    throw new Error("Private or local network URLs are not allowed");
-  }
-}
-
-export function isPrivateAddress(address) {
-  const lower = address.toLowerCase();
-  if (lower === "::" || lower === "::1" || lower.startsWith("fe8") || lower.startsWith("fe9") || lower.startsWith("fea") || lower.startsWith("feb") || lower.startsWith("fc") || lower.startsWith("fd")) {
-    return true;
-  }
-  const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
-  const ipv4 = mapped || (isIP(lower) === 4 ? lower : null);
-  if (!ipv4) return false;
-  const [a, b] = ipv4.split(".").map(Number);
-  return (
-    a === 0 ||
-    a === 10 ||
-    a === 127 ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    a >= 224
-  );
 }
 
 async function readBoundedText(response, maxBytes) {

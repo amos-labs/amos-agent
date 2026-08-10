@@ -18,6 +18,7 @@ import { adaptBriefingRun, adaptCompanyResult } from "./canvasAdapters.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import { DesktopCanvasResultStore } from "./canvasResults.js";
 import { documentArtifactCanvas } from "./documentArtifactCanvas.js";
+import { browserSessionCanvas } from "./browserCanvas.js";
 import {
   DEFAULT_COMPANY_CACHE_TTL_SECONDS
 } from "./companyCache.js";
@@ -62,6 +63,7 @@ import {
 } from "../tools/canvas.js";
 import { createCompanyCacheTool } from "../tools/companyCache.js";
 import { createOfflineProposalTool } from "../tools/offlineProposal.js";
+import { createBrowserTools } from "../tools/browser.js";
 import {
   DEMO_SYSTEM_PROMPT,
   OFFLINE_SYSTEM_PROMPT,
@@ -96,6 +98,7 @@ export class DesktopController {
     decisionKeyStore = null,
     accountStore = null,
     offlineManager = null,
+    browserRuntime = null,
     telemetry = null,
     openBrowser,
     emit,
@@ -146,6 +149,7 @@ export class DesktopController {
     this.checkpointWrites = Promise.resolve();
     this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
+    this.browserRuntime = browserRuntime;
     this.telemetry = telemetry;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
@@ -1848,6 +1852,10 @@ export class DesktopController {
   }
 
   removeCanvas(id) {
+    const existing = this.canvases.list().find((canvas) => canvas.id === id);
+    for (const block of existing?.blocks || []) {
+      if (block.type === "browser") this.browserRuntime?.closeSession?.(block.sessionId);
+    }
     const removed = this.canvases.remove(id);
     if (removed) {
       this.send("canvas:changed", this.canvases.state());
@@ -2145,7 +2153,7 @@ export class DesktopController {
     this.resetRuntime();
     this.attachments.clear();
     this.canvasResults.clear();
-    this.canvases.restore(task.canvasState || {});
+    this.canvases.restore(durableCanvasState(task.canvasState || {}));
     this.activity = [];
     this.record("task", `Opened ${task.title}`, {
       task_id: task.id,
@@ -2311,7 +2319,7 @@ export class DesktopController {
     }
     const canvasState = contextScope === "selected_artifacts"
       ? selectedCanvasState(parent.canvasState, selectedArtifacts)
-      : parent.canvasState;
+      : durableCanvasState(parent.canvasState);
     const child = await this.taskStore.create(scope, {
       id: childId,
       remoteId: remoteFork?.task?.id || "",
@@ -2393,6 +2401,40 @@ export class DesktopController {
     this.send("canvas:changed", this.canvases.state());
     this.snapshotActiveTask().catch(() => {});
     return canvas;
+  }
+
+  presentBrowserSession(input) {
+    const spec = browserSessionCanvas(input);
+    const sessionId = spec.blocks[0].session_id;
+    const existing = this.canvases.list().find((canvas) =>
+      canvas.blocks.some((block) => block.type === "browser" && block.sessionId === sessionId)
+    );
+    const canvas = existing
+      ? this.canvases.update(existing.id, spec)
+      : this.canvases.present(spec);
+    this.record("browser", `${existing ? "Updated" : "Opened"} ${canvas.title}`, {
+      canvasId: canvas.id,
+      sessionId,
+      operation: input.operation,
+      pageRevision: input.page_revision,
+      status: input.status
+    });
+    this.send("canvas:changed", this.canvases.state());
+    return canvas;
+  }
+
+  readBrowserFrame(sessionId, frameId) {
+    const visible = this.canvases.list().some((canvas) =>
+      canvas.blocks.some((block) =>
+        block.type === "browser" &&
+        block.sessionId === sessionId &&
+        block.frameId === frameId &&
+        block.status !== "closed"
+      )
+    );
+    if (!visible) throw new Error("That browser frame is no longer attached to this task");
+    if (!this.browserRuntime) throw new Error("The local browser runtime is unavailable");
+    return this.browserRuntime.readFrame(sessionId, frameId);
   }
 
   async resolveDocumentArtifactPath(value) {
@@ -2904,6 +2946,14 @@ export class DesktopController {
 
   resetRuntime() {
     this.approvals.cancelAll();
+    this.browserRuntime?.closeAll?.();
+    let removedBrowserCanvas = false;
+    for (const canvas of this.canvases.list()) {
+      if ((Array.isArray(canvas.blocks) ? canvas.blocks : []).some((block) => block.type === "browser")) {
+        removedBrowserCanvas = this.canvases.remove(canvas.id) || removedBrowserCanvas;
+      }
+    }
+    if (removedBrowserCanvas) this.send("canvas:changed", this.canvases.state());
     this.runtime = null;
     this.canvasResults.clear();
   }
@@ -2965,6 +3015,18 @@ export class DesktopController {
         update: (id, input) => this.updateCanvas(id, input)
       })
     ];
+    if (!isOffline && this.browserRuntime) {
+      const browserScope = desktopBrowserScope({
+        identity: this.identity,
+        boundary: requestedBoundary,
+        taskId: this.activeTaskRecordId || this.activeContextKey || "active"
+      });
+      extraTools.push(...createBrowserTools({
+        browser: this.browserRuntime,
+        scope: () => browserScope,
+        present: (input) => this.presentBrowserSession(input)
+      }));
+    }
     if (!isOffline && !isPersonal) {
       extraTools.push(createCompanyViewTool({
         present: ({ result_ref: resultRef, intent, title, briefing }) => {
@@ -3167,7 +3229,7 @@ export class DesktopController {
           localPath: task.workspace?.localPath || currentSettings.workspace || ""
         };
     return this.taskStore.update(scope, task.id, {
-      canvasState: this.canvases.state(),
+      canvasState: durableCanvasState(this.canvases.state()),
       workspace
     });
   }
@@ -3444,9 +3506,33 @@ const CONTINUITY_LOCAL_TOOLS = new Set([
   "apply_patch"
 ]);
 
+function desktopBrowserScope({ identity = null, boundary = "personal", taskId = "active" } = {}) {
+  return {
+    boundary: ["online", "personal"].includes(boundary) ? boundary : "personal",
+    subjectId: String(identity?.sub || identity?.user?.id || "local-user"),
+    tenantId: String(identity?.tenant_id || boundary || "personal"),
+    taskId: String(taskId || "active")
+  };
+}
+
+function durableCanvasState(value) {
+  const canvases = (Array.isArray(value?.canvases) ? value.canvases : []).flatMap((canvas) => {
+    const blocks = (Array.isArray(canvas?.blocks) ? canvas.blocks : [])
+      .filter((block) => block?.type !== "browser");
+    return blocks.length > 0 ? [{ ...canvas, blocks }] : [];
+  });
+  return {
+    canvases,
+    activeCanvasId: canvases.some((canvas) => canvas.id === value?.activeCanvasId)
+      ? value.activeCanvasId
+      : canvases[0]?.id || null
+  };
+}
+
 function selectedCanvasState(value, selectedArtifacts) {
+  const durable = durableCanvasState(value);
   const selected = new Set((selectedArtifacts || []).map(String));
-  const canvases = (Array.isArray(value?.canvases) ? value.canvases : []).filter((canvas) => {
+  const canvases = durable.canvases.filter((canvas) => {
     if (selected.has(String(canvas.id))) return true;
     return (canvas.blocks || []).some((block) =>
       selected.has(String(block.id)) ||
@@ -3455,8 +3541,8 @@ function selectedCanvasState(value, selectedArtifacts) {
   });
   return {
     canvases,
-    activeCanvasId: canvases.some((canvas) => canvas.id === value?.activeCanvasId)
-      ? value.activeCanvasId
+    activeCanvasId: canvases.some((canvas) => canvas.id === durable.activeCanvasId)
+      ? durable.activeCanvasId
       : canvases[0]?.id || null
   };
 }

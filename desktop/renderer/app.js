@@ -1887,6 +1887,7 @@ function renderCanvasBlock(block) {
   else if (block.type === "markdown") card = renderCanvasMarkdown(block);
   else if (block.type === "code") card = renderCanvasCode(block);
   else if (block.type === "document") card = renderCanvasDocument(block);
+  else if (block.type === "browser") card = renderCanvasBrowser(block);
   else if (block.type === "link") card = renderCanvasLink(block);
   else if (block.type === "sources") card = renderCanvasSources(block);
   else card = renderCanvasDecision(block);
@@ -2253,6 +2254,61 @@ function renderCanvasDocument(block) {
   });
   artifacts.append(refine);
   card.append(artifacts);
+  return card;
+}
+
+function renderCanvasBrowser(block) {
+  const card = canvasCard(block, "canvas-browser-block wide");
+  const chrome = document.createElement("div");
+  chrome.className = "canvas-browser-chrome";
+  const status = document.createElement("span");
+  status.className = `canvas-browser-status ${block.status}`;
+  status.textContent = block.status === "ready" ? "Observed" : block.status;
+  const origin = document.createElement("span");
+  origin.className = "canvas-browser-origin";
+  try {
+    origin.textContent = new URL(block.url).origin;
+  } catch {
+    origin.textContent = block.url;
+  }
+  const revision = document.createElement("span");
+  revision.textContent = `page ${block.pageRevision} · ${block.elementCount} semantic elements`;
+  chrome.append(status, origin, revision);
+  card.append(chrome);
+
+  const frame = document.createElement("div");
+  frame.className = `canvas-browser-frame${block.frameId ? "" : " unavailable"}`;
+  if (block.frameId && block.status !== "closed") {
+    const image = document.createElement("img");
+    image.alt = `Local browser observation of ${block.title || block.url}`;
+    image.width = block.viewport.width;
+    image.height = block.viewport.height;
+    api.readBrowserFrame(block.sessionId, block.frameId).then((result) => {
+      image.src = `data:${result.mime};base64,${result.base64}`;
+    }).catch(() => frame.classList.add("load-error"));
+    frame.append(image);
+  } else {
+    const message = document.createElement("p");
+    message.textContent = block.status === "closed"
+      ? "This browser session is closed and its local frame was revoked."
+      : "The current local browser frame is unavailable.";
+    frame.append(message);
+  }
+  card.append(frame);
+
+  const footer = document.createElement("div");
+  footer.className = "canvas-browser-actions";
+  const summary = document.createElement("p");
+  summary.textContent = block.summary || "Public page inspected in the task-isolated AMOS browser.";
+  footer.append(summary);
+  if (block.status !== "closed") {
+    const open = actionButton("Open in system browser ↗", "secondary");
+    open.addEventListener("click", () => {
+      api.openExternal(block.url).catch((error) => toast(error.message, true));
+    });
+    footer.append(open);
+  }
+  card.append(footer);
   return card;
 }
 

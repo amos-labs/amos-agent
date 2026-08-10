@@ -7,6 +7,7 @@ import {
   nativeImage,
   Notification,
   safeStorage,
+  session,
   shell,
   Tray
 } from "electron";
@@ -33,12 +34,14 @@ import {
 } from "../src/desktop/updateManager.js";
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
 import { DesktopAccountStore } from "../src/auth/tokenStore.js";
+import { DesktopBrowserRuntime } from "./browserRuntime.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { autoUpdater } = electronUpdater;
 let window;
 let controller;
 let offlineManager;
+let browserRuntime;
 let updateManager;
 let tray;
 let remoteSyncTimer;
@@ -502,6 +505,9 @@ function registerIpc() {
       base64: readFileSync(previewPath).toString("base64")
     };
   });
+  ipcMain.handle("desktop:read-browser-frame", (_event, input) =>
+    controller.readBrowserFrame(input?.sessionId, input?.frameId)
+  );
   ipcMain.handle("desktop:open-external", async (_event, value) => {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error("AMOS blocked an invalid external link");
@@ -599,6 +605,7 @@ app.whenReady().then(async () => {
     routerBundlePath: join(localResourcesPath, "router"),
     emit: (payload) => send("offline:changed", payload)
   });
+  browserRuntime = new DesktopBrowserRuntime({ BrowserWindow, session });
   const telemetry = new DesktopTelemetry({
     filePath: join(app.getPath("userData"), "desktop-telemetry.json"),
     appVersion: app.getVersion(),
@@ -621,6 +628,7 @@ app.whenReady().then(async () => {
     decisionKeyStore,
     accountStore,
     offlineManager,
+    browserRuntime,
     telemetry,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,
@@ -663,6 +671,7 @@ app.on("before-quit", () => {
   clearInterval(remoteSyncTimer);
   controller?.interruptActiveTask().catch(() => {});
   controller?.resetRuntime();
+  browserRuntime?.closeAll();
   offlineManager?.shutdown().catch(() => {});
 });
 

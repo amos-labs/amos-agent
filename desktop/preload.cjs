@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:open-document-artifact", { path, mode }),
   readDocumentPreview: (path) =>
     ipcRenderer.invoke("desktop:read-document-preview", { path }),
+  readBrowserFrame: (sessionId, frameId) =>
+    ipcRenderer.invoke("desktop:read-browser-frame", { sessionId, frameId }),
   openExternal: (url) => ipcRenderer.invoke("desktop:open-external", url),
   updateState: () => ipcRenderer.invoke("desktop:update-state"),
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),
