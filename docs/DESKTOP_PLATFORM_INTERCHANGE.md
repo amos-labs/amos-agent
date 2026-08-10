@@ -657,6 +657,14 @@ context lane, dynamic canvas, artifacts, decisions, automation or goal
 references, and lineage. The page exposes active, waiting-for-user, recent, and
 forked tasks with search, rename, pin, archive, lineage, and safe resume.
 
+The user-facing vocabulary reflects that distinction instead of forcing the
+storage model into chat. **Operator** uses **New conversation** and **Fork
+conversation** because those are the actions a person recognizes while talking
+with AMOS. **Tasks** remains the management page for the durable work containers
+behind those conversations. Starting a conversation creates its task
+automatically; the first message becomes its initial objective and title. A
+user never has to visit Tasks before starting or branching a conversation.
+
 Memory remains an important settings and context surface, but it is not a daily
 operating destination. Its page stays intact and opens from **Accounts &
 Settings → Memory & context** instead of occupying primary navigation.

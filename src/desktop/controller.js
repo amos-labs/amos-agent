@@ -77,6 +77,9 @@ import { createAbortError, isAbortError } from "../util/abort.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 import { selectTaskWorkflow } from "../workflows.js";
 
+const NEW_CONVERSATION_TITLE = "New conversation";
+const NEW_CONVERSATION_OBJECTIVE = "Start a new conversation with AMOS.";
+
 export class DesktopController {
   constructor({
     userDataPath,
@@ -1521,6 +1524,10 @@ export class DesktopController {
     const prompt = String(requestedPrompt || "").trim() ||
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
+    const settings = await this.settingsStore.read();
+    await this.adoptConversationObjective(prompt, settings).catch((error) => {
+      this.record("task", `Could not name the new conversation: ${error.message}`);
+    });
     const taskId = randomUUID();
     const abortController = new AbortController();
     this.activeTask = {
@@ -1544,7 +1551,6 @@ export class DesktopController {
       phase: "starting",
       summary: "Preparing the task"
     });
-    const settings = await this.settingsStore.read();
     if (this.taskStore && this.activeTaskRecordId) {
       const scope = this.taskScope(settings);
       if (scope) {
@@ -2006,9 +2012,15 @@ export class DesktopController {
     if (!["general", "automation_builder", "goal_pursuit"].includes(kind)) {
       throw new Error("That task type is not supported by this Desktop build");
     }
-    const objective = String(input.objective || "").trim().slice(0, 6_000);
-    if (!objective) throw new Error("A new conversation needs an objective");
-    const title = String(input.title || "New task").trim().slice(0, 160) || "New task";
+    const requestedObjective = String(input.objective || "").trim().slice(0, 6_000);
+    if (!requestedObjective && kind !== "general") {
+      throw new Error("A new conversation needs an objective");
+    }
+    const objective = requestedObjective || NEW_CONVERSATION_OBJECTIVE;
+    const defaultTitle = kind === "general" && !requestedObjective
+      ? NEW_CONVERSATION_TITLE
+      : "New task";
+    const title = String(input.title || defaultTitle).trim().slice(0, 160) || defaultTitle;
     const settings = await this.settingsStore.read();
     await this.snapshotActiveTask(settings).catch((error) => {
       this.record("task", `Could not snapshot the previous task canvas: ${error.message}`);
@@ -2157,6 +2169,46 @@ export class DesktopController {
     }
     await this.sendRemoteState();
     return { task, tasks: await this.tasksState(settings) };
+  }
+
+  async adoptConversationObjective(prompt, settings = null) {
+    if (!this.taskStore || !this.activeTaskRecordId) return null;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return null;
+    const current = await this.taskStore.get(scope, this.activeTaskRecordId);
+    if (
+      !current ||
+      current.kind !== "general" ||
+      current.title !== NEW_CONVERSATION_TITLE ||
+      current.objective !== NEW_CONVERSATION_OBJECTIVE
+    ) {
+      return current;
+    }
+
+    const objective = String(prompt || "").trim().slice(0, 6_000);
+    if (!objective) return current;
+    const changes = {
+      title: conversationTitle(objective),
+      objective
+    };
+    let task = await this.taskStore.update(scope, current.id, changes);
+    const remoteId = task.remoteId || (isUuid(task.id) ? task.id : "");
+    if (
+      currentSettings.operatingMode === "online" &&
+      remoteId &&
+      this.identity?.principal_type === "user"
+    ) {
+      try {
+        const remote = await this.personalRemote(currentSettings, "naming this conversation");
+        const updated = await remote.updateTask(remoteId, changes);
+        this.upsertRemoteTask(updated.task);
+        task = await this.retainRemoteTask(currentSettings, updated.task, task);
+      } catch (error) {
+        this.record("task", `Named locally; Platform task sync is pending: ${error.message}`);
+      }
+    }
+    return task;
   }
 
   async forkTaskResource(input = {}) {
@@ -3817,6 +3869,13 @@ function appendSteeringObjective(objective, direction, queuedAt) {
   return combined.length <= 40_000
     ? combined
     : `Earlier objective and steering were truncated for checkpoint safety.\n\n${combined.slice(-39_930)}`;
+}
+
+function conversationTitle(objective) {
+  return String(objective || NEW_CONVERSATION_TITLE)
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 80) || NEW_CONVERSATION_TITLE;
 }
 
 function receiptEvent(event) {
