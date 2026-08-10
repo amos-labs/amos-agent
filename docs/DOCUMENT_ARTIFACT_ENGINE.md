@@ -18,17 +18,21 @@ and automation:
 The model never writes OOXML, PDF drawing commands, arbitrary HTML, or scripts.
 The renderer does not make business judgments or invent content.
 
-## Version 1 contract
+## Version 2 contract
 
-`amos.document-spec:1` supports:
+`amos.document-spec:2` keeps the complete V1 text contract and adds:
 
-- title, subtitle, author, subject, and one of three reviewed visual styles;
-- three heading levels and normal paragraphs;
-- bulleted and numbered lists;
-- fixed-layout tables with up to eight columns;
-- highlighted callouts;
-- explicit page breaks; and
-- numbered HTTPS or AMOS source references.
+- named business-brief, reference-guide, and proposal templates;
+- bounded customer brand tokens, logos, page headers, and page footers;
+- workspace-relative PNG and JPEG figures with alt text, captions, sizing, and
+  source references;
+- deterministic bar and line charts with bounded labels and series; and
+- rendered PNG thumbnails generated from the final PDF pages.
+
+The preserved `amos.document-spec:1` contract supports title metadata, three
+heading levels, paragraphs, lists, fixed-layout tables, callouts, explicit page
+breaks, and numbered HTTPS or AMOS source references. V1 rejects V2-only visual
+blocks instead of silently changing their meaning.
 
 One normalized spec may render DOCX, PDF, or both. Limits on block count, total
 characters, list items, table rows and columns, and sources bound memory and
@@ -51,22 +55,39 @@ requested formats, and the typed document spec.
 7. Only after all requested formats pass does it write the files.
 8. The tool result records each path, format, byte count, SHA-256, and verified
    extracted-character count for task continuity.
-9. Desktop presents the normalized spec in its typed canvas, alongside bounded
-   layout diagnostics and the verified artifact metadata.
+9. Desktop renders the final PDF into bounded page PNGs and presents those
+   pixels in its typed canvas, alongside layout diagnostics and verified
+   artifact metadata.
 
-The renderer never receives an arbitrary local path or document HTML. Preview
-content is inert text derived from the already-normalized `DocumentSpec`.
+The renderer never receives an arbitrary local path or document HTML. Images
+are decoded only after their workspace-relative paths, file sizes, combined
+size, and raster type are verified. Preview images live only under the
+workspace's `.amos/previews/` cache and cross a read-only, PNG-only IPC route.
 Opening or revealing an artifact crosses a narrow IPC boundary that resolves
 the exact workspace-relative DOCX or PDF path again in the main process and
 requires the file to exist. Regenerating the same output path refreshes the
 existing preview revision instead of creating a second work surface.
 
-The current preview is intentionally structural rather than a claim of
-pixel-perfect pagination. Explicit page breaks are visible, deterministic
-checks flag likely title wrapping, orphan headings, dense prose, wide or long
-tables, and unbroken values, and the tool result makes that repair guidance
-available to the model. Final pagination remains authoritative in the reopened
-and verified files.
+The primary preview is page-faithful because it displays the pages rendered
+from the final PDF. A bounded structural preview remains as the fallback if a
+thumbnail cannot be loaded. Deterministic checks still flag likely title
+wrapping, orphan headings, dense prose, wide or long tables, unbroken values,
+and low-resolution figures before regeneration.
+
+## Review and finalization
+
+`amos.document-review:1` edits an existing workspace DOCX without flattening
+the rest of its package. The model supplies exact text anchors; deterministic
+OOXML code creates real Word insertions, deletions, comment ranges, comment
+bodies, relationships, and content types. The source is never overwritten: a
+different workspace-relative output is mandatory and one file-write approval
+names the source, destination, and operation.
+
+`desktop_finalize_document` can accept, reject, or preserve tracked changes and
+remove or preserve comments. It writes another verified DOCX with source and
+output hashes, leaving both earlier documents intact. Anchors must occur inside
+one editable Word text run; ambiguous or structurally unsafe edits fail with a
+request for a shorter exact anchor.
 
 Company data used as source material keeps its existing AMOS identity, tenant,
 policy, and receipt boundary. Creating a local file does not publish it, place
@@ -88,27 +109,24 @@ provider-, and externally controlled sessions keep their controller's model
 choice. Every path may use the same deterministic artifact tool when it is
 running inside Desktop.
 
-## Parity roadmap
+## Qualification and remaining artifact roadmap
 
-The V1 engine establishes reliable creation, but complete daily-work parity
-requires a broader artifact system:
+The DOCX/PDF slice is qualified against representative multi-page fixtures:
+branded page furniture, tables, explicit page breaks, images, bar and line
+charts, true redlines/comments, accepted final output, extraction, rendered
+page inspection, and accessibility audit. Every artifact still reopens before
+the tool reports success.
 
-1. **Visual content** — bounded images, deterministic charts, captions, alt
-   text, crop rules, and source provenance.
-2. **Templates and brand systems** — signed reusable templates, customer fonts,
-   logos, page furniture, theme tokens, and template-version receipts.
-3. **Page-faithful preview** — the bounded structured preview, model-visible
-   layout findings, same-path rerendering, and local open/reveal flow are now
-   implemented. Page thumbnails and renderer-measured overflow remain.
-4. **Existing-document work** — read the source structure, edit selected
-   sections, preserve unaffected content, compare versions, and create redlines
-   and comments without silently flattening the document.
-5. **Evidence integrity** — citations bound to source references, optional
-   appendix manifests, freshness warnings, and governed publish/share actions.
-6. **More artifact types** — spreadsheets and presentations using separate
+Remaining artifact work is intentionally separate from document parity:
+
+1. **More artifact types** — spreadsheets and presentations using separate
    typed contracts while sharing approvals, provenance, verification, previews,
    and continuity.
-7. **Reusable skills** — reviewed document workflows for board briefs,
+2. **Governed publishing** — explicit share/publish actions and optional
+   evidence manifests beyond local file creation.
+3. **Expanded template catalog** — reviewed tenant-specific template packs and
+   fonts without allowing arbitrary executable template content.
+4. **Reusable skills** — reviewed document workflows for board briefs,
    proposals, operating reviews, SOPs, and commercialization packages, with the
    same renderer available to future tenant-defined skills.
 

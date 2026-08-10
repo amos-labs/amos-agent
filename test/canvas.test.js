@@ -63,6 +63,17 @@ test("canvas contract normalizes every safe block type", () => {
           verified: true
         }],
         diagnostics: [],
+        page_preview: {
+          page_count: 1,
+          pages: [{
+            path: ".amos/previews/fixture/page-1.png",
+            page: 1,
+            width: 420,
+            height: 544,
+            bytes: 1024,
+            sha256: "b".repeat(64)
+          }]
+        },
         estimated_pages: 1,
         total_blocks: 1
       },
@@ -91,6 +102,7 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.blocks[1].rows[0].spend, 18.25);
   assert.equal(canvas.blocks[4].content.includes("<script>"), true);
   assert.equal(canvas.blocks[5].artifacts[0].path, "reports/quarterly.pdf");
+  assert.equal(canvas.blocks[5].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
   assert.equal(canvas.blocks[6].url, "http://127.0.0.1:3000/preview");
   assert.equal(canvas.blocks[8].pendingId, "pending-1");
 });
@@ -157,6 +169,37 @@ test("canvas contract rejects arbitrary block types and unbounded tables", () =>
       /workspace-relative PDF path/
     );
   }
+  assert.throws(
+    () => normalizeCanvasSpec({
+      ...base,
+      blocks: [{
+        type: "document",
+        document: {
+          title: "Unsafe preview",
+          blocks: [{ type: "paragraph", text: "Blocked." }]
+        },
+        artifacts: [{
+          path: "reports/report.pdf",
+          format: "pdf",
+          bytes: 1,
+          sha256: "a".repeat(64),
+          verified: true
+        }],
+        page_preview: {
+          page_count: 1,
+          pages: [{
+            path: "../page-1.png",
+            page: 1,
+            width: 420,
+            height: 544,
+            bytes: 1024,
+            sha256: "b".repeat(64)
+          }]
+        }
+      }]
+    }),
+    /AMOS preview PNG path/
+  );
 });
 
 test("desktop canvas manager keeps a bounded session-only history", () => {

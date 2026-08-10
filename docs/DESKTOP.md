@@ -87,19 +87,23 @@ second offline copy of company data. See [Typed company canvas](CANVAS.md).
 ### Document artifacts
 
 Desktop can create polished DOCX and PDF files from one bounded, versioned
-document specification. The selected model authors the structure and content;
-local deterministic renderers own typography, pagination, tables, file safety,
-and format generation. Before any file is written, Desktop renders both formats
-in memory, reopens them through the normal attachment extractor, and verifies
-their title and file signatures. A single local file-write approval covers the
-explicit workspace-relative outputs.
+document specification. V2 includes named templates, customer brand tokens,
+logos, headers and footers, raster figures, captions, alt text, and deterministic
+bar and line charts. The selected model authors structure and content; local
+code owns typography, pagination, file safety, and format generation. Before
+any file is written, Desktop renders in memory, reopens the artifacts through
+the normal attachment extractor, and verifies their title and signatures. A
+single local file-write approval covers the explicit workspace-relative outputs.
 
-After verification, the normalized document opens automatically in the typed
-canvas beside chat. Desktop shows a bounded inert preview, deterministic layout
-diagnostics, page estimate, hashes, and explicit **Open** and **Show in folder**
-actions. Regenerating the same artifact refreshes that canvas in place. The
-preview does not pretend to be the final pagination; the reopened DOCX and PDF
-remain authoritative.
+After verification, the document opens automatically in the typed canvas beside
+chat. Desktop shows inert thumbnails rendered from the final PDF pages,
+deterministic layout diagnostics, hashes, and explicit **Open** and **Show in
+folder** actions. Regenerating the same artifact refreshes that canvas in place.
+
+Desktop can also create a separate reviewed DOCX from an existing workspace
+DOCX using exact anchored replacements, true Word tracked insertions/deletions,
+and true inline comments. Finalization accepts, rejects, or preserves changes
+and removes or preserves comments without overwriting the source.
 
 Document creation remains available in local-only mode and does not require a
 hosted rendering service. See
@@ -376,15 +380,13 @@ proof govern any resulting action. See
 The next product layers build on the signed distribution foundation:
 
 1. signed device identity and policy-controlled environment grants;
-2. document images, charts, reusable templates, and page-faithful thumbnails;
-3. existing-document editing, redlines, comments, and approval-safe export;
-4. spreadsheet and presentation artifact engines on the same typed contract;
-5. governed JavaScript browser automation and bounded visual computer use;
-6. richer typed canvas blocks and managed AMOS result adapters;
-7. richer private-memory retrieval and sharing proposals;
-8. richer retrieval within the bounded signed company briefing;
-9. richer offline-draft conflict explanations and lifecycle controls;
-10. enterprise/MDM packaging; and
-11. Windows on Arm and managed-store distribution.
+2. spreadsheet and presentation artifact engines on the same typed contract;
+3. governed JavaScript browser automation and bounded visual computer use;
+4. richer typed canvas blocks and managed AMOS result adapters;
+5. richer private-memory retrieval and sharing proposals;
+6. richer retrieval within the bounded signed company briefing;
+7. richer offline-draft conflict explanations and lifecycle controls;
+8. enterprise/MDM packaging; and
+9. Windows on Arm and managed-store distribution.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

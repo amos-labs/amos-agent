@@ -3,7 +3,7 @@ import { documentText, normalizeDocumentSpec } from "../artifacts/documentSpec.j
 const MAX_PREVIEW_BLOCKS = 60;
 const MAX_PREVIEW_CHARACTERS = 50_000;
 
-export function documentArtifactCanvas({ document, artifacts, layout, generatedAt }) {
+export function documentArtifactCanvas({ document, artifacts, layout, pagePreview, generatedAt }) {
   const spec = normalizeDocumentSpec(document);
   const preview = boundedPreview(spec);
   const timestamp = generatedAt || new Date().toISOString();
@@ -37,6 +37,7 @@ export function documentArtifactCanvas({ document, artifacts, layout, generatedA
       document: preview.document,
       artifacts,
       diagnostics: layout.diagnostics,
+      page_preview: pagePreview || null,
       estimated_pages: layout.estimated_pages,
       preview_truncated: preview.truncated,
       total_blocks: spec.blocks.length

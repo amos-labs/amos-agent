@@ -2,16 +2,20 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, extname, relative } from "node:path";
 import { analyzeDocumentLayout } from "../artifacts/documentDiagnostics.js";
+import { resolveDocumentAssets } from "../artifacts/documentAssets.js";
+import { renderPdfPreviewPages } from "../artifacts/documentPreview.js";
 import { renderDocumentArtifact } from "../artifacts/documentRenderer.js";
 import {
   DOCUMENT_BLOCK_TYPES,
   DOCUMENT_FORMATS,
   DOCUMENT_STYLES,
+  DOCUMENT_TEMPLATES,
   normalizeDocumentFormats,
   normalizeDocumentSpec
 } from "../artifacts/documentSpec.js";
 import { extractDocumentText } from "../desktop/attachments.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
+import { createDocumentReviewTools } from "./documentReview.js";
 
 export function createArtifactTools({ present = null } = {}) {
   return [{
@@ -36,12 +40,26 @@ export function createArtifactTools({ present = null } = {}) {
         document: {
           type: "object",
           properties: {
-            version: { type: "string", enum: ["1"] },
+            version: { type: "string", enum: ["1", "2"] },
             title: { type: "string" },
             subtitle: { type: "string" },
             author: { type: "string" },
             subject: { type: "string" },
             style: { type: "string", enum: DOCUMENT_STYLES },
+            template: { type: "string", enum: DOCUMENT_TEMPLATES },
+            header: { type: "string" },
+            footer: { type: "string" },
+            brand: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                primary_color: { type: "string" },
+                secondary_color: { type: "string" },
+                text_color: { type: "string" },
+                logo_path: { type: "string" }
+              },
+              additionalProperties: false
+            },
             blocks: {
               type: "array",
               minItems: 1,
@@ -60,6 +78,27 @@ export function createArtifactTools({ present = null } = {}) {
                     type: "array",
                     items: { type: "array", items: { type: "string" } }
                   },
+                  path: { type: "string" },
+                  alt_text: { type: "string" },
+                  caption: { type: "string" },
+                  width_percent: { type: "integer", minimum: 25, maximum: 100 },
+                  chart_type: { type: "string", enum: ["bar", "line"] },
+                  title: { type: "string" },
+                  labels: { type: "array", items: { type: "string" } },
+                  series: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        values: { type: "array", items: { type: "number" } },
+                        color: { type: "string" }
+                      },
+                      required: ["name", "values"],
+                      additionalProperties: false
+                    }
+                  },
+                  source_ref: { type: "string" },
                   sources: {
                     type: "array",
                     items: {
@@ -90,7 +129,7 @@ export function createArtifactTools({ present = null } = {}) {
     async handler(args, context) {
       return createDocumentArtifacts(args, context, { present });
     }
-  }];
+  }, ...createDocumentReviewTools()];
 }
 
 export async function createDocumentArtifacts(args, context, { present = null } = {}) {
@@ -98,6 +137,8 @@ export async function createDocumentArtifacts(args, context, { present = null } 
   const formats = normalizeDocumentFormats(args.formats);
   const layout = analyzeDocumentLayout(spec);
   const root = context.config.safety.workspaceRoot;
+  const canonicalRoot = resolveWorkspacePath(root, ".", false);
+  const assets = await resolveDocumentAssets(spec, root);
   const basePath = normalizedBasePath(args.path);
   const targets = formats.map((format) => {
     const relativePath = `${basePath}.${format}`;
@@ -119,6 +160,7 @@ export async function createDocumentArtifacts(args, context, { present = null } 
         "AMOS Desktop wants to create document files:",
         "",
         ...targets.map((target) => `• ${target.relativePath}`),
+        "• .amos/previews/<document-digest>/page-*.png (bounded local preview cache)",
         "",
         `Title: ${spec.title}`,
         args.reason ? `Reason: ${String(args.reason).slice(0, 500)}` : ""
@@ -130,17 +172,45 @@ export async function createDocumentArtifacts(args, context, { present = null } 
 
   const rendered = [];
   for (const target of targets) {
-    const buffer = await renderDocumentArtifact(spec, target.format);
+    const buffer = await renderDocumentArtifact(spec, target.format, { assets });
     const verification = await verifyArtifact(target.format, buffer, spec.title);
     rendered.push({ ...target, buffer, verification });
   }
+  const previewPdf = rendered.find((artifact) => artifact.format === "pdf")?.buffer ||
+    await renderDocumentArtifact(spec, "pdf", { assets });
+  const pagePreview = await renderPdfPreviewPages(previewPdf);
+  const previewDigest = createHash("sha256").update(previewPdf).digest("hex");
+  const previewDirectory = resolveWorkspacePath(
+    root,
+    `.amos/previews/${previewDigest.slice(0, 24)}`,
+    false
+  );
+  assertSafeAgentPath(previewDirectory, root);
   for (const artifact of rendered) {
     await mkdir(dirname(artifact.absolutePath), { recursive: true });
     await writeFile(artifact.absolutePath, artifact.buffer);
   }
+  await mkdir(previewDirectory, { recursive: true });
+  const previewPages = [];
+  for (const page of pagePreview.pages) {
+    const absolutePath = resolveWorkspacePath(
+      previewDirectory,
+      `page-${page.page}.png`,
+      false
+    );
+    await writeFile(absolutePath, page.data);
+    previewPages.push({
+      path: relative(canonicalRoot, absolutePath).replaceAll("\\", "/"),
+      page: page.page,
+      width: page.width,
+      height: page.height,
+      bytes: page.bytes,
+      sha256: page.sha256
+    });
+  }
 
   const artifacts = rendered.map((artifact) => ({
-    path: relative(root, artifact.absolutePath),
+    path: relative(canonicalRoot, artifact.absolutePath).replaceAll("\\", "/"),
     format: artifact.format,
     bytes: artifact.buffer.length,
     sha256: createHash("sha256").update(artifact.buffer).digest("hex"),
@@ -150,7 +220,16 @@ export async function createDocumentArtifacts(args, context, { present = null } 
   let preview = null;
   if (typeof present === "function") {
     try {
-      const canvas = await present({ document: spec, artifacts, layout });
+      const canvas = await present({
+        document: spec,
+        artifacts,
+        layout,
+        pagePreview: {
+          page_count: pagePreview.pageCount,
+          truncated: pagePreview.truncated,
+          pages: previewPages
+        }
+      });
       preview = {
         available: true,
         canvas_id: canvas.id,
@@ -166,10 +245,16 @@ export async function createDocumentArtifacts(args, context, { present = null } 
 
   return {
     ok: true,
-    contract: "amos.document-spec:1",
+    contract: `amos.document-spec:${spec.version}`,
     title: spec.title,
     style: spec.style,
     layout,
+    page_preview: {
+      page_count: pagePreview.pageCount,
+      rendered_pages: previewPages.length,
+      truncated: pagePreview.truncated,
+      pages: previewPages
+    },
     preview,
     artifacts
   };

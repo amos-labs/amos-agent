@@ -1808,6 +1808,26 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   color: #1f2937;
   font-family: Arial, Helvetica, sans-serif;
 }
+.document-preview-page.rendered {
+  min-height: 0;
+  padding: 0 0 34px;
+  background: #e8edf3;
+}
+.document-preview-thumbnail {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;
+}
+.document-preview-page.rendered.load-error::before {
+  display: grid;
+  min-height: 440px;
+  place-items: center;
+  color: #64748b;
+  content: "Rendered preview unavailable — open the verified file";
+  font-size: 12px;
+}
+.document-preview-page.rendered.load-error .document-preview-thumbnail { display: none; }
 .document-preview-title {
   max-width: 92%;
   margin: 0 0 13px;
@@ -1843,6 +1863,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   border-left: 4px solid #1f4e78;
   background: #eaf2f8;
 }
+.document-preview-visual-placeholder {
+  display: grid;
+  min-height: 180px;
+  margin: 14px 0;
+  padding: 24px;
+  place-items: center;
+  border: 1px dashed #9aa8ba;
+  border-radius: 8px;
+  background: #f3f6fa;
+  color: #526071;
+  text-align: center;
+}
+.document-preview-visual-placeholder strong { color: #263142; font-size: 13px; }
+.document-preview-visual-placeholder span,
+.document-preview-visual-placeholder figcaption { font-size: 9px; }
 .document-style-compact .document-preview-callout { border-color: #0f766e; background: #e6fffa; }
 .document-style-proposal .document-preview-callout { border-color: #7c3e21; background: #fff3e8; }
 .document-preview-table-scroll { max-width: 100%; margin: 13px 0; overflow: auto; }

@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { copyFile, mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import JSZip from "jszip";
 import {
   normalizeDocumentFormats,
   normalizeDocumentSpec
@@ -60,6 +61,32 @@ test("DocumentSpec is bounded and rejects unsafe source contracts", () => {
     }),
     /between 1 and 8 items/
   );
+  assert.throws(
+    () => normalizeDocumentSpec({
+      version: "1",
+      title: "Legacy visual",
+      blocks: [{ type: "image", path: "logo.png", alt_text: "Logo" }]
+    }),
+    /require DocumentSpec version 2/
+  );
+  assert.throws(
+    () => normalizeDocumentSpec({
+      version: "2",
+      title: "Mismatched template",
+      style: "business",
+      template: "narrative_proposal",
+      blocks: [{ type: "paragraph", text: "Blocked." }]
+    }),
+    /does not match template/
+  );
+  assert.throws(
+    () => normalizeDocumentSpec({
+      version: "2",
+      title: "Unsafe image",
+      blocks: [{ type: "image", path: "../logo.png", alt_text: "Logo" }]
+    }),
+    /workspace-relative PNG or JPEG/
+  );
 });
 
 test("Desktop creates and reopens verified DOCX and PDF from one specification", async () => {
@@ -110,6 +137,9 @@ test("Desktop creates and reopens verified DOCX and PDF from one specification",
   });
   assert.equal(previewInput.document.title, DOCUMENT.title);
   assert.equal(previewInput.artifacts.length, 2);
+  assert.equal(previewInput.pagePreview.page_count, 1);
+  assert.equal(previewInput.pagePreview.pages.length, 1);
+  assert.match(previewInput.pagePreview.pages[0].path, /^\.amos\/previews\//);
   assert.deepEqual(result.artifacts.map((artifact) => artifact.format), ["docx", "pdf"]);
   for (const artifact of result.artifacts) {
     assert.equal(artifact.verified, true);
@@ -127,6 +157,81 @@ test("Desktop creates and reopens verified DOCX and PDF from one specification",
     assert.match(text, /Quarterly Operating Brief/);
     assert.match(text, /Fund the next operating phase/);
   }
+});
+
+test("DocumentSpec v2 renders branded images, deterministic charts, and page thumbnails", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-documents-v2-"));
+  await copyFile(
+    new URL("../desktop/assets/amos-mark.png", import.meta.url),
+    join(root, "logo.png")
+  );
+  const tool = createArtifactTools()[0];
+  const result = await tool.handler({
+    path: "visual-brief",
+    formats: ["docx", "pdf"],
+    document: {
+      version: "2",
+      title: "Visual Operating Brief",
+      style: "business",
+      template: "standard_business_brief",
+      header: "AMOS Operating Review",
+      footer: "Confidential",
+      brand: {
+        name: "AMOS Labs",
+        primary_color: "315FD6",
+        secondary_color: "EEF3FF",
+        text_color: "172033",
+        logo_path: "logo.png"
+      },
+      blocks: [
+        { type: "heading", level: 1, text: "Performance" },
+        {
+          type: "image",
+          path: "logo.png",
+          alt_text: "AMOS orbit mark",
+          caption: "Figure 1. AMOS visual identity",
+          width_percent: 35,
+          source_ref: "workspace:logo.png"
+        },
+        {
+          type: "chart",
+          chart_type: "bar",
+          title: "ARR growth",
+          labels: ["Q1", "Q2", "Q3"],
+          series: [{ name: "ARR", values: [1.8, 2.4, 3] }],
+          alt_text: "Bar chart showing ARR increasing from 1.8 to 3 million",
+          caption: "Figure 2. ARR by quarter",
+          source_ref: "amos:metric:arr"
+        }
+      ]
+    }
+  }, {
+    config: {
+      safety: {
+        workspaceRoot: root,
+        allowOutsideWorkspace: false,
+        autoApproveWrites: true,
+        autoApproveKinds: []
+      }
+    },
+    approvals: { confirm: async () => true }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.contract, "amos.document-spec:2");
+  assert.ok(result.page_preview.page_count >= 1);
+  assert.equal(result.page_preview.rendered_pages, result.page_preview.page_count);
+  assert.equal((await stat(join(root, result.page_preview.pages[0].path))).isFile(), true);
+  for (const artifact of result.artifacts) {
+    assert.equal((await stat(join(root, artifact.path))).isFile(), true);
+  }
+  const docxArtifact = result.artifacts.find((artifact) => artifact.format === "docx");
+  const zip = await JSZip.loadAsync(await readFile(join(root, docxArtifact.path)));
+  const documentXml = await zip.file("word/document.xml").async("string");
+  const settingsXml = await zip.file("word/settings.xml").async("string");
+  assert.match(documentXml, /<w:headerReference w:type="default"/);
+  assert.match(documentXml, /<w:footerReference w:type="default"/);
+  assert.doesNotMatch(settingsXml, /<w:evenAndOddHeaders\s+w:val="(?:false|0|off|no)"/);
 });
 
 test("layout diagnostics provide bounded repair guidance before regeneration", () => {

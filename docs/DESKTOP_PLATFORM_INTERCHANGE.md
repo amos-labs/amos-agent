@@ -54,19 +54,18 @@ provider-error qualification. API-key mode remains available explicitly.
 Account-specific Marketplace and data-retention policy remain external gates;
 AMOS discovers and reports them without changing account policy.
 
-The first local artifact slice is also implemented: a versioned document spec
-now drives deterministic DOCX and PDF renderers, output approval, hashing, and
-reopen verification. It is a Desktop-local engine, not a company capability or
-an inference-routing concern. Verified documents now open in a bounded, inert
-typed-canvas preview with deterministic layout diagnostics, same-path revision
-updates, and main-process-validated local open/reveal actions. Final file
-pagination remains authoritative.
+The complete local DOCX/PDF artifact slice is implemented: a versioned document
+spec drives deterministic templates, brand systems, images, charts, DOCX/PDF
+renderers, output approval, hashing, reopen verification, and final-page
+thumbnails. A separate exact-anchor review contract creates true Word tracked
+changes and inline comments, then deterministically accepts, rejects, preserves,
+or removes them into a new verified file. This remains a Desktop-local engine,
+not a company capability or an inference-routing concern.
 
 The next product slices, in order, are:
 
-1. add images, charts, reusable templates, page-faithful thumbnails, and editing
-   to the local artifact engine, followed by spreadsheet and presentation
-   contracts;
+1. add spreadsheet and presentation artifact contracts on the same local
+   approval, provenance, preview, and verification foundation;
 2. add the governed browser runtime for JavaScript pages, authenticated web
    workflows, deterministic browser recipes, and bounded computer-use fallback;
 3. add consent-aware Router corrections/export and a sealed qualification gate;

@@ -495,6 +495,13 @@ function registerIpc() {
     if (error) throw new Error(`AMOS could not open that document artifact: ${error}`);
     return { ok: true, mode };
   });
+  ipcMain.handle("desktop:read-document-preview", async (_event, input) => {
+    const previewPath = await controller.resolveDocumentPreviewPath(input?.path);
+    return {
+      mime: "image/png",
+      base64: readFileSync(previewPath).toString("base64")
+    };
+  });
   ipcMain.handle("desktop:open-external", async (_event, value) => {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error("AMOS blocked an invalid external link");

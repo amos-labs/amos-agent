@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, realpath, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DesktopController } from "../src/desktop/controller.js";
@@ -156,5 +156,21 @@ test("document artifact actions resolve only existing DOCX or PDF files inside t
   await assert.rejects(
     controller.resolveDocumentArtifactPath("missing.docx"),
     /ENOENT/
+  );
+
+  const previewDirectory = join(workspace, ".amos", "previews", "fixture");
+  await mkdir(previewDirectory, { recursive: true });
+  await writeFile(join(previewDirectory, "page-1.png"), Buffer.from("preview"));
+  assert.equal(
+    await controller.resolveDocumentPreviewPath(".amos/previews/fixture/page-1.png"),
+    await realpath(join(previewDirectory, "page-1.png"))
+  );
+  await assert.rejects(
+    controller.resolveDocumentPreviewPath("reports/page-1.png"),
+    /invalid document preview path/
+  );
+  await assert.rejects(
+    controller.resolveDocumentPreviewPath(".amos/previews/../brief.pdf.png"),
+    /invalid document preview path/
   );
 });
