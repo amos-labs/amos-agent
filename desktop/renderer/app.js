@@ -82,7 +82,7 @@ const elements = Object.fromEntries(
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
     "providerCheck", "onboardingProviderText", "workspaceCheck", "enterButton", "boundaryReadinessText",
-    "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
+    "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
     "canvasSidecar", "contextResizeHandle",
     "attachmentList", "attachButton",
@@ -418,6 +418,7 @@ function render() {
         : "ONLINE COMPANY";
   elements.modeBadge.classList.toggle("offline", Boolean(state.mode?.offline));
   elements.demoBanner.classList.toggle("hidden", !demo);
+  elements.operatorView.classList.toggle("has-demo-banner", demo);
   if (demo) {
     elements.demoExpiry.textContent =
       `Sample data only · expires ${new Date(state.demo.expiresAt).toLocaleTimeString([], {
@@ -573,6 +574,7 @@ function render() {
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
   renderStarterActions();
+  renderConversationChrome();
 }
 
 function restoreShellPreferences() {
@@ -2518,6 +2520,17 @@ function renderStarterActions() {
   }
 }
 
+function renderConversationChrome() {
+  const hasConversation = Boolean(
+    elements.messages.querySelector(".message.user, .message.assistant, .message.error")
+  );
+  elements.conversation.classList.toggle("has-history", hasConversation);
+  elements.conversationHeading.classList.toggle("hidden", hasConversation);
+  elements.welcomeMessage.classList.toggle("hidden", hasConversation);
+  elements.starterActions.classList.toggle("hidden", hasConversation);
+  elements.clearButton.classList.toggle("hidden", !hasConversation);
+}
+
 function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
@@ -3853,6 +3866,7 @@ function resetSessionView() {
   canvasSidecarOpen = false;
   renderCanvas();
   renderStarterActions();
+  renderConversationChrome();
 }
 
 function addMessage(role, content) {
@@ -3869,6 +3883,7 @@ function addMessage(role, content) {
     message.append(paragraph);
   }
   elements.messages.append(message);
+  renderConversationChrome();
   elements.messages.scrollTop = elements.messages.scrollHeight;
   return message;
 }
