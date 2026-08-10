@@ -1,6 +1,7 @@
 import { OpenAICompatibleClient } from "./openAiCompatibleClient.js";
 import { OpenAIResponsesClient } from "./openAiResponsesClient.js";
 import { AnthropicMessagesClient } from "./anthropicMessagesClient.js";
+import { BEDROCK_MANTLE_CATALOG } from "./bedrockMantleCatalog.js";
 import { MODEL_PROTOCOLS, normalizeModelProtocol } from "./protocol.js";
 import {
   INTELLIGENCE_ROUTING_OWNERS,
@@ -51,18 +52,24 @@ const PROVIDERS = {
   bedrock: {
     id: "bedrock",
     displayName: "Amazon Bedrock",
-    description: "Customer or AMOS AWS inference through Bedrock's OpenAI-compatible API.",
+    description: "Customer or AMOS AWS inference through model-qualified Bedrock Mantle APIs.",
     deployment: "customer-cloud",
-    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
+    protocol: MODEL_PROTOCOLS.OPENAI_RESPONSES,
     defaultBaseUrl: "",
-    defaultModel: "openai.gpt-oss-120b-1:0",
-    models: [
-      { id: "openai.gpt-oss-20b-1:0", label: "GPT OSS 20B" },
-      { id: "openai.gpt-oss-120b-1:0", label: "GPT OSS 120B" }
-    ],
+    defaultModel: BEDROCK_MANTLE_CATALOG.defaultModel,
+    models: BEDROCK_MANTLE_CATALOG.models,
+    endpoint: {
+      schema: BEDROCK_MANTLE_CATALOG.schema,
+      verifiedAt: BEDROCK_MANTLE_CATALOG.verifiedAt,
+      defaultRegion: BEDROCK_MANTLE_CATALOG.defaultRegion,
+      regions: BEDROCK_MANTLE_CATALOG.regions,
+      originTemplate: BEDROCK_MANTLE_CATALOG.originTemplate,
+      sources: BEDROCK_MANTLE_CATALOG.sources
+    },
     apiKeyEnv: ["AWS_BEARER_TOKEN_BEDROCK", "BEDROCK_API_KEY"],
     apiKeyRequired: true,
-    capabilities: { tools: true, vision: false, reasoning: true }
+    capabilities: { tools: true, vision: false, reasoning: true },
+    catalogRequired: true
   },
   ollama: {
     id: "ollama",
@@ -132,6 +139,8 @@ const PROVIDERS = {
     apiKeyEnv: ["ANTHROPIC_API_KEY"],
     apiKeyRequired: true,
     defaultApiVersion: "2023-06-01",
+    supportedReasoningEfforts: ["low", "medium", "high", "max"],
+    defaultReasoningEffort: "medium",
     capabilities: { tools: true, vision: true, reasoning: true }
   }
 };
@@ -151,8 +160,7 @@ export function resolveModelConfig(env = process.env) {
     throw new Error(`Unsupported AMOS_MODEL_PROVIDER: ${providerId}`);
   }
 
-  const region = env.AWS_REGION || env.AWS_DEFAULT_REGION || "us-east-1";
-  const bedrockBaseUrl = `https://bedrock-mantle.${region}.api.aws/v1`;
+  const region = env.AWS_REGION || env.AWS_DEFAULT_REGION || BEDROCK_MANTLE_CATALOG.defaultRegion;
   const hostedBaseUrl = hostedInferenceBaseUrl(env.AMOS_MCP_URL);
   const hosted = provider.id === "amos-hosted";
   const apiKey = provider.usesAmosIdentity
@@ -162,9 +170,11 @@ export function resolveModelConfig(env = process.env) {
       provider.defaultApiKey ||
       "";
 
-  const model = hosted
+  const requestedModel = hosted
     ? "auto"
     : env.AMOS_MODEL || (provider.id === "kimi" ? env.KIMI_MODEL : "") || provider.defaultModel;
+  const modelProfile = resolveProviderModel(provider, requestedModel);
+  const model = modelProfile?.id || requestedModel;
   const requestedReasoningEffort = hosted
     ? ""
     : env.AMOS_MODEL_REASONING_EFFORT ||
@@ -175,7 +185,7 @@ export function resolveModelConfig(env = process.env) {
     provider: provider.id,
     protocol: normalizeModelProtocol(
       provider.id === "openai-compatible" ? env.AMOS_MODEL_PROTOCOL : "",
-      provider.protocol
+      modelProfile?.protocol || provider.protocol
     ),
     displayName: provider.displayName,
     deployment: provider.deployment,
@@ -186,7 +196,7 @@ export function resolveModelConfig(env = process.env) {
     // routing.
     baseUrl: hosted
       ? hostedBaseUrl
-      : env.AMOS_MODEL_BASE_URL || providerBaseUrl(provider, env, bedrockBaseUrl),
+      : providerBaseUrl(provider, env, { modelProfile, region }),
     model,
     routingOwner: hosted
       ? INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP
@@ -195,13 +205,14 @@ export function resolveModelConfig(env = process.env) {
     localRouterMode: hosted
       ? normalizeIntelligenceRouterRolloutMode(env.AMOS_LOCAL_ROUTER_MODE)
       : "disabled",
-    apiVersion: env.AMOS_MODEL_API_VERSION ||
+    apiVersion: env.AMOS_MODEL_API_VERSION || modelProfile?.apiVersion ||
       (provider.id === "anthropic" ? env.ANTHROPIC_VERSION : "") ||
       provider.defaultApiVersion,
     reasoningEffort: normalizeReasoningEffort(
       provider,
       model,
-      requestedReasoningEffort
+      requestedReasoningEffort,
+      modelProfile
     ),
     maxCompletionTokens: boundedInt(
       env.AMOS_MODEL_MAX_COMPLETION_TOKENS ||
@@ -219,16 +230,24 @@ export function resolveModelConfig(env = process.env) {
     ),
     apiKeyRequired: provider.apiKeyRequired,
     usesAmosIdentity: Boolean(provider.usesAmosIdentity),
+    modelProfile: modelProfile ? publicModelProfile(modelProfile) : null,
     capabilities: {
       ...provider.capabilities,
+      ...modelProfile?.capabilities,
       tools: env.AMOS_MODEL_SUPPORTS_TOOLS == null
-        ? provider.capabilities.tools
+        ? (modelProfile?.capabilities?.tools ?? provider.capabilities.tools)
         : booleanValue(env.AMOS_MODEL_SUPPORTS_TOOLS)
     }
   };
 }
 
-function normalizeReasoningEffort(provider, model, requested) {
+function normalizeReasoningEffort(provider, model, requested, modelProfile = null) {
+  const supported = modelProfile?.supportedReasoningEfforts?.length
+    ? modelProfile.supportedReasoningEfforts
+    : provider.supportedReasoningEfforts;
+  if (supported?.length && !supported.includes(requested)) {
+    return modelProfile?.defaultReasoningEffort || provider.defaultReasoningEffort || supported[0];
+  }
   if (
     provider.id === "kimi" &&
     /^kimi-k3(?:$|[-:])/i.test(model) &&
@@ -278,12 +297,82 @@ export function createModelClient(config, fetchImpl) {
   return new OpenAICompatibleClient(clientConfig, fetchImpl);
 }
 
-function providerBaseUrl(provider, env, bedrockBaseUrl) {
+function providerBaseUrl(provider, env, { modelProfile, region }) {
   if (provider.id === "kimi") {
     return env.MOONSHOT_BASE_URL || env.KIMI_BASE_URL || provider.defaultBaseUrl;
   }
-  if (provider.id === "bedrock") return bedrockBaseUrl;
-  return provider.defaultBaseUrl;
+  if (provider.id === "bedrock") {
+    return bedrockMantleBaseUrl(provider, modelProfile, env.AMOS_MODEL_BASE_URL, region);
+  }
+  return env.AMOS_MODEL_BASE_URL || provider.defaultBaseUrl;
+}
+
+export function resolveProviderModel(provider, modelId) {
+  const requested = String(modelId || "").trim();
+  if (!requested || !Array.isArray(provider?.models)) return null;
+  const profile = provider.models.find((candidate) =>
+    candidate.id === requested || candidate.aliases?.includes(requested)
+  );
+  if (!profile && provider.catalogRequired) {
+    throw new Error(`${provider.displayName} model is not qualified for this Desktop build: ${requested}`);
+  }
+  return profile || null;
+}
+
+function bedrockMantleBaseUrl(provider, modelProfile, configuredBaseUrl, requestedRegion) {
+  if (!modelProfile) {
+    throw new Error("Choose a qualified Amazon Bedrock model");
+  }
+  const endpoint = provider.endpoint || BEDROCK_MANTLE_CATALOG;
+  const initialRegion = requestedRegion || endpoint.defaultRegion;
+  if (!modelProfile.regions?.includes(initialRegion) && !configuredBaseUrl) {
+    throw new Error(`${modelProfile.label} is not qualified in Amazon Bedrock region ${initialRegion}`);
+  }
+  const fallbackOrigin = endpoint.originTemplate.replace("{region}", initialRegion);
+  let url;
+  try {
+    url = new URL(configuredBaseUrl || fallbackOrigin);
+  } catch {
+    throw new Error("Amazon Bedrock endpoint must be a valid Mantle URL");
+  }
+  const region = bedrockMantleRegion(url, endpoint);
+  if (!modelProfile.regions?.includes(region)) {
+    throw new Error(`${modelProfile.label} is not qualified in Amazon Bedrock region ${region}`);
+  }
+  url.pathname = modelProfile.endpointPath;
+  url.search = "";
+  url.hash = "";
+  return url.toString().replace(/\/$/, "");
+}
+
+function bedrockMantleRegion(url, endpoint) {
+  if (url.protocol !== "https:" || url.username || url.password || url.port) {
+    throw new Error("Amazon Bedrock inference must use its canonical HTTPS Mantle endpoint");
+  }
+  const prefix = "bedrock-mantle.";
+  const suffix = ".api.aws";
+  if (!url.hostname.startsWith(prefix) || !url.hostname.endsWith(suffix)) {
+    throw new Error("Amazon Bedrock credentials can only be sent to a Bedrock Mantle endpoint");
+  }
+  const region = url.hostname.slice(prefix.length, -suffix.length);
+  if (!endpoint.regions.includes(region)) {
+    throw new Error(`Amazon Bedrock Mantle is not qualified in region ${region || "unknown"}`);
+  }
+  return region;
+}
+
+function publicModelProfile(profile) {
+  return {
+    id: profile.id,
+    label: profile.label,
+    family: profile.family,
+    protocol: profile.protocol,
+    endpointPath: profile.endpointPath,
+    authScheme: profile.authScheme,
+    supportedReasoningEfforts: [...(profile.supportedReasoningEfforts || [])],
+    defaultReasoningEffort: profile.defaultReasoningEffort,
+    regions: [...(profile.regions || [])]
+  };
 }
 
 export const AMOS_INTELLIGENCE_ROUTING = Object.freeze({

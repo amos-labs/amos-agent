@@ -78,6 +78,12 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   assert.match(javascript, /reasoningEffort: managed\s*\? ""/);
   assert.match(javascript, /if \(!managed\) elements\.advancedInfrastructureDetails\.open = true/);
   assert.doesNotMatch(javascript, /advancedInfrastructureDetails\.open = !managed/);
+  assert.match(html, /id="modelInput"[^>]*><\/select>/);
+  assert.match(html, /id="baseUrlHelp"/);
+  assert.match(javascript, /modelInput\.addEventListener\("change", syncSelectedModelEndpoint\)/);
+  assert.match(javascript, /model\.aliases\?\.includes\(selectedModel\)/);
+  assert.match(javascript, /endpoint\.pathname = model\.endpointPath/);
+  assert.match(javascript, /syncProviderReasoning\(provider, model\)/);
 });
 
 test("routine approval review stays inside Desktop", async () => {

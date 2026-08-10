@@ -22,7 +22,9 @@ export class OpenAIResponsesClient {
     };
     if (this.config.reasoningEffort && this.config.capabilities?.reasoning !== false) {
       body.reasoning = { effort: this.config.reasoningEffort };
-      body.include = ["reasoning.encrypted_content"];
+      if (this.config.capabilities?.encryptedReasoning !== false) {
+        body.include = ["reasoning.encrypted_content"];
+      }
     }
     if (this.config.maxCompletionTokens > 0) {
       body.max_output_tokens = this.config.maxCompletionTokens;

@@ -36,9 +36,15 @@ OpenAI Chat Completions. The provider factory selects one of these adapters:
 
 | Protocol | Endpoint | Native provider | Behavior |
 | --- | --- | --- | --- |
-| `openai-chat-completions` | `/chat/completions` | AMOS Hosted, Kimi, Bedrock GPT OSS, Ollama, llama.cpp, compatible endpoints | Existing compatible request and SSE translation |
-| `openai-responses` | `/responses` | OpenAI | Responses input items, flat function tools, encrypted reasoning continuation, Responses SSE events |
-| `anthropic-messages` | `/messages` | Anthropic | System extraction, content blocks, tool-use/result blocks, signed thinking continuation, Messages SSE events |
+| `openai-chat-completions` | `/chat/completions` | AMOS Hosted, Kimi, Ollama, llama.cpp, compatible endpoints | Existing compatible request and SSE translation |
+| `openai-responses` | `/responses` | OpenAI; qualified Bedrock OpenAI models | Responses input items, flat function tools, optional encrypted reasoning continuation, Responses SSE events |
+| `anthropic-messages` | `/messages` | Anthropic; qualified Bedrock Claude models | System extraction, content blocks, tool-use/result blocks, signed thinking continuation, Messages SSE events |
+
+Amazon Bedrock is selected at the model-descriptor level rather than the
+provider level. GPT-5.6, GPT OSS, and Claude use different Mantle base paths and
+authentication headers even though they appear under one Bedrock connection.
+The signed catalog supplies those facts to the existing adapters; the agent
+loop contains no Bedrock model-name conditionals.
 
 ## Routing ownership boundary
 
@@ -69,6 +75,13 @@ inference requests that arrive without a valid Desktop envelope.
 `openai-compatible` controlled-endpoint profile. Named and managed profiles
 keep their declared protocol even when a stale override exists. Unknown custom
 protocols fail closed before a request is sent.
+
+The Bedrock profile is stricter: only catalog-qualified model IDs may be
+selected, the configured origin must be a supported regional
+`bedrock-mantle.*.api.aws` endpoint, and the selected descriptor owns the final
+path. Credentials therefore cannot be redirected by editing a named-provider
+endpoint, and a Claude model cannot accidentally reach a Responses path (or
+vice versa).
 
 ## Provider continuation state
 

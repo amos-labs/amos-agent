@@ -38,10 +38,18 @@ shell, inline governed progress, dynamic canvas, encrypted restart continuity,
 mid-task steering, native OpenAI Responses and Anthropic Messages adapters,
 managed local intelligence, and local-primary AMOS Router integration.
 
-The current hardening slice makes routing ownership explicit. Only the official
+The routing hardening slice makes ownership explicit. Only the official
 Desktop `amos-hosted` profile can receive the local classifier; selected-provider
 and external-client paths are structurally excluded and covered by negative
 tests.
+
+Bedrock protocol binding is now model-qualified rather than provider-wide. A
+signed descriptor catalog selects OpenAI Responses or Anthropic Messages plus
+the exact Mantle base path, API-key header, capabilities, reasoning controls,
+and verified regions. Invalid model, region, path, and credential-origin
+combinations fail before settings are persisted. Live account qualification and
+future SigV4 credentials remain explicit follow-on gates rather than guessed
+support.
 
 The first local artifact slice is also implemented: a versioned document spec
 now drives deterministic DOCX and PDF renderers, output approval, hashing, and
@@ -53,8 +61,8 @@ pagination remains authoritative.
 
 The next product slices, in order, are:
 
-1. finish qualified provider and Bedrock protocol parity rather than merely
-   exposing direct-provider foundations;
+1. seal live Bedrock account qualification and add the enterprise SigV4
+   credential adapter on top of the model-qualified protocol catalog;
 2. add images, charts, reusable templates, page-faithful thumbnails, and editing
    to the local artifact engine, followed by spreadsheet and presentation
    contracts;

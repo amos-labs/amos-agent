@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { AgentLoop } from "../src/agentLoop.js";
 import { OpenAIResponsesClient } from "../src/model/openAiResponsesClient.js";
 import { AnthropicMessagesClient } from "../src/model/anthropicMessagesClient.js";
+import { createModelClient, resolveModelConfig } from "../src/model/providers.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 
 function scoreRegistry() {
@@ -134,4 +135,80 @@ test("the agent loop executes and continues an Anthropic Messages tool turn", as
 
   assert.equal(await loop(modelClient, "anthropic").run("Score Austin"), "Austin scored 92.");
   assert.equal(call, 2);
+});
+
+test("qualified Bedrock Responses and Messages profiles complete native tool turns", async (t) => {
+  await t.test("GPT-5.6 Responses", async () => {
+    let call = 0;
+    const config = resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "bedrock",
+      AMOS_MODEL: "openai.gpt-5.6-terra",
+      AWS_REGION: "us-west-2",
+      AWS_BEARER_TOKEN_BEDROCK: "test"
+    });
+    const modelClient = createModelClient(config, async (url, options) => {
+      call += 1;
+      assert.equal(url, "https://bedrock-mantle.us-west-2.api.aws/openai/v1/responses");
+      const body = JSON.parse(options.body);
+      if (call === 1) {
+        assert.equal(body.tools[0].name, "score_location");
+        return Response.json({
+          output: [{
+            type: "function_call",
+            id: "fc_bedrock_1",
+            call_id: "call_bedrock_1",
+            name: "score_location",
+            arguments: "{\"location\":\"Austin\"}"
+          }]
+        });
+      }
+      assert.ok(body.input.some((item) =>
+        item.type === "function_call_output" &&
+        item.call_id === "call_bedrock_1" &&
+        JSON.parse(item.output).score === 92
+      ));
+      return Response.json({
+        output: [{
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Austin scored 92." }]
+        }]
+      });
+    });
+    assert.equal(await loop(modelClient, "bedrock").run("Score Austin"), "Austin scored 92.");
+    assert.equal(call, 2);
+  });
+
+  await t.test("Claude Messages", async () => {
+    let call = 0;
+    const config = resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "bedrock",
+      AMOS_MODEL: "anthropic.claude-sonnet-5",
+      AWS_REGION: "us-east-1",
+      AWS_BEARER_TOKEN_BEDROCK: "test"
+    });
+    const modelClient = createModelClient(config, async (url, options) => {
+      call += 1;
+      assert.equal(url, "https://bedrock-mantle.us-east-1.api.aws/anthropic/v1/messages");
+      const body = JSON.parse(options.body);
+      if (call === 1) {
+        assert.equal(body.tools[0].name, "score_location");
+        return Response.json({
+          content: [{
+            type: "tool_use",
+            id: "toolu_bedrock_1",
+            name: "score_location",
+            input: { location: "Austin" }
+          }]
+        });
+      }
+      const result = body.messages.find((message) =>
+        message.role === "user" && message.content.some((block) => block.type === "tool_result")
+      );
+      assert.equal(JSON.parse(result.content[0].content).score, 92);
+      return Response.json({ content: [{ type: "text", text: "Austin scored 92." }] });
+    });
+    assert.equal(await loop(modelClient, "bedrock").run("Score Austin"), "Austin scored 92.");
+    assert.equal(call, 2);
+  });
 });
