@@ -108,6 +108,11 @@ const PROVIDERS = {
     protocol: MODEL_PROTOCOLS.OPENAI_RESPONSES,
     defaultBaseUrl: "https://api.openai.com/v1",
     defaultModel: "gpt-5.6-terra",
+    models: [
+      { id: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
+      { id: "gpt-5.6-sol", label: "GPT-5.6 Sol" },
+      { id: "gpt-5.6-luna", label: "GPT-5.6 Luna" }
+    ],
     apiKeyEnv: ["OPENAI_API_KEY"],
     apiKeyRequired: true,
     capabilities: { tools: true, vision: true, reasoning: true }
@@ -120,6 +125,10 @@ const PROVIDERS = {
     protocol: MODEL_PROTOCOLS.ANTHROPIC_MESSAGES,
     defaultBaseUrl: "https://api.anthropic.com/v1",
     defaultModel: "claude-sonnet-5",
+    models: [
+      { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
+      { id: "claude-opus-5", label: "Claude Opus 5" }
+    ],
     apiKeyEnv: ["ANTHROPIC_API_KEY"],
     apiKeyRequired: true,
     defaultApiVersion: "2023-06-01",
