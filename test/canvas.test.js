@@ -78,6 +78,20 @@ test("canvas contract normalizes every safe block type", () => {
         total_blocks: 1
       },
       {
+        type: "browser",
+        title: "Public page",
+        session_id: "browser-session-1",
+        url: "https://example.com/research",
+        status: "ready",
+        page_revision: 2,
+        frame_id: "frame-1",
+        viewport: { width: 1280, height: 800 },
+        observed_at: timestamp,
+        element_count: 12,
+        summary: "Example research page",
+        interactive: false
+      },
+      {
         type: "link",
         title: "Preview",
         label: "Open the local app",
@@ -103,8 +117,10 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.blocks[4].content.includes("<script>"), true);
   assert.equal(canvas.blocks[5].artifacts[0].path, "reports/quarterly.pdf");
   assert.equal(canvas.blocks[5].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
-  assert.equal(canvas.blocks[6].url, "http://127.0.0.1:3000/preview");
-  assert.equal(canvas.blocks[8].pendingId, "pending-1");
+  assert.equal(canvas.blocks[6].sessionId, "browser-session-1");
+  assert.equal(canvas.blocks[6].frameId, "frame-1");
+  assert.equal(canvas.blocks[7].url, "http://127.0.0.1:3000/preview");
+  assert.equal(canvas.blocks[9].pendingId, "pending-1");
 });
 
 test("canvas contract rejects arbitrary block types and unbounded tables", () => {
@@ -140,6 +156,27 @@ test("canvas contract rejects arbitrary block types and unbounded tables", () =>
         blocks: [{ type: "link", label: "Unsafe", url }]
       }),
       /URL|HTTPS|credential/i
+    );
+  }
+  for (const url of [
+    "file:///tmp/secret",
+    "http://localhost:3000/admin",
+    "https://user:password@example.com/private"
+  ]) {
+    assert.throws(
+      () => normalizeCanvasSpec({
+        ...base,
+        blocks: [{
+          type: "browser",
+          session_id: "browser-session-1",
+          url,
+          status: "ready",
+          page_revision: 1,
+          viewport: { width: 1280, height: 800 },
+          observed_at: timestamp
+        }]
+      }),
+      /HTTP|local network|credentials/i
     );
   }
   for (const path of [

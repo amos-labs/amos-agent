@@ -309,6 +309,8 @@ The example environment file documents provider and advanced CLI configuration:
 - `apply_patch`
 - `run_bash`
 - `web_fetch` and optional `web_search`
+- Desktop-only `browser_open`, `browser_snapshot`, `browser_extract`,
+  `browser_screenshot`, and `browser_close` for governed public JavaScript pages
 
 AMOS tools begin with a compact bootstrap:
 
@@ -337,6 +339,8 @@ as the AMOS platform grows.
 - [Streaming, cancellation, and restart-safe tasks](docs/TASK_LIFECYCLE.md)
 - [Typed company canvas](docs/CANVAS.md)
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
+- [Governed browser and computer use](docs/BROWSER_AND_COMPUTER_USE.md)
+- [Browser/CUA gap analysis and roadmap](docs/BROWSER_CUA_GAP_ANALYSIS.md)
 - [Contributing](CONTRIBUTING.md)
 
 ## Direction
@@ -344,7 +348,8 @@ as the AMOS platform grows.
 The near-term product path is:
 
 1. add spreadsheet and presentation engines beside the completed DOCX/PDF artifact system;
-2. add governed JavaScript browser automation and bounded computer-use fallback;
+2. complete authenticated semantic browser actions, deterministic recipes, and
+   bounded visual computer-use fallback on the shipped public-page runtime;
 3. finish consent-aware Router learning and richer typed company work surfaces;
 4. add signed device identity, revocable environment grants, and fleet-management controls; and
 5. deliver Windows on Arm and managed-store distribution when customer demand warrants them.

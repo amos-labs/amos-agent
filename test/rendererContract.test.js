@@ -224,7 +224,8 @@ test("Tasks expose durable resume, governed forking, lineage, and task-bound can
   assert.match(preload, /desktop:open-task/);
   assert.match(preload, /desktop:fork-task/);
   assert.match(main, /controller\.forkTaskResource\(input\)/);
-  assert.match(controller, /this\.canvases\.restore\(task\.canvasState \|\| \{\}\)/);
+  assert.match(controller, /this\.canvases\.restore\(durableCanvasState\(task\.canvasState \|\| \{\}\)\)/);
+  assert.match(controller, /function durableCanvasState[\s\S]*?block\?\.type !== "browser"/);
   assert.match(controller, /replayed: false/);
   assert.match(taskStore, /pendingOperationsCopied: false/);
   assert.match(taskStore, /credentialsIncluded: false/);

@@ -130,6 +130,59 @@ test("regenerating the same document refreshes one bounded artifact canvas", () 
   assert.equal(bounded.blocks[0].total_blocks, 61);
 });
 
+test("browser canvas refreshes one local frame and removal revokes its session", () => {
+  const closed = [];
+  const frames = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-browser-canvas-controller",
+    settingsStore: {},
+    browserRuntime: {
+      closeAll() {},
+      closeSession(id) { closed.push(id); },
+      readFrame(sessionId, frameId) {
+        frames.push({ sessionId, frameId });
+        return { mime: "image/png", base64: "cG5n", width: 1280, height: 800 };
+      }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+  const first = controller.presentBrowserSession({
+    operation: "open",
+    status: "ready",
+    session_id: "browser-session-1",
+    url: "https://example.com/",
+    title: "Example",
+    page_revision: 1,
+    observed_at: timestamp,
+    element_count: 4,
+    summary: "Example page",
+    frame: { frame_id: "frame-1", width: 1280, height: 800 }
+  });
+  const second = controller.presentBrowserSession({
+    operation: "screenshot",
+    status: "ready",
+    session_id: "browser-session-1",
+    url: "https://example.com/next",
+    title: "Example next",
+    page_revision: 2,
+    observed_at: timestamp,
+    element_count: 8,
+    summary: "Updated page",
+    frame: { frame_id: "frame-2", width: 1280, height: 800 }
+  });
+  assert.equal(second.id, first.id);
+  assert.equal(second.revision, 2);
+  assert.equal(controller.readBrowserFrame("browser-session-1", "frame-2").base64, "cG5n");
+  assert.deepEqual(frames, [{ sessionId: "browser-session-1", frameId: "frame-2" }]);
+  assert.throws(
+    () => controller.readBrowserFrame("browser-session-1", "frame-1"),
+    /no longer attached/
+  );
+  controller.removeCanvas(first.id);
+  assert.deepEqual(closed, ["browser-session-1"]);
+});
+
 test("document artifact actions resolve only existing DOCX or PDF files inside the workspace", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "amos-artifact-actions-"));
   await writeFile(join(workspace, "brief.pdf"), "%PDF-1.7\n");

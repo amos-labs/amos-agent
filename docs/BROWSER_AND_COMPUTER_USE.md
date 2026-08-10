@@ -24,7 +24,7 @@ decision boundary as the equivalent API action.
 
 ## Current foundation
 
-Desktop already exposes two public-web primitives outside local-only mode:
+Desktop exposes two request-level public-web primitives outside local-only mode:
 
 - `web_fetch` retrieves a bounded public HTTP/HTTPS response, blocks private
   network targets and credential-bearing URLs, follows bounded redirects, and
@@ -32,17 +32,31 @@ Desktop already exposes two public-web primitives outside local-only mode:
 - `web_search` uses a configured search provider and returns bounded result
   metadata.
 
-This is enough for static public pages. It does not execute JavaScript, retain a
-session, inspect an accessibility tree, click, type, download, upload, or
-operate a signed-in web application.
+For JavaScript-rendered public pages, Desktop now also exposes the first local
+browser slice:
+
+- `browser_open` creates or navigates a task-, tenant-, and user-bound ephemeral
+  Chromium session;
+- `browser_snapshot` returns bounded text plus opaque semantic element
+  references tied to the current page revision;
+- `browser_extract` deterministically extracts article text, tables, lists,
+  form structure without values, or one referenced region;
+- `browser_screenshot` refreshes an opaque local PNG frame rendered in the
+  dynamic canvas; and
+- `browser_close` destroys the page and revokes its references and frame.
+
+This slice executes JavaScript and retains a task-local public browsing session.
+It deliberately does not click, type, download, upload, persist authentication,
+or operate a signed-in application yet.
 
 ## Browser runtime
 
-A pinned Chromium automation sidecar should run from the Desktop main-process
-boundary. The privileged renderer must never receive raw cookies, passwords,
-OAuth tokens, browser debugging ports, or unrestricted automation handles.
+A pinned Chromium runtime runs behind the Desktop main-process boundary using
+the Chromium already shipped with Electron. The privileged renderer never
+receives raw cookies, passwords, OAuth tokens, browser debugging ports, raw DOM
+selectors, or unrestricted automation handles.
 
-The first typed primitives are:
+The typed primitive set is:
 
 - `browser_open` — create or navigate an isolated task-bound page;
 - `browser_snapshot` — return a bounded accessibility/DOM snapshot with stable
@@ -61,9 +75,11 @@ The first typed primitives are:
   arbitrary filesystem paths; and
 - `browser_close` — destroy the task session and revoke its handles.
 
-Element references are short-lived capabilities tied to the page revision,
-origin, task, account, and tenant. A navigation invalidates prior references.
-Free-form model text cannot mint a browser handle or privileged action.
+The implemented read-only subset already enforces short-lived element
+references tied to the page revision, task, account, and tenant. A navigation
+invalidates prior references. Free-form model text cannot mint a browser handle,
+selector, frame, or privileged action. Click/type/select/wait and file transfer
+remain the next delivery slice.
 
 ## Website data ingestion
 
@@ -161,8 +177,9 @@ execution authority.
 
 ## Delivery slices
 
-1. JavaScript page loading, accessibility snapshots, deterministic extraction,
-   screenshots, and dynamic-canvas presentation.
+1. **Implemented:** JavaScript page loading, semantic DOM/accessibility
+   snapshots, deterministic extraction, screenshots, public-network isolation,
+   and dynamic-canvas presentation.
 2. Isolated authenticated sessions, typed click/type/select/wait, downloads,
    user takeover, and exact-action approvals.
 3. Browser recipe recording/compilation, deterministic scheduled execution,

@@ -9,6 +9,7 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "markdown",
   "code",
   "document",
+  "browser",
   "link",
   "sources",
   "decision"
@@ -376,6 +377,43 @@ function normalizeBlock(input, index, canvasSource) {
     };
   }
 
+  if (type === "browser") {
+    const viewport = object(block.viewport || {}, `blocks[${index}].viewport must be an object`);
+    return {
+      ...common,
+      sessionId: text(block.session_id || block.sessionId, `blocks[${index}].session_id`, 128),
+      url: safeBrowserUrl(block.url, `blocks[${index}].url`),
+      status: enumValue(
+        block.status || "ready",
+        ["loading", "ready", "error", "closed"],
+        `blocks[${index}].status`
+      ),
+      pageRevision: boundedInteger(
+        block.page_revision ?? block.pageRevision ?? 0,
+        `blocks[${index}].page_revision`,
+        0,
+        Number.MAX_SAFE_INTEGER
+      ),
+      frameId: optionalText(block.frame_id || block.frameId, `blocks[${index}].frame_id`, 128),
+      viewport: {
+        width: boundedInteger(viewport.width || 1280, `blocks[${index}].viewport.width`, 1, 4_000),
+        height: boundedInteger(viewport.height || 800, `blocks[${index}].viewport.height`, 1, 4_000)
+      },
+      observedAt: isoDate(
+        block.observed_at || block.observedAt || new Date().toISOString(),
+        `blocks[${index}].observed_at`
+      ),
+      elementCount: boundedInteger(
+        block.element_count ?? block.elementCount ?? 0,
+        `blocks[${index}].element_count`,
+        0,
+        120
+      ),
+      summary: optionalText(block.summary, `blocks[${index}].summary`, 1_000),
+      interactive: block.interactive === true
+    };
+  }
+
   if (type === "link") {
     return {
       ...common,
@@ -651,6 +689,31 @@ function safePreviewUrl(value, path) {
     if (/(?:token|secret|password|signature|api[_-]?key|access[_-]?key|code)/i.test(key)) {
       throw new Error(`${path} cannot contain credential-like query parameters`);
     }
+  }
+  return url.toString();
+}
+
+function safeBrowserUrl(value, path) {
+  const raw = text(value, path, 2_048);
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${path} must be a valid URL`);
+  }
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error(`${path} must use HTTP or HTTPS`);
+  }
+  const host = url.hostname.toLowerCase();
+  if (
+    !host ||
+    ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(host) ||
+    host.endsWith(".local")
+  ) {
+    throw new Error(`${path} cannot target a local network host`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`${path} cannot contain embedded credentials`);
   }
   return url.toString();
 }
