@@ -245,6 +245,85 @@ export class DesktopRemoteStateClient {
     }
   }
 
+  async tasksLibrary({ includeArchived = false, query = "", signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("list_tasks", {
+        include_archived: includeArchived === true,
+        query: String(query || "").slice(0, 160),
+        limit: 100
+      }, { signal });
+      const payload = parseMcpJson(result, "AMOS Tasks");
+      return {
+        supported: true,
+        tasks: (Array.isArray(payload?.tasks) ? payload.tasks : [])
+          .map(normalizeTaskResource)
+          .filter(Boolean),
+        contract: payload?.contract && typeof payload.contract === "object"
+          ? payload.contract
+          : null
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "list_tasks")) {
+        return { supported: false, tasks: [], contract: null };
+      }
+      throw error;
+    }
+  }
+
+  async registerTask(input, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("register_task", taskRegistrationArgs(input), { signal }),
+      "AMOS task registration"
+    );
+    return normalizeTaskMutation(payload, "registered");
+  }
+
+  async updateTask(id, changes, { signal = null } = {}) {
+    const args = { task_id: requiredUuid(id, "Task") };
+    for (const [source, target] of [
+      ["title", "title"],
+      ["objective", "objective"],
+      ["status", "status"],
+      ["pinned", "pinned"],
+      ["archived", "archived"]
+    ]) {
+      if (Object.hasOwn(changes || {}, source)) args[target] = changes[source];
+    }
+    const payload = parseMcpJson(
+      await this.mcp.callTool("update_task", args, { signal }),
+      "AMOS task update"
+    );
+    return normalizeTaskMutation(payload, "updated");
+  }
+
+  async forkTask(input, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("fork_task", taskForkArgs(input), { signal }),
+      "AMOS task fork"
+    );
+    return normalizeTaskMutation(payload, "forked");
+  }
+
+  async resumeTask(id, { tenantId = "", signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("resume_task", { task_id: requiredUuid(id, "Task") }, { signal }),
+      "AMOS task resume"
+    );
+    const task = normalizeTaskResource(payload?.task);
+    if (!task) throw new Error("AMOS task resume returned an invalid task");
+    return {
+      task,
+      continuity: normalizeContinuityResponse(payload?.continuity || {}, {
+        tenantId
+      }),
+      events: Array.isArray(payload?.events) ? payload.events.slice(0, 30) : [],
+      children: (Array.isArray(payload?.children) ? payload.children : [])
+        .map(normalizeTaskResource)
+        .filter(Boolean),
+      resumeContract: normalizeResumeContract(payload?.resume_contract)
+    };
+  }
+
   async connectionsCatalog({ signal = null } = {}) {
     const [connectionsResult, providerPayload] = await Promise.all([
       this.mcp.callTool("list_connections", {}, { signal }),
@@ -886,6 +965,207 @@ function normalizeAutomation(value) {
     createdAt: safeTimestamp(value.created_at),
     updatedAt: safeTimestamp(value.updated_at)
   };
+}
+
+function normalizeTaskResource(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = String(value.id || "").trim();
+  const contextKey = String(value.context_key || value.contextKey || "").trim().slice(0, 128);
+  const title = String(value.title || "").trim().slice(0, 160);
+  const objective = String(value.objective || "").trim().slice(0, 6_000);
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !/^[A-Za-z0-9._:-]+$/.test(contextKey) || !title || !objective) {
+    return null;
+  }
+  const workspaceMode = String(value.workspace_mode || value.workspaceMode || "same_directory");
+  return {
+    id,
+    contextKey,
+    title,
+    objective,
+    kind: ["general", "automation_builder", "goal_pursuit", "fork"].includes(value.kind)
+      ? value.kind
+      : "general",
+    status: ["active", "waiting", "completed", "failed", "interrupted"].includes(value.status)
+      ? value.status
+      : "active",
+    sourceClient: String(value.source_client || value.sourceClient || "unknown").slice(0, 64),
+    pinned: value.pinned === true,
+    archived: value.archived === true,
+    archivedAt: safeTimestamp(value.archived_at || value.archivedAt),
+    parentTaskId: String(value.parent_task_id || value.parentTaskId || "").slice(0, 128),
+    sourceEventId: String(value.source_event_id || value.sourceEventId || "").slice(0, 160),
+    workspaceMode: ["same_directory", "new_worktree", "context_only"].includes(workspaceMode)
+      ? workspaceMode
+      : "same_directory",
+    workspace: normalizePortableWorkspace(value.workspace),
+    resourceRefs: normalizeStringList(value.resource_refs || value.resourceRefs, 40, 1_024),
+    forkManifest: normalizeRemoteForkManifest(value.fork_manifest || value.forkManifest),
+    childCount: boundedCount(value.child_count || value.childCount),
+    createdAt: safeTimestamp(value.created_at || value.createdAt),
+    updatedAt: safeTimestamp(value.updated_at || value.updatedAt)
+  };
+}
+
+function normalizeTaskMutation(value, action) {
+  const task = normalizeTaskResource(value?.task);
+  if (!task) throw new Error(`AMOS task ${action} returned an invalid task`);
+  return {
+    task,
+    parent: normalizeTaskResource(value?.parent),
+    forkManifest: normalizeRemoteForkManifest(value?.fork_manifest || value?.forkManifest),
+    contract: value?.contract && typeof value.contract === "object" ? value.contract : null
+  };
+}
+
+function taskRegistrationArgs(input = {}) {
+  const id = input.id ? requiredUuid(input.id, "Task") : undefined;
+  const kind = String(input.kind || "general");
+  const status = String(input.status || "active");
+  const workspaceMode = String(input.workspaceMode || "same_directory");
+  if (!["general", "automation_builder", "goal_pursuit", "fork"].includes(kind)) {
+    throw new Error("AMOS blocked an invalid task type");
+  }
+  if (!["active", "waiting", "completed", "failed", "interrupted"].includes(status)) {
+    throw new Error("AMOS blocked an invalid task status");
+  }
+  if (!["same_directory", "new_worktree", "context_only"].includes(workspaceMode)) {
+    throw new Error("AMOS blocked an invalid task workspace mode");
+  }
+  return {
+    ...(id ? { task_id: id } : {}),
+    context_key: requiredIdentifier(input.contextKey, 128, "Task context"),
+    title: requiredBoundedText(input.title, 160, "Task title"),
+    objective: requiredBoundedText(input.objective, 6_000, "Task objective"),
+    kind,
+    status,
+    source_client: "amos_desktop",
+    workspace_mode: workspaceMode,
+    workspace: normalizePortableWorkspace(input.workspace),
+    resource_refs: normalizeStringList(input.resourceRefs, 40, 1_024)
+  };
+}
+
+function taskForkArgs(input = {}) {
+  const contextScope = String(input.contextScope || "from_here");
+  const workspaceMode = String(input.workspaceMode || "same_directory");
+  if (!["everything", "from_here", "selected_artifacts"].includes(contextScope)) {
+    throw new Error("AMOS blocked an invalid task context scope");
+  }
+  if (!["same_directory", "new_worktree", "context_only"].includes(workspaceMode)) {
+    throw new Error("AMOS blocked an invalid task workspace mode");
+  }
+  const selectedArtifacts = normalizeStringList(input.selectedArtifacts, 40, 1_024);
+  if (contextScope === "selected_artifacts" && selectedArtifacts.length === 0) {
+    throw new Error("Choose at least one artifact for this task fork");
+  }
+  return {
+    task_id: requiredUuid(input.taskId, "Task"),
+    name: requiredBoundedText(input.name, 160, "Fork name"),
+    objective: requiredBoundedText(input.objective, 6_000, "Fork objective"),
+    source_event_id: requiredIdentifier(input.sourceEventId, 160, "Fork source event"),
+    context_scope: contextScope,
+    workspace_mode: workspaceMode,
+    workspace: normalizePortableWorkspace(input.workspace),
+    selected_artifacts: selectedArtifacts,
+    source_client: "amos_desktop"
+  };
+}
+
+function normalizePortableWorkspace(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const repository = String(source.repository || "").trim().slice(0, 500);
+  if (repository.startsWith("/") || /^[a-z]:[\\/]/i.test(repository)) {
+    throw new Error("AMOS will not send an absolute local workspace path to Platform");
+  }
+  const commit = String(source.commit || "").trim();
+  return {
+    label: String(source.label || "").trim().slice(0, 160),
+    repository,
+    branch: String(source.branch || "").trim().slice(0, 300),
+    commit: /^[a-f0-9]{7,64}$/i.test(commit) ? commit : "",
+    dirty: source.dirty === true
+  };
+}
+
+function normalizeRemoteForkManifest(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const scope = value.scope && typeof value.scope === "object" ? value.scope : {};
+  const safeguards = value.safeguards && typeof value.safeguards === "object"
+    ? value.safeguards
+    : {};
+  if (
+    safeguards.orientationOnly !== true ||
+    safeguards.replayAllowed !== false ||
+    safeguards.pendingOperationsCopied !== false ||
+    safeguards.credentialsIncluded !== false ||
+    safeguards.executionAuthorityIncluded !== false
+  ) {
+    throw new Error("AMOS task fork did not preserve its safety contract");
+  }
+  return {
+    format: value.format === "amos.task_fork_manifest" ? value.format : "amos.task_fork_manifest",
+    version: 1,
+    parentTaskId: String(scope.parentTaskId || value.parentTaskId || "").slice(0, 128),
+    childTaskId: String(scope.childTaskId || value.childTaskId || "").slice(0, 128),
+    sourceEventId: String(scope.sourceEventId || value.sourceEventId || "").slice(0, 160),
+    contextScope: String(scope.contextScope || value.contextScope || "from_here"),
+    workspaceMode: String(scope.workspaceMode || value.workspaceMode || "same_directory"),
+    selectedArtifacts: normalizeStringList(value.selectedArtifacts, 40, 1_024),
+    safeguards: {
+      orientationOnly: true,
+      requiresFreshIdentity: true,
+      requiresFreshCompanyEvidence: true,
+      requiresFreshPolicy: true,
+      requiresFreshApprovals: true,
+      requiresFreshReceipts: true,
+      replayAllowed: false,
+      pendingOperationsCopied: false,
+      credentialsIncluded: false,
+      executionAuthorityIncluded: false
+    }
+  };
+}
+
+function normalizeResumeContract(value) {
+  if (
+    value?.automatic_replay !== false ||
+    value?.fresh_identity_required !== true ||
+    value?.fresh_company_evidence_required !== true ||
+    value?.fresh_policy_required !== true ||
+    value?.fresh_approvals_required !== true ||
+    value?.fresh_receipts_required !== true
+  ) {
+    throw new Error("AMOS task resume did not preserve its revalidation contract");
+  }
+  return {
+    automaticReplay: false,
+    freshIdentityRequired: true,
+    freshCompanyEvidenceRequired: true,
+    freshPolicyRequired: true,
+    freshApprovalsRequired: true,
+    freshReceiptsRequired: true
+  };
+}
+
+function normalizeStringList(value, maxItems, maxLength) {
+  return [...new Set((Array.isArray(value) ? value : [])
+    .map((item) => String(item || "").trim().slice(0, maxLength))
+    .filter(Boolean))]
+    .slice(0, maxItems);
+}
+
+function requiredIdentifier(value, maxLength, label) {
+  const result = requiredBoundedText(value, maxLength, label);
+  if (!/^[A-Za-z0-9._:-]+$/.test(result)) throw new Error(`${label} is invalid`);
+  return result;
+}
+
+function requiredBoundedText(value, maxLength, label) {
+  const result = String(value || "").trim();
+  if (!result || result.length > maxLength) {
+    throw new Error(`${label} must be between 1 and ${maxLength} characters`);
+  }
+  return result;
 }
 
 function boundedCount(value) {

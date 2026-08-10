@@ -43,6 +43,12 @@ import {
   buildSessionContinuityPrompt,
   continuityScope
 } from "./sessionContinuity.js";
+import { taskOwnerScope } from "./taskStore.js";
+import {
+  createTaskWorktree,
+  inspectTaskWorkspace,
+  portableTaskWorkspace
+} from "./taskWorkspace.js";
 import {
   amosOrigin,
   approvalReviewUrl,
@@ -82,6 +88,7 @@ export class DesktopController {
     localReceiptStore = null,
     savedViewStore = null,
     sessionContinuityStore = null,
+    taskStore = null,
     decisionKeyStore = null,
     accountStore = null,
     offlineManager = null,
@@ -105,9 +112,11 @@ export class DesktopController {
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
+    this.tasks = { supported: false, tasks: [], contract: null };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.activeContextKey = "active";
+    this.activeTaskRecordId = null;
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: null,
@@ -126,6 +135,7 @@ export class DesktopController {
     this.localReceiptStore = localReceiptStore;
     this.savedViewStore = savedViewStore;
     this.sessionContinuityStore = sessionContinuityStore;
+    this.taskStore = taskStore;
     this.decisionKeyStore = decisionKeyStore;
     this.accountStore = accountStore;
     this.activeTask = null;
@@ -186,6 +196,7 @@ export class DesktopController {
       connectionsCatalog: this.connectionsCatalog,
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
+      tasks: await this.tasksState(settings),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -193,6 +204,7 @@ export class DesktopController {
       accounts,
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
       activeContextKey: this.activeContextKey || "active",
+      activeTaskRecordId: this.activeTaskRecordId,
       remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model),
       providers: listModelProviders(),
@@ -979,6 +991,7 @@ export class DesktopController {
     if (settings.operatingMode !== "online") {
       this.workingContinuity = null;
       this.automations = { supported: false, automations: [] };
+      this.tasks = { supported: false, tasks: [], contract: null };
       this.remoteStatus = {
         syncing: false,
         lastSyncedAt: this.remoteStatus.lastSyncedAt,
@@ -1001,6 +1014,7 @@ export class DesktopController {
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
       this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
       this.automations = { supported: false, automations: [] };
+      this.tasks = { supported: false, tasks: [], contract: null };
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -1024,7 +1038,8 @@ export class DesktopController {
       receiptsResult,
       continuityResult,
       briefingsResult,
-      automationsResult
+      automationsResult,
+      tasksResult
     ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
@@ -1034,7 +1049,8 @@ export class DesktopController {
       remote.receipts({ limit: 50 }),
       remote.hydrateContinuity({ contextKey: this.activeContextKey }),
       remote.briefingsLibrary(),
-      remote.automationsLibrary()
+      remote.automationsLibrary(),
+      remote.tasksLibrary()
     ]);
 
     const errors = [];
@@ -1100,6 +1116,18 @@ export class DesktopController {
       this.automations = { supported: false, automations: [] };
       if (automationsResult.status === "rejected") {
         errors.push(automationsResult.reason?.message || "Could not load AMOS Automations");
+      }
+    }
+
+    if (tasksResult.status === "fulfilled" && tasksResult.value) {
+      this.tasks = tasksResult.value;
+      await this.syncRemoteTasksLocally(settings, tasksResult.value.tasks).catch((error) => {
+        errors.push(`Could not retain local task presentation state: ${error.message}`);
+      });
+    } else {
+      this.tasks = { supported: false, tasks: [], contract: null };
+      if (tasksResult.status === "rejected") {
+        errors.push(tasksResult.reason?.message || "Could not load AMOS Tasks");
       }
     }
 
@@ -1517,6 +1545,12 @@ export class DesktopController {
       summary: "Preparing the task"
     });
     const settings = await this.settingsStore.read();
+    if (this.taskStore && this.activeTaskRecordId) {
+      const scope = this.taskScope(settings);
+      if (scope) {
+        await this.taskStore.update(scope, this.activeTaskRecordId, { status: "active" });
+      }
+    }
     this.activeTask.workspace = settings.workspace || homedir();
     const boundary = settings.operatingMode;
     const offline = boundary === "offline";
@@ -1616,8 +1650,9 @@ export class DesktopController {
         startedAt: this.activeTask.startedAt,
         receiptEvents
       });
+      let continuityRecord = null;
       if (this.activeTask.continuityAllowed) {
-        await this.saveSessionContinuity({
+        continuityRecord = await this.saveSessionContinuity({
           settings,
           boundary,
           objective: prompt,
@@ -1626,12 +1661,17 @@ export class DesktopController {
           receipt: localReceipt
         }).catch((error) => {
           this.record("continuity", `Could not save encrypted session continuity: ${error.message}`);
+          return null;
         });
       }
+      await this.snapshotActiveTask(settings).catch((error) => {
+        this.record("task", `Could not snapshot the task canvas: ${error.message}`);
+      });
       await this.recordNorthwindValue(settings, receiptEvents);
       return {
         answer,
         taskId,
+        taskEventId: continuityRecord?.turns?.at(-1)?.id || `run:${taskId}`,
         activity: this.activity.slice(-100),
         attachments: this.attachments.list(),
         ...this.canvases.state(),
@@ -1663,6 +1703,15 @@ export class DesktopController {
         receiptEvents,
         error: error.message
       });
+      if (this.taskStore && this.activeTaskRecordId) {
+        const scope = this.taskScope(settings);
+        if (scope) {
+          await this.taskStore.update(scope, this.activeTaskRecordId, {
+            status: canceled ? "interrupted" : "failed",
+            canvasState: this.canvases.state()
+          }).catch(() => {});
+        }
+      }
       if (canceled) throw createAbortError();
       throw error;
     } finally {
@@ -1780,7 +1829,10 @@ export class DesktopController {
 
   removeCanvas(id) {
     const removed = this.canvases.remove(id);
-    if (removed) this.send("canvas:changed", this.canvases.state());
+    if (removed) {
+      this.send("canvas:changed", this.canvases.state());
+      this.snapshotActiveTask().catch(() => {});
+    }
     return this.canvases.state();
   }
 
@@ -1951,14 +2003,58 @@ export class DesktopController {
       throw new Error("Finish or stop the current task before opening another conversation");
     }
     const kind = String(input.kind || "general");
-    if (!["general", "automation_builder"].includes(kind)) {
+    if (!["general", "automation_builder", "goal_pursuit"].includes(kind)) {
       throw new Error("That task type is not supported by this Desktop build");
     }
     const objective = String(input.objective || "").trim().slice(0, 6_000);
     if (!objective) throw new Error("A new conversation needs an objective");
     const title = String(input.title || "New task").trim().slice(0, 160) || "New task";
+    const settings = await this.settingsStore.read();
+    await this.snapshotActiveTask(settings).catch((error) => {
+      this.record("task", `Could not snapshot the previous task canvas: ${error.message}`);
+    });
     const previousContextKey = this.activeContextKey;
-    this.activeContextKey = `task:${randomUUID()}`;
+    const id = randomUUID();
+    this.activeContextKey = `task:${id}`;
+    this.activeTaskRecordId = id;
+    const workspaceMode = input.workspaceMode === "context_only"
+      ? "context_only"
+      : "same_directory";
+    const workspace = await this.localTaskWorkspace(settings, workspaceMode);
+    const scope = this.taskScope(settings);
+    let task = null;
+    if (this.taskStore && scope) {
+      task = await this.taskStore.create(scope, {
+        id,
+        contextKey: this.activeContextKey,
+        title,
+        objective,
+        kind,
+        status: "active",
+        workspaceMode,
+        workspace
+      });
+    }
+    if (settings.operatingMode === "online" && this.identity?.principal_type === "user") {
+      try {
+        const remote = await this.personalRemote(settings, "creating this task");
+        const registered = await remote.registerTask({
+          id,
+          contextKey: this.activeContextKey,
+          title,
+          objective,
+          kind,
+          status: "active",
+          workspaceMode,
+          workspace: portableTaskWorkspace(workspace),
+          resourceRefs: []
+        });
+        task = await this.retainRemoteTask(settings, registered.task, task);
+        this.upsertRemoteTask(registered.task);
+      } catch (error) {
+        this.record("task", `Task will sync when Platform is available: ${error.message}`);
+      }
+    }
     this.resetRuntime();
     this.workingContinuity = null;
     this.attachments.clear();
@@ -1967,6 +2063,7 @@ export class DesktopController {
     this.activity = [];
     this.record("task", `Started ${title}`, {
       context_key: this.activeContextKey,
+      task_id: id,
       previous_context_key: previousContextKey,
       kind,
       replay_allowed: false
@@ -1977,12 +2074,211 @@ export class DesktopController {
       state: await this.state(),
       launch: {
         contextKey: this.activeContextKey,
+        taskId: id,
         previousContextKey,
         kind,
         title,
-        objective
+        objective,
+        task
       }
     };
+  }
+
+  async openTask(id) {
+    if (this.activeTask) throw new Error("Finish or stop the current run before opening another task");
+    const settings = await this.settingsStore.read();
+    const scope = this.taskScope(settings);
+    if (!scope) throw new Error("Connect the AMOS account that owns this task");
+    await this.snapshotActiveTask(settings);
+    let task = this.taskStore ? await this.taskStore.get(scope, id) : null;
+    const remoteTask = this.tasks.tasks.find((item) => item.id === id || item.contextKey === task?.contextKey);
+    if (!task && remoteTask) task = await this.retainRemoteTask(settings, remoteTask, null);
+    if (!task) throw new Error("That AMOS task is not available to this account");
+    if (task.archivedAt) throw new Error("Restore the task before opening it");
+
+    let resume = null;
+    if (settings.operatingMode === "online" && this.identity?.principal_type === "user") {
+      const remoteId = task.remoteId || (isUuid(task.id) ? task.id : "");
+      if (remoteId) {
+        try {
+          const remote = await this.personalRemote(settings, "resuming this task");
+          resume = await remote.resumeTask(remoteId, { tenantId: this.identity.tenant_id });
+          this.workingContinuity = resume.continuity;
+        } catch (error) {
+          this.workingContinuity = null;
+          this.record("task", `Opened from encrypted local state; Platform revalidation is pending: ${error.message}`);
+        }
+      }
+    }
+
+    if (task.workspaceMode !== "context_only" && task.workspace?.localPath) {
+      await this.settingsStore.write({ ...settings, workspace: task.workspace.localPath });
+    }
+    this.activeTaskRecordId = task.id;
+    this.activeContextKey = task.contextKey;
+    this.resetRuntime();
+    this.attachments.clear();
+    this.canvasResults.clear();
+    this.canvases.restore(task.canvasState || {});
+    this.activity = [];
+    this.record("task", `Opened ${task.title}`, {
+      task_id: task.id,
+      context_key: task.contextKey,
+      replay_allowed: false,
+      fresh_identity_required: true,
+      fresh_policy_required: true
+    });
+    this.send("canvas:changed", this.canvases.state());
+    await this.sendRemoteState();
+    return {
+      state: await this.state(),
+      task,
+      resume,
+      replayed: false
+    };
+  }
+
+  async updateTaskResource(id, changes = {}) {
+    if (this.activeTask) throw new Error("Finish or stop the current run before changing task metadata");
+    const settings = await this.settingsStore.read();
+    const scope = this.taskScope(settings);
+    if (!scope || !this.taskStore) throw new Error("Task storage is unavailable");
+    let task = await this.taskStore.update(scope, id, changes);
+    const remoteId = task.remoteId || (isUuid(task.id) ? task.id : "");
+    if (settings.operatingMode === "online" && remoteId && this.identity?.principal_type === "user") {
+      try {
+        const remote = await this.personalRemote(settings, "updating this task");
+        const updated = await remote.updateTask(remoteId, changes);
+        this.upsertRemoteTask(updated.task);
+        task = await this.retainRemoteTask(settings, updated.task, task);
+      } catch (error) {
+        this.record("task", `Saved locally; Platform task sync is pending: ${error.message}`);
+      }
+    }
+    await this.sendRemoteState();
+    return { task, tasks: await this.tasksState(settings) };
+  }
+
+  async forkTaskResource(input = {}) {
+    if (this.activeTask) throw new Error("Finish or stop the current run before forking a task");
+    const settings = await this.settingsStore.read();
+    const scope = this.taskScope(settings);
+    if (!scope || !this.taskStore) throw new Error("Task storage is unavailable");
+    const parentId = String(input.taskId || this.activeTaskRecordId || "");
+    const parent = await this.taskStore.get(scope, parentId);
+    if (!parent) throw new Error("That parent task is not available to this account");
+    const name = String(input.name || "").trim().slice(0, 160);
+    const objective = String(input.objective || "").trim().slice(0, 6_000);
+    const sourceEventId = String(input.sourceEventId || "").trim().slice(0, 160);
+    const contextScope = String(input.contextScope || "from_here");
+    const workspaceMode = String(input.workspaceMode || "same_directory");
+    const selectedArtifacts = Array.isArray(input.selectedArtifacts)
+      ? input.selectedArtifacts.map((item) => String(item).slice(0, 1_024)).slice(0, 40)
+      : [];
+    if (!name || !objective || !sourceEventId) {
+      throw new Error("A task fork needs a name, objective, and source milestone");
+    }
+    if (!["everything", "from_here", "selected_artifacts"].includes(contextScope)) {
+      throw new Error("Choose a valid task context scope");
+    }
+    if (!["same_directory", "new_worktree", "context_only"].includes(workspaceMode)) {
+      throw new Error("Choose a valid task workspace mode");
+    }
+    if (contextScope === "selected_artifacts" && selectedArtifacts.length === 0) {
+      throw new Error("Choose at least one artifact for this task fork");
+    }
+    await this.snapshotActiveTask(settings);
+    let workspace = {};
+    if (workspaceMode === "context_only") {
+      workspace = {};
+    } else if (workspaceMode === "new_worktree") {
+      workspace = await createTaskWorktree(
+        parent.workspace?.localPath || settings.workspace,
+        { name, id: randomUUID() }
+      );
+    } else {
+      workspace = await this.localTaskWorkspace(settings, workspaceMode, parent.workspace);
+    }
+
+    let remoteFork = null;
+    const parentRemoteId = parent.remoteId || (isUuid(parent.id) ? parent.id : "");
+    if (settings.operatingMode === "online" && parentRemoteId && this.identity?.principal_type === "user") {
+      try {
+        const remote = await this.personalRemote(settings, "forking this task");
+        remoteFork = await remote.forkTask({
+          taskId: parentRemoteId,
+          name,
+          objective,
+          sourceEventId,
+          contextScope,
+          workspaceMode,
+          workspace: portableTaskWorkspace(workspace),
+          selectedArtifacts
+        });
+        this.upsertRemoteTask(remoteFork.task);
+      } catch (error) {
+        this.record("task", `Fork will sync when Platform is available: ${error.message}`);
+      }
+    }
+
+    const childId = remoteFork?.task?.id || randomUUID();
+    const childContextKey = remoteFork?.task?.contextKey || `task:${childId}`;
+    const childScope = continuityScope({
+      identity: this.identity,
+      boundary: settings.operatingMode,
+      workspace: workspace.localPath || settings.workspace || homedir(),
+      contextKey: childContextKey
+    });
+    const parentContinuityScope = continuityScope({
+      identity: this.identity,
+      boundary: settings.operatingMode,
+      workspace: parent.workspace?.localPath || settings.workspace || homedir(),
+      contextKey: parent.contextKey
+    });
+    let continuity = null;
+    if (this.sessionContinuityStore && parentContinuityScope && childScope) {
+      continuity = await this.sessionContinuityStore.fork(parentContinuityScope, childScope, {
+        contextScope,
+        sourceEventId,
+        selectedArtifacts
+      });
+    }
+    const canvasState = contextScope === "selected_artifacts"
+      ? selectedCanvasState(parent.canvasState, selectedArtifacts)
+      : parent.canvasState;
+    const child = await this.taskStore.create(scope, {
+      id: childId,
+      remoteId: remoteFork?.task?.id || "",
+      contextKey: childContextKey,
+      title: name,
+      objective,
+      kind: "fork",
+      status: "active",
+      parentTaskId: parent.id,
+      sourceEventId,
+      contextScope,
+      workspaceMode,
+      workspace,
+      resourceRefs: contextScope === "selected_artifacts" ? selectedArtifacts : parent.resourceRefs,
+      forkManifest: remoteFork?.forkManifest || {
+        parentTaskId: parent.id,
+        sourceEventId,
+        contextScope,
+        workspaceMode,
+        selectedArtifacts
+      },
+      canvasState
+    });
+    this.record("task", `Forked ${parent.title} into ${child.title}`, {
+      parent_task_id: parent.id,
+      child_task_id: child.id,
+      source_event_id: sourceEventId,
+      context_scope: contextScope,
+      workspace_mode: workspaceMode,
+      replay_allowed: false
+    });
+    const opened = await this.openTask(child.id);
+    return { ...opened, task: child, continuity, forkManifest: child.forkManifest };
   }
 
   presentCanvas(spec) {
@@ -1994,6 +2290,7 @@ export class DesktopController {
       source: canvas.source.label
     });
     this.send("canvas:changed", this.canvases.state());
+    this.snapshotActiveTask().catch(() => {});
     return canvas;
   }
 
@@ -2006,6 +2303,7 @@ export class DesktopController {
       state: canvas.state.kind
     });
     this.send("canvas:changed", this.canvases.state());
+    this.snapshotActiveTask().catch(() => {});
     return canvas;
   }
 
@@ -2027,6 +2325,7 @@ export class DesktopController {
       layoutStatus: input.layout.status
     });
     this.send("canvas:changed", this.canvases.state());
+    this.snapshotActiveTask().catch(() => {});
     return canvas;
   }
 
@@ -2083,6 +2382,7 @@ export class DesktopController {
     this.activity = [];
     this.send("activity:changed", []);
     this.send("canvas:changed", this.canvases.state());
+    await this.snapshotActiveTask(settings).catch(() => {});
     await this.sendRemoteState();
     return { ok: true, sharedContinuity };
   }
@@ -2523,9 +2823,15 @@ export class DesktopController {
 
   async getRuntime({ requireAmos, offline = false, boundary = null }) {
     const requestedBoundary = boundary || (offline ? "offline" : "online");
-    if (this.runtime?.boundary === requestedBoundary) return this.runtime;
-    if (this.runtime) this.resetRuntime();
     const settings = await this.settingsStore.read();
+    const contextOnly = await this.activeTaskIsContextOnly(settings);
+    if (
+      this.runtime?.boundary === requestedBoundary &&
+      this.runtime?.contextOnly === contextOnly
+    ) {
+      return this.runtime;
+    }
+    if (this.runtime) this.resetRuntime();
     const config = this.configFrom(settings);
     const missing = validateConfig(config);
     if (missing.length > 0) {
@@ -2617,6 +2923,7 @@ export class DesktopController {
     this.runtime = {
       offline: isOffline,
       boundary: requestedBoundary,
+      contextOnly,
       demo: Boolean(credentials?.demo),
       config,
       oauth,
@@ -2625,17 +2932,20 @@ export class DesktopController {
         approvals: this.approvals,
         oauth,
         useOAuth,
+        includeLocal: !contextOnly,
         includeAmos: !isOffline && !isPersonal,
         includeWeb: !isOffline,
         artifactPresenter: (input) => this.presentDocumentArtifact(input),
         intelligenceRouter,
-        systemPrompt: desktopSystemPrompt(isOffline
+        systemPrompt: `${desktopSystemPrompt(isOffline
           ? OFFLINE_SYSTEM_PROMPT
           : isPersonal
             ? PERSONAL_SYSTEM_PROMPT
             : credentials?.demo
               ? DEMO_SYSTEM_PROMPT
-              : SYSTEM_PROMPT, settings, config),
+              : SYSTEM_PROMPT, settings, config)}${contextOnly
+          ? "\n\nThis task is context-only. No local workspace is granted, and local shell, file, code, Git, and document-generation tools are unavailable."
+          : ""}`,
         extraTools,
         onToolResult: (outcome) => {
           this.captureContinuityToolOutcome(outcome, config.safety.workspaceRoot);
@@ -2655,6 +2965,149 @@ export class DesktopController {
       workspace: settings?.workspace || homedir(),
       contextKey: this.activeContextKey
     });
+  }
+
+  taskScope(settings, boundary = settings?.operatingMode) {
+    if (!this.taskStore) return null;
+    return taskOwnerScope({
+      identity: this.identity,
+      boundary,
+      workspace: settings?.workspace || homedir()
+    });
+  }
+
+  async tasksState(settings = null) {
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    const local = this.taskStore && scope
+      ? await this.taskStore.list(scope, { includeArchived: true })
+      : [];
+    const remoteById = new Map((this.tasks?.tasks || []).map((task) => [task.id, task]));
+    const tasks = local.map((task) => ({
+      ...task,
+      remote: remoteById.has(task.remoteId || task.id),
+      active: task.id === this.activeTaskRecordId
+    }));
+    for (const remote of this.tasks?.tasks || []) {
+      if (tasks.some((task) => task.id === remote.id || task.remoteId === remote.id)) continue;
+      tasks.push({
+        ...remote,
+        remoteId: remote.id,
+        canvasState: { activeCanvasId: null, canvases: [] },
+        local: false,
+        remote: true,
+        active: remote.contextKey === this.activeContextKey
+      });
+    }
+    tasks.sort((left, right) => {
+      if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
+      return String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""));
+    });
+    return {
+      supported: Boolean(this.taskStore) || this.tasks?.supported === true,
+      platformSupported: this.tasks?.supported === true,
+      activeTaskId: this.activeTaskRecordId,
+      tasks,
+      contract: this.tasks?.contract || {
+        replayAllowed: false,
+        credentialsIncluded: false,
+        absoluteLocalPathsIncluded: false
+      }
+    };
+  }
+
+  async syncRemoteTasksLocally(settings, remoteTasks) {
+    if (!this.taskStore || !this.taskScope(settings)) return;
+    for (const remoteTask of remoteTasks || []) {
+      await this.retainRemoteTask(settings, remoteTask, null);
+    }
+  }
+
+  async retainRemoteTask(settings, remoteTask, existing = null) {
+    if (!this.taskStore) return existing || remoteTask;
+    const scope = this.taskScope(settings);
+    if (!scope) return existing || remoteTask;
+    const current = existing ||
+      await this.taskStore.get(scope, remoteTask.id) ||
+      await this.taskStore.findByContext(scope, remoteTask.contextKey);
+    const portable = remoteTask.workspace || {};
+    return this.taskStore.upsert(scope, {
+      ...(current || {}),
+      id: current?.id || remoteTask.id,
+      remoteId: remoteTask.id,
+      contextKey: remoteTask.contextKey,
+      title: remoteTask.title,
+      objective: remoteTask.objective,
+      kind: remoteTask.kind,
+      status: remoteTask.status,
+      pinned: remoteTask.pinned,
+      archivedAt: remoteTask.archivedAt,
+      parentTaskId: current?.parentTaskId || remoteTask.parentTaskId,
+      sourceEventId: current?.sourceEventId || remoteTask.sourceEventId,
+      workspaceMode: remoteTask.workspaceMode,
+      workspace: {
+        ...(portable || {}),
+        ...(current?.workspace?.localPath ? { localPath: current.workspace.localPath } : {})
+      },
+      resourceRefs: remoteTask.resourceRefs,
+      forkManifest: remoteTask.forkManifest || current?.forkManifest,
+      canvasState: current?.canvasState,
+      createdAt: remoteTask.createdAt || current?.createdAt,
+      updatedAt: remoteTask.updatedAt || current?.updatedAt
+    });
+  }
+
+  upsertRemoteTask(task) {
+    const tasks = Array.isArray(this.tasks?.tasks) ? this.tasks.tasks : [];
+    this.tasks = {
+      supported: true,
+      contract: this.tasks?.contract || null,
+      tasks: [task, ...tasks.filter((item) => item.id !== task.id)]
+    };
+  }
+
+  async snapshotActiveTask(settings = null) {
+    if (!this.taskStore || !this.activeTaskRecordId) return null;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return null;
+    const task = await this.taskStore.get(scope, this.activeTaskRecordId);
+    if (!task) return null;
+    const workspace = task.workspaceMode === "context_only"
+      ? {}
+      : {
+          ...task.workspace,
+          localPath: task.workspace?.localPath || currentSettings.workspace || ""
+        };
+    return this.taskStore.update(scope, task.id, {
+      canvasState: this.canvases.state(),
+      workspace
+    });
+  }
+
+  async activeTaskIsContextOnly(settings = null) {
+    if (!this.taskStore || !this.activeTaskRecordId) return false;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return false;
+    const task = await this.taskStore.get(scope, this.activeTaskRecordId);
+    return task?.workspaceMode === "context_only";
+  }
+
+  async localTaskWorkspace(settings, workspaceMode, fallback = {}) {
+    if (workspaceMode === "context_only") return {};
+    const path = fallback?.localPath || settings?.workspace || "";
+    if (!path) return {};
+    try {
+      return await inspectTaskWorkspace(path);
+    } catch {
+      return {
+        ...portableTaskWorkspace(fallback),
+        localPath: resolve(path),
+        label: fallback?.label || basename(path),
+        dirty: fallback?.dirty === true
+      };
+    }
   }
 
   async sessionContinuityState(settings = null) {
@@ -2823,9 +3276,11 @@ export class DesktopController {
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
+    this.tasks = { supported: false, tasks: [], contract: null };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.activeContextKey = "active";
+    this.activeTaskRecordId = null;
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
     this.send("activity:changed", []);
     this.send("canvas:changed", this.canvases.state());
@@ -2851,6 +3306,12 @@ export class DesktopController {
   }
 
   async sendRemoteState() {
+    const taskSettings = this.settingsStore?.read
+      ? await this.settingsStore.read().catch(() => ({ operatingMode: "personal", workspace: "" }))
+      : { operatingMode: "personal", workspace: "" };
+    const tasks = typeof this.tasksState === "function"
+      ? await this.tasksState(taskSettings)
+      : structuredClone(this.tasks || { supported: false, tasks: [] });
     const remoteState = {
       identity: this.identity,
       accountStatus: this.accountStatus,
@@ -2861,6 +3322,7 @@ export class DesktopController {
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
+      tasks,
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -2870,6 +3332,7 @@ export class DesktopController {
         : { currentAccountId: this.identity ? "legacy" : "", accounts: [] },
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
       activeContextKey: this.activeContextKey || "active",
+      activeTaskRecordId: this.activeTaskRecordId,
       remoteStatus: { ...this.remoteStatus },
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState(),
@@ -2892,6 +3355,28 @@ const CONTINUITY_LOCAL_TOOLS = new Set([
   "git_status",
   "apply_patch"
 ]);
+
+function selectedCanvasState(value, selectedArtifacts) {
+  const selected = new Set((selectedArtifacts || []).map(String));
+  const canvases = (Array.isArray(value?.canvases) ? value.canvases : []).filter((canvas) => {
+    if (selected.has(String(canvas.id))) return true;
+    return (canvas.blocks || []).some((block) =>
+      selected.has(String(block.id)) ||
+      (block.artifacts || []).some((artifact) => selected.has(String(artifact.path)))
+    );
+  });
+  return {
+    canvases,
+    activeCanvasId: canvases.some((canvas) => canvas.id === value?.activeCanvasId)
+      ? value.activeCanvasId
+      : canvases[0]?.id || null
+  };
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(String(value || ""));
+}
 
 function publicWorkingContinuity(value) {
   if (!value) return null;

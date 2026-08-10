@@ -12,15 +12,18 @@ import { createWebTools } from "./tools/web.js";
 
 export function createRegistry({
   extraTools = [],
+  includeLocal = true,
   includeAmos = true,
   includeWeb = true,
   artifactPresenter = null
 } = {}) {
   const registry = new ToolRegistry();
-  registry.register(createBashTool());
-  for (const tool of createCodingTools()) registry.register(tool);
-  for (const tool of createFileTools()) registry.register(tool);
-  for (const tool of createArtifactTools({ present: artifactPresenter })) registry.register(tool);
+  if (includeLocal) {
+    registry.register(createBashTool());
+    for (const tool of createCodingTools()) registry.register(tool);
+    for (const tool of createFileTools()) registry.register(tool);
+    for (const tool of createArtifactTools({ present: artifactPresenter })) registry.register(tool);
+  }
   if (includeWeb) {
     for (const tool of createWebTools()) registry.register(tool);
   }
@@ -38,6 +41,7 @@ export function createRuntime({
   useOAuth = false,
   fetchImpl,
   extraTools = [],
+  includeLocal = true,
   includeAmos = true,
   includeWeb = true,
   artifactPresenter = null,
@@ -45,7 +49,13 @@ export function createRuntime({
   onToolResult = null,
   intelligenceRouter = null
 }) {
-  const registry = createRegistry({ extraTools, includeAmos, includeWeb, artifactPresenter });
+  const registry = createRegistry({
+    extraTools,
+    includeLocal,
+    includeAmos,
+    includeWeb,
+    artifactPresenter
+  });
   const modelConfig = {
     ...config.model,
     getAccessToken: config.model.usesAmosIdentity

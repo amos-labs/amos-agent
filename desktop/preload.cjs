@@ -68,6 +68,9 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:set-automation-status", { name, active }),
   startNewConversation: (input) =>
     ipcRenderer.invoke("desktop:start-new-conversation", input),
+  openTask: (id) => ipcRenderer.invoke("desktop:open-task", id),
+  updateTask: (id, changes) => ipcRenderer.invoke("desktop:update-task", { id, changes }),
+  forkTask: (input) => ipcRenderer.invoke("desktop:fork-task", input),
   removeSavedView: (id) => ipcRenderer.invoke("desktop:remove-saved-view", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),
