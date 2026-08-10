@@ -179,17 +179,16 @@
             <button id="demoConnectButton" class="button secondary" type="button">Use my company</button>
           </div>
           <div id="operatorGrid" class="operator-grid">
-            <div class="conversation">
-              <div class="conversation-heading">
+            <div id="conversation" class="conversation">
+              <div id="conversationHeading" class="conversation-heading">
                 <div>
                   <span id="operatorEyebrow" class="eyebrow">OPERATE THE COMPANY</span>
                   <h1 id="operatorTitle">What should move forward?</h1>
                 </div>
-                <button id="clearButton" class="text-button">Clear session</button>
               </div>
 
               <div id="messages" class="messages">
-                <div class="welcome-message">
+                <div id="welcomeMessage" class="welcome-message">
                   <div class="agent-avatar">A</div>
                   <div>
                     <strong id="readyTitle">AMOS is ready.</strong>
@@ -243,6 +242,13 @@
                       <span>＋</span> Attach
                     </button>
                     <div id="scopeNote" class="scope-note"><span class="status-dot green"></span><span>AMOS policy and proof are active</span></div>
+                    <button
+                      id="clearButton"
+                      class="composer-clear-button text-button hidden"
+                      type="button"
+                      aria-label="Clear current conversation context"
+                      title="Clear current conversation context"
+                    >Clear context</button>
                   </div>
                   <div class="composer-actions">
                     <button id="cancelButton" class="button danger hidden" type="button">Stop safely</button>

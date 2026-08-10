@@ -170,18 +170,38 @@ test("Briefings use the platform catalog and typed actions instead of Desktop pr
 });
 
 test("Operator is chat-first with collapsible navigation and inline governed progress", async () => {
-  const [javascript, html] = await Promise.all([
+  const [javascript, html, css] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
   ]);
 
   assert.match(html, /id="sidebarToggle"/);
+  assert.match(html, /id="conversationHeading"/);
+  assert.match(
+    html,
+    /class="composer-tools"[\s\S]*?id="clearButton"[\s\S]*?>Clear context<\/button>/
+  );
   assert.match(html, /id="activityStream"/);
   assert.match(html, /Progress summaries, governed tool use, and recorded outcomes/);
   const operator = html.match(/<section id="operatorView"([\s\S]*?)<section id="canvasView"/)?.[1] || "";
+  const heading = operator.match(/id="conversationHeading"([\s\S]*?)<div id="messages"/)?.[1] || "";
   assert.doesNotMatch(operator, /class="work-panel"/);
+  assert.doesNotMatch(heading, /id="clearButton"/);
   assert.match(javascript, /function beginInlineActivity\(\)/);
   assert.match(javascript, /finishInlineActivity\(\)/);
+  assert.match(javascript, /function toggleSidebar\(\)[\s\S]*?setSidebarCollapsed/);
+  assert.match(javascript, /elements\.app\.classList\.toggle\("nav-collapsed", collapsed\)/);
+  assert.match(
+    javascript,
+    /function renderConversationChrome\(\)[\s\S]*?\.message\.user, \.message\.assistant, \.message\.error[\s\S]*?conversationHeading\.classList\.toggle\("hidden", hasConversation\)[\s\S]*?welcomeMessage\.classList\.toggle\("hidden", hasConversation\)[\s\S]*?starterActions\.classList\.toggle\("hidden", hasConversation\)/
+  );
+  assert.match(javascript, /elements\.messages\.append\(message\);\s+renderConversationChrome\(\)/);
+  assert.match(javascript, /operatorView\.classList\.toggle\("has-demo-banner", demo\)/);
+  assert.match(css, /\.sidebar-toggle\s*{[\s\S]*?-webkit-app-region: no-drag;[\s\S]*?z-index: 3;/);
+  assert.match(css, /\.operator\s*{[\s\S]*?padding: 0;/);
+  assert.match(css, /\.operator\.has-demo-banner\s*{\s*grid-template-rows: auto minmax\(0, 1fr\);/);
+  assert.match(css, /\.conversation\.has-history\s*{\s*grid-template-rows: minmax\(0, 1fr\) auto;/);
 });
 
 test("local auto-approve is an exact-folder Desktop trust ceremony, not a company approval bypass", async () => {
@@ -214,19 +234,29 @@ test("local auto-approve is an exact-folder Desktop trust ceremony, not a compan
 });
 
 test("dynamic canvases open beside chat without navigating away from Operator", async () => {
-  const [javascript, html] = await Promise.all([
+  const [javascript, html, css] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
   ]);
 
   assert.match(html, /id="canvasSidecar"/);
   assert.match(html, /id="liveCanvasList"/);
   assert.match(javascript, /if \(activeCanvasId\) canvasSidecarOpen = true;\s+renderCanvas\(\);/);
+  assert.match(javascript, /operatorGrid\.classList\.toggle\("has-context", sidecarVisible\)/);
+  assert.match(javascript, /contextResizeHandle\.classList\.toggle\("hidden", !sidecarVisible\)/);
   assert.doesNotMatch(
     javascript,
     /api\.on\("canvas:changed",[\s\S]*?if \(activeCanvasId\) showView\("canvas"\)/
   );
   assert.match(javascript, /actionLabel: "Open beside chat"/);
+  assert.match(
+    css,
+    /\.operator-grid\.has-context\s*{\s*grid-template-columns: minmax\(480px, 1fr\) 6px minmax\(380px, var\(--context-width, 48%\)\);/
+  );
+  assert.match(css, /\.context-resize-handle\s*{[\s\S]*?cursor: col-resize;/);
+  assert.match(css, /\.operator-grid\.has-context \.conversation\s*{\s*border-right:/);
+  assert.match(css, /\.operator-grid\.has-context \.scope-note\s*{\s*display: none;/);
 });
 
 test("the identity card opens Google-style account switching outside Intelligence", async () => {
