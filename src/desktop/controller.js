@@ -2412,6 +2412,27 @@ export class DesktopController {
     return absolutePath;
   }
 
+  async resolveDocumentPreviewPath(value) {
+    const previewPath = String(value || "").trim().replaceAll("\\", "/");
+    if (
+      !previewPath.startsWith(".amos/previews/") ||
+      previewPath.split("/").includes("..") ||
+      !previewPath.toLowerCase().endsWith(".png") ||
+      previewPath.length > 1_000
+    ) {
+      throw new Error("AMOS blocked an invalid document preview path");
+    }
+    const settings = await this.settingsStore.read();
+    if (!settings.workspace) throw new Error("Choose the document workspace first");
+    const absolutePath = resolveWorkspacePath(settings.workspace, previewPath, false);
+    assertSafeAgentPath(absolutePath, settings.workspace);
+    const info = await stat(absolutePath);
+    if (!info.isFile() || info.size > 5_000_000) {
+      throw new Error("That document preview is unavailable");
+    }
+    return absolutePath;
+  }
+
   async clear() {
     const settings = this.settingsStore?.read
       ? await this.settingsStore.read().catch(() => ({}))

@@ -32,6 +32,7 @@ const MAX_SOURCES = 100;
 const MAX_DECISION_DETAILS = 20;
 const MAX_DOCUMENT_ARTIFACTS = 2;
 const MAX_DOCUMENT_DIAGNOSTICS = 20;
+const MAX_DOCUMENT_PREVIEW_PAGES = 12;
 const SOURCE_KINDS = new Set(["live", "cached", "private", "local"]);
 const DECISION_KINDS = new Set(["approval", "receipt"]);
 const DECISION_STATUSES = new Set([
@@ -343,6 +344,7 @@ function normalizeBlock(input, index, canvasSource) {
       `blocks[${index}].diagnostics`,
       MAX_DOCUMENT_DIAGNOSTICS
     );
+    const pagePreview = block.page_preview || block.pagePreview || null;
     return {
       ...common,
       document: normalizeDocumentSpec(block.document),
@@ -354,6 +356,10 @@ function normalizeBlock(input, index, canvasSource) {
         diagnostic,
         `blocks[${index}].diagnostics[${diagnosticIndex}]`
       )),
+      pagePreview: pagePreview ? normalizeDocumentPagePreview(
+        pagePreview,
+        `blocks[${index}].page_preview`
+      ) : null,
       estimatedPages: boundedInteger(
         block.estimated_pages || block.estimatedPages || 1,
         `blocks[${index}].estimated_pages`,
@@ -414,6 +420,44 @@ function normalizeBlock(input, index, canvasSource) {
         value: primitive(value.value, `blocks[${index}].details[${detailIndex}].value`)
       };
     })
+  };
+}
+
+function normalizeDocumentPagePreview(input, path) {
+  const preview = object(input, `${path} must be an object`);
+  const pages = array(preview.pages || [], `${path}.pages`, MAX_DOCUMENT_PREVIEW_PAGES)
+    .map((page, index) => {
+      const value = object(page, `${path}.pages[${index}] must be an object`);
+      const previewPath = text(value.path, `${path}.pages[${index}].path`, 1_000).replaceAll("\\", "/");
+      if (
+        !previewPath.startsWith(".amos/previews/") ||
+        previewPath.split("/").includes("..") ||
+        !previewPath.toLowerCase().endsWith(".png")
+      ) {
+        throw new Error(`${path}.pages[${index}].path must be an AMOS preview PNG path`);
+      }
+      const sha256 = text(value.sha256, `${path}.pages[${index}].sha256`, 64).toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(sha256)) {
+        throw new Error(`${path}.pages[${index}].sha256 must be a SHA-256 digest`);
+      }
+      return {
+        path: previewPath,
+        page: boundedInteger(value.page, `${path}.pages[${index}].page`, 1, 10_000),
+        width: boundedInteger(value.width, `${path}.pages[${index}].width`, 1, 4_000),
+        height: boundedInteger(value.height, `${path}.pages[${index}].height`, 1, 6_000),
+        bytes: boundedInteger(value.bytes, `${path}.pages[${index}].bytes`, 1, 5_000_000),
+        sha256
+      };
+    });
+  return {
+    pageCount: boundedInteger(
+      preview.page_count || preview.pageCount || pages.length,
+      `${path}.page_count`,
+      1,
+      10_000
+    ),
+    truncated: preview.truncated === true,
+    pages
   };
 }
 

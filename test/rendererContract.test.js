@@ -372,7 +372,10 @@ test("canvas code and previews stay typed, inert, and outside the privileged ren
   assert.match(javascript, /api\.openDocumentArtifact\(path, mode\)/);
   assert.doesNotMatch(javascript, /renderCanvasDocument[\s\S]{0,6000}(?:innerHTML|createElement\("iframe"\))/);
   assert.match(preload, /desktop:open-document-artifact/);
+  assert.match(preload, /desktop:read-document-preview/);
   assert.match(main, /controller\.resolveDocumentArtifactPath\(input\?\.path\)/);
+  assert.match(main, /controller\.resolveDocumentPreviewPath\(input\?\.path\)/);
+  assert.match(javascript, /api\.readDocumentPreview\(preview\.path\)/);
   assert.match(main, /shell\.openPath\(artifactPath\)/);
   assert.match(main, /shell\.showItemInFolder\(artifactPath\)/);
 });

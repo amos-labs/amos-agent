@@ -82,6 +82,22 @@ export function analyzeDocumentLayout(input) {
         ));
       }
     }
+
+    if (block.type === "image" && block.width_percent < 45) {
+      diagnostics.push(warning(
+        "small-image",
+        "This image may be difficult to read at the selected width; confirm the rendered page preview.",
+        index
+      ));
+    }
+
+    if (block.type === "chart" && block.labels.length > 12) {
+      diagnostics.push(warning(
+        "dense-chart",
+        "This chart has many category labels; confirm label readability in the rendered page preview.",
+        index
+      ));
+    }
   });
 
   const estimatedPages = estimatePages(spec);
@@ -119,6 +135,8 @@ function layoutUnits(block) {
     }, 0);
   }
   if (block.type === "callout") return 6 + Math.ceil(block.text.length / 120);
+  if (block.type === "image") return 28;
+  if (block.type === "chart") return 34;
   if (block.type === "sources") return 4 + (block.sources.length * 2);
   return 0;
 }

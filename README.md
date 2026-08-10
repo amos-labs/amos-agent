@@ -343,7 +343,7 @@ as the AMOS platform grows.
 
 The near-term product path is:
 
-1. complete document artifacts with visual content, templates, editing, spreadsheets, and presentations;
+1. add spreadsheet and presentation engines beside the completed DOCX/PDF artifact system;
 2. add governed JavaScript browser automation and bounded computer-use fallback;
 3. finish consent-aware Router learning and richer typed company work surfaces;
 4. add signed device identity, revocable environment grants, and fleet-management controls; and

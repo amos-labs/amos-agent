@@ -2155,19 +2155,40 @@ function renderCanvasDocument(block) {
 
   const previewLabel = document.createElement("div");
   previewLabel.className = "document-preview-label";
-  previewLabel.textContent = block.previewTruncated
-    ? `Structured preview · showing ${block.document.blocks.length} of ${block.totalBlocks} blocks`
-    : "Structured preview · final pagination is preserved in the verified files";
+  previewLabel.textContent = block.pagePreview?.pages?.length
+    ? `Rendered page preview · ${block.pagePreview.pages.length} of ${block.pagePreview.pageCount} pages`
+    : block.previewTruncated
+      ? `Structured preview · showing ${block.document.blocks.length} of ${block.totalBlocks} blocks`
+      : "Structured preview · final pagination is preserved in the verified files";
   card.append(previewLabel);
 
-  const pages = [[]];
-  for (const documentBlock of block.document.blocks) {
-    if (documentBlock.type === "page_break") pages.push([]);
-    else pages.at(-1).push(documentBlock);
-  }
   const deck = document.createElement("div");
   deck.className = "document-page-deck";
-  pages.forEach((pageBlocks, pageIndex) => {
+  if (block.pagePreview?.pages?.length) {
+    for (const preview of block.pagePreview.pages) {
+      const page = document.createElement("section");
+      page.className = "document-preview-page rendered";
+      const image = document.createElement("img");
+      image.className = "document-preview-thumbnail";
+      image.alt = `Rendered preview of page ${preview.page}`;
+      image.width = preview.width;
+      image.height = preview.height;
+      image.addEventListener("error", () => page.classList.add("load-error"), { once: true });
+      api.readDocumentPreview(preview.path).then((result) => {
+        image.src = `data:${result.mime};base64,${result.base64}`;
+      }).catch(() => page.classList.add("load-error"));
+      const pageMarker = document.createElement("footer");
+      pageMarker.textContent = `Rendered page ${preview.page} of ${block.pagePreview.pageCount}`;
+      page.append(image, pageMarker);
+      deck.append(page);
+    }
+  } else {
+    const pages = [[]];
+    for (const documentBlock of block.document.blocks) {
+      if (documentBlock.type === "page_break") pages.push([]);
+      else pages.at(-1).push(documentBlock);
+    }
+    pages.forEach((pageBlocks, pageIndex) => {
     const page = document.createElement("section");
     page.className = "document-preview-page";
     if (pageIndex === 0) {
@@ -2197,7 +2218,8 @@ function renderCanvasDocument(block) {
       : "Document preview";
     page.append(pageMarker);
     deck.append(page);
-  });
+    });
+  }
   card.append(deck);
 
   const artifacts = document.createElement("div");
@@ -2293,6 +2315,23 @@ function renderDocumentPreviewBlock(block) {
     }
     callout.append(document.createTextNode(block.text));
     return callout;
+  }
+  if (["image", "chart"].includes(block.type)) {
+    const figure = document.createElement("figure");
+    figure.className = "document-preview-visual-placeholder";
+    const label = document.createElement("strong");
+    label.textContent = block.type === "chart" ? block.title : block.alt_text;
+    const detail = document.createElement("span");
+    detail.textContent = block.type === "chart"
+      ? `${block.chart_type} chart · ${block.series.length} ${block.series.length === 1 ? "series" : "series"}`
+      : block.path;
+    figure.append(label, detail);
+    if (block.caption) {
+      const caption = document.createElement("figcaption");
+      caption.textContent = block.caption;
+      figure.append(caption);
+    }
+    return figure;
   }
   const sources = document.createElement("section");
   sources.className = "document-preview-sources";
