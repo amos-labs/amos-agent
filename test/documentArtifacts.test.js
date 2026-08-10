@@ -7,6 +7,7 @@ import {
   normalizeDocumentFormats,
   normalizeDocumentSpec
 } from "../src/artifacts/documentSpec.js";
+import { analyzeDocumentLayout } from "../src/artifacts/documentDiagnostics.js";
 import { extractDocumentText } from "../src/desktop/attachments.js";
 import { createArtifactTools } from "../src/tools/artifacts.js";
 
@@ -64,7 +65,13 @@ test("DocumentSpec is bounded and rejects unsafe source contracts", () => {
 test("Desktop creates and reopens verified DOCX and PDF from one specification", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-documents-"));
   let approvals = 0;
-  const tool = createArtifactTools()[0];
+  let previewInput = null;
+  const tool = createArtifactTools({
+    present: async (input) => {
+      previewInput = input;
+      return { id: "canvas-document", revision: 1 };
+    }
+  })[0];
   const result = await tool.handler(
     {
       path: "reports/quarterly-operating-brief",
@@ -94,6 +101,15 @@ test("Desktop creates and reopens verified DOCX and PDF from one specification",
   assert.equal(approvals, 1);
   assert.equal(result.ok, true);
   assert.equal(result.contract, "amos.document-spec:1");
+  assert.equal(result.layout.status, "ready");
+  assert.equal(result.layout.estimated_pages, 1);
+  assert.deepEqual(result.preview, {
+    available: true,
+    canvas_id: "canvas-document",
+    revision: 1
+  });
+  assert.equal(previewInput.document.title, DOCUMENT.title);
+  assert.equal(previewInput.artifacts.length, 2);
   assert.deepEqual(result.artifacts.map((artifact) => artifact.format), ["docx", "pdf"]);
   for (const artifact of result.artifacts) {
     assert.equal(artifact.verified, true);
@@ -111,6 +127,28 @@ test("Desktop creates and reopens verified DOCX and PDF from one specification",
     assert.match(text, /Quarterly Operating Brief/);
     assert.match(text, /Fund the next operating phase/);
   }
+});
+
+test("layout diagnostics provide bounded repair guidance before regeneration", () => {
+  const layout = analyzeDocumentLayout({
+    title: "A very long operating review title that should be shortened before it is shared with the executive team and board",
+    blocks: [
+      { type: "heading", level: 1, text: "Detached heading" },
+      { type: "page_break" },
+      {
+        type: "table",
+        headers: ["One", "Two", "Three", "Four", "Five", "Six", "Seven"],
+        rows: [["1", "2", "3", "4", "5", "6", "7"]]
+      }
+    ]
+  });
+  assert.equal(layout.status, "attention");
+  assert.ok(layout.estimated_pages >= 2);
+  assert.deepEqual(
+    layout.diagnostics.map((item) => item.code),
+    ["long-title", "orphan-heading", "wide-table"]
+  );
+  assert.ok(layout.diagnostics.every((item) => item.severity === "warning"));
 });
 
 test("Document creation denies writes cleanly and rejects paths outside the workspace", async () => {

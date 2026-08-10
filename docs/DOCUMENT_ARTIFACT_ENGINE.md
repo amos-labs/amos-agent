@@ -51,6 +51,22 @@ requested formats, and the typed document spec.
 7. Only after all requested formats pass does it write the files.
 8. The tool result records each path, format, byte count, SHA-256, and verified
    extracted-character count for task continuity.
+9. Desktop presents the normalized spec in its typed canvas, alongside bounded
+   layout diagnostics and the verified artifact metadata.
+
+The renderer never receives an arbitrary local path or document HTML. Preview
+content is inert text derived from the already-normalized `DocumentSpec`.
+Opening or revealing an artifact crosses a narrow IPC boundary that resolves
+the exact workspace-relative DOCX or PDF path again in the main process and
+requires the file to exist. Regenerating the same output path refreshes the
+existing preview revision instead of creating a second work surface.
+
+The current preview is intentionally structural rather than a claim of
+pixel-perfect pagination. Explicit page breaks are visible, deterministic
+checks flag likely title wrapping, orphan headings, dense prose, wide or long
+tables, and unbroken values, and the tool result makes that repair guidance
+available to the model. Final pagination remains authoritative in the reopened
+and verified files.
 
 Company data used as source material keeps its existing AMOS identity, tenant,
 policy, and receipt boundary. Creating a local file does not publish it, place
@@ -81,8 +97,9 @@ requires a broader artifact system:
    text, crop rules, and source provenance.
 2. **Templates and brand systems** — signed reusable templates, customer fonts,
    logos, page furniture, theme tokens, and template-version receipts.
-3. **Preview and repair** — page thumbnails beside chat, overflow diagnostics,
-   model-visible layout findings, and deterministic rerendering.
+3. **Page-faithful preview** — the bounded structured preview, model-visible
+   layout findings, same-path rerendering, and local open/reveal flow are now
+   implemented. Page thumbnails and renderer-measured overflow remain.
 4. **Existing-document work** — read the source structure, edit selected
    sections, preserve unaffected content, compare versions, and create redlines
    and comments without silently flattening the document.

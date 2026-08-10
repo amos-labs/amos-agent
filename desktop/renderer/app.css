@@ -1393,6 +1393,163 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   tab-size: 2;
 }
 .canvas-code-block .canvas-block-provenance { margin: 0; padding: 10px 20px 14px; }
+.canvas-document-block { padding: 0; overflow: hidden; }
+.canvas-document-block > h2 { margin: 0; padding: 20px 22px 0; }
+.document-preview-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.document-preview-summary > span {
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: var(--surface-pill);
+  color: var(--muted-2);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+.document-layout-status.ready { background: rgba(59,213,143,.11); color: var(--green); }
+.document-layout-status.attention { background: rgba(255,202,105,.11); color: var(--warning); }
+.document-diagnostics { display: grid; gap: 7px; padding: 14px 22px 0; }
+.document-diagnostic {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(255,202,105,.24);
+  border-radius: 9px;
+  background: rgba(255,202,105,.045);
+}
+.document-diagnostic > span {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255,202,105,.14);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 900;
+}
+.document-diagnostic strong {
+  color: var(--ink);
+  font-size: 9px;
+  text-transform: capitalize;
+}
+.document-diagnostic p { margin: 3px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.document-preview-label {
+  padding: 15px 22px 8px;
+  color: var(--muted-2);
+  font-size: 8px;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+.document-page-deck {
+  display: grid;
+  gap: 18px;
+  max-height: 760px;
+  overflow: auto;
+  padding: 0 22px 22px;
+  background: var(--surface-softer);
+}
+.document-preview-page {
+  position: relative;
+  width: min(720px, 100%);
+  min-height: 610px;
+  margin: 0 auto;
+  padding: clamp(34px, 7%, 66px);
+  border: 1px solid rgba(64,78,105,.22);
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(0,0,0,.2);
+  color: #1f2937;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.document-preview-title {
+  max-width: 92%;
+  margin: 0 0 13px;
+  color: #1f4e78;
+  font-size: clamp(29px, 5vw, 48px);
+  letter-spacing: -.035em;
+  line-height: 1.05;
+}
+.document-style-compact .document-preview-title { color: #0f766e; font-size: clamp(27px, 4.5vw, 42px); }
+.document-style-proposal .document-preview-title { color: #7c3e21; }
+.document-preview-subtitle { margin: 0 0 10px; color: #64748b; font-size: 15px; line-height: 1.4; }
+.document-preview-author { margin: 0 0 23px; color: #64748b; font-size: 10px; font-style: italic; }
+.document-preview-heading { margin: 22px 0 8px; color: #1f2937; line-height: 1.2; }
+.document-preview-heading.level-1 { color: #1f4e78; font-size: 20px; }
+.document-style-compact .document-preview-heading.level-1 { color: #0f766e; }
+.document-style-proposal .document-preview-heading.level-1 { color: #7c3e21; }
+.document-preview-heading.level-2 { font-size: 16px; }
+.document-preview-heading.level-3 { font-size: 13px; }
+.document-preview-paragraph,
+.document-preview-list,
+.document-preview-callout,
+.document-preview-sources {
+  color: #263142;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.document-preview-paragraph { margin: 0 0 10px; white-space: pre-line; }
+.document-preview-list { display: grid; gap: 4px; margin: 0 0 12px; padding-left: 22px; }
+.document-preview-callout {
+  display: block;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-left: 4px solid #1f4e78;
+  background: #eaf2f8;
+}
+.document-style-compact .document-preview-callout { border-color: #0f766e; background: #e6fffa; }
+.document-style-proposal .document-preview-callout { border-color: #7c3e21; background: #fff3e8; }
+.document-preview-table-scroll { max-width: 100%; margin: 13px 0; overflow: auto; }
+.document-preview-table-scroll table { width: 100%; border-collapse: collapse; font-size: 9px; }
+.document-preview-table-scroll th,
+.document-preview-table-scroll td { padding: 8px; border: 1px solid #cbd5e1; text-align: left; }
+.document-preview-table-scroll th { background: #1f4e78; color: #fff; }
+.document-style-compact .document-preview-table-scroll th { background: #0f766e; }
+.document-style-proposal .document-preview-table-scroll th { background: #7c3e21; }
+.document-preview-sources h5 { margin: 20px 0 7px; font-size: 13px; }
+.document-preview-sources ol { display: grid; gap: 5px; margin: 0; padding-left: 22px; overflow-wrap: anywhere; }
+.document-preview-page > footer {
+  position: absolute;
+  right: 34px;
+  bottom: 22px;
+  left: 34px;
+  color: #8290a3;
+  font-size: 8px;
+  text-align: center;
+}
+.document-artifacts { display: grid; gap: 8px; padding: 16px 22px 20px; border-top: 1px solid var(--line); }
+.document-artifact-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-softer);
+}
+.document-artifact-row > div:first-child { min-width: 0; }
+.document-artifact-row strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.document-artifact-row small { display: block; margin-top: 4px; color: var(--muted-2); font-size: 8px; }
+.document-artifact-row > div:last-child { display: flex; gap: 7px; }
+.document-artifact-row .button,
+.document-refine-button { padding: 8px 10px; font-size: 8px; }
+.document-refine-button { justify-self: start; margin-top: 2px; }
+.canvas-document-block .canvas-block-provenance { margin: 0; padding: 10px 22px 14px; }
 .canvas-link-block { display: flex; flex-direction: column; align-items: flex-start; }
 .canvas-link-block > strong { font-size: 14px; line-height: 1.4; }
 .canvas-link-block > p { margin: 8px 0 16px; color: var(--muted); font-size: 10px; line-height: 1.55; }

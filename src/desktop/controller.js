@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import { homedir, totalmem, freemem, arch, platform, release } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { loadConfig, validateConfig } from "../config.js";
 import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
@@ -17,6 +17,7 @@ import { AttachmentManager } from "./attachments.js";
 import { adaptBriefingRun, adaptCompanyResult } from "./canvasAdapters.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import { DesktopCanvasResultStore } from "./canvasResults.js";
+import { documentArtifactCanvas } from "./documentArtifactCanvas.js";
 import {
   DEFAULT_COMPANY_CACHE_TTL_SECONDS
 } from "./companyCache.js";
@@ -67,6 +68,7 @@ import {
   localAutoApproveEnabled
 } from "./settingsStore.js";
 import { createAbortError, isAbortError } from "../util/abort.js";
+import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 import { selectTaskWorkflow } from "../workflows.js";
 
 export class DesktopController {
@@ -1936,6 +1938,44 @@ export class DesktopController {
     return canvas;
   }
 
+  presentDocumentArtifact(input) {
+    const spec = documentArtifactCanvas(input);
+    const nextPaths = new Set(spec.blocks[0].artifacts.map((artifact) => artifact.path));
+    const existing = this.canvases.list().find((canvas) =>
+      canvas.blocks.some((block) =>
+        block.type === "document" && block.artifacts.some((artifact) => nextPaths.has(artifact.path))
+      )
+    );
+    const canvas = existing
+      ? this.canvases.update(existing.id, spec)
+      : this.canvases.present(spec);
+    this.record("artifact", `${existing ? "Refreshed" : "Previewed"} ${canvas.title}`, {
+      canvasId: canvas.id,
+      revision: canvas.revision,
+      formats: spec.blocks[0].artifacts.map((artifact) => artifact.format),
+      layoutStatus: input.layout.status
+    });
+    this.send("canvas:changed", this.canvases.state());
+    return canvas;
+  }
+
+  async resolveDocumentArtifactPath(value) {
+    const artifactPath = String(value || "").trim();
+    if (!artifactPath || artifactPath.length > 1_000) {
+      throw new Error("AMOS blocked an invalid document artifact path");
+    }
+    if (![".docx", ".pdf"].includes(extname(artifactPath).toLowerCase())) {
+      throw new Error("AMOS can open only DOCX and PDF document artifacts");
+    }
+    const settings = await this.settingsStore.read();
+    if (!settings.workspace) throw new Error("Choose the document workspace first");
+    const absolutePath = resolveWorkspacePath(settings.workspace, artifactPath, false);
+    assertSafeAgentPath(absolutePath, settings.workspace);
+    const info = await stat(absolutePath);
+    if (!info.isFile()) throw new Error("That document artifact is not a file");
+    return absolutePath;
+  }
+
   async clear() {
     const settings = this.settingsStore?.read
       ? await this.settingsStore.read().catch(() => ({}))
@@ -2516,6 +2556,7 @@ export class DesktopController {
         useOAuth,
         includeAmos: !isOffline && !isPersonal,
         includeWeb: !isOffline,
+        artifactPresenter: (input) => this.presentDocumentArtifact(input),
         intelligenceRouter,
         systemPrompt: desktopSystemPrompt(isOffline
           ? OFFLINE_SYSTEM_PROMPT

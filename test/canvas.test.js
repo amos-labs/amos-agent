@@ -15,7 +15,7 @@ import { createRegistry } from "../src/runtime.js";
 
 const timestamp = "2026-07-26T12:00:00.000Z";
 
-test("canvas contract normalizes all eight safe block types", () => {
+test("canvas contract normalizes every safe block type", () => {
   const canvas = normalizeCanvasSpec({
     version: "1",
     title: "Campaign operating view",
@@ -49,6 +49,24 @@ test("canvas contract normalizes all eight safe block types", () => {
         content: "const value = '<script>never execute</script>';\n"
       },
       {
+        type: "document",
+        title: "Verified artifact",
+        document: {
+          title: "Quarterly brief",
+          blocks: [{ type: "paragraph", text: "Verified local content." }]
+        },
+        artifacts: [{
+          path: "reports/quarterly.pdf",
+          format: "pdf",
+          bytes: 1024,
+          sha256: "a".repeat(64),
+          verified: true
+        }],
+        diagnostics: [],
+        estimated_pages: 1,
+        total_blocks: 1
+      },
+      {
         type: "link",
         title: "Preview",
         label: "Open the local app",
@@ -72,8 +90,9 @@ test("canvas contract normalizes all eight safe block types", () => {
   assert.equal(canvas.source.references[0].id, "campaign-1");
   assert.equal(canvas.blocks[1].rows[0].spend, 18.25);
   assert.equal(canvas.blocks[4].content.includes("<script>"), true);
-  assert.equal(canvas.blocks[5].url, "http://127.0.0.1:3000/preview");
-  assert.equal(canvas.blocks[7].pendingId, "pending-1");
+  assert.equal(canvas.blocks[5].artifacts[0].path, "reports/quarterly.pdf");
+  assert.equal(canvas.blocks[6].url, "http://127.0.0.1:3000/preview");
+  assert.equal(canvas.blocks[8].pendingId, "pending-1");
 });
 
 test("canvas contract rejects arbitrary block types and unbounded tables", () => {
@@ -109,6 +128,33 @@ test("canvas contract rejects arbitrary block types and unbounded tables", () =>
         blocks: [{ type: "link", label: "Unsafe", url }]
       }),
       /URL|HTTPS|credential/i
+    );
+  }
+  for (const path of [
+    "/tmp/report.pdf",
+    "../report.pdf",
+    "reports/report.docx",
+    "reports/report.txt"
+  ]) {
+    assert.throws(
+      () => normalizeCanvasSpec({
+        ...base,
+        blocks: [{
+          type: "document",
+          document: {
+            title: "Unsafe artifact",
+            blocks: [{ type: "paragraph", text: "Blocked." }]
+          },
+          artifacts: [{
+            path,
+            format: "pdf",
+            bytes: 1,
+            sha256: "a".repeat(64),
+            verified: true
+          }]
+        }]
+      }),
+      /workspace-relative PDF path/
     );
   }
 });

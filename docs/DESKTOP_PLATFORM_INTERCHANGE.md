@@ -46,14 +46,18 @@ tests.
 The first local artifact slice is also implemented: a versioned document spec
 now drives deterministic DOCX and PDF renderers, output approval, hashing, and
 reopen verification. It is a Desktop-local engine, not a company capability or
-an inference-routing concern.
+an inference-routing concern. Verified documents now open in a bounded, inert
+typed-canvas preview with deterministic layout diagnostics, same-path revision
+updates, and main-process-validated local open/reveal actions. Final file
+pagination remains authoritative.
 
 The next product slices, in order, are:
 
 1. finish qualified provider and Bedrock protocol parity rather than merely
    exposing direct-provider foundations;
-2. add images, charts, reusable templates, editing, and preview to the local
-   artifact engine, followed by spreadsheet and presentation contracts;
+2. add images, charts, reusable templates, page-faithful thumbnails, and editing
+   to the local artifact engine, followed by spreadsheet and presentation
+   contracts;
 3. add consent-aware Router corrections/export and a sealed qualification gate;
 4. deliver the searchable task manager and governed task-forking/lineage
    experience tracked in issue 47; and
