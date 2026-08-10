@@ -39,21 +39,22 @@ test("model provider defaults to Kimi while preserving legacy environment names"
   assert.equal(config.kimi, config.model);
 });
 
-test("Bedrock resolves to its OpenAI-compatible regional endpoint", () => {
+test("Bedrock resolves a qualified model to its native regional endpoint", () => {
   const config = loadConfig(
     {
       AMOS_MODEL_PROVIDER: "bedrock",
-      AWS_REGION: "eu-west-1",
+      AWS_REGION: "us-west-2",
       AWS_BEARER_TOKEN_BEDROCK: "bedrock-key",
-      AMOS_MODEL: "moonshot.kimi-k3"
+      AMOS_MODEL: "openai.gpt-5.6-terra"
     },
     "."
   );
 
   assert.equal(config.model.provider, "bedrock");
-  assert.equal(config.model.baseUrl, "https://bedrock-mantle.eu-west-1.api.aws/v1");
+  assert.equal(config.model.protocol, "openai-responses");
+  assert.equal(config.model.baseUrl, "https://bedrock-mantle.us-west-2.api.aws/openai/v1");
   assert.equal(config.model.apiKey, "bedrock-key");
-  assert.equal(config.model.model, "moonshot.kimi-k3");
+  assert.equal(config.model.model, "openai.gpt-5.6-terra");
   assert.equal(config.model.deployment, "customer-cloud");
 });
 

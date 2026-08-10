@@ -62,27 +62,37 @@ a working user-selected infrastructure configuration.
 ## Amazon Bedrock
 
 Bedrock supports customer-controlled or AMOS-controlled AWS inference through
-its compatible endpoint. The current Desktop profile exposes Bedrock's
-Chat-Completions-compatible GPT OSS models as a verified dropdown. Native
-OpenAI Responses and Anthropic Messages adapters exist, but a future Bedrock
-profile must still pair the correct protocol with Bedrock-specific endpoint and
-credential handling; AMOS does not imply that every Bedrock model shares one
-wire protocol.
+its Mantle endpoints. Desktop does not treat Bedrock as one wire protocol. A
+release-signed model catalog binds each qualified model to its native protocol,
+endpoint path, API-key header, capabilities, reasoning controls, and verified
+regions:
+
+- GPT-5.6 Sol, Terra, and Luna use OpenAI Responses at `/openai/v1`;
+- GPT OSS uses OpenAI Responses at `/v1`; and
+- Claude Fable, Sonnet, and Opus use Anthropic Messages at `/anthropic/v1`.
+
+Selecting a model updates the endpoint path. The runtime repeats the check,
+normalizes legacy GPT OSS IDs, and rejects unknown models, unqualified regions,
+or non-Mantle credential origins before saving settings or sending a request.
+Adding another qualified Bedrock route is therefore a catalog change rather
+than a model-family branch in the agent loop.
 
 ```dotenv
 AMOS_MODEL_PROVIDER=bedrock
-AWS_REGION=us-east-1
+AWS_REGION=us-west-2
 AWS_BEARER_TOKEN_BEDROCK=...
-AMOS_MODEL=openai.gpt-oss-120b-1:0
+AMOS_MODEL=openai.gpt-5.6-terra
 ```
 
 The default compatible endpoint is:
 
 ```text
-https://bedrock-mantle.${AWS_REGION}.api.aws/v1
+https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1
 ```
 
-Bearer authentication is supported now. AWS profile and SigV4 support belongs
+Bedrock API-key authentication is supported now: Responses uses a bearer header
+and Messages uses `x-api-key`. Keys remain encrypted locally and are accepted
+only for canonical Bedrock Mantle origins. AWS profile and SigV4 support belongs
 in a dedicated credential adapter so the model-provider boundary stays
 unchanged.
 

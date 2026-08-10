@@ -31,8 +31,19 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   const bedrock = providers.find((provider) => provider.id === "bedrock");
   assert.deepEqual(
     bedrock.models.map((model) => model.id),
-    ["openai.gpt-oss-20b-1:0", "openai.gpt-oss-120b-1:0"]
+    [
+      "openai.gpt-5.6-luna",
+      "openai.gpt-5.6-terra",
+      "openai.gpt-5.6-sol",
+      "openai.gpt-oss-20b",
+      "openai.gpt-oss-120b",
+      "anthropic.claude-fable-5",
+      "anthropic.claude-sonnet-5",
+      "anthropic.claude-opus-5"
+    ]
   );
+  assert.ok(bedrock.models.every((model) => model.protocol && model.endpointPath));
+  assert.equal(bedrock.defaultModel, "openai.gpt-5.6-terra");
 });
 
 test("native providers resolve their protocol, current default, endpoint, and credential", () => {
@@ -86,7 +97,7 @@ test("AMOS Intelligence exposes one automatic route without exposing routed mode
   assert.match(managed.description, /automatically routes every step/i);
 });
 
-test("Kimi K3 stays on its currently supported max effort while other routes stay flexible", () => {
+test("reasoning effort is normalized to each provider or model contract", () => {
   const kimi = resolveModelConfig({
     AMOS_MODEL_PROVIDER: "kimi",
     AMOS_MODEL_API_KEY: "test-key",
@@ -103,6 +114,21 @@ test("Kimi K3 stays on its currently supported max effort while other routes sta
   assert.equal(hosted.routingOwner, INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP);
   assert.equal(hosted.routingMode, "automatic");
   assert.equal(hosted.localRouterMode, "active");
+
+  const anthropic = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "anthropic",
+    ANTHROPIC_API_KEY: "test-key",
+    AMOS_MODEL_REASONING_EFFORT: "none"
+  });
+  assert.equal(anthropic.reasoningEffort, "medium");
+
+  const bedrockClaude = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "bedrock",
+    AMOS_MODEL: "anthropic.claude-sonnet-5",
+    AWS_BEARER_TOKEN_BEDROCK: "test-key",
+    AMOS_MODEL_REASONING_EFFORT: "none"
+  });
+  assert.equal(bedrockClaude.reasoningEffort, "medium");
 });
 
 test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", () => {

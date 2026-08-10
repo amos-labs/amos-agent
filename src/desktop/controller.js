@@ -71,7 +71,8 @@ import {
 import {
   LOCAL_APPROVAL_KINDS,
   localApprovalKindEnabled,
-  localAutoApproveEnabled
+  localAutoApproveEnabled,
+  sanitizeSettings
 } from "./settingsStore.js";
 import { createAbortError, isAbortError } from "../util/abort.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
@@ -244,11 +245,24 @@ export class DesktopController {
 
   async saveSettings(settings) {
     const current = await this.settingsStore.read();
-    const saved = await this.settingsStore.write({
+    let candidate = sanitizeSettings({
       ...current,
       ...settings,
       apiKey: settings.apiKey === undefined ? current.apiKey : settings.apiKey
     });
+    if (intelligenceSettingsRequested(settings)) {
+      const config = this.configFrom(candidate);
+      const missing = validateConfig(config);
+      if (missing.length > 0) {
+        throw new Error(`Finish intelligence setup: ${missing.join(", ")}`);
+      }
+      candidate = sanitizeSettings({
+        ...candidate,
+        model: config.model.model,
+        baseUrl: config.model.baseUrl
+      });
+    }
+    const saved = await this.settingsStore.write(candidate);
     if (runtimeSettingsChanged(current, saved)) {
       this.resetRuntime();
       if (intelligenceSettingsChanged(current, saved)) {
@@ -3672,6 +3686,7 @@ function publicProvider(config) {
     id: config.provider,
     displayName: config.displayName,
     deployment: config.deployment,
+    protocol: config.protocol,
     model: managed ? "" : config.model,
     baseUrl: managed ? "" : config.baseUrl,
     routingMode: managed ? "automatic" : "pinned",
@@ -3728,6 +3743,18 @@ function runtimeSettingsChanged(previous, next) {
     "workspace",
     "amosMcpUrl"
   ].some((key) => previous[key] !== next[key]);
+}
+
+function intelligenceSettingsRequested(input = {}) {
+  return [
+    "provider",
+    "model",
+    "baseUrl",
+    "apiKey",
+    "intelligenceProfile",
+    "reasoningEffort",
+    "operatingMode"
+  ].some((key) => Object.hasOwn(input, key));
 }
 
 function localApprovalSettingsChanged(previous, next) {

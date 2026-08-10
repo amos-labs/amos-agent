@@ -15,8 +15,8 @@ const providerDefaults = {
     credential: "Uses your AMOS sign-in—no second key. Included credits apply first; additional use is metered."
   },
   bedrock: {
-    model: "openai.gpt-oss-120b",
-    baseUrl: "https://bedrock-mantle.us-east-1.api.aws/v1",
+    model: "openai.gpt-5.6-terra",
+    baseUrl: "https://bedrock-mantle.us-east-1.api.aws/openai/v1",
     credential: "Amazon Bedrock API key"
   },
   openai: {
@@ -94,7 +94,7 @@ const elements = Object.fromEntries(
     "managedConnectionCallout", "managedConnectButton",
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
-    "baseUrlInput", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
+    "baseUrlInput", "baseUrlHelp", "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "alwaysApproveButton", "autoApproveFolderButton",
     "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
@@ -221,6 +221,8 @@ function bindActions() {
   elements.promptForm.addEventListener("drop", handleDrop);
   elements.clearButton.addEventListener("click", clearSession);
   elements.settingsForm.addEventListener("submit", saveSettings);
+  elements.modelInput.addEventListener("change", syncSelectedModelEndpoint);
+  elements.baseUrlInput.addEventListener("change", syncSelectedModelEndpoint);
   elements.testButton.addEventListener("click", testModel);
   elements.managedConnectButton.addEventListener("click", connectManagedIntelligence);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
@@ -3624,7 +3626,11 @@ function modelCatalog(provider) {
 
 function populateModelOptions(catalog, selectedModel) {
   elements.modelInput.replaceChildren();
-  const known = new Set(catalog.map((model) => model.id));
+  const selectedProfile = catalog.find((model) =>
+    model.id === selectedModel || model.aliases?.includes(selectedModel)
+  );
+  const normalizedSelection = selectedProfile?.id || selectedModel;
+  const known = new Set(catalog.flatMap((model) => [model.id, ...(model.aliases || [])]));
   if (selectedModel && !known.has(selectedModel)) {
     const current = document.createElement("option");
     current.value = selectedModel;
@@ -3634,10 +3640,12 @@ function populateModelOptions(catalog, selectedModel) {
   for (const model of catalog) {
     const option = document.createElement("option");
     option.value = model.id;
-    option.textContent = model.label;
+    option.textContent = model.protocol
+      ? `${model.label} · ${modelProtocolLabel(model.protocol)}`
+      : model.label;
     elements.modelInput.append(option);
   }
-  elements.modelInput.value = selectedModel || catalog[0]?.id || "";
+  elements.modelInput.value = normalizedSelection || catalog[0]?.id || "";
 }
 
 function renderSettings() {
@@ -3845,9 +3853,68 @@ function renderProviderFields(modelValue = "") {
     : "Test intelligence";
   if (catalogModel) {
     populateModelOptions(catalog, modelValue || provider?.defaultModel || "");
+    syncSelectedModelEndpoint();
   } else if (!managed && document.activeElement !== elements.customModelInput) {
     elements.customModelInput.value = modelValue || provider?.defaultModel || "";
   }
+  syncProviderReasoning(provider, providerModelProfile(provider, elements.modelInput.value));
+  renderModelEndpointHelp(provider);
+}
+
+function syncSelectedModelEndpoint() {
+  const provider = state?.providers?.find((item) => item.id === selectedProvider);
+  const model = providerModelProfile(provider, elements.modelInput.value);
+  syncProviderReasoning(provider, model);
+  if (!model?.endpointPath) {
+    renderModelEndpointHelp(provider, model);
+    return;
+  }
+  const fallback = providerDefaults[selectedProvider]?.baseUrl || "";
+  try {
+    const endpoint = new URL(elements.baseUrlInput.value || fallback);
+    endpoint.pathname = model.endpointPath;
+    endpoint.search = "";
+    endpoint.hash = "";
+    elements.baseUrlInput.value = endpoint.toString().replace(/\/$/, "");
+  } catch {
+    // Core validation produces the actionable error when the user saves/tests.
+  }
+  renderModelEndpointHelp(provider, model);
+}
+
+function providerModelProfile(provider, modelId) {
+  return provider?.models?.find((model) =>
+    model.id === modelId || model.aliases?.includes(modelId)
+  ) || null;
+}
+
+function renderModelEndpointHelp(provider, selectedModel = null) {
+  const model = selectedModel || providerModelProfile(provider, elements.modelInput.value);
+  if (provider?.id === "bedrock" && model) {
+    elements.baseUrlHelp.textContent =
+      `${modelProtocolLabel(model.protocol)} uses ${model.endpointPath}. Qualified regions: ${model.regions.join(", ")}. AMOS keeps the path aligned with the selected model.`;
+    return;
+  }
+  elements.baseUrlHelp.textContent = "HTTPS required except for localhost runtimes.";
+}
+
+function syncProviderReasoning(provider, model = null) {
+  const supported = model?.supportedReasoningEfforts?.length
+    ? model.supportedReasoningEfforts
+    : provider?.supportedReasoningEfforts;
+  for (const option of elements.reasoningInput.options) {
+    option.disabled = Boolean(supported?.length && !supported.includes(option.value));
+  }
+  if (supported?.length && !supported.includes(elements.reasoningInput.value)) {
+    elements.reasoningInput.value = model?.defaultReasoningEffort ||
+      provider?.defaultReasoningEffort || supported[0];
+  }
+}
+
+function modelProtocolLabel(protocol) {
+  if (protocol === "openai-responses") return "Responses";
+  if (protocol === "anthropic-messages") return "Messages";
+  return "Chat Completions";
 }
 
 function renderProviderSelection() {
