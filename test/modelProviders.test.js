@@ -11,6 +11,7 @@ import {
 import { OpenAICompatibleClient } from "../src/model/openAiCompatibleClient.js";
 import { OpenAIResponsesClient } from "../src/model/openAiResponsesClient.js";
 import { AnthropicMessagesClient } from "../src/model/anthropicMessagesClient.js";
+import { INTELLIGENCE_ROUTING_OWNERS } from "../src/model/intelligenceRouter.js";
 
 test("provider catalog exposes managed, customer-cloud, and local deployment modes", () => {
   const providers = listModelProviders();
@@ -35,6 +36,9 @@ test("native providers resolve their protocol, current default, endpoint, and cr
   assert.equal(openai.baseUrl, "https://api.openai.com/v1");
   assert.equal(openai.model, "gpt-5.6-terra");
   assert.equal(openai.apiKey, "openai-key");
+  assert.equal(openai.routingOwner, INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER);
+  assert.equal(openai.routingMode, "pinned");
+  assert.equal(openai.localRouterMode, "disabled");
 
   const anthropic = resolveModelConfig({
     AMOS_MODEL_PROVIDER: "anthropic",
@@ -45,6 +49,9 @@ test("native providers resolve their protocol, current default, endpoint, and cr
   assert.equal(anthropic.model, "claude-sonnet-5");
   assert.equal(anthropic.apiVersion, "2023-06-01");
   assert.equal(anthropic.apiKey, "anthropic-key");
+  assert.equal(anthropic.routingOwner, INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER);
+  assert.equal(anthropic.routingMode, "pinned");
+  assert.equal(anthropic.localRouterMode, "disabled");
 });
 
 test("model factory selects the protocol adapter and rejects unknown protocols", () => {
@@ -85,6 +92,7 @@ test("Kimi K3 stays on its currently supported max effort while other routes sta
     AMOS_MODEL_REASONING_EFFORT: "max"
   });
   assert.equal(hosted.reasoningEffort, "");
+  assert.equal(hosted.routingOwner, INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP);
   assert.equal(hosted.routingMode, "automatic");
   assert.equal(hosted.localRouterMode, "active");
 });
@@ -99,6 +107,7 @@ test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", (
   assert.equal(config.usesAmosIdentity, true);
   assert.equal(config.baseUrl, "https://app.amoslabs.com/v1");
   assert.equal(config.model, "auto");
+  assert.equal(config.routingOwner, INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP);
   assert.equal(config.routingMode, "automatic");
   assert.equal(config.reasoningEffort, "");
   assert.equal(config.apiKey, "");
@@ -175,6 +184,73 @@ test("only a controlled compatible endpoint accepts an explicit protocol overrid
   );
 });
 
+test("provider-controlled clients cannot opt into AMOS Desktop routing", async () => {
+  let routerCalls = 0;
+  let body;
+  const client = createModelClient({
+    provider: "openai-compatible",
+    protocol: "openai-chat-completions",
+    displayName: "Controlled endpoint",
+    baseUrl: "https://gateway.example/v1",
+    model: "controlled-model",
+    usesAmosIdentity: true,
+    routingOwner: INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP,
+    routingMode: "automatic",
+    localRouterMode: "active",
+    requestTimeoutMs: 1_000,
+    capabilities: {},
+    intelligenceRouter: {
+      classify: async () => {
+        routerCalls += 1;
+        return { minimumClass: "routine" };
+      }
+    }
+  }, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonModelResponse("ready");
+  });
+
+  await client.chat({ messages: [{ role: "user", content: "hello" }] });
+
+  assert.equal(routerCalls, 0);
+  assert.equal(client.config.routingOwner, INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER);
+  assert.equal(client.config.routingMode, "pinned");
+  assert.equal(client.config.localRouterMode, "disabled");
+  assert.equal(client.config.intelligenceRouter, null);
+  assert.equal(body.amos_routing, undefined);
+  assert.equal(body.amos_routing_shadow, undefined);
+});
+
+test("Claude and OpenAI controlled adapters never receive the Desktop classifier", () => {
+  const classifier = { classify: async () => ({ minimumClass: "routine" }) };
+  const cases = [
+    resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "anthropic",
+      ANTHROPIC_API_KEY: "anthropic-key",
+      AMOS_LOCAL_ROUTER_MODE: "active"
+    }),
+    resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "openai",
+      OPENAI_API_KEY: "openai-key",
+      AMOS_LOCAL_ROUTER_MODE: "active"
+    })
+  ];
+
+  for (const config of cases) {
+    const client = createModelClient({
+      ...config,
+      routingOwner: INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP,
+      routingMode: "automatic",
+      localRouterMode: "active",
+      intelligenceRouter: classifier
+    });
+    assert.equal(client.config.routingOwner, INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER);
+    assert.equal(client.config.routingMode, "pinned");
+    assert.equal(client.config.localRouterMode, "disabled");
+    assert.equal(client.config.intelligenceRouter, null);
+  }
+});
+
 test("OpenAI-compatible client omits reasoning for runtimes without that capability", async () => {
   let body;
   const client = createModelClient(
@@ -247,9 +323,13 @@ test("automatic routing sends a local decision in shadow mode without exposing p
   let body;
   const events = [];
   const client = new OpenAICompatibleClient({
+    provider: "amos-hosted",
+    protocol: "openai-chat-completions",
     displayName: "AMOS Intelligence",
     baseUrl: "https://app.amoslabs.com/v1",
     model: "auto",
+    usesAmosIdentity: true,
+    routingOwner: INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP,
     routingMode: "automatic",
     localRouterMode: "shadow",
     requestTimeoutMs: 1_000,
@@ -297,8 +377,12 @@ test("local-primary routing controls the envelope and local failures fall back t
     return jsonModelResponse("ready");
   };
   const active = new OpenAICompatibleClient({
+    provider: "amos-hosted",
+    protocol: "openai-chat-completions",
     baseUrl: "https://app.amoslabs.com/v1",
     model: "auto",
+    usesAmosIdentity: true,
+    routingOwner: INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP,
     routingMode: "automatic",
     localRouterMode: "active",
     requestTimeoutMs: 1_000,
@@ -311,8 +395,12 @@ test("local-primary routing controls the envelope and local failures fall back t
   });
 
   const fallback = new OpenAICompatibleClient({
+    provider: "amos-hosted",
+    protocol: "openai-chat-completions",
     baseUrl: "https://app.amoslabs.com/v1",
     model: "auto",
+    usesAmosIdentity: true,
+    routingOwner: INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP,
     routingMode: "automatic",
     localRouterMode: "active",
     requestTimeoutMs: 1_000,

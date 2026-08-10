@@ -40,6 +40,31 @@ OpenAI Chat Completions. The provider factory selects one of these adapters:
 | `openai-responses` | `/responses` | OpenAI | Responses input items, flat function tools, encrypted reasoning continuation, Responses SSE events |
 | `anthropic-messages` | `/messages` | Anthropic | System extraction, content blocks, tool-use/result blocks, signed thinking continuation, Messages SSE events |
 
+## Routing ownership boundary
+
+The local AMOS Router is a capability of the official Desktop plus the managed
+`amos-hosted` profile. It is not a generic feature of the protocol adapters.
+Desktop may create a bounded `amos_routing` envelope only when all of these
+facts hold:
+
+- the provider is `amos-hosted`;
+- the request uses AMOS identity and the managed Chat Completions contract;
+- routing ownership is explicitly `amos-desktop`; and
+- the local Router rollout is active.
+
+The model factory strips the classifier, disables local routing, and pins the
+selected provider when any of those facts is absent. Direct Anthropic, direct
+OpenAI, Bedrock, local-model, Kimi, and customer-controlled endpoints therefore
+cannot activate Desktop classification by copying an automatic-routing setting.
+Their adapters never emit `amos_routing` or `amos_routing_shadow`.
+
+Claude, Codex, and other external MCP clients are even farther outside this
+path: they call the governed AMOS MCP capability surface using the model already
+chosen by their controlling application. They do not enter the AMOS Desktop
+inference endpoint and do not run or configure its Router. AMOS Hosted's
+classifier remains an availability fallback only for AMOS Intelligence
+inference requests that arrive without a valid Desktop envelope.
+
 `AMOS_MODEL_PROTOCOL` can explicitly select a supported protocol for the
 `openai-compatible` controlled-endpoint profile. Named and managed profiles
 keep their declared protocol even when a stale override exists. Unknown custom

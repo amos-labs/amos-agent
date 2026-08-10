@@ -1,5 +1,6 @@
 import { AgentLoop } from "./agentLoop.js";
 import { createModelClient } from "./model/providers.js";
+import { isAmosDesktopRoutingConfig } from "./model/intelligenceRouter.js";
 import { AmosMcpClient } from "./mcp/amosMcpClient.js";
 import { createAmosTools } from "./tools/amos.js";
 import { createBashTool } from "./tools/bash.js";
@@ -48,7 +49,9 @@ export function createRuntime({
         ? (options) => oauth.getAccessToken(options)
         : async () => config.amos.apiKey || config.model.apiKey
       : null,
-    intelligenceRouter
+    intelligenceRouter: isAmosDesktopRoutingConfig(config.model)
+      ? intelligenceRouter
+      : null
   };
   const modelClient = createModelClient(modelConfig, fetchImpl);
   const amosClient = new AmosMcpClient(

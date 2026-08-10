@@ -7,7 +7,10 @@ import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
 import { listModelProviders } from "../model/providers.js";
-import { LocalIntelligenceRouter } from "../model/intelligenceRouter.js";
+import {
+  isAmosDesktopRoutingConfig,
+  LocalIntelligenceRouter
+} from "../model/intelligenceRouter.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
@@ -2431,7 +2434,7 @@ export class DesktopController {
     let intelligenceRouter = null;
     if (
       requestedBoundary === "online" &&
-      config.model.routingMode === "automatic" &&
+      isAmosDesktopRoutingConfig(config.model) &&
       config.model.localRouterMode !== "disabled"
     ) {
       try {

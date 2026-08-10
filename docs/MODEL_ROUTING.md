@@ -136,6 +136,15 @@ mode records only fixed-cardinality agreement metrics without logging task
 text, and Desktop keeps any task-level correlation inside its encrypted local
 receipt.
 
+This local classification path is owned only by official AMOS Desktop requests
+using the managed `amos-hosted` profile. Direct Claude/Anthropic, OpenAI/Codex,
+Bedrock, Kimi, local-model, and compatible-endpoint profiles are pinned to the
+provider the user or administrator selected. The client factory removes any
+injected Desktop classifier from those profiles, and their adapters never send
+an AMOS routing envelope. External Claude, Codex, and other MCP clients use
+their controlling application's selected model and only consume the governed
+AMOS capability surface.
+
 ### Expansion without application releases
 
 The envelope, candidate catalog, and fallback graph are data:
