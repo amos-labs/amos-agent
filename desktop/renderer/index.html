@@ -31,11 +31,11 @@
           <button class="nav-item" data-view="canvas">
             <span class="nav-icon">▦</span><span>Briefings</span><span id="canvasBadge" class="nav-badge canvas-badge hidden">0</span>
           </button>
-          <button class="nav-item" data-view="memory">
-            <span class="nav-icon">◎</span><span>Memory</span><span id="privateMemoryBadge" class="nav-badge memory-badge hidden">0</span>
-          </button>
           <button class="nav-item" data-view="connections">
             <span class="nav-icon">⌘</span><span>Connections</span><span id="connectionBadge" class="nav-badge connection-badge hidden">0</span>
+          </button>
+          <button class="nav-item" data-view="automations">
+            <span class="nav-icon">↻</span><span>Automations</span><span id="automationBadge" class="nav-badge automation-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="work">
             <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
@@ -68,6 +68,14 @@
               <select id="companySwitcher" aria-label="Active AMOS organization"></select>
               <small>Switch organizations for this login. Other accounts stay separate on this computer.</small>
             </div>
+            <button id="accountMemoryButton" class="account-settings-link" type="button">
+              <span class="account-settings-icon" aria-hidden="true">◎</span>
+              <span>
+                <strong>Memory &amp; context</strong>
+                <small>Private memory, offline company context, and encrypted transfer</small>
+              </span>
+              <span id="privateMemoryBadge" class="nav-badge memory-badge hidden">0</span>
+            </button>
             <div class="account-menu-actions">
               <button id="addAccountButton" class="button primary" type="button">Add another account</button>
               <button id="signOutAccountButton" class="button ghost" type="button">Sign out of this account</button>
@@ -431,6 +439,46 @@
             </div>
             <div id="availableProviderList" class="connection-catalog-grid"></div>
           </div>
+        </section>
+
+        <section id="automationsView" class="view automations-view hidden">
+          <div class="section-heading automations-heading">
+            <div>
+              <span class="eyebrow">GOVERNED RECURRING WORK</span>
+              <h1>Automations that keep operating.</h1>
+              <p>
+                View live triggers, steps, outcomes, and status from the AMOS platform.
+                Build or revise an automation in its own focused task; execution remains
+                governed by current company policy, approvals, and proof.
+              </p>
+            </div>
+            <div class="automation-heading-actions">
+              <button id="refreshAutomationsButton" class="button secondary" type="button">Refresh</button>
+              <button id="buildAutomationButton" class="button primary" type="button">Build automation <span>→</span></button>
+            </div>
+          </div>
+          <div class="automation-lifecycle" aria-label="AMOS operating lifecycle">
+            <span><strong>1</strong> Connect systems</span>
+            <i aria-hidden="true">→</i>
+            <span><strong>2</strong> Understand &amp; analyze</span>
+            <i aria-hidden="true">→</i>
+            <span><strong>3</strong> Build deterministic automation</span>
+            <i aria-hidden="true">→</i>
+            <span><strong>4</strong> Pursue governed goals</span>
+          </div>
+          <div id="automationSummary" class="automation-summary"></div>
+          <div id="automationUnavailable" class="automation-empty hidden">
+            <span>↻</span>
+            <strong>Automations are not available from this AMOS server</strong>
+            <p>The page will populate when the connected platform advertises its governed automation contract.</p>
+          </div>
+          <div id="automationEmpty" class="automation-empty hidden">
+            <span>↻</span>
+            <strong>No automations yet</strong>
+            <p>Start a focused task and AMOS will help define the trigger, deterministic steps, safeguards, and measurable outcome.</p>
+            <button id="automationEmptyBuildButton" class="button primary" type="button">Build the first automation</button>
+          </div>
+          <div id="automationList" class="automation-list"></div>
         </section>
 
         <section id="workView" class="view work-view hidden">

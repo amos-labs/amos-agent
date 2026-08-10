@@ -71,13 +71,14 @@ const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
-    "memoryView", "canvasView", "connectionsView",
+    "memoryView", "canvasView", "connectionsView", "automationsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
     "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
+    "accountMemoryButton",
     "companySwitcherControl", "companySwitcher",
-    "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge",
+    "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
@@ -113,6 +114,8 @@ const elements = Object.fromEntries(
     "connectionUsernameInput", "connectionCredentialLabel", "connectionCredentialInput",
     "connectionCredentialHelp", "connectionDefaultFromField", "connectionDefaultFromInput",
     "connectionModalError", "connectionCancelButton", "connectionSubmitButton",
+    "automationSummary", "automationUnavailable", "automationEmpty", "automationList",
+    "refreshAutomationsButton", "buildAutomationButton", "automationEmptyBuildButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -215,10 +218,17 @@ function bindActions() {
   elements.disconnectButton.addEventListener("click", disconnectAmos);
   elements.accountMenuButton.addEventListener("click", toggleAccountMenu);
   elements.accountMenuClose.addEventListener("click", closeAccountMenu);
+  elements.accountMemoryButton.addEventListener("click", () => {
+    closeAccountMenu();
+    showView("memory");
+  });
   elements.addAccountButton.addEventListener("click", addAccount);
   elements.signOutAccountButton.addEventListener("click", disconnectAmos);
   elements.accountUpdateButton.addEventListener("click", handleAccountUpdate);
   elements.companySwitcher.addEventListener("change", switchCompany);
+  elements.refreshAutomationsButton.addEventListener("click", refreshAutomations);
+  elements.buildAutomationButton.addEventListener("click", () => openAutomationTask());
+  elements.automationEmptyBuildButton.addEventListener("click", () => openAutomationTask());
   elements.approvalsButton.addEventListener("click", () => showView("decisions"));
   elements.workDecisionsTab.addEventListener("click", () => showWorkTab("open"));
   elements.workProofTab.addEventListener("click", () => showWorkTab("history"));
@@ -328,6 +338,7 @@ function bindEvents() {
     renderWorkingContinuity();
     renderCompanyCache();
     renderConnections();
+    renderAutomations();
     renderHistory();
     renderCanvas();
     restoreConversationFromContinuity();
@@ -393,6 +404,8 @@ function render() {
     elements.operatorView.classList.add("hidden");
     elements.canvasView.classList.add("hidden");
     elements.memoryView.classList.add("hidden");
+    elements.connectionsView.classList.add("hidden");
+    elements.automationsView.classList.add("hidden");
     elements.workView.classList.add("hidden");
     elements.settingsView.classList.add("hidden");
   } else {
@@ -571,6 +584,7 @@ function render() {
   renderWorkingContinuity();
   renderCompanyCache();
   renderConnections();
+  renderAutomations();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
   renderStarterActions();
@@ -660,6 +674,7 @@ function showView(view) {
     canvas: elements.canvasView,
     memory: elements.memoryView,
     connections: elements.connectionsView,
+    automations: elements.automationsView,
     work: elements.workView,
     settings: elements.settingsView
   };
@@ -814,6 +829,191 @@ function renderConnections() {
       elements.availableProviderList.append(card);
     }
   }
+}
+
+function renderAutomations() {
+  if (!state) return;
+  const library = state.automations || {};
+  const automations = Array.isArray(library.automations) ? library.automations : [];
+  const supported = library.supported === true;
+  const active = automations.filter((automation) => automation.status === "active").length;
+  const needsAttention = automations.filter(
+    (automation) => automation.status !== "active" || automation.stats.failed > 0
+  ).length;
+  const totalRuns = automations.reduce(
+    (sum, automation) => sum + automation.stats.completed,
+    0
+  );
+
+  elements.automationBadge.textContent = String(active);
+  elements.automationBadge.classList.toggle("hidden", active === 0);
+  elements.automationSummary.classList.toggle("hidden", !supported);
+  elements.automationUnavailable.classList.toggle("hidden", supported);
+  elements.automationEmpty.classList.toggle("hidden", !supported || automations.length > 0);
+  elements.automationList.classList.toggle("hidden", !supported || automations.length === 0);
+  elements.buildAutomationButton.disabled = state.connectionMode !== "user";
+  elements.automationEmptyBuildButton.disabled = state.connectionMode !== "user";
+  elements.refreshAutomationsButton.disabled = state.connectionMode !== "user";
+
+  elements.automationSummary.replaceChildren();
+  for (const [label, value, detail] of [
+    ["Live", active, "running under current policy"],
+    ["Needs attention", needsAttention, "paused, draft, or reporting failures"],
+    ["Completed runs", totalRuns, "bounded outcomes reported by AMOS"]
+  ]) {
+    const item = document.createElement("article");
+    const number = document.createElement("strong");
+    number.textContent = new Intl.NumberFormat().format(value);
+    const title = document.createElement("span");
+    title.textContent = label;
+    const copy = document.createElement("small");
+    copy.textContent = detail;
+    item.append(number, title, copy);
+    elements.automationSummary.append(item);
+  }
+
+  elements.automationList.replaceChildren();
+  for (const automation of automations) {
+    const card = document.createElement("article");
+    card.className = "automation-card";
+
+    const heading = document.createElement("div");
+    heading.className = "automation-card-heading";
+    const identity = document.createElement("div");
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "eyebrow";
+    eyebrow.textContent = automationTriggerLabel(automation.trigger);
+    const title = document.createElement("h2");
+    title.textContent = automation.name;
+    identity.append(eyebrow, title);
+    const status = document.createElement("span");
+    status.className = `automation-status ${automation.status}`;
+    status.textContent = automation.status.replaceAll("_", " ").toUpperCase();
+    heading.append(identity, status);
+
+    const description = document.createElement("p");
+    description.className = "automation-card-description";
+    description.textContent = automation.liveCopySubject || automationStepSummary(automation.steps);
+
+    const stats = document.createElement("div");
+    stats.className = "automation-stats";
+    for (const [label, value] of [
+      ["Enrolled", automation.stats.enrolled],
+      ["Completed", automation.stats.completed],
+      ["Pending", automation.stats.pending],
+      ["Failed", automation.stats.failed]
+    ]) {
+      const metric = document.createElement("span");
+      const metricValue = document.createElement("strong");
+      metricValue.textContent = new Intl.NumberFormat().format(value);
+      const metricLabel = document.createElement("small");
+      metricLabel.textContent = label;
+      metric.append(metricValue, metricLabel);
+      stats.append(metric);
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "automation-meta";
+    meta.textContent = [
+      `${automation.steps.length} step${automation.steps.length === 1 ? "" : "s"}`,
+      automation.updatedAt ? `Updated ${relativeTime(automation.updatedAt)}` : "",
+      automation.stats.lastSentAt
+        ? `Last delivery ${relativeTime(automation.stats.lastSentAt)}`
+        : automation.stats.lastCalendarEventAt
+          ? `Last matched ${relativeTime(automation.stats.lastCalendarEventAt)}`
+          : "No completed delivery yet"
+    ].filter(Boolean).join(" · ");
+
+    const actions = document.createElement("div");
+    actions.className = "automation-actions";
+    const edit = actionButton("Work on this with AMOS", "secondary");
+    edit.addEventListener("click", () => openAutomationTask(automation, edit));
+    const nextActive = automation.status !== "active";
+    const statusButton = actionButton(nextActive ? "Resume" : "Pause", nextActive ? "primary" : "secondary");
+    statusButton.addEventListener("click", () => changeAutomationStatus(automation, nextActive, statusButton));
+    actions.append(edit, statusButton);
+
+    card.append(heading, description, stats, meta, actions);
+    elements.automationList.append(card);
+  }
+}
+
+async function refreshAutomations() {
+  setButtonBusy(elements.refreshAutomationsButton, true, "Refreshing…");
+  try {
+    state = await api.refreshRemote();
+    renderAutomations();
+    toast("Automations refreshed from AMOS Platform.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.refreshAutomationsButton, false, "Refresh");
+  }
+}
+
+async function changeAutomationStatus(automation, active, button) {
+  setButtonBusy(button, true, active ? "Resuming…" : "Pausing…");
+  try {
+    const response = await api.setAutomationStatus(automation.name, active);
+    state.automations = response.automations || state.automations;
+    renderAutomations();
+    const message = response.result?.message || (
+      active
+        ? `${automation.name} was submitted for governed resume.`
+        : `${automation.name} is paused.`
+    );
+    toast(message);
+  } catch (error) {
+    toast(error.message, true);
+    renderAutomations();
+  }
+}
+
+async function openAutomationTask(automation = null, sourceButton = elements.buildAutomationButton) {
+  const sourceLabel = sourceButton.textContent;
+  const title = automation ? `Improve ${automation.name}` : "Build an automation";
+  const objective = automation
+    ? `Open the existing AMOS automation named “${automation.name}” in a focused task. Read its current governed definition and live stats first. Help me improve the business outcome, trigger, deterministic steps, exception handling, approvals, and measurement. Do not resume or activate consequential behavior without my explicit approval.`
+    : "Help me design and build a governed AMOS automation in this focused task. Start by clarifying the business outcome, trigger, deterministic steps, required connections, exception handling, approval boundaries, and measurable success criteria. Do not activate it until I explicitly approve the final design.";
+  setButtonBusy(sourceButton, true, "Opening task…");
+  try {
+    const response = await api.startNewConversation({
+      kind: "automation_builder",
+      title,
+      objective,
+      resource: automation ? { type: "automation", id: automation.id, name: automation.name } : null
+    });
+    state = response.state;
+    currentTaskId = null;
+    streamingMessage = null;
+    continuityConversationRestored = false;
+    resetSessionView();
+    render();
+    showView("operator");
+    elements.promptInput.value = response.launch.objective;
+    elements.promptInput.focus();
+    toast("Opened a separate automation task. The prior context lane was preserved.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (sourceButton.isConnected) setButtonBusy(sourceButton, false, sourceLabel);
+  }
+}
+
+function automationTriggerLabel(trigger) {
+  const type = String(trigger?.type || trigger?.kind || trigger?.event || "event");
+  return `TRIGGER · ${type.replaceAll("_", " ").toUpperCase()}`;
+}
+
+function automationStepSummary(steps) {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return "AMOS has not advertised a step summary for this automation yet.";
+  }
+  return steps
+    .slice(0, 3)
+    .map((step) => step.stage || step.subject || humanizeTool(step.action))
+    .filter(Boolean)
+    .join(" → ");
 }
 
 function openConnectionModal(provider) {

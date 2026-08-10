@@ -23,10 +23,11 @@ function codec() {
   };
 }
 
-function scope(overrides = {}) {
+function scope(overrides = {}, contextKey = "active") {
   return continuityScope({
     boundary: "online",
     workspace: "/workspace/ai_co",
+    contextKey,
     identity: {
       principal_type: "user",
       sub: "user-1",
@@ -158,8 +159,38 @@ test("local continuity is separated by boundary and exact workspace", () => {
     boundary: "personal",
     workspace: "/workspace/two"
   });
+  const otherTask = continuityScope({
+    boundary: "personal",
+    workspace: "/workspace/one",
+    contextKey: "task:automation-builder"
+  });
   assert.notEqual(personal.key, offline.key);
   assert.notEqual(personal.key, otherWorkspace.key);
+  assert.notEqual(personal.key, otherTask.key);
+});
+
+test("named task lanes keep local continuity isolated without losing the active lane", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-named-task-continuity-"));
+  const store = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T09:00:00.000Z")
+  });
+  const active = scope();
+  const automation = scope({}, "task:automation-builder");
+
+  await store.appendTurn(active, { objective: "Plan the quarter", answer: "Plan saved" });
+  await store.appendTurn(automation, {
+    objective: "Build the renewal automation",
+    answer: "Drafted the governed trigger and steps"
+  });
+
+  assert.equal((await store.load(active)).turns[0].objective, "Plan the quarter");
+  assert.equal(
+    (await store.load(automation)).turns[0].objective,
+    "Build the renewal automation"
+  );
+  assert.equal((await store.load(automation)).manifest.scope.contextKey, "task:automation-builder");
 });
 
 test("shared continuity is tenant pinned, non-authoritative, and portable", () => {

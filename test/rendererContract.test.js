@@ -153,6 +153,37 @@ test("Connections HTML contains no customer or provider-specific catalog truth",
   assert.match(javascript, /api\.connectSecretProvider\(connectionSetupProvider\.provider/);
 });
 
+test("Automations replace Memory in primary navigation and launch isolated governed task lanes", async () => {
+  const [javascript, html, preload, main, controller, remoteState] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8")
+  ]);
+  const nav = html.match(/<nav class="nav"([\s\S]*?)<\/nav>/)?.[1] || "";
+  const accountMenu = html.match(/id="accountMenu"([\s\S]*?)<button id="workspaceButton"/)?.[1] || "";
+
+  assert.doesNotMatch(nav, /data-view="memory"/);
+  assert.match(nav, /data-view="connections"[\s\S]*?data-view="automations"[\s\S]*?data-view="work"/);
+  assert.match(accountMenu, /id="accountMemoryButton"[\s\S]*?Memory &amp; context/);
+  assert.match(html, /id="memoryView"/);
+  assert.match(html, /Connect systems[\s\S]*?Understand &amp; analyze[\s\S]*?Build deterministic automation[\s\S]*?Pursue governed goals/);
+  assert.match(javascript, /const library = state\.automations \|\| \{\}/);
+  assert.match(javascript, /api\.setAutomationStatus\(automation\.name, active\)/);
+  assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?kind: "automation_builder"/);
+  assert.match(preload, /desktop:start-new-conversation/);
+  assert.match(preload, /desktop:set-automation-status/);
+  assert.match(main, /controller\.startNewConversation\(input\)/);
+  assert.match(main, /controller\.setAutomationStatus\(input\?\.name, input\?\.active === true\)/);
+  assert.match(controller, /this\.activeContextKey = `task:\$\{randomUUID\(\)\}`/);
+  assert.match(controller, /continuityCapturePayload\(transition, settings, this\.activeContextKey\)/);
+  assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);
+  assert.match(remoteState, /active \? "resume_automation" : "pause_automation"/);
+  assert.doesNotMatch(html, /Neighborly|Franchise scorecard follow-up/);
+});
+
 test("Briefings use the platform catalog and typed actions instead of Desktop prompt injection", async () => {
   const [javascript, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
@@ -272,6 +303,7 @@ test("the identity card opens Google-style account switching outside Intelligenc
   assert.match(sidebar, /id="accountMenuButton"/);
   assert.match(sidebar, /id="addAccountButton"/);
   assert.match(sidebar, /id="companySwitcherControl" class="account-company-switcher hidden"/);
+  assert.match(sidebar, /id="accountMemoryButton"/);
   assert.doesNotMatch(sidebar, /id="companySwitcherControl" class="field company-switcher/);
   assert.match(sidebar, /Platform is never told what other accounts are present/);
   assert.match(controller, /clearEphemeralCompanyBoundary\(\)/);

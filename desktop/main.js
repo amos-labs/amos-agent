@@ -361,6 +361,12 @@ function registerIpc() {
   ipcMain.handle("desktop:set-briefing-schedule-status", (_event, input) =>
     controller.setBriefingScheduleStatus(input?.scheduleId, input?.active === true)
   );
+  ipcMain.handle("desktop:set-automation-status", (_event, input) =>
+    controller.setAutomationStatus(input?.name, input?.active === true)
+  );
+  ipcMain.handle("desktop:start-new-conversation", (_event, input) =>
+    controller.startNewConversation(input)
+  );
   ipcMain.handle("desktop:remove-saved-view", (_event, id) => controller.removeSavedView(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({

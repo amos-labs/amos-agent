@@ -59,7 +59,9 @@ The next product slices, in order, are:
    to the local artifact engine, followed by spreadsheet and presentation
    contracts;
 3. add consent-aware Router corrections/export and a sealed qualification gate;
-4. deliver the searchable task manager and governed task-forking/lineage
+4. surface the existing platform Automation engine as a first-class Desktop
+   operating page, with authoring launched into isolated task lanes; then
+   deliver the searchable task manager and governed task-forking/lineage
    experience tracked in issue 47; and
 5. add enterprise device inventory, revocation, and environment grants tracked
    in issue 17.
@@ -610,6 +612,54 @@ Everything else should be queryable or actionable in Desktop through the brain.
 It must also remain queryable or actionable through the relevant governed MCP
 tool. Desktop-only presentation is acceptable; Desktop-only business capability
 is not.
+
+## Automations as a first-class operating surface
+
+Automations belongs immediately after Connections in primary Desktop
+navigation. The product progression is deliberate:
+
+1. connect governed company systems;
+2. give AMOS current context and deterministic data to analyze;
+3. build and operate reusable automations from platform primitives; and
+4. optionally attach those automations to a bounded, governed goal-pursuit loop
+   that observes results and proposes or performs allowed adjustments.
+
+This is a projection of the existing platform Automation engine, not a second
+Electron implementation. The platform already owns automation definitions,
+triggers, deterministic steps, enrollment and run state, pause/resume behavior,
+policy, approvals, receipts, and goal-pursuit primitives. Desktop calls the
+client-neutral `list_automations`, `set_automation`, `pause_automation`, and
+`resume_automation` capabilities and renders their credential-free result.
+Claude, Codex, and other compatible MCP clients retain the same capability.
+
+The Automations page is for durable management: status, trigger and step
+summaries, bounded outcome metrics, refresh, pause, resume, and entry into
+conversational authoring. Direct controls remain typed platform calls. The AI
+helps a user design, explain, revise, and validate the definition; once saved,
+the durable automation should continue through deterministic primitives when
+the model is unavailable unless a declared step explicitly requires model
+judgment.
+
+Authoring integrates with the task manager without inventing false lineage:
+
+- **Build automation** starts a new root task with an automation-builder intent.
+- **Work on this with AMOS** starts a focused task carrying an immutable
+  reference to the selected platform automation.
+- **Fork from here** inside an existing conversation creates a true governed
+  child fork and records the parent task plus exact source milestone.
+
+The first Desktop slice may open a new named context lane before the searchable
+task manager is visible, but it must preserve the prior lane and must never
+implement “new task” by deleting shared or encrypted continuity. The following
+task-manager slice adds **Tasks** immediately after Operator in primary
+navigation. A chat is the interface; a task is the durable object that owns its
+context lane, dynamic canvas, artifacts, decisions, automation or goal
+references, and lineage. The page exposes active, waiting-for-user, recent, and
+forked tasks with search, rename, pin, archive, lineage, and safe resume.
+
+Memory remains an important settings and context surface, but it is not a daily
+operating destination. Its page stays intact and opens from **Accounts &
+Settings → Memory & context** instead of occupying primary navigation.
 
 ## First-class task forking
 

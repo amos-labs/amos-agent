@@ -197,6 +197,74 @@ test("Desktop Briefings use only platform-owned templates, definitions, runs, an
   });
 });
 
+test("Desktop Automations project platform-owned definitions, live stats, and governed status controls", async () => {
+  const calls = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "automation-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      calls.push(request.params);
+      const payload = request.params.name === "list_automations"
+        ? {
+            automations: [{
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Franchise scorecard follow-up",
+              status: "active",
+              trigger: { type: "record_event", collection: "franchise_scorecards", secret: "omit" },
+              live_copy_subject: "Your monthly scorecard",
+              steps_summary: [{
+                action: "send_email",
+                stage: "coaching",
+                subject: "Your monthly scorecard",
+                instructions: "Use the deterministic scorecard payload",
+                body: "must not project"
+              }],
+              stats: {
+                enrolled: 42,
+                completed: 37,
+                pending: 3,
+                failed: 2,
+                emails_sent: 37,
+                last_sent_at: "2026-08-10T08:00:00.000Z"
+              },
+              created_at: "2026-08-01T08:00:00.000Z",
+              updated_at: "2026-08-10T08:00:00.000Z"
+            }]
+          }
+        : {
+            ok: true,
+            name: "Franchise scorecard follow-up",
+            status: request.params.name === "pause_automation" ? "paused" : "active",
+            message: "Status updated"
+          };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const library = await client.automationsLibrary();
+  await client.setAutomationStatus("Franchise scorecard follow-up", false);
+  await client.setAutomationStatus("Franchise scorecard follow-up", true);
+
+  assert.equal(library.supported, true);
+  assert.equal(library.automations[0].stats.enrolled, 42);
+  assert.deepEqual(library.automations[0].trigger, {
+    type: "record_event",
+    collection: "franchise_scorecards"
+  });
+  assert.equal(library.automations[0].steps[0].body, undefined);
+  assert.deepEqual(calls.map((call) => call.name), [
+    "list_automations", "pause_automation", "resume_automation"
+  ]);
+  assert.deepEqual(calls[1].arguments, { name: "Franchise scorecard follow-up" });
+});
+
 test("Desktop sends native human decisions only through the dedicated approval endpoint", async () => {
   const requests = [];
   const client = new DesktopRemoteStateClient(

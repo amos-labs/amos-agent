@@ -70,6 +70,37 @@ export class DesktopRemoteStateClient {
     }
   }
 
+  async automationsLibrary({ signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("list_automations", {}, { signal });
+      const payload = parseMcpJson(result, "AMOS Automations");
+      return {
+        supported: true,
+        automations: Array.isArray(payload?.automations)
+          ? payload.automations.map(normalizeAutomation).filter(Boolean)
+          : []
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "list_automations")) {
+        return { supported: false, automations: [] };
+      }
+      throw error;
+    }
+  }
+
+  async setAutomationStatus(name, active, { signal = null } = {}) {
+    const automationName = requiredText(name, 200, "Automation");
+    const result = await this.mcp.callTool(
+      active ? "resume_automation" : "pause_automation",
+      { name: automationName },
+      { signal }
+    );
+    return parseMcpJson(
+      result,
+      active ? "AMOS Automation resume" : "AMOS Automation pause"
+    );
+  }
+
   async runBriefing(input, { signal = null } = {}) {
     const result = await this.mcp.callTool("run_briefing", briefingRunArgs(input), { signal });
     return parseMcpJson(result, "AMOS Briefing run");
@@ -803,6 +834,87 @@ function normalizeReceipt(value) {
     ).slice(0, 500),
     createdAt: String(value.created_at || receipt.emitted_at || "")
   };
+}
+
+function normalizeAutomation(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = String(value.id || "").trim().slice(0, 128);
+  const name = String(value.name || "").trim().slice(0, 200);
+  if (!id || !name) return null;
+  const trigger = value.trigger && typeof value.trigger === "object" && !Array.isArray(value.trigger)
+    ? Object.fromEntries(
+        ["type", "kind", "event", "collection", "field", "cadence", "schedule", "source"]
+          .filter((key) => value.trigger[key] !== undefined)
+          .map((key) => [key, boundedJsonValue(value.trigger[key])])
+      )
+    : {};
+  const stats = value.stats && typeof value.stats === "object" ? value.stats : {};
+  return {
+    id,
+    name,
+    status: ["active", "paused", "draft", "archived"].includes(value.status)
+      ? value.status
+      : String(value.status || "unknown").slice(0, 40),
+    trigger,
+    liveCopySubject: String(value.live_copy_subject || "").slice(0, 500),
+    steps: (Array.isArray(value.steps_summary) ? value.steps_summary : [])
+      .slice(0, 40)
+      .flatMap((step) => {
+        if (!step || typeof step !== "object") return [];
+        const action = String(step.action || "").trim().slice(0, 120);
+        if (!action) return [];
+        return [{
+          action,
+          stage: String(step.stage || "").slice(0, 120),
+          subject: String(step.subject || "").slice(0, 500),
+          instructions: String(step.instructions || "").slice(0, 500)
+        }];
+      }),
+    stats: {
+      enrolled: boundedCount(stats.enrolled),
+      sent: boundedCount(stats.sent),
+      emailsSent: boundedCount(stats.emails_sent),
+      pending: boundedCount(stats.pending),
+      completed: boundedCount(stats.completed),
+      failed: boundedCount(stats.failed),
+      unsubscribed: boundedCount(stats.unsubscribed),
+      lastSentAt: safeTimestamp(stats.last_sent_at),
+      calendarEventsEvaluated: boundedCount(stats.calendar_events_evaluated),
+      calendarEventsMatched: boundedCount(stats.calendar_events_matched),
+      lastCalendarEventAt: safeTimestamp(stats.last_calendar_event_at)
+    },
+    createdAt: safeTimestamp(value.created_at),
+    updatedAt: safeTimestamp(value.updated_at)
+  };
+}
+
+function boundedCount(value) {
+  const count = Number(value);
+  return Number.isSafeInteger(count) && count >= 0 ? count : 0;
+}
+
+function safeTimestamp(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function boundedJsonValue(value) {
+  if (typeof value === "string") return value.slice(0, 500);
+  if (typeof value === "number" || typeof value === "boolean" || value === null) return value;
+  if (Array.isArray(value)) return value.slice(0, 20).map(boundedJsonValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).slice(0, 20).map(([key, item]) => [key.slice(0, 80), boundedJsonValue(item)])
+    );
+  }
+  return null;
+}
+
+function requiredText(value, maxLength, label) {
+  const text = String(value || "").trim().slice(0, maxLength);
+  if (!text) throw new Error(`${label} name is required`);
+  return text;
 }
 
 function normalizeConnection(value) {
