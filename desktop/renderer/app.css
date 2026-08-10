@@ -940,6 +940,30 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .attach-button:hover { color: var(--ink); }
 .attach-button span { color: var(--blue); font-size: 15px; line-height: 1; }
+.conversation-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+}
+.conversation-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-2);
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.conversation-action:hover:not(:disabled) { background: var(--surface-soft); color: var(--ink); }
+.conversation-action span { color: var(--blue-2); font-size: 11px; }
+.conversation-action:disabled { cursor: default; opacity: .4; }
 .scope-note { display: flex; align-items: center; gap: 9px; color: var(--muted-2); font-size: 10px; }
 .composer-clear-button {
   flex: 0 0 auto;

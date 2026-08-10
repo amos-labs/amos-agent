@@ -85,6 +85,7 @@ const elements = Object.fromEntries(
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
     "providerCheck", "onboardingProviderText", "workspaceCheck", "enterButton", "boundaryReadinessText",
     "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
+    "newConversationButton", "forkConversationButton",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
     "canvasSidecar", "contextResizeHandle",
     "attachmentList", "attachButton",
@@ -240,7 +241,9 @@ function bindActions() {
   elements.refreshAutomationsButton.addEventListener("click", refreshAutomations);
   elements.buildAutomationButton.addEventListener("click", () => openAutomationTask());
   elements.automationEmptyBuildButton.addEventListener("click", () => openAutomationTask());
-  elements.newTaskButton.addEventListener("click", createNewTask);
+  elements.newTaskButton.addEventListener("click", () => createNewConversation(elements.newTaskButton));
+  elements.newConversationButton.addEventListener("click", () => createNewConversation(elements.newConversationButton));
+  elements.forkConversationButton.addEventListener("click", forkCurrentConversation);
   elements.taskSearchInput.addEventListener("input", renderTasks);
   elements.taskFilterInput.addEventListener("change", renderTasks);
   elements.forkTaskForm.addEventListener("submit", submitTaskFork);
@@ -1179,26 +1182,34 @@ function taskCard(task) {
   return card;
 }
 
-async function createNewTask() {
-  const objective = window.prompt("What should this task move forward?");
-  if (!objective?.trim()) return;
-  const title = objective.trim().replace(/\s+/g, " ").slice(0, 80);
-  setButtonBusy(elements.newTaskButton, true, "Opening…");
+async function createNewConversation(sourceButton = elements.newConversationButton) {
+  const sourceMarkup = sourceButton.innerHTML;
+  setButtonBusy(sourceButton, true, "Opening…");
   try {
     const response = await api.startNewConversation({
-      kind: "general",
-      title,
-      objective: objective.trim()
+      kind: "general"
     });
     adoptOpenedTask(response);
-    elements.promptInput.value = objective.trim();
+    elements.promptInput.value = "";
     elements.promptInput.focus();
-    toast("Opened a new durable task. No model request has run yet.");
+    toast("Started a new conversation. Its context and branches are managed under Tasks.");
   } catch (error) {
     toast(error.message, true);
   } finally {
-    setButtonBusy(elements.newTaskButton, false, "New task →");
+    sourceButton.disabled = false;
+    sourceButton.removeAttribute("aria-busy");
+    sourceButton.innerHTML = sourceMarkup;
+    renderConversationActions();
   }
+}
+
+function forkCurrentConversation() {
+  const task = activeDurableTask();
+  if (!task) {
+    toast("Start a conversation before creating a fork.", true);
+    return;
+  }
+  openTaskForkModal(task, latestTaskEventId(task));
 }
 
 async function openManagedTask(task, button) {
@@ -3081,6 +3092,16 @@ function renderConversationChrome() {
   elements.welcomeMessage.classList.toggle("hidden", hasConversation);
   elements.starterActions.classList.toggle("hidden", hasConversation);
   elements.clearButton.classList.toggle("hidden", !hasConversation);
+  renderConversationActions();
+}
+
+function renderConversationActions() {
+  elements.newConversationButton.disabled = running;
+  const active = activeDurableTask();
+  elements.forkConversationButton.disabled = running || !active;
+  elements.forkConversationButton.title = active
+    ? "Create a governed branch from the latest retained milestone"
+    : "Start a conversation before creating a fork";
 }
 
 function renderDecisions() {
@@ -4888,6 +4909,7 @@ function setRunning(value) {
   }
   renderAttachments();
   renderUpdate();
+  renderConversationActions();
 }
 
 function renderRunButtonLabel() {

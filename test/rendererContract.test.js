@@ -199,9 +199,15 @@ test("Tasks expose durable resume, governed forking, lineage, and task-bound can
   ]);
 
   assert.match(html, /id="tasksView"/);
+  assert.match(html, /id="newTaskButton"[^>]*>New task/);
+  assert.match(html, /id="newConversationButton"[^>]*>[\s\S]*?New conversation/);
+  assert.match(html, /id="forkConversationButton"[^>]*>[\s\S]*?Fork conversation/);
   assert.match(html, /Everything[\s\S]*?From here[\s\S]*?Selected artifacts/);
   assert.match(html, /Same directory[\s\S]*?New Git worktree[\s\S]*?Context only/);
   assert.match(javascript, /api\.openTask\(task\.id\)/);
+  assert.match(javascript, /api\.startNewConversation\(\{\s*kind: "general"\s*\}\)/);
+  assert.match(javascript, /forkCurrentConversation[\s\S]*?openTaskForkModal\(task, latestTaskEventId\(task\)\)/);
+  assert.doesNotMatch(javascript, /What should this task move forward\?/);
   assert.match(javascript, /api\.forkTask\(\{/);
   assert.match(javascript, /Fork from here/);
   assert.match(preload, /desktop:open-task/);

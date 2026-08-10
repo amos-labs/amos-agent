@@ -32,6 +32,47 @@ function settingsStore(workspace) {
   };
 }
 
+test("a new conversation opens without a prompt and adopts its first objective", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-new-conversation-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:00:00.000Z")
+  });
+  const settings = settingsStore(root);
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeContextKey: controller.activeContextKey,
+    activeTaskRecordId: controller.activeTaskRecordId
+  });
+
+  const opened = await controller.startNewConversation({ kind: "general" });
+  assert.equal(opened.launch.title, "New conversation");
+  assert.equal(opened.launch.objective, "Start a new conversation with AMOS.");
+
+  await controller.adoptConversationObjective(
+    "Research the multi-location enterprise market and identify the strongest wedge",
+    await settings.read()
+  );
+  const owner = taskOwnerScope({ boundary: "personal", workspace: root });
+  const [conversation] = await tasks.list(owner);
+  assert.equal(
+    conversation.title,
+    "Research the multi-location enterprise market and identify the strongest wedge"
+  );
+  assert.equal(
+    conversation.objective,
+    "Research the multi-location enterprise market and identify the strongest wedge"
+  );
+});
+
 test("Desktop opens and forks durable tasks without replaying a model or tool call", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-managed-tasks-"));
   const tasks = new DesktopTaskStore({
