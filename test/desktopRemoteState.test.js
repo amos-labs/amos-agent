@@ -265,6 +265,114 @@ test("Desktop Automations project platform-owned definitions, live stats, and go
   assert.deepEqual(calls[1].arguments, { name: "Franchise scorecard follow-up" });
 });
 
+test("Desktop Tasks use governed Platform resources and preserve non-replay fork contracts", async () => {
+  const calls = [];
+  const parentId = "11111111-1111-4111-8111-111111111111";
+  const childId = "22222222-2222-4222-8222-222222222222";
+  const task = (overrides = {}) => ({
+    id: parentId,
+    context_key: `task:${parentId}`,
+    title: "Neighborly scorecard",
+    objective: "Build the deterministic scorecard",
+    kind: "general",
+    status: "active",
+    source_client: "amos_desktop",
+    pinned: false,
+    archived: false,
+    workspace_mode: "same_directory",
+    workspace: {
+      label: "amos-platform",
+      repository: "git@github.com:amos-labs/amos-managed-platform.git",
+      branch: "main",
+      commit: "a".repeat(40),
+      dirty: true
+    },
+    resource_refs: ["briefing:scorecard"],
+    child_count: 0,
+    created_at: "2026-08-10T08:00:00.000Z",
+    updated_at: "2026-08-10T09:00:00.000Z",
+    ...overrides
+  });
+  const forkManifest = {
+    format: "amos.task_fork_manifest",
+    version: 1,
+    scope: {
+      parentTaskId: parentId,
+      childTaskId: childId,
+      sourceEventId: "turn:one",
+      contextScope: "from_here",
+      workspaceMode: "context_only"
+    },
+    selectedArtifacts: [],
+    safeguards: {
+      orientationOnly: true,
+      requiresFreshIdentity: true,
+      requiresFreshCompanyEvidence: true,
+      requiresFreshPolicy: true,
+      requiresFreshApprovals: true,
+      requiresFreshReceipts: true,
+      replayAllowed: false,
+      pendingOperationsCopied: false,
+      credentialsIncluded: false,
+      executionAuthorityIncluded: false
+    }
+  };
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "task-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      calls.push(request.params);
+      const payload = request.params.name === "list_tasks"
+        ? { tasks: [task()], contract: { replay_allowed: false } }
+        : request.params.name === "fork_task"
+          ? {
+              parent: task({ child_count: 1 }),
+              task: task({
+                id: childId,
+                context_key: `task:${childId}`,
+                title: "Upsell branch",
+                objective: "Explore upsell",
+                kind: "fork",
+                parent_task_id: parentId,
+                source_event_id: "turn:one",
+                workspace_mode: "context_only",
+                workspace: {},
+                fork_manifest: forkManifest
+              }),
+              fork_manifest: forkManifest
+            }
+          : { task: task() };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const library = await client.tasksLibrary();
+  const fork = await client.forkTask({
+    taskId: parentId,
+    name: "Upsell branch",
+    objective: "Explore upsell",
+    sourceEventId: "turn:one",
+    contextScope: "from_here",
+    workspaceMode: "context_only",
+    workspace: {},
+    selectedArtifacts: []
+  });
+
+  assert.equal(library.supported, true);
+  assert.equal(library.tasks[0].workspace.localPath, undefined);
+  assert.equal(fork.task.parentTaskId, parentId);
+  assert.equal(fork.forkManifest.safeguards.replayAllowed, false);
+  assert.deepEqual(calls.map((call) => call.name), ["list_tasks", "fork_task"]);
+  assert.equal(calls[1].arguments.workspace.localPath, undefined);
+});
+
 test("Desktop sends native human decisions only through the dedicated approval endpoint", async () => {
   const requests = [];
   const client = new DesktopRemoteStateClient(

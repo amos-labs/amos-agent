@@ -25,6 +25,7 @@ import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
 import { SavedViewStore } from "../src/desktop/savedViewStore.js";
 import { SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
+import { DesktopTaskStore } from "../src/desktop/taskStore.js";
 import { DecisionKeyStore } from "../src/desktop/decisionKeyStore.js";
 import {
   DesktopUpdateManager,
@@ -367,6 +368,11 @@ function registerIpc() {
   ipcMain.handle("desktop:start-new-conversation", (_event, input) =>
     controller.startNewConversation(input)
   );
+  ipcMain.handle("desktop:open-task", (_event, id) => controller.openTask(id));
+  ipcMain.handle("desktop:update-task", (_event, input) =>
+    controller.updateTaskResource(input?.id, input?.changes)
+  );
+  ipcMain.handle("desktop:fork-task", (_event, input) => controller.forkTaskResource(input));
   ipcMain.handle("desktop:remove-saved-view", (_event, id) => controller.removeSavedView(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({
@@ -557,6 +563,11 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
+  const taskStore = new DesktopTaskStore({
+    filePath: join(app.getPath("userData"), "tasks.json"),
+    encrypt,
+    decrypt
+  });
   const decisionKeyStore = new DecisionKeyStore({
     filePath: join(app.getPath("userData"), "desktop-approval-key.json"),
     encrypt,
@@ -599,6 +610,7 @@ app.whenReady().then(async () => {
     localReceiptStore,
     savedViewStore,
     sessionContinuityStore,
+    taskStore,
     decisionKeyStore,
     accountStore,
     offlineManager,

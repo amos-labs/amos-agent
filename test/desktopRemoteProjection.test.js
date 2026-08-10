@@ -27,6 +27,8 @@ test("remote state events project every refreshed platform surface into Desktop"
       templates: [{ key: "daily_company_brief", title: "Daily company brief" }],
       briefings: [{ id: "briefing-1", title: "Daily company brief" }]
     },
+    tasks: { supported: true, tasks: [{ id: "task-1", title: "Plan" }] },
+    activeTaskRecordId: "task-1",
     companies: {
       currentTenantId: "tenant-1",
       tenants: [{ tenant_id: "tenant-1", tenant_name: "AMOS Labs" }]
@@ -66,10 +68,12 @@ test("remote state events project every refreshed platform surface into Desktop"
     connectionsCatalog: controller.connectionsCatalog,
     briefings: controller.briefings,
     automations: { supported: false, automations: [] },
+    tasks: controller.tasks,
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,
     activeContextKey: "active",
+    activeTaskRecordId: "task-1",
     remoteStatus: controller.remoteStatus,
     companyCache: { available: true },
     offlineProposals: [{ id: "proposal-1" }],

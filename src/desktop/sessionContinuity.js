@@ -32,13 +32,22 @@ export class SessionContinuityStore {
 
   async appendTurn(
     scope,
-    { objective, answer, artifacts = [], receipt = null, model = "", continuity = null } = {}
+    {
+      eventId = "",
+      objective,
+      answer,
+      artifacts = [],
+      receipt = null,
+      model = "",
+      continuity = null
+    } = {}
   ) {
     const normalizedScope = normalizeScope(scope);
     const store = await this.readStore();
     const existing = store.records.find((item) => item.key === normalizedScope.key);
     const now = this.now().toISOString();
     const turn = normalizeTurn({
+      id: eventId,
       objective,
       answer,
       receiptId: receipt?.id,
@@ -66,6 +75,50 @@ export class SessionContinuityStore {
       record,
       ...store.records.filter((item) => item.key !== record.key)
     ].slice(0, MAX_RECORDS);
+    await this.writeStore(store);
+    return publicRecord(record);
+  }
+
+  async fork(
+    parentScope,
+    childScope,
+    { contextScope = "from_here", sourceEventId = "", selectedArtifacts = [] } = {}
+  ) {
+    const parent = normalizeScope(parentScope);
+    const child = normalizeScope(childScope);
+    if (parent.key === child.key) throw new Error("A fork needs a new task context");
+    if (!sameContinuityOwner(parent, child)) {
+      throw new Error("A task fork cannot cross user, company, boundary, or workspace scope");
+    }
+    if (!["everything", "from_here", "selected_artifacts"].includes(contextScope)) {
+      throw new Error("A task fork has an invalid context scope");
+    }
+    const store = await this.readStore();
+    const source = store.records.find((item) => item.key === parent.key);
+    const now = this.now().toISOString();
+    let turns = source?.turns || [];
+    let artifacts = source?.artifacts || [];
+    if (contextScope === "from_here") {
+      const sourceId = cleanRequired(sourceEventId, 160, "source event id");
+      const index = turns.findIndex((turn) => turn.id === sourceId || turn.taskId === sourceId);
+      if (index < 0) throw new Error("The selected task milestone is no longer in bounded continuity");
+      turns = turns.slice(0, index + 1);
+    } else if (contextScope === "selected_artifacts") {
+      turns = [];
+      artifacts = uniqueStrings(selectedArtifacts, MAX_ARTIFACTS, 1_024);
+      if (artifacts.length === 0) {
+        throw new Error("Choose at least one artifact for this task fork");
+      }
+    }
+    const record = normalizeRecord({
+      ...child,
+      turns,
+      artifacts,
+      createdAt: now,
+      updatedAt: now
+    });
+    store.records = [record, ...store.records.filter((item) => item.key !== record.key)]
+      .slice(0, MAX_RECORDS);
     await this.writeStore(store);
     return publicRecord(record);
   }
@@ -174,6 +227,7 @@ export function buildSessionContinuityPrompt(record, options = {}) {
 export function buildContinuityManifest(record, { currentModel = "" } = {}) {
   if (!record?.turns?.length) return null;
   const transitions = record.turns.map((turn) => ({
+    eventId: turn.id,
     taskId: turn.taskId,
     at: turn.at,
     status: turn.status,
@@ -399,7 +453,9 @@ function normalizeRecord(value) {
 }
 
 function normalizeTurn(value) {
+  const id = cleanText(value?.id, 160) || stableTurnId(value);
   return {
+    id,
     objective: redactContinuityText(cleanRequired(value?.objective, 6_000, "objective")),
     answer: redactContinuityText(cleanRequired(value?.answer, 12_000, "recorded outcome")),
     taskId: cleanText(value?.taskId, 128),
@@ -422,6 +478,23 @@ function normalizeTurn(value) {
   };
 }
 
+function stableTurnId(value) {
+  return `turn:${createHash("sha256")
+    .update([
+      cleanText(value?.taskId, 128),
+      String(value?.at || ""),
+      String(value?.objective || "")
+    ].join("\0"))
+    .digest("hex")
+    .slice(0, 24)}`;
+}
+
+function sameContinuityOwner(left, right) {
+  return left.boundary === right.boundary &&
+    left.subjectId === right.subjectId &&
+    left.tenantId === right.tenantId;
+}
+
 function normalizeSharedTransition(value) {
   const objective = redactContinuityText(
     cleanRequired(value?.objective, 6_000, "objective")
@@ -430,6 +503,7 @@ function normalizeSharedTransition(value) {
     cleanRequired(value?.outcome, 12_000, "recorded outcome")
   );
   return {
+    eventId: cleanText(value?.eventId, 160),
     objective,
     outcome,
     taskId: cleanText(value?.taskId, 128),
@@ -609,6 +683,7 @@ function normalizeStateItems(value, maxItems) {
 
 function compactTransition(transition, latest) {
   const item = {
+    event_id: transition?.eventId || undefined,
     at: transition?.at,
     task_id: transition?.taskId || undefined,
     status: transition?.status,
@@ -641,6 +716,7 @@ function compactTransition(transition, latest) {
 
 function minimalTransition(transition) {
   return {
+    event_id: transition?.eventId || undefined,
     at: transition?.at,
     status: transition?.status,
     objective: compactText(transition?.objective, 420),

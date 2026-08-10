@@ -166,7 +166,7 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   const accountMenu = html.match(/id="accountMenu"([\s\S]*?)<button id="workspaceButton"/)?.[1] || "";
 
   assert.doesNotMatch(nav, /data-view="memory"/);
-  assert.match(nav, /data-view="connections"[\s\S]*?data-view="automations"[\s\S]*?data-view="work"/);
+  assert.match(nav, /data-view="operator"[\s\S]*?data-view="tasks"[\s\S]*?data-view="canvas"[\s\S]*?data-view="connections"[\s\S]*?data-view="automations"[\s\S]*?data-view="work"/);
   assert.match(accountMenu, /id="accountMemoryButton"[\s\S]*?Memory &amp; context/);
   assert.match(html, /id="memoryView"/);
   assert.match(html, /Connect systems[\s\S]*?Understand &amp; analyze[\s\S]*?Build deterministic automation[\s\S]*?Pursue governed goals/);
@@ -177,11 +177,39 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(preload, /desktop:set-automation-status/);
   assert.match(main, /controller\.startNewConversation\(input\)/);
   assert.match(main, /controller\.setAutomationStatus\(input\?\.name, input\?\.active === true\)/);
-  assert.match(controller, /this\.activeContextKey = `task:\$\{randomUUID\(\)\}`/);
+  assert.match(controller, /const id = randomUUID\(\);[\s\S]*?this\.activeContextKey = `task:\$\{id\}`/);
   assert.match(controller, /continuityCapturePayload\(transition, settings, this\.activeContextKey\)/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);
   assert.match(remoteState, /active \? "resume_automation" : "pause_automation"/);
   assert.doesNotMatch(html, /Neighborly|Franchise scorecard follow-up/);
+});
+
+test("Tasks expose durable resume, governed forking, lineage, and task-bound canvases", async () => {
+  const [javascript, html, preload, main, controller, taskStore, workspace] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/taskStore.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/taskWorkspace.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /id="tasksView"/);
+  assert.match(html, /Everything[\s\S]*?From here[\s\S]*?Selected artifacts/);
+  assert.match(html, /Same directory[\s\S]*?New Git worktree[\s\S]*?Context only/);
+  assert.match(javascript, /api\.openTask\(task\.id\)/);
+  assert.match(javascript, /api\.forkTask\(\{/);
+  assert.match(javascript, /Fork from here/);
+  assert.match(preload, /desktop:open-task/);
+  assert.match(preload, /desktop:fork-task/);
+  assert.match(main, /controller\.forkTaskResource\(input\)/);
+  assert.match(controller, /this\.canvases\.restore\(task\.canvasState \|\| \{\}\)/);
+  assert.match(controller, /replayed: false/);
+  assert.match(taskStore, /pendingOperationsCopied: false/);
+  assert.match(taskStore, /credentialsIncluded: false/);
+  assert.match(workspace, /"worktree",[\s\S]*?"add"[\s\S]*?"-b"/);
+  assert.doesNotMatch(workspace, /"reset"|"checkout"|"clean"|"stash"/);
 });
 
 test("Briefings use the platform catalog and typed actions instead of Desktop prompt injection", async () => {

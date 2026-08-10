@@ -193,6 +193,40 @@ test("named task lanes keep local continuity isolated without losing the active 
   assert.equal((await store.load(automation)).manifest.scope.contextKey, "task:automation-builder");
 });
 
+test("task forks copy bounded orientation only through the selected milestone", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-forked-task-continuity-"));
+  const store = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T09:00:00.000Z")
+  });
+  const parent = scope({}, "task:parent");
+  const child = scope({}, "task:child");
+  await store.appendTurn(parent, {
+    eventId: "turn:one",
+    objective: "Inspect the KPI gap",
+    answer: "Located the margin issue",
+    artifacts: ["reports/margin.csv"]
+  });
+  await store.appendTurn(parent, {
+    eventId: "turn:two",
+    objective: "Draft an intervention",
+    answer: "Drafted the intervention",
+    artifacts: ["reports/intervention.md"]
+  });
+
+  const fork = await store.fork(parent, child, {
+    contextScope: "from_here",
+    sourceEventId: "turn:one"
+  });
+
+  assert.equal(fork.turns.length, 1);
+  assert.equal(fork.turns[0].id, "turn:one");
+  assert.equal(fork.manifest.safeguards.replayAllowed, false);
+  assert.match(buildSessionContinuityPrompt(fork), /not current company truth/i);
+  assert.doesNotMatch(buildSessionContinuityPrompt(fork), /Draft an intervention/);
+});
+
 test("shared continuity is tenant pinned, non-authoritative, and portable", () => {
   const manifest = normalizeSharedContinuityManifest({
     format: "amos.continuity_manifest",

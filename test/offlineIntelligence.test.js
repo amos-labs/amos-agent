@@ -109,6 +109,18 @@ test("offline registry omits all AMOS and public-web tools", () => {
   assert.ok(tools.some((tool) => tool.name === "desktop_create_document"));
 });
 
+test("context-only registry exposes no local workspace tools", () => {
+  const tools = createRegistry({ includeLocal: false }).list();
+  assert.equal(tools.some((tool) => tool.name === "run_bash"), false);
+  assert.equal(tools.some((tool) => tool.name === "search_files"), false);
+  assert.equal(tools.some((tool) => tool.name === "read_file"), false);
+  assert.equal(tools.some((tool) => tool.name === "write_file"), false);
+  assert.equal(tools.some((tool) => tool.name === "apply_patch"), false);
+  assert.equal(tools.some((tool) => tool.name === "desktop_create_document"), false);
+  assert.ok(tools.some((tool) => tool.name.startsWith("web_")));
+  assert.ok(tools.some((tool) => tool.name.startsWith("amos_")));
+});
+
 test("Ollama manager probes, installs, reports progress, and removes curated models", async () => {
   let installed = false;
   const events = [];

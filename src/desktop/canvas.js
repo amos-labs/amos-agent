@@ -160,6 +160,38 @@ export class DesktopCanvasManager {
     this.activeCanvasId = null;
   }
 
+  restore(input = {}) {
+    const values = Array.isArray(input?.canvases) ? input.canvases : [];
+    const canvases = values.slice(0, this.limit).map((value, index) => {
+      const source = object(value, `canvases[${index}] must be an object`);
+      const spec = normalizeCanvasSpec(source, { now: this.now });
+      return {
+        id: text(source.id, `canvases[${index}].id`, 128),
+        ...spec,
+        revision: boundedInteger(
+          source.revision || 1,
+          `canvases[${index}].revision`,
+          1,
+          Number.MAX_SAFE_INTEGER
+        ),
+        presentedAt: isoDate(
+          source.presentedAt || source.presented_at || source.generatedAt || this.now(),
+          `canvases[${index}].presentedAt`
+        ),
+        updatedAt: isoDate(
+          source.updatedAt || source.updated_at || source.generatedAt || this.now(),
+          `canvases[${index}].updatedAt`
+        )
+      };
+    });
+    const activeCanvasId = optionalText(input?.activeCanvasId, "activeCanvasId", 128);
+    this.canvases = canvases;
+    this.activeCanvasId = canvases.some((canvas) => canvas.id === activeCanvasId)
+      ? activeCanvasId
+      : canvases[0]?.id || null;
+    return this.state();
+  }
+
   state() {
     return {
       canvases: this.list(),

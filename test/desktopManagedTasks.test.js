@@ -1,0 +1,150 @@
+import assert from "node:assert/strict";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+
+import { DesktopController } from "../src/desktop/controller.js";
+import { continuityScope, SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
+import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
+
+function codec() {
+  return {
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  };
+}
+
+function settingsStore(workspace) {
+  let value = {
+    operatingMode: "personal",
+    workspace,
+    provider: "ollama",
+    model: "qwen",
+    baseUrl: "http://127.0.0.1:11434/v1",
+    apiKey: "",
+    reasoningEffort: "medium",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  };
+  return {
+    async read() { return { ...value }; },
+    async write(next) { value = { ...next }; return { ...value }; }
+  };
+}
+
+test("Desktop opens and forks durable tasks without replaying a model or tool call", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-managed-tasks-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:00:00.000Z")
+  });
+  const continuity = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:00:00.000Z")
+  });
+  const settings = settingsStore(root);
+  const owner = taskOwnerScope({ boundary: "personal", workspace: root });
+  const parentId = "11111111-1111-4111-8111-111111111111";
+  const parentContext = `task:${parentId}`;
+  const canvas = {
+    id: "canvas-1",
+    version: "1",
+    title: "Scorecard",
+    subtitle: "",
+    generatedAt: "2026-08-10T12:00:00.000Z",
+    state: { kind: "ready", message: "" },
+    source: {
+      kind: "local",
+      label: "Test",
+      refreshedAt: "2026-08-10T12:00:00.000Z",
+      staleAt: "",
+      references: []
+    },
+    blocks: [{
+      id: "note",
+      type: "markdown",
+      title: "",
+      content: "Deterministic result",
+      provenance: { kind: "local", observedAt: "2026-08-10T12:00:00.000Z", references: [] }
+    }],
+    revision: 1,
+    presentedAt: "2026-08-10T12:00:00.000Z",
+    updatedAt: "2026-08-10T12:00:00.000Z"
+  };
+  await tasks.create(owner, {
+    id: parentId,
+    contextKey: parentContext,
+    title: "Neighborly scorecard",
+    objective: "Find the KPI gap",
+    workspace: { localPath: root, label: "managed-tasks" },
+    canvasState: { activeCanvasId: canvas.id, canvases: [canvas] }
+  });
+  const parentContinuity = continuityScope({
+    boundary: "personal",
+    workspace: root,
+    contextKey: parentContext
+  });
+  await continuity.appendTurn(parentContinuity, {
+    eventId: "turn:kpi-gap",
+    objective: "Find the KPI gap",
+    answer: "The margin gap is concentrated in seven locations"
+  });
+
+  let modelRuns = 0;
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    sessionContinuityStore: continuity,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeContextKey: controller.activeContextKey,
+    activeTaskRecordId: controller.activeTaskRecordId,
+    sessionContinuity: await controller.sessionContinuityState(),
+    ...controller.canvases.state()
+  });
+  controller.getRuntime = async () => {
+    modelRuns += 1;
+    throw new Error("model must not run during task navigation");
+  };
+
+  const opened = await controller.openTask(parentId);
+  assert.equal(opened.replayed, false);
+  assert.equal(controller.canvases.active().title, "Scorecard");
+  assert.equal(modelRuns, 0);
+
+  const forked = await controller.forkTaskResource({
+    taskId: parentId,
+    name: "Margin intervention",
+    objective: "Design the location intervention",
+    sourceEventId: "turn:kpi-gap",
+    contextScope: "from_here",
+    workspaceMode: "context_only"
+  });
+
+  assert.equal(forked.replayed, false);
+  assert.equal(forked.task.parentTaskId, parentId);
+  assert.equal(forked.task.workspaceMode, "context_only");
+  assert.equal(forked.forkManifest.safeguards.replayAllowed, false);
+  assert.equal(controller.activeTaskRecordId, forked.task.id);
+  assert.equal(controller.canvases.active().title, "Scorecard");
+  assert.equal(forked.continuity.turns[0].id, "turn:kpi-gap");
+  assert.equal(modelRuns, 0);
+
+  controller.getRuntime = DesktopController.prototype.getRuntime.bind(controller);
+  const contextRuntime = await controller.getRuntime({
+    requireAmos: false,
+    boundary: "personal"
+  });
+  const contextTools = contextRuntime.runtime.registry.list();
+  assert.equal(contextRuntime.contextOnly, true);
+  assert.equal(contextTools.some((tool) => tool.name === "run_bash"), false);
+  assert.equal(contextTools.some((tool) => tool.name === "read_file"), false);
+  assert.equal(contextTools.some((tool) => tool.name === "apply_patch"), false);
+  assert.equal(contextTools.some((tool) => tool.name === "desktop_create_document"), false);
+});

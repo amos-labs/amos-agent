@@ -66,19 +66,20 @@ let pendingGenericConnectCalls = 0;
 let continuityConversationRestored = false;
 const transientTaskMessages = new Set();
 let resumingCheckpointId = null;
+let forkTaskSource = null;
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
-    "memoryView", "canvasView", "connectionsView", "automationsView",
+    "memoryView", "tasksView", "canvasView", "connectionsView", "automationsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
     "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
     "accountMemoryButton",
     "companySwitcherControl", "companySwitcher",
-    "decisionBadge", "privateMemoryBadge", "canvasBadge", "connectionBadge", "automationBadge",
+    "decisionBadge", "privateMemoryBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
@@ -116,6 +117,8 @@ const elements = Object.fromEntries(
     "connectionModalError", "connectionCancelButton", "connectionSubmitButton",
     "automationSummary", "automationUnavailable", "automationEmpty", "automationList",
     "refreshAutomationsButton", "buildAutomationButton", "automationEmptyBuildButton",
+    "taskSummary", "taskSearchInput", "taskFilterInput", "taskPlatformNotice", "taskEmpty",
+    "taskList", "newTaskButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -132,7 +135,11 @@ const elements = Object.fromEntries(
     "briefingScheduleKind", "briefingScheduleWeekday", "briefingScheduleTime",
     "briefingScheduleInterval", "briefingWeekdayField", "briefingTimeField",
     "briefingIntervalField", "briefingScheduleError", "briefingScheduleCancel",
-    "briefingScheduleSubmit"
+    "briefingScheduleSubmit",
+    "forkTaskModal", "forkTaskForm", "forkTaskTitle", "forkTaskParent",
+    "forkTaskParentId", "forkTaskSourceEventId", "forkTaskName", "forkTaskObjective",
+    "forkArtifactPicker", "forkArtifactList", "forkTaskPreview", "forkTaskError",
+    "forkTaskCancel", "forkTaskSubmit"
   ].map((id) => [id, document.getElementById(id)])
 );
 
@@ -229,6 +236,17 @@ function bindActions() {
   elements.refreshAutomationsButton.addEventListener("click", refreshAutomations);
   elements.buildAutomationButton.addEventListener("click", () => openAutomationTask());
   elements.automationEmptyBuildButton.addEventListener("click", () => openAutomationTask());
+  elements.newTaskButton.addEventListener("click", createNewTask);
+  elements.taskSearchInput.addEventListener("input", renderTasks);
+  elements.taskFilterInput.addEventListener("change", renderTasks);
+  elements.forkTaskForm.addEventListener("submit", submitTaskFork);
+  elements.forkTaskCancel.addEventListener("click", closeTaskForkModal);
+  elements.forkTaskModal.addEventListener("click", (event) => {
+    if (event.target === elements.forkTaskModal) closeTaskForkModal();
+  });
+  for (const input of document.querySelectorAll('[name="forkContextScope"], [name="forkWorkspaceMode"]')) {
+    input.addEventListener("change", renderTaskForkPreview);
+  }
   elements.approvalsButton.addEventListener("click", () => showView("decisions"));
   elements.workDecisionsTab.addEventListener("click", () => showWorkTab("open"));
   elements.workProofTab.addEventListener("click", () => showWorkTab("history"));
@@ -283,6 +301,9 @@ function bindActions() {
     }
     if (event.key === "Escape" && !elements.accountMenu.classList.contains("hidden")) {
       closeAccountMenu();
+    }
+    if (event.key === "Escape" && !elements.forkTaskModal.classList.contains("hidden")) {
+      closeTaskForkModal();
     }
   });
   document.addEventListener("pointerdown", (event) => {
@@ -339,6 +360,7 @@ function bindEvents() {
     renderCompanyCache();
     renderConnections();
     renderAutomations();
+    renderTasks();
     renderHistory();
     renderCanvas();
     restoreConversationFromContinuity();
@@ -402,6 +424,7 @@ function render() {
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
+    elements.tasksView.classList.add("hidden");
     elements.canvasView.classList.add("hidden");
     elements.memoryView.classList.add("hidden");
     elements.connectionsView.classList.add("hidden");
@@ -585,6 +608,7 @@ function render() {
   renderCompanyCache();
   renderConnections();
   renderAutomations();
+  renderTasks();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
   renderStarterActions();
@@ -673,6 +697,7 @@ function showView(view) {
     operator: elements.operatorView,
     canvas: elements.canvasView,
     memory: elements.memoryView,
+    tasks: elements.tasksView,
     connections: elements.connectionsView,
     automations: elements.automationsView,
     work: elements.workView,
@@ -1014,6 +1039,329 @@ function automationStepSummary(steps) {
     .map((step) => step.stage || step.subject || humanizeTool(step.action))
     .filter(Boolean)
     .join(" → ");
+}
+
+function renderTasks() {
+  if (!state) return;
+  const library = state.tasks || { supported: false, tasks: [] };
+  const tasks = Array.isArray(library.tasks) ? library.tasks : [];
+  const query = elements.taskSearchInput.value.trim().toLowerCase();
+  const filter = elements.taskFilterInput.value || "current";
+  const visible = tasks.filter((task) => {
+    const matchesQuery = !query || `${task.title}\n${task.objective}`.toLowerCase().includes(query);
+    if (!matchesQuery) return false;
+    const archived = Boolean(task.archivedAt || task.archived);
+    if (filter === "archived") return archived;
+    if (filter === "forks") return !archived && Boolean(task.parentTaskId || task.kind === "fork");
+    if (filter === "current") {
+      return !archived && ["active", "waiting", "interrupted", "failed"].includes(task.status);
+    }
+    if (filter === "recent") return !archived;
+    return true;
+  });
+  const current = tasks.filter((task) => !task.archivedAt && !task.archived);
+  const waiting = current.filter((task) => task.status === "waiting").length;
+  const forks = current.filter((task) => task.parentTaskId || task.kind === "fork").length;
+  const active = current.filter((task) => task.status === "active").length;
+
+  elements.taskBadge.textContent = String(waiting || active);
+  elements.taskBadge.classList.toggle("hidden", waiting + active === 0);
+  elements.taskPlatformNotice.classList.toggle("hidden", library.platformSupported !== false);
+  elements.taskEmpty.classList.toggle("hidden", visible.length > 0);
+  elements.taskSummary.replaceChildren();
+  for (const [label, value, detail] of [
+    ["Active", active, "context lanes ready to continue"],
+    ["Waiting", waiting, "tasks waiting on a person or external event"],
+    ["Forks", forks, "bounded branches with visible lineage"]
+  ]) {
+    const item = document.createElement("article");
+    const number = document.createElement("strong");
+    number.textContent = String(value);
+    const title = document.createElement("span");
+    title.textContent = label;
+    const copy = document.createElement("small");
+    copy.textContent = detail;
+    item.append(number, title, copy);
+    elements.taskSummary.append(item);
+  }
+
+  elements.taskList.replaceChildren();
+  for (const task of visible) elements.taskList.append(taskCard(task));
+}
+
+function taskCard(task) {
+  const card = document.createElement("article");
+  card.className = `task-card${task.active ? " active" : ""}`;
+  const heading = document.createElement("div");
+  heading.className = "task-card-heading";
+  const copy = document.createElement("div");
+  const meta = document.createElement("div");
+  meta.className = "task-card-kicker";
+  const status = document.createElement("span");
+  status.className = `task-status ${task.status || "active"}`;
+  status.textContent = String(task.status || "active").replaceAll("_", " ").toUpperCase();
+  meta.append(status);
+  if (task.pinned) {
+    const pinned = document.createElement("span");
+    pinned.className = "task-lineage-chip";
+    pinned.textContent = "PINNED";
+    meta.append(pinned);
+  }
+  if (task.parentTaskId) {
+    const fork = document.createElement("span");
+    fork.className = "task-lineage-chip fork";
+    fork.textContent = "FORK";
+    meta.append(fork);
+  }
+  if (task.active) {
+    const current = document.createElement("span");
+    current.className = "task-lineage-chip current";
+    current.textContent = "OPEN IN OPERATOR";
+    meta.append(current);
+  }
+  const title = document.createElement("h2");
+  title.textContent = task.title;
+  copy.append(meta, title);
+  const updated = document.createElement("time");
+  updated.textContent = task.updatedAt ? relativeTime(task.updatedAt) : "Local task";
+  heading.append(copy, updated);
+
+  const objective = document.createElement("p");
+  objective.className = "task-card-objective";
+  objective.textContent = task.objective;
+
+  const details = document.createElement("div");
+  details.className = "task-card-details";
+  for (const value of [
+    task.kind === "automation_builder" ? "Automation build" : humanizeTool(task.kind || "general"),
+    taskWorkspaceLabel(task),
+    task.parentTaskId ? `From ${shortTaskId(task.parentTaskId)}` : "Root task",
+    task.remote ? "Platform + local" : "Encrypted local"
+  ]) {
+    const chip = document.createElement("span");
+    chip.textContent = value;
+    details.append(chip);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "task-card-actions";
+  const archived = Boolean(task.archivedAt || task.archived);
+  const open = actionButton(task.active ? "Open in Operator" : "Resume", "primary");
+  open.disabled = archived;
+  open.addEventListener("click", () => openManagedTask(task, open));
+  const fork = actionButton("Fork", "secondary");
+  fork.disabled = archived;
+  fork.addEventListener("click", () => openTaskForkModal(task));
+  const pin = actionButton(task.pinned ? "Unpin" : "Pin", "ghost");
+  pin.addEventListener("click", () => updateManagedTask(task, { pinned: !task.pinned }, pin));
+  const rename = actionButton("Rename", "ghost");
+  rename.addEventListener("click", async () => {
+    const next = window.prompt("Task name", task.title);
+    if (next?.trim() && next.trim() !== task.title) {
+      await updateManagedTask(task, { title: next.trim() }, rename);
+    }
+  });
+  const wait = actionButton(task.status === "waiting" ? "Mark active" : "Mark waiting", "ghost");
+  wait.disabled = archived;
+  wait.addEventListener("click", () => updateManagedTask(
+    task,
+    { status: task.status === "waiting" ? "active" : "waiting" },
+    wait
+  ));
+  const archive = actionButton(archived ? "Restore" : "Archive", "ghost");
+  archive.addEventListener("click", () => updateManagedTask(task, { archived: !archived }, archive));
+  actions.append(open, fork, pin, rename, wait, archive);
+  card.append(heading, objective, details, actions);
+  return card;
+}
+
+async function createNewTask() {
+  const objective = window.prompt("What should this task move forward?");
+  if (!objective?.trim()) return;
+  const title = objective.trim().replace(/\s+/g, " ").slice(0, 80);
+  setButtonBusy(elements.newTaskButton, true, "Opening…");
+  try {
+    const response = await api.startNewConversation({
+      kind: "general",
+      title,
+      objective: objective.trim()
+    });
+    adoptOpenedTask(response);
+    elements.promptInput.value = objective.trim();
+    elements.promptInput.focus();
+    toast("Opened a new durable task. No model request has run yet.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.newTaskButton, false, "New task →");
+  }
+}
+
+async function openManagedTask(task, button) {
+  setButtonBusy(button, true, "Opening…");
+  try {
+    const response = await api.openTask(task.id);
+    adoptOpenedTask(response);
+    toast("Task restored. AMOS will revalidate current sources and authority before acting.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, task.active ? "Open in Operator" : "Resume");
+  }
+}
+
+async function updateManagedTask(task, changes, button) {
+  const label = button.textContent;
+  setButtonBusy(button, true, "Saving…");
+  try {
+    const response = await api.updateTask(task.id, changes);
+    state.tasks = response.tasks || state.tasks;
+    renderTasks();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, label);
+  }
+}
+
+function adoptOpenedTask(response) {
+  resetSessionView();
+  state = response.state;
+  currentTaskId = state.activeTask?.id || null;
+  streamingMessage = null;
+  continuityConversationRestored = false;
+  activeCanvasId = state.activeCanvasId || null;
+  canvasSidecarOpen = Boolean(activeCanvasId);
+  updateAttachments(state.attachments || []);
+  render();
+  showView("operator");
+  restoreConversationFromContinuity();
+}
+
+function openTaskForkModal(task, sourceEventId = "") {
+  forkTaskSource = task;
+  const exactEventId = sourceEventId || latestTaskEventId(task);
+  elements.forkTaskParentId.value = task.id;
+  elements.forkTaskSourceEventId.value = exactEventId || task.contextKey || `task:${task.id}`;
+  elements.forkTaskParent.textContent = sourceEventId
+    ? `Branching from an exact milestone in “${task.title}”.`
+    : `Branching from “${task.title}”.`;
+  elements.forkTaskName.value = `Branch of ${task.title}`.slice(0, 160);
+  elements.forkTaskObjective.value = task.objective;
+  const fromHere = document.querySelector('[name="forkContextScope"][value="from_here"]');
+  const everything = document.querySelector('[name="forkContextScope"][value="everything"]');
+  if (sourceEventId || exactEventId) fromHere.checked = true;
+  else everything.checked = true;
+  document.querySelector('[name="forkWorkspaceMode"][value="same_directory"]').checked = true;
+  elements.forkArtifactList.replaceChildren();
+  for (const artifact of taskArtifacts(task)) {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = artifact.id;
+    input.addEventListener("change", renderTaskForkPreview);
+    const copy = document.createElement("span");
+    copy.textContent = artifact.label;
+    label.append(input, copy);
+    elements.forkArtifactList.append(label);
+  }
+  elements.forkTaskError.textContent = "";
+  elements.forkTaskError.classList.add("hidden");
+  renderTaskForkPreview();
+  elements.forkTaskModal.classList.remove("hidden");
+  elements.forkTaskName.focus();
+}
+
+function closeTaskForkModal() {
+  forkTaskSource = null;
+  elements.forkTaskModal.classList.add("hidden");
+  elements.forkTaskForm.reset();
+  elements.forkTaskError.classList.add("hidden");
+}
+
+function renderTaskForkPreview() {
+  const contextScope = checkedValue("forkContextScope", "from_here");
+  const workspaceMode = checkedValue("forkWorkspaceMode", "same_directory");
+  const selected = [...elements.forkArtifactList.querySelectorAll('input[type="checkbox"]:checked')];
+  elements.forkArtifactPicker.classList.toggle("hidden", contextScope !== "selected_artifacts");
+  const contextCopy = contextScope === "everything"
+    ? "Carries the full bounded orientation retained for this task."
+    : contextScope === "selected_artifacts"
+      ? `Carries ${selected.length} selected artifact${selected.length === 1 ? "" : "s"} and no retained turns.`
+      : "Carries bounded orientation only through the selected milestone.";
+  const workspaceCopy = workspaceMode === "new_worktree"
+    ? "Creates an isolated Git branch at the current commit. Dirty parent changes stay in the parent."
+    : workspaceMode === "context_only"
+      ? "Carries no local filesystem grant."
+      : "Uses the same files; parallel edits can overlap.";
+  elements.forkTaskPreview.textContent = `${contextCopy} ${workspaceCopy} Pending operations, approvals, credentials, tokens, and execution authority never carry over.`;
+}
+
+async function submitTaskFork(event) {
+  event.preventDefault();
+  const contextScope = checkedValue("forkContextScope", "from_here");
+  const workspaceMode = checkedValue("forkWorkspaceMode", "same_directory");
+  const selectedArtifacts = [...elements.forkArtifactList.querySelectorAll('input[type="checkbox"]:checked')]
+    .map((input) => input.value);
+  if (contextScope === "selected_artifacts" && selectedArtifacts.length === 0) {
+    elements.forkTaskError.textContent = "Choose at least one artifact to carry.";
+    elements.forkTaskError.classList.remove("hidden");
+    return;
+  }
+  setButtonBusy(elements.forkTaskSubmit, true, workspaceMode === "new_worktree" ? "Creating worktree…" : "Creating fork…");
+  try {
+    const response = await api.forkTask({
+      taskId: elements.forkTaskParentId.value,
+      name: elements.forkTaskName.value,
+      objective: elements.forkTaskObjective.value,
+      sourceEventId: elements.forkTaskSourceEventId.value,
+      contextScope,
+      workspaceMode,
+      selectedArtifacts
+    });
+    closeTaskForkModal();
+    adoptOpenedTask(response);
+    toast("Fork created and opened. No model request or tool call was replayed.");
+  } catch (error) {
+    elements.forkTaskError.textContent = error.message;
+    elements.forkTaskError.classList.remove("hidden");
+  } finally {
+    setButtonBusy(elements.forkTaskSubmit, false, "Create fork");
+  }
+}
+
+function latestTaskEventId(task) {
+  if (task.id !== state.tasks?.activeTaskId) return "";
+  return state.sessionContinuity?.turns?.at(-1)?.id || "";
+}
+
+function taskArtifacts(task) {
+  const values = new Map();
+  for (const reference of task.resourceRefs || []) values.set(String(reference), String(reference));
+  for (const canvas of task.canvasState?.canvases || []) {
+    values.set(String(canvas.id), `Work surface · ${canvas.title}`);
+    for (const block of canvas.blocks || []) {
+      for (const artifact of block.artifacts || []) {
+        if (artifact.path) values.set(String(artifact.path), `Artifact · ${artifact.path}`);
+      }
+    }
+  }
+  return [...values].slice(0, 40).map(([id, label]) => ({ id, label }));
+}
+
+function checkedValue(name, fallback) {
+  return document.querySelector(`[name="${name}"]:checked`)?.value || fallback;
+}
+
+function taskWorkspaceLabel(task) {
+  if (task.workspaceMode === "context_only") return "Context only";
+  if (task.workspaceMode === "new_worktree") return task.workspace?.branch || "Isolated worktree";
+  return task.workspace?.label || "Same workspace";
+}
+
+function shortTaskId(value) {
+  const text = String(value || "");
+  return text.length > 10 ? `${text.slice(0, 8)}…` : text;
 }
 
 function openConnectionModal(provider) {
@@ -3929,7 +4277,7 @@ async function runTask(event) {
     resumingCheckpointId = null;
     streamingMessage = null;
     clearTransientTaskMessages();
-    addMessage("assistant", result.answer);
+    addMessage("assistant", result.answer, { eventId: result.taskEventId });
     renderGovernedUiActions();
     state.activity = result.activity;
     state.canvases = result.canvases || state.canvases;
@@ -3966,9 +4314,13 @@ async function runTask(event) {
       state.privateMemory = latest.privateMemory || [];
       state.offlineProposals = latest.offlineProposals || [];
       state.localReceipts = latest.localReceipts || [];
+      state.tasks = latest.tasks || state.tasks;
+      state.activeTaskRecordId = latest.activeTaskRecordId || state.activeTaskRecordId;
+      state.sessionContinuity = latest.sessionContinuity || state.sessionContinuity;
       renderPrivateMemory();
       renderDecisions();
       renderHistory();
+      renderTasks();
     } catch {
       // Task completion must not be masked if a local memory refresh fails.
     }
@@ -4069,14 +4421,27 @@ function resetSessionView() {
   renderConversationChrome();
 }
 
-function addMessage(role, content) {
+function addMessage(role, content, { eventId = "" } = {}) {
   const message = document.createElement("div");
   message.className = `message ${role}`;
+  if (eventId) message.dataset.eventId = eventId;
   if (role === "assistant") {
     const markdown = document.createElement("div");
     markdown.className = "markdown-content";
     renderMarkdown(markdown, content);
     message.append(markdown);
+    const task = activeDurableTask();
+    if (eventId && task) {
+      const actions = document.createElement("div");
+      actions.className = "message-task-actions";
+      const fork = document.createElement("button");
+      fork.type = "button";
+      fork.className = "message-fork-button";
+      fork.textContent = "Fork from here";
+      fork.addEventListener("click", () => openTaskForkModal(task, eventId));
+      actions.append(fork);
+      message.append(actions);
+    }
   } else {
     const paragraph = document.createElement("p");
     paragraph.textContent = content;
@@ -4105,7 +4470,7 @@ function restoreConversationFromContinuity() {
     );
     for (const turn of continuity.turns) {
       addMessage("user", turn.objective);
-      addMessage("assistant", turn.answer);
+      addMessage("assistant", turn.answer, { eventId: turn.id });
     }
   }
   if (
@@ -4115,6 +4480,12 @@ function restoreConversationFromContinuity() {
     addMessage("user", activeObjective);
     addMessage("pending", "AMOS is still working on this task. Add direction below to steer it.");
   }
+}
+
+function activeDurableTask() {
+  return (state?.tasks?.tasks || []).find((task) =>
+    task.id === state.tasks?.activeTaskId || task.id === state.activeTaskRecordId
+  ) || null;
 }
 
 function renderMarkdown(container, source) {

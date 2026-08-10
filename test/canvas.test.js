@@ -179,6 +179,27 @@ test("desktop canvas manager keeps a bounded session-only history", () => {
   assert.deepEqual(manager.state(), { canvases: [], activeCanvasId: null });
 });
 
+test("desktop canvas manager restores a task-bound canvas snapshot", () => {
+  const manager = new DesktopCanvasManager({ now: () => timestamp });
+  const first = manager.present({
+    version: "1",
+    title: "First",
+    generated_at: timestamp,
+    source: { kind: "local", label: "Workspace", refreshed_at: timestamp, references: [] },
+    state: "ready",
+    blocks: [{ id: "note", type: "markdown", content: "Task one" }]
+  });
+  const snapshot = manager.state();
+  manager.clear();
+
+  const restored = manager.restore(snapshot);
+
+  assert.equal(restored.activeCanvasId, first.id);
+  assert.equal(restored.canvases[0].title, "First");
+  assert.equal(restored.canvases[0].revision, 1);
+  assert.equal(manager.active().blocks[0].content, "Task one");
+});
+
 test("canvas supports explicit empty and restricted states without pretending data exists", () => {
   const empty = normalizeCanvasSpec({
     version: "1",
