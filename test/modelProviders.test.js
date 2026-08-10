@@ -20,6 +20,14 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   assert.ok(providers.some((provider) => provider.id === "ollama" && provider.deployment === "local"));
   assert.ok(providers.some((provider) => provider.id === "openai" && provider.protocol === "openai-responses"));
   assert.ok(providers.some((provider) => provider.id === "anthropic" && provider.protocol === "anthropic-messages"));
+  assert.deepEqual(
+    providers.find((provider) => provider.id === "openai").models.map((model) => model.id),
+    ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]
+  );
+  assert.deepEqual(
+    providers.find((provider) => provider.id === "anthropic").models.map((model) => model.id),
+    ["claude-sonnet-5", "claude-opus-5"]
+  );
   const bedrock = providers.find((provider) => provider.id === "bedrock");
   assert.deepEqual(
     bedrock.models.map((model) => model.id),

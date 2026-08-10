@@ -76,7 +76,8 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   assert.doesNotMatch(html, /id="intelligenceProfileInput"/);
   assert.match(javascript, /intelligenceProfile: "auto"/);
   assert.match(javascript, /reasoningEffort: managed\s*\? ""/);
-  assert.match(javascript, /advancedInfrastructureDetails\.open = !managed/);
+  assert.match(javascript, /if \(!managed\) elements\.advancedInfrastructureDetails\.open = true/);
+  assert.doesNotMatch(javascript, /advancedInfrastructureDetails\.open = !managed/);
 });
 
 test("routine approval review stays inside Desktop", async () => {
@@ -166,8 +167,10 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   const accountMenu = html.match(/id="accountMenu"([\s\S]*?)<button id="workspaceButton"/)?.[1] || "";
 
   assert.doesNotMatch(nav, /data-view="memory"/);
+  assert.doesNotMatch(nav, /data-view="settings"/);
   assert.match(nav, /data-view="operator"[\s\S]*?data-view="tasks"[\s\S]*?data-view="canvas"[\s\S]*?data-view="connections"[\s\S]*?data-view="automations"[\s\S]*?data-view="work"/);
   assert.match(accountMenu, /id="accountMemoryButton"[\s\S]*?Memory &amp; context/);
+  assert.match(accountMenu, /id="accountIntelligenceButton"[\s\S]*?Intelligence &amp; infrastructure/);
   assert.match(html, /id="memoryView"/);
   assert.match(html, /Connect systems[\s\S]*?Understand &amp; analyze[\s\S]*?Build deterministic automation[\s\S]*?Pursue governed goals/);
   assert.match(javascript, /const library = state\.automations \|\| \{\}/);
@@ -332,6 +335,7 @@ test("the identity card opens Google-style account switching outside Intelligenc
   assert.match(sidebar, /id="addAccountButton"/);
   assert.match(sidebar, /id="companySwitcherControl" class="account-company-switcher hidden"/);
   assert.match(sidebar, /id="accountMemoryButton"/);
+  assert.match(sidebar, /id="accountIntelligenceButton"/);
   assert.doesNotMatch(sidebar, /id="companySwitcherControl" class="field company-switcher/);
   assert.match(sidebar, /Platform is never told what other accounts are present/);
   assert.match(controller, /clearEphemeralCompanyBoundary\(\)/);

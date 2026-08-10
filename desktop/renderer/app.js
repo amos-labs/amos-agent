@@ -77,7 +77,7 @@ const elements = Object.fromEntries(
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
     "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
-    "accountMemoryButton",
+    "accountMemoryButton", "accountIntelligenceButton",
     "companySwitcherControl", "companySwitcher",
     "decisionBadge", "privateMemoryBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
@@ -228,6 +228,10 @@ function bindActions() {
   elements.accountMemoryButton.addEventListener("click", () => {
     closeAccountMenu();
     showView("memory");
+  });
+  elements.accountIntelligenceButton.addEventListener("click", () => {
+    closeAccountMenu();
+    showView("settings");
   });
   elements.addAccountButton.addEventListener("click", addAccount);
   elements.signOutAccountButton.addEventListener("click", disconnectAmos);
@@ -3804,7 +3808,7 @@ function renderProviderFields(modelValue = "") {
   const catalogModel = !managed && catalog.length > 0;
   const local = provider?.deployment === "local";
   elements.managedProfileField.classList.toggle("hidden", !managed);
-  elements.advancedInfrastructureDetails.open = !managed;
+  if (!managed) elements.advancedInfrastructureDetails.open = true;
   elements.localSetupField.classList.toggle("hidden", selectedProvider !== "ollama");
   elements.modelSelectField.classList.toggle("hidden", !catalogModel);
   elements.customModelField.classList.toggle("hidden", managed || catalogModel);
