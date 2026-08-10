@@ -104,8 +104,10 @@ export class DesktopController {
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
+    this.automations = { supported: false, automations: [] };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
+    this.activeContextKey = "active";
     this.remoteStatus = {
       syncing: false,
       lastSyncedAt: null,
@@ -183,12 +185,14 @@ export class DesktopController {
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
       briefings: structuredClone(this.briefings),
+      automations: structuredClone(this.automations || { supported: false, automations: [] }),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
       },
       accounts,
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
+      activeContextKey: this.activeContextKey || "active",
       remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model),
       providers: listModelProviders(),
@@ -974,6 +978,7 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     if (settings.operatingMode !== "online") {
       this.workingContinuity = null;
+      this.automations = { supported: false, automations: [] };
       this.remoteStatus = {
         syncing: false,
         lastSyncedAt: this.remoteStatus.lastSyncedAt,
@@ -995,6 +1000,7 @@ export class DesktopController {
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
       this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
+      this.automations = { supported: false, automations: [] };
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -1017,7 +1023,8 @@ export class DesktopController {
       companiesResult,
       receiptsResult,
       continuityResult,
-      briefingsResult
+      briefingsResult,
+      automationsResult
     ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
@@ -1025,8 +1032,9 @@ export class DesktopController {
       remote.connectionsCatalog(),
       oauth.companies(),
       remote.receipts({ limit: 50 }),
-      remote.hydrateContinuity(),
-      remote.briefingsLibrary()
+      remote.hydrateContinuity({ contextKey: this.activeContextKey }),
+      remote.briefingsLibrary(),
+      remote.automationsLibrary()
     ]);
 
     const errors = [];
@@ -1086,6 +1094,15 @@ export class DesktopController {
       }
     }
 
+    if (automationsResult.status === "fulfilled" && automationsResult.value) {
+      this.automations = automationsResult.value;
+    } else {
+      this.automations = { supported: false, automations: [] };
+      if (automationsResult.status === "rejected") {
+        errors.push(automationsResult.reason?.message || "Could not load AMOS Automations");
+      }
+    }
+
     if (receiptsResult.status === "fulfilled") {
       this.companyReceipts = receiptsResult.value;
     } else {
@@ -1108,7 +1125,10 @@ export class DesktopController {
       const continuity = continuityResult.value;
       const tenantMatches =
         !continuity.available ||
-        continuity.manifest?.scope?.tenantId === this.identity?.tenant_id;
+        (
+          continuity.manifest?.scope?.tenantId === this.identity?.tenant_id &&
+          continuity.manifest?.scope?.contextKey === this.activeContextKey
+        );
       if (tenantMatches) {
         this.workingContinuity = continuity;
       } else {
@@ -1914,6 +1934,57 @@ export class DesktopController {
     return { result, briefings: this.briefings };
   }
 
+  async setAutomationStatus(name, active) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(
+      settings,
+      `${active ? "resuming" : "pausing"} this Automation`
+    );
+    const result = await remote.setAutomationStatus(name, active);
+    this.automations = await remote.automationsLibrary();
+    await this.sendRemoteState();
+    return { result, automations: this.automations };
+  }
+
+  async startNewConversation(input = {}) {
+    if (this.activeTask) {
+      throw new Error("Finish or stop the current task before opening another conversation");
+    }
+    const kind = String(input.kind || "general");
+    if (!["general", "automation_builder"].includes(kind)) {
+      throw new Error("That task type is not supported by this Desktop build");
+    }
+    const objective = String(input.objective || "").trim().slice(0, 6_000);
+    if (!objective) throw new Error("A new conversation needs an objective");
+    const title = String(input.title || "New task").trim().slice(0, 160) || "New task";
+    const previousContextKey = this.activeContextKey;
+    this.activeContextKey = `task:${randomUUID()}`;
+    this.resetRuntime();
+    this.workingContinuity = null;
+    this.attachments.clear();
+    this.canvases.clear();
+    this.canvasResults.clear();
+    this.activity = [];
+    this.record("task", `Started ${title}`, {
+      context_key: this.activeContextKey,
+      previous_context_key: previousContextKey,
+      kind,
+      replay_allowed: false
+    });
+    this.send("canvas:changed", this.canvases.state());
+    await this.sendRemoteState();
+    return {
+      state: await this.state(),
+      launch: {
+        contextKey: this.activeContextKey,
+        previousContextKey,
+        kind,
+        title,
+        objective
+      }
+    };
+  }
+
   presentCanvas(spec) {
     const canvas = this.canvases.present(spec);
     this.record("canvas", `Presented ${canvas.title}`, {
@@ -2581,7 +2652,8 @@ export class DesktopController {
     return continuityScope({
       identity: this.identity,
       boundary,
-      workspace: settings?.workspace || homedir()
+      workspace: settings?.workspace || homedir(),
+      contextKey: this.activeContextKey
     });
   }
 
@@ -2602,7 +2674,8 @@ export class DesktopController {
     const sharedManifest =
       boundary === "online" &&
       this.workingContinuity?.available === true &&
-      this.workingContinuity.manifest?.scope?.tenantId === this.identity?.tenant_id
+      this.workingContinuity.manifest?.scope?.tenantId === this.identity?.tenant_id &&
+      this.workingContinuity.manifest?.scope?.contextKey === this.activeContextKey
         ? this.workingContinuity.manifest
         : null;
     const useShared =
@@ -2657,7 +2730,7 @@ export class DesktopController {
       requestTimeoutMs: config.amos.requestTimeoutMs
     });
     const result = await remote.captureContinuity(
-      continuityCapturePayload(transition, settings),
+      continuityCapturePayload(transition, settings, this.activeContextKey),
       { tenantId: this.identity.tenant_id }
     );
     this.workingContinuity = result;
@@ -2680,7 +2753,7 @@ export class DesktopController {
       requestTimeoutMs: config.amos.requestTimeoutMs
     });
     const result = await remote.clearContinuity({
-      contextKey: "active",
+      contextKey: this.activeContextKey,
       tenantId: this.identity.tenant_id
     });
     return { attempted: true, ...result };
@@ -2749,8 +2822,10 @@ export class DesktopController {
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
+    this.automations = { supported: false, automations: [] };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
+    this.activeContextKey = "active";
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
     this.send("activity:changed", []);
     this.send("canvas:changed", this.canvases.state());
@@ -2785,6 +2860,7 @@ export class DesktopController {
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       briefings: structuredClone(this.briefings),
+      automations: structuredClone(this.automations || { supported: false, automations: [] }),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -2793,6 +2869,7 @@ export class DesktopController {
         ? await this.accountStore.list()
         : { currentAccountId: this.identity ? "legacy" : "", accounts: [] },
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
+      activeContextKey: this.activeContextKey || "active",
       remoteStatus: { ...this.remoteStatus },
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState(),
@@ -2834,7 +2911,7 @@ function continuityTimestamp(manifest) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function continuityCapturePayload(transition, settings) {
+function continuityCapturePayload(transition, settings, contextKey = "active") {
   const stateItems = (value) => (Array.isArray(value) ? value : [])
     .slice(-4)
     .flatMap((item) => {
@@ -2848,7 +2925,7 @@ function continuityCapturePayload(transition, settings) {
       }];
     });
   return {
-    context_key: "active",
+    context_key: String(contextKey || "active"),
     source_client: "amos_desktop",
     workspace_hint: compactContinuityField(
       basename(settings?.workspace || "AMOS Desktop"),

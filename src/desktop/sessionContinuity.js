@@ -141,7 +141,7 @@ export class SessionContinuityStore {
   }
 }
 
-export function continuityScope({ identity = null, boundary, workspace }) {
+export function continuityScope({ identity = null, boundary, workspace, contextKey = "active" }) {
   const normalizedBoundary = ["online", "personal", "offline"].includes(boundary)
     ? boundary
     : "personal";
@@ -154,14 +154,16 @@ export function continuityScope({ identity = null, boundary, workspace }) {
       boundary: normalizedBoundary,
       workspace: normalizedWorkspace,
       subjectId,
-      tenantId
+      tenantId,
+      contextKey
     });
   }
   return normalizeScope({
     boundary: normalizedBoundary,
     workspace: normalizedWorkspace,
     subjectId: "local-user",
-    tenantId: normalizedBoundary
+    tenantId: normalizedBoundary,
+    contextKey
   });
 }
 
@@ -211,7 +213,8 @@ export function buildContinuityManifest(record, { currentModel = "" } = {}) {
     version: MANIFEST_VERSION,
     scope: {
       boundary: record.boundary,
-      workspace: record.workspace
+      workspace: record.workspace,
+      contextKey: record.contextKey
     },
     updatedAt: record.updatedAt,
     transitions,
@@ -365,15 +368,23 @@ function normalizeScope(value) {
   const workspace = cleanRequired(value?.workspace, 4_096, "workspace");
   const subjectId = cleanRequired(value?.subjectId, 256, "subject id");
   const tenantId = cleanRequired(value?.tenantId, 256, "tenant id");
+  const contextKey = cleanRequired(value?.contextKey || "active", 128, "context key");
+  if (!/^[A-Za-z0-9._:-]+$/.test(contextKey)) {
+    throw new Error("Session continuity has an invalid context key");
+  }
   const key = createHash("sha256")
-    .update([boundary, subjectId, tenantId, workspace].join("\0"))
+    .update([boundary, subjectId, tenantId, workspace, contextKey].join("\0"))
     .digest("hex");
-  return { key, boundary, workspace, subjectId, tenantId };
+  return { key, boundary, workspace, subjectId, tenantId, contextKey };
 }
 
 function normalizeRecord(value) {
   const scope = normalizeScope(value);
-  if (value?.key && value.key !== scope.key) {
+  const legacyKey = createHash("sha256")
+    .update([scope.boundary, scope.subjectId, scope.tenantId, scope.workspace].join("\0"))
+    .digest("hex");
+  const legacyActiveRecord = !value?.contextKey && value?.key === legacyKey;
+  if (value?.key && value.key !== scope.key && !legacyActiveRecord) {
     throw new Error("Session continuity scope does not match its key");
   }
   return {

@@ -90,6 +90,53 @@ test("active AMOS members cannot replace their company with the Northwind demo",
   );
 });
 
+test("starting an automation build opens an isolated context lane without clearing the prior lane", async () => {
+  const events = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-automation-lane",
+    settingsStore: {
+      read: async () => ({
+        operatingMode: "personal",
+        provider: "ollama",
+        model: "qwen",
+        baseUrl: "http://127.0.0.1:11434/v1",
+        apiKey: "",
+        reasoningEffort: "medium",
+        workspace: "/tmp",
+        amosMcpUrl: "https://app.amoslabs.com/mcp"
+      })
+    },
+    openBrowser() {},
+    emit(channel, payload) {
+      events.push({ channel, payload });
+    }
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({ activeContextKey: controller.activeContextKey });
+  controller.activity = [{ id: "prior-activity" }];
+  controller.canvases.present({
+    version: "1",
+    title: "Prior canvas",
+    source: { kind: "local", label: "test", references: [] },
+    state: { kind: "loading", message: "Preparing prior canvas" },
+    blocks: []
+  });
+
+  const result = await controller.startNewConversation({
+    kind: "automation_builder",
+    title: "Build an automation",
+    objective: "Build the deterministic scorecard follow-up"
+  });
+
+  assert.equal(result.launch.previousContextKey, "active");
+  assert.match(result.launch.contextKey, /^task:[0-9a-f-]{36}$/);
+  assert.equal(result.state.activeContextKey, result.launch.contextKey);
+  assert.equal(controller.canvases.list().length, 0);
+  assert.equal(controller.activity.length, 1);
+  assert.equal(controller.activity[0].detail.previous_context_key, "active");
+  assert.ok(events.some((event) => event.channel === "canvas:changed"));
+});
+
 test("desktop explicitly promotes selected document attachments into governed company memory", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-controller-attachments-"));
   const path = join(root, "brief.md");
