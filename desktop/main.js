@@ -508,6 +508,12 @@ function registerIpc() {
   ipcMain.handle("desktop:read-browser-frame", (_event, input) =>
     controller.readBrowserFrame(input?.sessionId, input?.frameId)
   );
+  ipcMain.handle("desktop:start-browser-takeover", (_event, input) =>
+    controller.startBrowserTakeover(input?.sessionId)
+  );
+  ipcMain.handle("desktop:finish-browser-takeover", (_event, input) =>
+    controller.finishBrowserTakeover(input?.sessionId)
+  );
   ipcMain.handle("desktop:open-external", async (_event, value) => {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error("AMOS blocked an invalid external link");

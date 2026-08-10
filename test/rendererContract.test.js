@@ -301,6 +301,8 @@ test("local auto-approve is an exact-folder Desktop trust ceremony, not a compan
   assert.match(javascript, /api\.setLocalApprovalMode\(enabled \? "ask" : "workspace"\)/);
   assert.match(javascript, /api\.allowLocalApprovalKind\(approval\.kind\)/);
   assert.match(javascript, /elements\.messages\.append\(elements\.approvalModal\)/);
+  assert.match(javascript, /approval\.kind === "browser-action"/);
+  assert.match(javascript, /It can never be made persistent or covered by local workspace auto-approval/);
   assert.match(javascript, /Keep typing—your direction will be queued while this approval waits/);
   assert.match(javascript, /elements\.promptInput\.disabled = false/);
   assert.match(javascript, /Company approvals remain governed/);
@@ -311,6 +313,34 @@ test("local auto-approve is an exact-folder Desktop trust ceremony, not a compan
   assert.match(main, /AMOS company operations, connected-app writes, and governed decisions/);
   assert.match(main, /defaultId: 1/);
   assert.match(main, /cancelId: 1/);
+});
+
+test("authenticated browser actions keep credentials in a user-controlled isolated window", async () => {
+  const [javascript, preload, main, controller, runtime, tools] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/browserRuntime.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/tools/browser.js", import.meta.url), "utf8")
+  ]);
+  assert.match(javascript, /Take control for login/);
+  assert.match(javascript, /Return to AMOS & refresh/);
+  assert.match(javascript, /Passwords, MFA codes, tokens, and cookies stay inside the isolated browser/);
+  assert.match(preload, /desktop:start-browser-takeover/);
+  assert.match(preload, /desktop:finish-browser-takeover/);
+  assert.match(main, /controller\.startBrowserTakeover\(input\?\.sessionId\)/);
+  assert.match(main, /controller\.finishBrowserTakeover\(input\?\.sessionId\)/);
+  assert.match(controller, /attachedBrowserBlock\(sessionId\)/);
+  assert.match(runtime, /AMOS Secure Browser/);
+  assert.match(runtime, /This consequential browser action requires exact human approval/);
+  assert.match(runtime, /The browser action target changed while approval was pending/);
+  assert.match(tools, /name: "browser_click"/);
+  assert.match(tools, /name: "browser_type"/);
+  assert.match(tools, /name: "browser_select"/);
+  assert.match(tools, /name: "browser_check"/);
+  assert.match(tools, /name: "browser_wait"/);
+  assert.match(tools, /Passwords, MFA, recovery codes, tokens, and authentication forms are never model-operated/);
 });
 
 test("dynamic canvases open beside chat without navigating away from Operator", async () => {

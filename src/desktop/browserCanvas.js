@@ -8,7 +8,7 @@ export function browserSessionCanvas(input, { generatedAt = new Date().toISOStri
     title: input.title || "AMOS browser",
     subtitle: closed
       ? "This task-bound browser session is closed."
-      : "Public JavaScript page in an isolated AMOS Desktop browser session",
+      : "JavaScript page in an isolated task-bound AMOS Desktop browser session",
     generated_at: generatedAt,
     state: {
       kind: closed ? "stale" : input.status === "error" ? "error" : "ready",
@@ -18,7 +18,7 @@ export function browserSessionCanvas(input, { generatedAt = new Date().toISOStri
     },
     source: {
       kind: "local",
-      label: "AMOS Desktop governed browser",
+      label: "AMOS Desktop governed semantic browser",
       refreshed_at: generatedAt,
       references
     },
@@ -37,7 +37,8 @@ export function browserSessionCanvas(input, { generatedAt = new Date().toISOStri
       observed_at: input.observed_at || generatedAt,
       element_count: Math.max(0, Number(input.element_count) || 0),
       summary: input.summary || "",
-      interactive: false
+      takeover_active: !closed && input.takeover_active === true,
+      interactive: !closed
     }]
   };
 }
