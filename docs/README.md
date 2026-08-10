@@ -15,6 +15,7 @@
 - [Signed offline company context](OFFLINE_COMPANY_CONTEXT.md)
 - [Offline draft reconciliation](OFFLINE_RECONCILIATION.md)
 - [Typed company canvas](CANVAS.md)
+- [Deterministic document artifacts](DOCUMENT_ARTIFACT_ENGINE.md)
 - [Desktop and platform interchange](DESKTOP_PLATFORM_INTERCHANGE.md)
 
 ## Product direction

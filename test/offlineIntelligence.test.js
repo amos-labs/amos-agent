@@ -106,6 +106,7 @@ test("offline registry omits all AMOS and public-web tools", () => {
   assert.equal(tools.some((tool) => tool.name.startsWith("web_")), false);
   assert.ok(tools.some((tool) => tool.name === "search_files"));
   assert.ok(tools.some((tool) => tool.name === "run_bash"));
+  assert.ok(tools.some((tool) => tool.name === "desktop_create_document"));
 });
 
 test("Ollama manager probes, installs, reports progress, and removes curated models", async () => {
