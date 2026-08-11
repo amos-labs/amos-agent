@@ -106,3 +106,20 @@ test("always allow this kind updates only that local request class", async () =>
   assert.deepEqual(active.config.safety.autoApproveKinds, ["code-patch"]);
   assert.match(active.runtime.loop.systemPrompt, /user-approved local request types: code-patch/);
 });
+
+test("task-scoped local work is ephemeral and does not change persistent settings", async () => {
+  const settingsStore = mutableSettings();
+  const controller = controllerFor(settingsStore);
+  controller.activeTask = { id: "run-1" };
+  controller.approvals.setTaskScope({ key: "task-1", workspace: "/tmp/project-a" });
+
+  const state = await controller.allowTaskLocalWork();
+
+  assert.equal(state.localTaskGrant.active, true);
+  assert.deepEqual(state.localTaskGrant.kinds, ["code-patch", "file-write", "shell"]);
+  assert.equal(state.settings.localApprovalMode, "ask");
+  assert.deepEqual(state.settings.localApprovalKinds, []);
+
+  const cleared = await controller.clearTaskLocalWork();
+  assert.equal(cleared.localTaskGrant.active, false);
+});

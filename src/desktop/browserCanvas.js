@@ -1,6 +1,9 @@
+import { LOCAL_PREVIEW_ATTESTATION } from "./canvas.js";
+
 export function browserSessionCanvas(input, { generatedAt = new Date().toISOString() } = {}) {
   const closed = input.status === "closed";
   const download = browserDownload(input.downloaded_attachment);
+  const localPreviewAttested = isAttestedLocalPreview(input);
   const references = input.url && !closed
     ? [{ type: "web_page", id: input.page_revision, label: input.url, observed_at: generatedAt }]
     : [];
@@ -44,9 +47,27 @@ export function browserSessionCanvas(input, { generatedAt = new Date().toISOStri
       visual_target: input.target_description || input.public_action?.target_description || "",
       ...(download ? { download } : {}),
       takeover_active: !closed && input.takeover_active === true,
-      interactive: !closed
+      interactive: !closed,
+      ...(localPreviewAttested ? { [LOCAL_PREVIEW_ATTESTATION]: true } : {})
     }]
   };
+}
+
+function isAttestedLocalPreview(input) {
+  try {
+    const page = new URL(String(input.url || ""));
+    const origin = new URL(String(input.preview?.origin || ""));
+    return (
+      input.preview?.network === "exact loopback origin only" &&
+      page.origin === origin.origin &&
+      page.protocol === "http:" &&
+      page.hostname === "127.0.0.1" &&
+      Boolean(page.port) &&
+      Number(page.port) >= 1024
+    );
+  } catch {
+    return false;
+  }
 }
 
 function browserDownload(input) {

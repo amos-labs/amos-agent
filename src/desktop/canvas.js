@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeDocumentSpec } from "../artifacts/documentSpec.js";
 
 export const CANVAS_VERSION = "1";
+export const LOCAL_PREVIEW_ATTESTATION = Symbol("amos.local-preview-attestation");
 export const CANVAS_BLOCK_TYPES = Object.freeze([
   "metric",
   "table",
@@ -379,10 +380,11 @@ function normalizeBlock(input, index, canvasSource) {
 
   if (type === "browser") {
     const viewport = object(block.viewport || {}, `blocks[${index}].viewport must be an object`);
-    return {
+    const localPreviewAttested = block[LOCAL_PREVIEW_ATTESTATION] === true;
+    const normalized = {
       ...common,
       sessionId: text(block.session_id || block.sessionId, `blocks[${index}].session_id`, 128),
-      url: safeBrowserUrl(block.url, `blocks[${index}].url`),
+      url: safeBrowserUrl(block.url, `blocks[${index}].url`, { localPreviewAttested }),
       status: enumValue(
         block.status || "ready",
         ["loading", "ready", "error", "closed"],
@@ -425,6 +427,13 @@ function normalizeBlock(input, index, canvasSource) {
       takeoverActive: block.takeover_active === true || block.takeoverActive === true,
       interactive: block.interactive === true
     };
+    if (localPreviewAttested) {
+      Object.defineProperty(normalized, LOCAL_PREVIEW_ATTESTATION, {
+        value: true,
+        enumerable: false
+      });
+    }
+    return normalized;
   }
 
   if (type === "link") {
@@ -720,7 +729,7 @@ function safePreviewUrl(value, path) {
   return url.toString();
 }
 
-function safeBrowserUrl(value, path) {
+function safeBrowserUrl(value, path, { localPreviewAttested = false } = {}) {
   const raw = text(value, path, 2_048);
   let url;
   try {
@@ -732,9 +741,15 @@ function safeBrowserUrl(value, path) {
     throw new Error(`${path} must use HTTP or HTTPS`);
   }
   const host = url.hostname.toLowerCase();
+  const exactLoopbackPreview =
+    localPreviewAttested &&
+    url.protocol === "http:" &&
+    host === "127.0.0.1" &&
+    Boolean(url.port) &&
+    Number(url.port) >= 1024;
   if (
     !host ||
-    ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(host) ||
+    (!exactLoopbackPreview && ["localhost", "127.0.0.1", "[::1]", "0.0.0.0"].includes(host)) ||
     host.endsWith(".local")
   ) {
     throw new Error(`${path} cannot target a local network host`);

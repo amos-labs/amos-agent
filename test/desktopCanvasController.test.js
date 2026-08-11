@@ -255,6 +255,53 @@ test("browser canvas refreshes one local frame, supports user takeover, and remo
   assert.deepEqual(closed, ["browser-session-1"]);
 });
 
+test("local preview attestation survives browser follow-up actions", () => {
+  const origin = "http://127.0.0.1:43119";
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-local-preview-canvas-controller",
+    settingsStore: {},
+    browserRuntime: {
+      closeAll() {},
+      localPreviewForSession(sessionId) {
+        return sessionId === "browser-preview-1"
+          ? { origin, network: "exact loopback origin only" }
+          : null;
+      }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+  const first = controller.presentBrowserSession({
+    operation: "local_preview",
+    status: "ready",
+    session_id: "browser-preview-1",
+    url: `${origin}/index.html`,
+    title: "Local preview",
+    page_revision: 1,
+    observed_at: timestamp,
+    element_count: 1,
+    summary: "Score 0",
+    frame: { frame_id: "frame-1", width: 1280, height: 800 }
+  });
+  const second = controller.presentBrowserSession({
+    operation: "click",
+    status: "ready",
+    session_id: "browser-preview-1",
+    url: `${origin}/index.html`,
+    title: "Local preview",
+    page_revision: 2,
+    observed_at: timestamp,
+    element_count: 1,
+    summary: "Score 1",
+    frame: { frame_id: "frame-2", width: 1280, height: 800 }
+  });
+
+  assert.equal(second.id, first.id);
+  assert.equal(second.revision, 2);
+  assert.equal(second.blocks[0].url, `${origin}/index.html`);
+  assert.equal(second.blocks[0].summary, "Score 1");
+});
+
 test("document artifact actions resolve only existing DOCX or PDF files inside the workspace", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "amos-artifact-actions-"));
   await writeFile(join(workspace, "brief.pdf"), "%PDF-1.7\n");

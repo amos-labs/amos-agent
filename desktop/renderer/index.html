@@ -232,14 +232,18 @@
                   <p id="approvalMessage"></p>
                   <div id="approvalScopeNote" class="approval-scope-note"></div>
                   <div class="approval-note">You can keep typing while this waits. Company-side policy and approvals remain independently enforced by AMOS.</div>
-                  <div class="approval-persistence-actions">
-                    <button id="alwaysApproveButton" class="button ghost" type="button">Always allow this kind</button>
-                    <button id="autoApproveFolderButton" class="button ghost" type="button">Auto-approve this folder</button>
-                  </div>
                   <div class="approval-actions">
                     <button id="denyButton" class="button secondary" type="button">Deny</button>
-                    <button id="approveButton" class="button primary" type="button">Approve once</button>
+                    <button id="approveButton" class="button ghost" type="button">Approve once</button>
+                    <button id="taskApproveButton" class="button primary" type="button">Allow for this task</button>
                   </div>
+                  <details id="approvalPersistence" class="approval-persistence">
+                    <summary>Remember this permission</summary>
+                    <div class="approval-persistence-actions">
+                      <button id="alwaysApproveButton" class="button ghost" type="button">Always allow this kind</button>
+                      <button id="autoApproveFolderButton" class="button ghost" type="button">Auto-approve this folder</button>
+                    </div>
+                  </details>
                 </section>
               </div>
 

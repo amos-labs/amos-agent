@@ -69,6 +69,7 @@ AMOS managed platform
 - Encrypted offline outcome drafts with live diff, identity pinning, and explicit reauthorization
 - Typed company canvases for metrics, tables, trends, briefs, evidence, approvals, and receipts
 - Local workspace grants, search, reads, Git status/diff, and atomic patches
+- Ephemeral task-scoped local grants plus exact-origin governed app previews
 - A bounded project briefing with detected stack, manifests, scripts, Git
   state, README context, verification commands, and safe suggested next tasks
 - Approval-gated shell commands and file changes

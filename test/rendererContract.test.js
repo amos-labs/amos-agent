@@ -332,12 +332,14 @@ test("local auto-approve is an exact-folder Desktop trust ceremony, not a compan
 
   assert.match(html, /id="localApprovalButton"/);
   assert.match(html, /id="alwaysApproveButton"/);
+  assert.match(html, /id="taskApproveButton"/);
   assert.match(html, /id="autoApproveFolderButton"/);
   assert.match(html, /id="approvalModal" class="approval-modal inline-approval hidden"/);
   assert.match(html, /You can keep typing while this waits/);
   assert.doesNotMatch(html, /id="approvalModal" class="modal-backdrop/);
   assert.match(javascript, /api\.setLocalApprovalMode\(enabled \? "ask" : "workspace"\)/);
   assert.match(javascript, /api\.allowLocalApprovalKind\(approval\.kind\)/);
+  assert.match(javascript, /api\.allowTaskLocalWork\(\)/);
   assert.match(javascript, /elements\.messages\.append\(elements\.approvalModal\)/);
   assert.match(javascript, /approval\.kind === "browser-action"/);
   assert.match(javascript, /It can never be made persistent or covered by local workspace auto-approval/);
@@ -345,6 +347,7 @@ test("local auto-approve is an exact-folder Desktop trust ceremony, not a compan
   assert.match(javascript, /elements\.promptInput\.disabled = false/);
   assert.match(javascript, /Company approvals remain governed/);
   assert.match(preload, /desktop:set-local-approval-mode/);
+  assert.match(preload, /desktop:allow-task-local-work/);
   assert.match(main, /Exact project folder:/);
   assert.match(main, /run with your local user permissions and are not OS-sandboxed/);
   assert.match(main, /Changing folders turns this off automatically/);
