@@ -410,6 +410,7 @@ function normalizeBlock(input, index, canvasSource) {
         120
       ),
       summary: optionalText(block.summary, `blocks[${index}].summary`, 1_000),
+      takeoverActive: block.takeover_active === true || block.takeoverActive === true,
       interactive: block.interactive === true
     };
   }

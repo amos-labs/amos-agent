@@ -381,8 +381,8 @@ The next product layers build on the signed distribution foundation:
 
 1. signed device identity and policy-controlled environment grants;
 2. spreadsheet and presentation artifact engines on the same typed contract;
-3. authenticated semantic browser actions, deterministic recipes, and bounded
-   visual computer use on the implemented public JavaScript browser runtime;
+3. governed browser file transfer, deterministic recipes, and bounded visual
+   computer use on the implemented authenticated semantic browser runtime;
 4. richer typed canvas blocks and managed AMOS result adapters;
 5. richer private-memory retrieval and sharing proposals;
 6. richer retrieval within the bounded signed company briefing;

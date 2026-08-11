@@ -109,8 +109,19 @@ The Desktop JavaScript browser adds a narrower local boundary:
 - closing or changing account/task/runtime revokes the page, references, and
   frame. Browser execution capabilities are never copied into a task fork.
 
-Authenticated actions, file transfer, user takeover, and visual pointer control
-remain unavailable until their exact approval and credential boundaries land.
+Semantic browser actions use current opaque references only. Safe navigation and
+search-like input are observational. Buttons, form text, selects, checks, and
+other consequential controls require a one-time approval bound to the exact
+origin, page revision, material-page marker, target, and payload hash. Local
+workspace auto-approval never applies. Any navigation or material page/target
+drift cancels execution.
+
+Authentication fields, password forms, MFA/recovery/token controls, payment
+credentials, and sign-in submissions cannot be model-operated. The user may
+take direct control of the same fixed-title isolated window; field values and
+cookies remain inside that ephemeral session. Returning control refreshes a
+value-free semantic snapshot. File transfer and visual pointer control remain
+unavailable until their separate boundaries land.
 
 ## Intelligence providers
 

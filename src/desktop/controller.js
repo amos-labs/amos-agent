@@ -2437,6 +2437,44 @@ export class DesktopController {
     return this.browserRuntime.readFrame(sessionId, frameId);
   }
 
+  async startBrowserTakeover(sessionId) {
+    this.attachedBrowserBlock(sessionId);
+    if (!this.browserRuntime) throw new Error("The local browser runtime is unavailable");
+    const result = await this.browserRuntime.startUserTakeover(sessionId);
+    const canvas = this.presentBrowserSession({ operation: "takeover_started", ...result });
+    this.record("browser", `User took direct control of ${result.title}`, {
+      sessionId: result.session_id,
+      pageRevision: result.page_revision,
+      origin: new URL(result.url).origin
+    });
+    return { ok: true, canvasId: canvas.id, takeoverActive: true };
+  }
+
+  async finishBrowserTakeover(sessionId) {
+    this.attachedBrowserBlock(sessionId);
+    if (!this.browserRuntime) throw new Error("The local browser runtime is unavailable");
+    const result = await this.browserRuntime.finishUserTakeover(sessionId);
+    const canvas = this.presentBrowserSession(result);
+    this.record("browser", `User returned control of ${result.title} to AMOS`, {
+      sessionId: result.session_id,
+      pageRevision: result.page_revision,
+      origin: new URL(result.url).origin
+    });
+    return { ok: true, canvasId: canvas.id, takeoverActive: false };
+  }
+
+  attachedBrowserBlock(sessionId) {
+    const value = String(sessionId || "");
+    const block = this.canvases.list().flatMap((canvas) => canvas.blocks)
+      .find((candidate) =>
+        candidate.type === "browser" &&
+        candidate.sessionId === value &&
+        candidate.status !== "closed"
+      );
+    if (!block) throw new Error("That browser session is no longer attached to this task");
+    return block;
+  }
+
   async resolveDocumentArtifactPath(value) {
     const artifactPath = String(value || "").trim();
     if (!artifactPath || artifactPath.length > 1_000) {

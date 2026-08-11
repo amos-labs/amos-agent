@@ -32,8 +32,8 @@ Desktop exposes two request-level public-web primitives outside local-only mode:
 - `web_search` uses a configured search provider and returns bounded result
   metadata.
 
-For JavaScript-rendered public pages, Desktop now also exposes the first local
-browser slice:
+For JavaScript-rendered and authenticated pages, Desktop now also exposes the
+first two local browser slices:
 
 - `browser_open` creates or navigates a task-, tenant-, and user-bound ephemeral
   Chromium session;
@@ -41,13 +41,18 @@ browser slice:
   references tied to the current page revision;
 - `browser_extract` deterministically extracts article text, tables, lists,
   form structure without values, or one referenced region;
+- `browser_click`, `browser_type`, `browser_select`, and `browser_check` operate
+  only current opaque references and pause at the exact consequence boundary;
+- `browser_wait` performs bounded selector-free waits and returns a fresh
+  semantic observation;
 - `browser_screenshot` refreshes an opaque local PNG frame rendered in the
   dynamic canvas; and
 - `browser_close` destroys the page and revokes its references and frame.
 
-This slice executes JavaScript and retains a task-local public browsing session.
-It deliberately does not click, type, download, upload, persist authentication,
-or operate a signed-in application yet.
+The same task-local session can be shown in a fixed-title **AMOS Secure Browser**
+for direct user control. The user enters passwords and MFA there; AMOS receives
+neither field values nor cookies. Returning control hides the window and
+refreshes the semantic observation. Downloads and uploads remain unavailable.
 
 ## Browser runtime
 
@@ -63,9 +68,9 @@ The typed primitive set is:
   element references and current origin;
 - `browser_extract` — deterministically extract a table, list, article, form,
   or user-selected region;
-- `browser_click`, `browser_type`, and `browser_select` — interact only with a
-  current validated element reference;
-- `browser_wait` — wait for a bounded URL, element, download, or network-idle
+- `browser_click`, `browser_type`, `browser_select`, and `browser_check` —
+  interact only with a current validated element reference;
+- `browser_wait` — wait for a bounded settled, URL-text, or visible-text
   condition;
 - `browser_screenshot` — capture a bounded visual observation for the active
   task and dynamic canvas;
@@ -75,11 +80,13 @@ The typed primitive set is:
   arbitrary filesystem paths; and
 - `browser_close` — destroy the task session and revoke its handles.
 
-The implemented read-only subset already enforces short-lived element
-references tied to the page revision, task, account, and tenant. A navigation
-invalidates prior references. Free-form model text cannot mint a browser handle,
-selector, frame, or privileged action. Click/type/select/wait and file transfer
-remain the next delivery slice.
+The implemented semantic subset enforces short-lived element references tied to
+the page revision, task, account, and tenant. Navigation invalidates prior
+references. Consequential actions also bind to a material-page marker, exact
+target descriptor, origin, payload hash, and fresh local screenshot. Drift
+while approval waits cancels execution. Free-form model text cannot mint a
+browser handle, selector, frame, approval, or privileged action. File transfer
+remains a separate delivery slice.
 
 ## Website data ingestion
 
@@ -111,8 +118,9 @@ repair; it never silently changes the target or submits a different form.
   MFA code, recovery code, bearer token, or cookie.
 - Where the Platform already brokers OAuth, Desktop uses the governed connector
   instead of copying that session into Chromium.
-- Local browser state is encrypted or held in the operating-system browser
-  profile, expires explicitly, and can be cleared or revoked independently.
+- Local authentication state stays in the ephemeral Electron session for that
+  exact task and is destroyed on close, task/account/company switch, or runtime
+  reset. It is never copied into AMOS, another task, or the system browser.
 - Cross-account task switching closes or detaches the old session before any
   new page becomes available.
 - Private-network and localhost access remain denied unless an explicit
@@ -180,24 +188,29 @@ execution authority.
 1. **Implemented:** JavaScript page loading, semantic DOM/accessibility
    snapshots, deterministic extraction, screenshots, public-network isolation,
    and dynamic-canvas presentation.
-2. Isolated authenticated sessions, typed click/type/select/wait, downloads,
-   user takeover, and exact-action approvals.
-3. Browser recipe recording/compilation, deterministic scheduled execution,
+2. **Implemented:** isolated authenticated sessions, typed semantic
+   click/type/select/check/wait, direct user takeover, material-drift detection,
+   exact-action approval, and post-action receipts.
+3. Governed browser downloads/uploads through attachment hashing, workspace
+   approval, and explicit file provenance.
+4. Browser recipe recording/compilation, deterministic scheduled execution,
    drift detection, and AI-assisted repair proposals.
-4. Governed visual computer-use fallback for non-semantic pages and approved
+5. Governed visual computer-use fallback for non-semantic pages and approved
    desktop applications.
-5. Platform promotion path for browser workflows that should become durable
+6. Platform promotion path for browser workflows that should become durable
    connectors, automations, or company-data ingestion adapters.
 
 ## Acceptance criteria
 
 - A public JavaScript site can be loaded, inspected, cited, and extracted
   without exposing a browser debugging surface to the renderer or model.
-- An authenticated workflow cannot cross user, tenant, task, profile, or origin
-  boundaries.
+- An authenticated workflow cannot cross user, tenant, task, or profile
+  boundaries. Cross-origin transitions require fresh validation and exact
+  approval.
 - No model can retrieve or type credentials, MFA values, tokens, or cookies.
 - Consequential actions bind approval to the exact origin, page revision,
-  fields, destination, and artifacts.
+  material-page marker, target, payload, and destination. File-transfer
+  approvals additionally bind the exact artifact once that slice is enabled.
 - Downloads and uploads use existing workspace, hashing, approval, and receipt
   boundaries.
 - Deterministic recipes run without an LLM while their declared page contract

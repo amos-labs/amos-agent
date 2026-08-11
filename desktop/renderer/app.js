@@ -389,12 +389,15 @@ function bindEvents() {
     const label = localApprovalKindLabel(approval.kind);
     elements.alwaysApproveButton.classList.toggle("hidden", !label);
     elements.alwaysApproveButton.textContent = label ? `Always allow ${label}` : "Always allow this kind";
-    elements.autoApproveFolderButton.classList.toggle("hidden", !state.settings.workspace);
-    elements.approvalScopeNote.textContent = approval.kind === "shell"
-      ? "“Always allow local commands” applies to all shell commands started from this workspace, not only this request. Shell commands use a scrubbed environment but are not OS-sandboxed to the folder."
-      : label
-        ? `“Always allow” applies to all ${label} in this exact workspace, not only this request. “Auto-approve this folder” also covers local commands, file writes, and code patches.`
-      : "Auto-approve applies only to local work in the selected folder.";
+    const browserAction = approval.kind === "browser-action";
+    elements.autoApproveFolderButton.classList.toggle("hidden", !state.settings.workspace || browserAction);
+    elements.approvalScopeNote.textContent = browserAction
+      ? "Browser approval applies once to the exact origin, page revision, target, and payload shown above. It can never be made persistent or covered by local workspace auto-approval."
+      : approval.kind === "shell"
+        ? "“Always allow local commands” applies to all shell commands started from this workspace, not only this request. Shell commands use a scrubbed environment but are not OS-sandboxed to the folder."
+        : label
+          ? `“Always allow” applies to all ${label} in this exact workspace, not only this request. “Auto-approve this folder” also covers local commands, file writes, and code patches.`
+          : "Auto-approve applies only to local work in the selected folder.";
     elements.messages.append(elements.approvalModal);
     elements.approvalModal.classList.remove("hidden");
     elements.activityStreamTitle.textContent = "AMOS is waiting for you";
@@ -2298,15 +2301,43 @@ function renderCanvasBrowser(block) {
 
   const footer = document.createElement("div");
   footer.className = "canvas-browser-actions";
+  const copy = document.createElement("div");
+  copy.className = "canvas-browser-copy";
   const summary = document.createElement("p");
   summary.textContent = block.summary || "Public page inspected in the task-isolated AMOS browser.";
-  footer.append(summary);
+  const safety = document.createElement("p");
+  safety.className = "canvas-browser-safety";
+  safety.textContent = "Passwords, MFA codes, tokens, and cookies stay inside the isolated browser and are never returned to AMOS.";
+  copy.append(summary, safety);
+  footer.append(copy);
   if (block.status !== "closed") {
+    const controls = document.createElement("div");
+    controls.className = "canvas-browser-controls";
+    const takeover = actionButton(
+      block.takeoverActive ? "Return to AMOS & refresh" : "Take control for login",
+      block.takeoverActive ? "primary" : "secondary"
+    );
+    takeover.addEventListener("click", async () => {
+      takeover.disabled = true;
+      try {
+        if (block.takeoverActive) {
+          await api.finishBrowserTakeover(block.sessionId);
+          toast("Direct browser control ended and the page was refreshed.");
+        } else {
+          await api.startBrowserTakeover(block.sessionId);
+          toast("Secure browser control is open. Complete login there, then return control to AMOS.");
+        }
+      } catch (error) {
+        takeover.disabled = false;
+        toast(error.message, true);
+      }
+    });
     const open = actionButton("Open in system browser ↗", "secondary");
     open.addEventListener("click", () => {
       api.openExternal(block.url).catch((error) => toast(error.message, true));
     });
-    footer.append(open);
+    controls.append(takeover, open);
+    footer.append(controls);
   }
   card.append(footer);
   return card;

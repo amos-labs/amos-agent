@@ -89,7 +89,8 @@ test("canvas contract normalizes every safe block type", () => {
         observed_at: timestamp,
         element_count: 12,
         summary: "Example research page",
-        interactive: false
+        takeover_active: true,
+        interactive: true
       },
       {
         type: "link",
@@ -119,6 +120,7 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.blocks[5].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
   assert.equal(canvas.blocks[6].sessionId, "browser-session-1");
   assert.equal(canvas.blocks[6].frameId, "frame-1");
+  assert.equal(canvas.blocks[6].takeoverActive, true);
   assert.equal(canvas.blocks[7].url, "http://127.0.0.1:3000/preview");
   assert.equal(canvas.blocks[9].pendingId, "pending-1");
 });

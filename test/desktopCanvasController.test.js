@@ -130,15 +130,46 @@ test("regenerating the same document refreshes one bounded artifact canvas", () 
   assert.equal(bounded.blocks[0].total_blocks, 61);
 });
 
-test("browser canvas refreshes one local frame and removal revokes its session", () => {
+test("browser canvas refreshes one local frame, supports user takeover, and removal revokes its session", async () => {
   const closed = [];
   const frames = [];
+  const takeovers = [];
   const controller = new DesktopController({
     userDataPath: "/tmp/amos-browser-canvas-controller",
     settingsStore: {},
     browserRuntime: {
       closeAll() {},
       closeSession(id) { closed.push(id); },
+      async startUserTakeover(id) {
+        takeovers.push({ id, active: true });
+        return {
+          status: "ready",
+          session_id: id,
+          url: "https://example.com/login",
+          title: "Login",
+          page_revision: 3,
+          observed_at: timestamp,
+          element_count: 2,
+          summary: "Direct control open",
+          frame: { frame_id: "frame-2", width: 1280, height: 800 },
+          takeover_active: true
+        };
+      },
+      async finishUserTakeover(id) {
+        takeovers.push({ id, active: false });
+        return {
+          status: "ready",
+          session_id: id,
+          url: "https://example.com/account",
+          title: "Account",
+          page_revision: 4,
+          observed_at: timestamp,
+          element_count: 6,
+          summary: "Direct control ended",
+          frame: { frame_id: "frame-3", width: 1280, height: 800 },
+          takeover_active: false
+        };
+      },
       readFrame(sessionId, frameId) {
         frames.push({ sessionId, frameId });
         return { mime: "image/png", base64: "cG5n", width: 1280, height: 800 };
@@ -179,6 +210,20 @@ test("browser canvas refreshes one local frame and removal revokes its session",
     () => controller.readBrowserFrame("browser-session-1", "frame-1"),
     /no longer attached/
   );
+  await controller.startBrowserTakeover("browser-session-1");
+  assert.equal(
+    controller.canvases.list()[0].blocks[0].takeoverActive,
+    true
+  );
+  await controller.finishBrowserTakeover("browser-session-1");
+  assert.equal(
+    controller.canvases.list()[0].blocks[0].takeoverActive,
+    false
+  );
+  assert.deepEqual(takeovers, [
+    { id: "browser-session-1", active: true },
+    { id: "browser-session-1", active: false }
+  ]);
   controller.removeCanvas(first.id);
   assert.deepEqual(closed, ["browser-session-1"]);
 });

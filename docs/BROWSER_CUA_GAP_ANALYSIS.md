@@ -57,24 +57,39 @@ Implemented in the first governed slice:
   switch, or task switch. Browser execution capabilities are excluded from task
   persistence and forks.
 
-This closes the gap for public JavaScript research. It does not yet provide
-authenticated browser operations or general visual computer use.
+The authenticated semantic slice now additionally provides:
+
+- deterministic `click`, `type`, `select`, `check`, and bounded `wait` tools
+  over current opaque references only;
+- conservative action classification, with exact non-persistent approval for
+  buttons, form fields, selects, checks, and consequential links;
+- page-material and target fingerprint revalidation after approval;
+- redacted post-action receipts containing payload hashes rather than typed
+  text;
+- authentication/sensitive-field detection that routes to user takeover rather
+  than model operation; and
+- direct user control of the same isolated session through a fixed-title
+  native window, without cookie copying or credential extraction.
+
+This closes the core gap for bounded authenticated browser operation. File
+transfer, deterministic recipes, and general visual computer use remain.
 
 ## Remaining product slices
 
-### 2. Authenticated semantic browser actions
+### 2. Authenticated semantic browser actions — implemented core
 
-- Add `browser_click`, `browser_type`, `browser_select`, and `browser_wait` using
-  only current opaque element references—never raw model selectors.
-- Make user takeover show the same isolated browser session. The user enters
+- `browser_click`, `browser_type`, `browser_select`, `browser_check`, and
+  `browser_wait` use only current opaque element references—never raw model
+  selectors.
+- User takeover shows the same isolated browser session. The user enters
   passwords and MFA directly; AMOS cannot read or type them and no cookie copy
   occurs.
-- Classify navigation, extraction, and harmless controls as observational.
-  Bind form submission, messages, uploads, purchases, deletes, publishing,
-  permission changes, and cross-origin authenticated transitions to an exact
-  approval containing page revision, origin, fields, artifacts, and screenshot.
-- Route downloads and uploads through the existing attachment, hashing,
-  workspace, and approval boundaries.
+- Navigation, extraction, harmless links, and search-like input are
+  observational. Buttons and form changes bind to an exact approval containing
+  page revision, page-material marker, origin, target, payload hash, and a fresh
+  local screenshot.
+- Remaining sub-slice: route downloads and uploads through the existing
+  attachment, hashing, workspace, and approval boundaries.
 
 ### 3. Deterministic browser automations
 
@@ -110,9 +125,9 @@ authenticated browser operations or general visual computer use.
 
 Electron now recommends `WebContentsView` instead of the deprecated
 `BrowserView`, and discourages relying on the `<webview>` tag. The current
-read-only slice avoids both: a hidden sandboxed `BrowserWindow` performs local
-execution and the AMOS canvas renders an inert screenshot. A later same-session
-takeover can reveal a governed window without exposing its debugging surface.
+semantic slices avoid both: a hidden sandboxed `BrowserWindow` performs local
+execution, the AMOS canvas renders an inert screenshot, and same-session
+takeover reveals that governed window without exposing its debugging surface.
 
 Playwright remains a valid future reliability option for semantic actions and
 ARIA snapshots. Its browser versions are coupled to specific Playwright

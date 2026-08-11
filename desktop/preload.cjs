@@ -100,6 +100,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:read-document-preview", { path }),
   readBrowserFrame: (sessionId, frameId) =>
     ipcRenderer.invoke("desktop:read-browser-frame", { sessionId, frameId }),
+  startBrowserTakeover: (sessionId) =>
+    ipcRenderer.invoke("desktop:start-browser-takeover", { sessionId }),
+  finishBrowserTakeover: (sessionId) =>
+    ipcRenderer.invoke("desktop:finish-browser-takeover", { sessionId }),
   openExternal: (url) => ipcRenderer.invoke("desktop:open-external", url),
   updateState: () => ipcRenderer.invoke("desktop:update-state"),
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),
