@@ -14,6 +14,11 @@ import {
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
+import {
+  automationInstallArguments,
+  emptyAutomationTemplateCatalog,
+  publicAutomationInstallation
+} from "./automationSetup.js";
 import { adaptBriefingRun, adaptCompanyResult } from "./canvasAdapters.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import { DesktopCanvasResultStore } from "./canvasResults.js";
@@ -67,6 +72,7 @@ import { createOfflineProposalTool } from "../tools/offlineProposal.js";
 import { createBrowserTools } from "../tools/browser.js";
 import { createBrowserRecipeTools } from "../tools/browserRecipes.js";
 import { createBrowserVisualTools } from "../tools/browserVisual.js";
+import { createAutomationSetupTool } from "../tools/automationSetup.js";
 import {
   DEMO_SYSTEM_PROMPT,
   OFFLINE_SYSTEM_PROMPT,
@@ -123,6 +129,9 @@ export class DesktopController {
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
+    this.automationTemplates = emptyAutomationTemplateCatalog();
+    this.automationSetup = null;
+    this.pendingAutomationActivations = new Map();
     this.tasks = { supported: false, tasks: [], contract: null };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
@@ -210,6 +219,10 @@ export class DesktopController {
       connectionsCatalog: this.connectionsCatalog,
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
+      automationTemplates: structuredClone(
+        this.automationTemplates || emptyAutomationTemplateCatalog()
+      ),
+      automationSetup: publicAutomationSetup(this.automationSetup),
       browserRecipes: await this.browserRecipeState(settings),
       tasks: await this.tasksState(settings),
       companies: {
@@ -1019,6 +1032,9 @@ export class DesktopController {
     if (settings.operatingMode !== "online") {
       this.workingContinuity = null;
       this.automations = { supported: false, automations: [] };
+      this.automationTemplates = emptyAutomationTemplateCatalog();
+      this.automationSetup = null;
+      this.pendingAutomationActivations.clear();
       this.tasks = { supported: false, tasks: [], contract: null };
       this.remoteStatus = {
         syncing: false,
@@ -1042,6 +1058,9 @@ export class DesktopController {
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
       this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
       this.automations = { supported: false, automations: [] };
+      this.automationTemplates = emptyAutomationTemplateCatalog();
+      this.automationSetup = null;
+      this.pendingAutomationActivations.clear();
       this.tasks = { supported: false, tasks: [], contract: null };
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
@@ -1067,6 +1086,7 @@ export class DesktopController {
       continuityResult,
       briefingsResult,
       automationsResult,
+      automationTemplatesResult,
       tasksResult
     ] = await Promise.allSettled([
       remote.identity(),
@@ -1078,6 +1098,7 @@ export class DesktopController {
       remote.hydrateContinuity({ contextKey: this.activeContextKey }),
       remote.briefingsLibrary(),
       remote.automationsLibrary(),
+      remote.automationTemplateCatalog(),
       remote.tasksLibrary()
     ]);
 
@@ -1144,6 +1165,17 @@ export class DesktopController {
       this.automations = { supported: false, automations: [] };
       if (automationsResult.status === "rejected") {
         errors.push(automationsResult.reason?.message || "Could not load AMOS Automations");
+      }
+    }
+
+    if (automationTemplatesResult.status === "fulfilled" && automationTemplatesResult.value) {
+      this.automationTemplates = automationTemplatesResult.value;
+    } else {
+      this.automationTemplates = emptyAutomationTemplateCatalog();
+      if (automationTemplatesResult.status === "rejected") {
+        errors.push(
+          automationTemplatesResult.reason?.message || "Could not load AMOS Automation templates"
+        );
       }
     }
 
@@ -2033,6 +2065,170 @@ export class DesktopController {
     return { result, automations: this.automations };
   }
 
+  async revokeAutomationGrant(grantId, reason = "") {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "revoking this Automation authority");
+    const result = await remote.revokeAutomationGrant(grantId, reason);
+    this.automations = await remote.automationsLibrary();
+    this.record("automation", "Revoked bounded standing Automation authority", {
+      grant_id: String(grantId || ""),
+      automation_id: result.automation_id || null,
+      status: result.status || "revoked"
+    });
+    await this.sendRemoteState();
+    return { result, automations: this.automations };
+  }
+
+  async beginAutomationSetup(input = {}) {
+    const intent = String(input.intent || "").trim().slice(0, 2_000);
+    if (!intent) throw new Error("Describe the business outcome this Automation should produce");
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "building this Automation");
+    if (!this.automationTemplates?.supported) {
+      this.automationTemplates = await remote.automationTemplateCatalog();
+    }
+    if (!this.automationTemplates.supported || this.automationTemplates.templates.length === 0) {
+      throw new Error("This AMOS Platform does not yet advertise guided Automation templates");
+    }
+    const requestedTemplate = String(input.templateKey || "").trim().slice(0, 120);
+    const templateKey = this.automationTemplates.templates.some(
+      (template) => template.key === requestedTemplate
+    ) ? requestedTemplate : "";
+    this.automationSetup = {
+      id: randomUUID(),
+      intent,
+      templateKey,
+      phase: templateKey ? "connections" : "intent",
+      taskId: this.activeTaskRecordId || "",
+      createdAt: new Date().toISOString(),
+      installation: null,
+      activation: null
+    };
+    this.record("automation", "Opened guided Automation setup", {
+      setup_id: this.automationSetup.id,
+      template_key: templateKey || null,
+      task_id: this.automationSetup.taskId || null
+    });
+    const setup = publicAutomationSetup(this.automationSetup);
+    this.send("automation-setup:requested", setup);
+    await this.sendRemoteState();
+    return {
+      ok: true,
+      setup_id: setup.id,
+      template_count: this.automationTemplates.templates.length,
+      selected_template: templateKey || null,
+      message: "The guided Automation work surface is open beside this conversation."
+    };
+  }
+
+  async automationOperations(connection) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "reviewing Automation operations");
+    return remote.automationOperations(connection);
+  }
+
+  async installAutomationSetup(input = {}) {
+    const setup = this.requireAutomationSetup(input.setupId);
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "installing this Automation draft");
+    const parameters = input.parameters && typeof input.parameters === "object"
+      ? input.parameters
+      : {};
+    const operations = parameters.connection
+      ? await remote.automationOperations(parameters.connection)
+      : { contracts: [] };
+    const args = automationInstallArguments(
+      {
+        templateKey: input.templateKey || setup.templateKey,
+        name: input.name,
+        parameters
+      },
+      {
+        catalog: this.automationTemplates,
+        connections: this.connectionsCatalog?.connections || [],
+        contracts: operations.contracts
+      }
+    );
+    const installation = await remote.installAutomationTemplate(args);
+    this.pendingAutomationActivations.set(setup.id, {
+      arguments: installation.activation.arguments,
+      automationId: installation.automation.id,
+      automationName: installation.automation.name
+    });
+    this.automationSetup = {
+      ...setup,
+      templateKey: args.template_key,
+      phase: "activate",
+      installation: publicAutomationInstallation(installation),
+      activation: null
+    };
+    this.automations = await remote.automationsLibrary();
+    this.record("automation", `Installed ${installation.automation.name} as a draft`, {
+      setup_id: setup.id,
+      automation_id: installation.automation.id,
+      template_key: args.template_key,
+      receipt_id: installation.receiptId || null,
+      activated: false
+    });
+    await this.sendRemoteState();
+    return {
+      setup: publicAutomationSetup(this.automationSetup),
+      installation: publicAutomationInstallation(installation),
+      automations: this.automations
+    };
+  }
+
+  async activateAutomationSetup(setupId) {
+    const setup = this.requireAutomationSetup(setupId);
+    const pending = this.pendingAutomationActivations.get(setup.id);
+    if (!pending) throw new Error("That Automation draft no longer has a pending activation contract");
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "activating this Automation");
+    const result = await remote.activateAutomationDraft(pending.arguments);
+    this.pendingAutomationActivations.delete(setup.id);
+    const activation = publicAutomationActivation(result);
+    this.automationSetup = { ...setup, phase: "activate", activation };
+    const [automationsResult, approvalsResult] = await Promise.allSettled([
+      remote.automationsLibrary(),
+      remote.approvals()
+    ]);
+    if (automationsResult.status === "fulfilled") this.automations = automationsResult.value;
+    if (approvalsResult.status === "fulfilled") {
+      this.approvalsAvailable = approvalsResult.value.available;
+      this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
+      this.companyApprovals = approvalsResult.value.pending_operations;
+    }
+    this.record("automation", `Submitted ${pending.automationName} for governed activation`, {
+      setup_id: setup.id,
+      automation_id: pending.automationId,
+      status: activation.status,
+      pending_approval: activation.pendingApproval
+    });
+    await this.sendRemoteState();
+    return {
+      setup: publicAutomationSetup(this.automationSetup),
+      activation,
+      automations: this.automations,
+      approvals: this.companyApprovals
+    };
+  }
+
+  async dismissAutomationSetup(setupId) {
+    const id = String(setupId || "");
+    if (this.automationSetup?.id === id) this.automationSetup = null;
+    this.pendingAutomationActivations.delete(id);
+    await this.sendRemoteState();
+    return { dismissed: true };
+  }
+
+  requireAutomationSetup(input) {
+    const id = typeof input === "object" ? String(input?.setupId || "") : String(input || "");
+    if (!id || this.automationSetup?.id !== id) {
+      throw new Error("That guided Automation setup is no longer active");
+    }
+    return this.automationSetup;
+  }
+
   async removeBrowserRecipe(id) {
     if (!this.browserRecipeStore) throw new Error("Local browser recipes are unavailable");
     const settings = await this.settingsStore.read();
@@ -2066,6 +2262,8 @@ export class DesktopController {
     await this.snapshotActiveTask(settings).catch((error) => {
       this.record("task", `Could not snapshot the previous task canvas: ${error.message}`);
     });
+    this.automationSetup = null;
+    this.pendingAutomationActivations.clear();
     const previousContextKey = this.activeContextKey;
     const id = randomUUID();
     this.activeContextKey = `task:${id}`;
@@ -3031,6 +3229,9 @@ export class DesktopController {
 
   resetRuntime() {
     this.approvals.cancelAll();
+    this.automationSetup = null;
+    this.pendingAutomationActivations?.clear();
+    this.send("automation-setup:requested", null);
     this.browserRuntime?.closeAll?.();
     this.browserRecipeRecorder.clear();
     let removedBrowserCanvas = false;
@@ -3149,6 +3350,9 @@ export class DesktopController {
       }
     }
     if (!isOffline && !isPersonal) {
+      extraTools.push(createAutomationSetupTool({
+        begin: (input) => this.beginAutomationSetup(input)
+      }));
       extraTools.push(createCompanyViewTool({
         present: ({ result_ref: resultRef, intent, title, briefing }) => {
           const captured = this.canvasResults.get(resultRef);
@@ -3547,6 +3751,9 @@ export class DesktopController {
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
+    this.automationTemplates = emptyAutomationTemplateCatalog();
+    this.automationSetup = null;
+    this.pendingAutomationActivations.clear();
     this.tasks = { supported: false, tasks: [], contract: null };
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
@@ -3593,6 +3800,10 @@ export class DesktopController {
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
+      automationTemplates: structuredClone(
+        this.automationTemplates || emptyAutomationTemplateCatalog()
+      ),
+      automationSetup: publicAutomationSetup(this.automationSetup),
       browserRecipes: typeof this.browserRecipeState === "function"
         ? await this.browserRecipeState(taskSettings)
         : { supported: false, recipes: [] },
@@ -4083,6 +4294,46 @@ function applyLocalApprovalSettings(runtimeState, settings) {
       loop.messages[0].content = loop.systemPrompt;
     }
   }
+}
+
+function publicAutomationSetup(setup) {
+  if (!setup) return null;
+  return {
+    id: String(setup.id || ""),
+    intent: String(setup.intent || "").slice(0, 2_000),
+    templateKey: String(setup.templateKey || "").slice(0, 120),
+    phase: String(setup.phase || "intent").slice(0, 40),
+    taskId: String(setup.taskId || "").slice(0, 128),
+    createdAt: setup.createdAt || null,
+    installation: setup.installation ? structuredClone(setup.installation) : null,
+    activation: setup.activation ? structuredClone(setup.activation) : null
+  };
+}
+
+function publicAutomationActivation(value) {
+  const result = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const status = String(
+    result.status || result.lifecycle_state || result.result?.status || "submitted"
+  ).slice(0, 80);
+  const pendingApproval =
+    status.includes("pending") ||
+    status.includes("parked") ||
+    result.pending_approval === true ||
+    Boolean(result.pending_operation || result.approval_id);
+  return {
+    status,
+    pendingApproval,
+    approvalId: String(
+      result.approval_id || result.pending_operation?.id || result.operation_id || ""
+    ).slice(0, 128),
+    message: String(
+      result.message ||
+      result.note ||
+      (pendingApproval
+        ? "Activation is waiting for the governed company decision."
+        : "AMOS accepted the Automation activation request.")
+    ).slice(0, 2_000)
+  };
 }
 
 function sanitizeAgentEvent(event) {

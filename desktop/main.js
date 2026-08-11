@@ -370,6 +370,24 @@ function registerIpc() {
   ipcMain.handle("desktop:set-automation-status", (_event, input) =>
     controller.setAutomationStatus(input?.name, input?.active === true)
   );
+  ipcMain.handle("desktop:revoke-automation-grant", (_event, input) =>
+    controller.revokeAutomationGrant(input?.grantId, input?.reason)
+  );
+  ipcMain.handle("desktop:begin-automation-setup", (_event, input) =>
+    controller.beginAutomationSetup(input)
+  );
+  ipcMain.handle("desktop:automation-operations", (_event, connection) =>
+    controller.automationOperations(connection)
+  );
+  ipcMain.handle("desktop:install-automation-setup", (_event, input) =>
+    controller.installAutomationSetup(input)
+  );
+  ipcMain.handle("desktop:activate-automation-setup", (_event, setupId) =>
+    controller.activateAutomationSetup(setupId)
+  );
+  ipcMain.handle("desktop:dismiss-automation-setup", (_event, setupId) =>
+    controller.dismissAutomationSetup(setupId)
+  );
   ipcMain.handle("desktop:remove-browser-recipe", (_event, id) =>
     controller.removeBrowserRecipe(id)
   );

@@ -7,6 +7,7 @@ const eventChannels = new Set([
   "approval:completed",
   "activity:changed",
   "canvas:changed",
+  "automation-setup:requested",
   "offline:changed",
   "offline-proposals:changed",
   "task-checkpoints:changed",
@@ -66,6 +67,18 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:set-briefing-schedule-status", { scheduleId, active }),
   setAutomationStatus: (name, active) =>
     ipcRenderer.invoke("desktop:set-automation-status", { name, active }),
+  revokeAutomationGrant: (grantId, reason) =>
+    ipcRenderer.invoke("desktop:revoke-automation-grant", { grantId, reason }),
+  beginAutomationSetup: (input) =>
+    ipcRenderer.invoke("desktop:begin-automation-setup", input),
+  automationOperations: (connection) =>
+    ipcRenderer.invoke("desktop:automation-operations", connection),
+  installAutomationSetup: (input) =>
+    ipcRenderer.invoke("desktop:install-automation-setup", input),
+  activateAutomationSetup: (setupId) =>
+    ipcRenderer.invoke("desktop:activate-automation-setup", setupId),
+  dismissAutomationSetup: (setupId) =>
+    ipcRenderer.invoke("desktop:dismiss-automation-setup", setupId),
   removeBrowserRecipe: (id) =>
     ipcRenderer.invoke("desktop:remove-browser-recipe", id),
   startNewConversation: (input) =>

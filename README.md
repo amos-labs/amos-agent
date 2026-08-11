@@ -347,6 +347,7 @@ as the AMOS platform grows.
 - [Typed company canvas](docs/CANVAS.md)
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Governed browser and computer use](docs/BROWSER_AND_COMPUTER_USE.md)
+- [Guided Automation setup](docs/GUIDED_AUTOMATION_SETUP.md)
 - [Browser/CUA gap analysis and roadmap](docs/BROWSER_CUA_GAP_ANALYSIS.md)
 - [Contributing](CONTRIBUTING.md)
 

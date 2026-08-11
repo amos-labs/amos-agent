@@ -234,6 +234,39 @@ test("Desktop Automations project platform-owned definitions, live stats, and go
               updated_at: "2026-08-10T08:00:00.000Z"
             }]
           }
+        : request.params.name === "list_automation_grants"
+          ? {
+              standing_grants: [{
+                id: "22222222-2222-4222-8222-222222222222",
+                automation_id: "11111111-1111-4111-8111-111111111111",
+                automation_name: "Franchise scorecard follow-up",
+                automation_definition_version: 3,
+                automation_definition_sha256: "a".repeat(64),
+                step_position: 0,
+                step_key: "sync_target",
+                connection_id: "33333333-3333-4333-8333-333333333333",
+                operation_contract_id: "44444444-4444-4444-8444-444444444444",
+                operation_key: "update_scorecard",
+                trigger_scope: { kind: "record_change", collection: "franchise_scorecards" },
+                argument_scope: [{ path: "body.score", source: "trigger_reference" }],
+                window: "day",
+                max_runs_per_window: 1000,
+                window_runs: 12,
+                max_total_runs: 100000,
+                total_runs: 212,
+                max_consecutive_failures: 5,
+                consecutive_failures: 0,
+                status: "active",
+                expires_at: "2026-11-01T00:00:00.000Z"
+              }]
+            }
+          : request.params.name === "revoke_automation_grant"
+            ? {
+                revoked: true,
+                grant_id: "22222222-2222-4222-8222-222222222222",
+                automation_id: "11111111-1111-4111-8111-111111111111",
+                status: "revoked"
+              }
         : {
             ok: true,
             name: "Franchise scorecard follow-up",
@@ -251,6 +284,10 @@ test("Desktop Automations project platform-owned definitions, live stats, and go
   const library = await client.automationsLibrary();
   await client.setAutomationStatus("Franchise scorecard follow-up", false);
   await client.setAutomationStatus("Franchise scorecard follow-up", true);
+  await client.revokeAutomationGrant(
+    "22222222-2222-4222-8222-222222222222",
+    "Operator stopped the sync"
+  );
 
   assert.equal(library.supported, true);
   assert.equal(library.automations[0].stats.enrolled, 42);
@@ -259,10 +296,107 @@ test("Desktop Automations project platform-owned definitions, live stats, and go
     collection: "franchise_scorecards"
   });
   assert.equal(library.automations[0].steps[0].body, undefined);
+  assert.equal(library.grantsSupported, true);
+  assert.equal(library.grants[0].maxRunsPerWindow, 1000);
+  assert.equal(library.grants[0].argumentScope[0].path, "body.score");
   assert.deepEqual(calls.map((call) => call.name), [
-    "list_automations", "pause_automation", "resume_automation"
+    "list_automations", "list_automation_grants", "pause_automation", "resume_automation",
+    "revoke_automation_grant"
   ]);
-  assert.deepEqual(calls[1].arguments, { name: "Franchise scorecard follow-up" });
+  assert.deepEqual(calls[2].arguments, { name: "Franchise scorecard follow-up" });
+  assert.deepEqual(calls[4].arguments, {
+    grant_id: "22222222-2222-4222-8222-222222222222",
+    reason: "Operator stopped the sync"
+  });
+});
+
+test("Desktop consumes the Platform Automation setup contract without moving activation authority into the renderer", async () => {
+  const calls = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "automation-builder-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      calls.push(request.params);
+      const payload = request.params.name === "list_automation_templates"
+        ? {
+            catalog_version: 1,
+            blueprints: [{ key: "connected_operations", title: "Connected Operations", templates: ["event_driven_system_sync"] }],
+            templates: [{
+              key: "event_driven_system_sync",
+              version: 1,
+              blueprint: "connected_operations",
+              title: "Event sync",
+              installable: true,
+              trigger_modes: ["webhook"],
+              required_parameters: ["webhook", "connection", "operation"]
+            }]
+          }
+        : request.params.name === "list_connection_operations"
+          ? {
+              connection_id: "connection-1",
+              provider: "quickbooks",
+              contracts: [{
+                contract_id: "contract-1",
+                operation_key: "create_invoice",
+                display_name: "Create invoice",
+                consequence: "write",
+                method: "POST",
+                path_template: "/invoice",
+                path_params_schema: { type: "object", additionalProperties: false },
+                query_schema: { type: "object", additionalProperties: false },
+                body_schema: { type: "object", additionalProperties: false },
+                status: "active"
+              }]
+            }
+          : request.params.name === "install_automation_template"
+            ? {
+                installed: true,
+                automation: { id: "automation-1", name: "Invoice sync", status: "draft" },
+                activation: {
+                  required: true,
+                  tool: "set_automation",
+                  arguments: {
+                    name: "Invoice sync",
+                    status: "active",
+                    trigger: { kind: "webhook", webhook: "stripe.invoice.created" },
+                    steps: []
+                  }
+                }
+              }
+            : { status: "pending_approval", operation_id: "approval-1" };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const catalog = await client.automationTemplateCatalog();
+  const operations = await client.automationOperations("quickbooks");
+  const installation = await client.installAutomationTemplate({
+    template_key: "event_driven_system_sync",
+    name: "Invoice sync",
+    parameters: {
+      webhook: "stripe.invoice.created",
+      connection: "quickbooks",
+      operation: "create_invoice"
+    }
+  });
+  await client.activateAutomationDraft(installation.activation.arguments);
+
+  assert.equal(catalog.templates[0].key, "event_driven_system_sync");
+  assert.equal(operations.contracts[0].consequence, "write");
+  assert.equal(installation.activation.arguments.status, "active");
+  assert.deepEqual(calls.map((call) => call.name), [
+    "list_automation_templates",
+    "list_connection_operations",
+    "install_automation_template",
+    "set_automation"
+  ]);
 });
 
 test("Desktop Tasks use governed Platform resources and preserve non-replay fork contracts", async () => {

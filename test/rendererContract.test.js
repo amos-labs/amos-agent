@@ -189,18 +189,51 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(javascript, /LOCAL BROWSER RECIPE/);
   assert.match(javascript, /api\.removeBrowserRecipe\(recipe\.id\)/);
   assert.match(javascript, /api\.setAutomationStatus\(automation\.name, active\)/);
+  assert.match(javascript, /api\.revokeAutomationGrant\(/);
   assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?kind: "automation_builder"/);
   assert.match(preload, /desktop:start-new-conversation/);
   assert.match(preload, /desktop:set-automation-status/);
+  assert.match(preload, /desktop:revoke-automation-grant/);
   assert.match(preload, /desktop:remove-browser-recipe/);
   assert.match(main, /controller\.startNewConversation\(input\)/);
   assert.match(main, /controller\.setAutomationStatus\(input\?\.name, input\?\.active === true\)/);
+  assert.match(main, /controller\.revokeAutomationGrant\(input\?\.grantId, input\?\.reason\)/);
   assert.match(main, /controller\.removeBrowserRecipe\(id\)/);
   assert.match(controller, /const id = randomUUID\(\);[\s\S]*?this\.activeContextKey = `task:\$\{id\}`/);
   assert.match(controller, /continuityCapturePayload\(transition, settings, this\.activeContextKey\)/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);
   assert.match(remoteState, /active \? "resume_automation" : "pause_automation"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("list_automation_grants"/);
   assert.doesNotMatch(html, /Neighborly|Franchise scorecard follow-up/);
+});
+
+test("Operator exposes guided Platform-owned Automation setup beside chat", async () => {
+  const [javascript, html, preload, main, controller, prompts, tool] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/prompts.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/tools/automationSetup.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /id="automationSetupSurface"/);
+  assert.match(html, /Outcome, connections, mappings, trigger, preview/i);
+  assert.match(javascript, /api\.beginAutomationSetup\(\{ intent: objective \}\)/);
+  assert.match(javascript, /api\.automationOperations\(automationSetupDraft\.connection\)/);
+  assert.match(javascript, /compileAutomationMappings/);
+  assert.match(javascript, /api\.installAutomationSetup\(\{/);
+  assert.match(javascript, /api\.activateAutomationSetup\(automationSetupDraft\.setupId\)/);
+  assert.match(javascript, /activation\.pendingApproval[\s\S]*?showView\("work"\)/);
+  assert.match(preload, /automation-setup:requested/);
+  assert.match(preload, /desktop:install-automation-setup/);
+  assert.match(main, /controller\.installAutomationSetup\(input\)/);
+  assert.match(controller, /pendingAutomationActivations\.set/);
+  assert.match(controller, /remote\.activateAutomationDraft\(pending\.arguments\)/);
+  assert.match(prompts, /desktop_begin_automation_setup/);
+  assert.match(tool, /name: "desktop_begin_automation_setup"/);
+  assert.doesNotMatch(html, /Stripe|QuickBooks|Neighborly/);
 });
 
 test("Tasks expose durable resume, governed forking, lineage, and task-bound canvases", async () => {
