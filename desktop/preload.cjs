@@ -104,6 +104,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:start-browser-takeover", { sessionId }),
   finishBrowserTakeover: (sessionId) =>
     ipcRenderer.invoke("desktop:finish-browser-takeover", { sessionId }),
+  saveBrowserDownload: (attachmentId) =>
+    ipcRenderer.invoke("desktop:save-browser-download", { attachmentId }),
   openExternal: (url) => ipcRenderer.invoke("desktop:open-external", url),
   updateState: () => ipcRenderer.invoke("desktop:update-state"),
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),

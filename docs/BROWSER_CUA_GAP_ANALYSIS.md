@@ -45,8 +45,8 @@ Implemented in the first governed slice:
 - public HTTP/HTTPS validation before navigation and on browser requests;
 - private, loopback, link-local, metadata, unsupported-scheme, credential-bearing,
   and credential-like main-frame URL rejection;
-- sandboxed, no-Node, no-preload, permission-denied, popup-denied, download-denied
-  ephemeral Chromium sessions;
+- sandboxed, no-Node, no-preload, permission-denied, popup-denied,
+  unapproved-download-denied ephemeral Chromium sessions;
 - exact boundary binding across user, tenant, task, and operating mode;
 - bounded semantic snapshots with opaque revision-bound element references;
 - deterministic article, table, list, form-structure, and referenced-region
@@ -71,12 +71,25 @@ The authenticated semantic slice now additionally provides:
 - direct user control of the same isolated session through a fixed-title
   native window, without cookie copying or credential extraction.
 
-This closes the core gap for bounded authenticated browser operation. File
-transfer, deterministic recipes, and general visual computer use remain.
+The governed transfer slice additionally provides:
+
+- `browser_upload` over one current attachment ID and one current file-input
+  reference, with exact byte/digest revalidation and one-time approval;
+- private mode-0600 staging and main-process-only transient Chromium DOM
+  assignment, without revealing local paths or a debugger capability;
+- `browser_download` as the only approved download route, with surprise-download
+  cancellation, private quarantine, a 20 MB limit, SHA-256 verification, and
+  admission through the existing supported attachment pipeline;
+- a typed canvas download summary and separate native **Save copy…** ceremony;
+  and
+- transfer-directory destruction with browser/task/account/runtime revocation.
+
+This closes the core gap for bounded authenticated browser operation and file
+transfer. Deterministic recipes and general visual computer use remain.
 
 ## Remaining product slices
 
-### 2. Authenticated semantic browser actions — implemented core
+### 2. Authenticated semantic browser actions and file transfer — implemented
 
 - `browser_click`, `browser_type`, `browser_select`, `browser_check`, and
   `browser_wait` use only current opaque element references—never raw model
@@ -88,8 +101,9 @@ transfer, deterministic recipes, and general visual computer use remain.
   observational. Buttons and form changes bind to an exact approval containing
   page revision, page-material marker, origin, target, payload hash, and a fresh
   local screenshot.
-- Remaining sub-slice: route downloads and uploads through the existing
-  attachment, hashing, workspace, and approval boundaries.
+- Uploads and downloads use separate exact-action tools, attachment IDs,
+  hashing, quarantine, supported-format admission, receipts, and native user
+  save rather than model-authored filesystem paths.
 
 ### 3. Deterministic browser automations
 

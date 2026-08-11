@@ -1985,6 +1985,21 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .canvas-browser-copy { display: grid; gap: 4px; min-width: 0; }
 .canvas-browser-actions p { margin: 0; color: var(--muted-2); font-size: 9px; line-height: 1.5; }
 .canvas-browser-actions .canvas-browser-safety { color: #2f9e6f; font-size: 8px; }
+.canvas-browser-download {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(59,213,143,.24);
+  border-radius: 9px;
+  background: rgba(59,213,143,.05);
+}
+.canvas-browser-download strong,
+.canvas-browser-download small { display: block; }
+.canvas-browser-download strong { color: var(--ink); font-size: 9px; }
+.canvas-browser-download small { margin-top: 3px; color: var(--muted-2); font: 7px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .canvas-browser-controls { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .canvas-browser-actions .button { flex-shrink: 0; padding: 8px 10px; font-size: 8px; }
 .canvas-browser-block .canvas-block-provenance { margin: 0; padding: 10px 20px 14px; }

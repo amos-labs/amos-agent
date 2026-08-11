@@ -329,8 +329,14 @@ test("authenticated browser actions keep credentials in a user-controlled isolat
   assert.match(javascript, /Passwords, MFA codes, tokens, and cookies stay inside the isolated browser/);
   assert.match(preload, /desktop:start-browser-takeover/);
   assert.match(preload, /desktop:finish-browser-takeover/);
+  assert.match(preload, /desktop:save-browser-download/);
   assert.match(main, /controller\.startBrowserTakeover\(input\?\.sessionId\)/);
   assert.match(main, /controller\.finishBrowserTakeover\(input\?\.sessionId\)/);
+  assert.match(main, /controller\.browserDownloadPayload\(input\?\.attachmentId\)/);
+  assert.match(javascript, /Save copy…/);
+  assert.match(javascript, /api\.saveBrowserDownload\(block\.download\.attachmentId\)/);
+  assert.match(javascript, /submittedIds = new Set/);
+  assert.match(javascript, /filter\(\(attachment\) => !submittedIds\.has\(attachment\.id\)\)/);
   assert.match(controller, /attachedBrowserBlock\(sessionId\)/);
   assert.match(runtime, /AMOS Secure Browser/);
   assert.match(runtime, /This consequential browser action requires exact human approval/);
@@ -340,6 +346,8 @@ test("authenticated browser actions keep credentials in a user-controlled isolat
   assert.match(tools, /name: "browser_select"/);
   assert.match(tools, /name: "browser_check"/);
   assert.match(tools, /name: "browser_wait"/);
+  assert.match(tools, /name: "browser_upload"/);
+  assert.match(tools, /name: "browser_download"/);
   assert.match(tools, /Passwords, MFA, recovery codes, tokens, and authentication forms are never model-operated/);
 });
 

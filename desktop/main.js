@@ -12,6 +12,7 @@ import {
   Tray
 } from "electron";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { basename, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
@@ -514,6 +515,21 @@ function registerIpc() {
   ipcMain.handle("desktop:finish-browser-takeover", (_event, input) =>
     controller.finishBrowserTakeover(input?.sessionId)
   );
+  ipcMain.handle("desktop:save-browser-download", async (_event, input) => {
+    const artifact = controller.browserDownloadPayload(input?.attachmentId);
+    const result = await dialog.showSaveDialog(window, {
+      title: "Save verified browser download",
+      defaultPath: artifact.name
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    await writeFile(result.filePath, artifact.buffer, { mode: 0o600 });
+    return {
+      canceled: false,
+      name: artifact.name,
+      size: artifact.size,
+      sha256: artifact.sha256
+    };
+  });
   ipcMain.handle("desktop:open-external", async (_event, value) => {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error("AMOS blocked an invalid external link");
@@ -611,7 +627,11 @@ app.whenReady().then(async () => {
     routerBundlePath: join(localResourcesPath, "router"),
     emit: (payload) => send("offline:changed", payload)
   });
-  browserRuntime = new DesktopBrowserRuntime({ BrowserWindow, session });
+  browserRuntime = new DesktopBrowserRuntime({
+    BrowserWindow,
+    session,
+    transferRoot: join(app.getPath("userData"), "browser-transfers")
+  });
   const telemetry = new DesktopTelemetry({
     filePath: join(app.getPath("userData"), "desktop-telemetry.json"),
     appVersion: app.getVersion(),

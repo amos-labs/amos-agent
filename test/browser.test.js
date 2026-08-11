@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { DesktopBrowserRuntime } from "../desktop/browserRuntime.js";
 import { browserSessionCanvas } from "../src/desktop/browserCanvas.js";
 import { createBrowserTools } from "../src/tools/browser.js";
@@ -44,6 +49,8 @@ test("browser tools expose semantic governed primitives and present deterministi
       "browser_type",
       "browser_select",
       "browser_check",
+      "browser_upload",
+      "browser_download",
       "browser_wait",
       "browser_screenshot",
       "browser_close"
@@ -144,14 +151,224 @@ test("authentication fields route to user takeover without asking the model to a
   assert.equal(performed, 0);
 });
 
+test("browser transfer tools keep local paths and bytes outside model-visible results", async () => {
+  const bytes = Buffer.from("region,revenue\nwest,42\n");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  const approvals = [];
+  const presented = [];
+  let registered = null;
+  const browser = {
+    async prepareUpload(_scope, input) {
+      assert.equal(input.attachment.buffer.equals(bytes), true);
+      return transferPreparation("upload", {
+        attachment_id: "attachment-123",
+        name: "report.csv",
+        mime: "text/csv",
+        bytes: bytes.length,
+        sha256: digest
+      });
+    },
+    async performUpload(_scope, input) {
+      assert.equal(input.approved, true);
+      return { ...browserResult(), operation: "upload", transfer_receipt: transferReceipt("upload", digest) };
+    },
+    async cancelPreparedUpload() {},
+    async prepareDownload() { return transferPreparation("download"); },
+    async performDownload(_scope, input) {
+      assert.equal(input.approved, true);
+      return {
+        result: { ...browserResult(), operation: "download", transfer_receipt: transferReceipt("download", digest) },
+        transfer: {
+          name: "report.csv",
+          mime: "text/csv",
+          bytes: bytes.length,
+          sha256: digest,
+          source_url: "https://example.com/report",
+          buffer: bytes
+        }
+      };
+    }
+  };
+  const tools = createBrowserTools({
+    browser,
+    scope: () => scope,
+    resolveAttachment: async (id) => ({
+      id,
+      name: "report.csv",
+      mime: "text/csv",
+      size: bytes.length,
+      sha256: digest,
+      buffer: bytes
+    }),
+    async registerDownload(transfer) {
+      registered = transfer;
+      return {
+        id: "downloaded-attachment",
+        name: transfer.name,
+        mime: transfer.mime,
+        kind: "document",
+        size: transfer.buffer.length,
+        sha256: transfer.sha256,
+        source: "browser-download"
+      };
+    },
+    present(input) {
+      presented.push(input);
+      return { id: "canvas-1" };
+    }
+  });
+  const context = {
+    signal: new AbortController().signal,
+    approvals: {
+      async confirm(message) {
+        approvals.push(message);
+        return true;
+      }
+    }
+  };
+
+  const uploaded = await tools.find((tool) => tool.name === "browser_upload").handler({
+    session_id: "browser-session-1",
+    ref: "el_upload",
+    attachment_id: "attachment-123"
+  }, context);
+  const downloaded = await tools.find((tool) => tool.name === "browser_download").handler({
+    session_id: "browser-session-1",
+    ref: "el_download"
+  }, context);
+
+  assert.equal(uploaded.transfer_receipt.action, "upload");
+  assert.equal(downloaded.downloaded_attachment.id, "downloaded-attachment");
+  assert.equal(registered.buffer.equals(bytes), true);
+  assert.match(approvals[0], /immutable staged copy/);
+  assert.match(approvals[1], /quarantined/);
+  assert.equal(JSON.stringify([uploaded, downloaded, presented]).includes(bytes.toString()), false);
+  assert.equal(JSON.stringify([uploaded, downloaded, presented]).includes("/Users/"), false);
+  assert.equal(Object.hasOwn(downloaded, "transfer"), false);
+});
+
 test("browser canvas carries only an opaque local frame capability", () => {
-  const canvas = browserSessionCanvas(browserResult(), { generatedAt: timestamp });
+  const canvas = browserSessionCanvas({
+    ...browserResult(),
+    downloaded_attachment: {
+      id: "downloaded-attachment",
+      name: "report.csv",
+      mime: "text/csv",
+      size: 42,
+      sha256: "d".repeat(64)
+    }
+  }, { generatedAt: timestamp });
   const block = canvas.blocks[0];
   assert.equal(block.type, "browser");
   assert.equal(block.session_id, "browser-session-1");
   assert.equal(block.frame_id, "frame-1");
   assert.equal(JSON.stringify(canvas).includes("base64"), false);
   assert.equal(JSON.stringify(canvas).includes("cookie"), false);
+  assert.deepEqual(block.download, {
+    attachment_id: "downloaded-attachment",
+    name: "report.csv",
+    mime: "text/csv",
+    size: 42,
+    sha256: "d".repeat(64)
+  });
+});
+
+test("runtime uploads only an immutable staged attachment through main-process CDP", async (t) => {
+  const transferRoot = await mkdtemp(join(tmpdir(), "amos-browser-transfer-test-"));
+  t.after(() => rm(transferRoot, { recursive: true, force: true }));
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => fakeSession() },
+    transferRoot,
+    now: () => new Date(timestamp),
+    createId: idSequence(["browser-session-1", "frame-prepare", "frame-after", "receipt-upload"])
+  });
+  const record = await runtime.createSession(scope);
+  record.url = "https://example.com/import";
+  record.title = "Import";
+  record.revision = 3;
+  record.window.webContents.capturePage = async () => fakeImage();
+  const descriptor = actionDescriptor({
+    tag: "input",
+    type: "file",
+    role: "button",
+    name: "Import CSV"
+  });
+  configureActionExecution(record, () => descriptor);
+  setReference(record, "el_upload", "#upload");
+  const bytes = Buffer.from("region,revenue\nwest,42\n");
+  const digest = createHash("sha256").update(bytes).digest("hex");
+
+  const prepared = await runtime.prepareUpload(scope, {
+    sessionId: record.id,
+    ref: "el_upload",
+    attachment: {
+      id: "attachment-123",
+      name: "report.csv",
+      mime: "text/csv",
+      size: bytes.length,
+      sha256: digest,
+      buffer: bytes
+    }
+  });
+
+  assert.equal(prepared.requires_approval, true);
+  assert.equal(JSON.stringify(prepared.public_action).includes(transferRoot), false);
+  await assert.rejects(runtime.performUpload(scope, { plan: prepared.plan }), /exact human approval/);
+  const result = await runtime.performUpload(scope, { plan: prepared.plan, approved: true });
+  const assignment = record.window.debuggerCommands.find((entry) => entry.method === "DOM.setFileInputFiles");
+  assert.equal(assignment.params.files.length, 1);
+  assert.equal(assignment.params.files[0].startsWith(transferRoot), true);
+  assert.equal(basename(assignment.params.files[0]), "report.csv");
+  assert.equal(result.transfer_receipt.contract, "amos.browser-transfer:1");
+  assert.equal(result.transfer_receipt.artifact.sha256, digest);
+  assert.equal(JSON.stringify(result).includes(assignment.params.files[0]), false);
+  runtime.closeAll();
+});
+
+test("runtime quarantines, hashes, and returns approved downloads without a filesystem path", async (t) => {
+  const transferRoot = await mkdtemp(join(tmpdir(), "amos-browser-download-test-"));
+  t.after(() => rm(transferRoot, { recursive: true, force: true }));
+  const browserSession = fakeSession();
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => browserSession },
+    transferRoot,
+    now: () => new Date(timestamp),
+    createId: idSequence(["browser-session-1", "frame-prepare", "download-1", "frame-after", "receipt-download"])
+  });
+  const record = await runtime.createSession(scope);
+  record.url = "https://example.com/reports";
+  record.title = "Reports";
+  record.revision = 2;
+  record.window.webContents.capturePage = async () => fakeImage();
+  const descriptor = actionDescriptor({ tag: "button", role: "button", name: "Download CSV" });
+  const bytes = Buffer.from("region,revenue\nwest,42\n");
+  configureActionExecution(record, () => descriptor, {
+    async onAction() {
+      const item = new FakeDownloadItem({ name: "report.csv", bytes });
+      browserSession.emit("will-download", { preventDefault() {} }, item, record.window.webContents);
+      await item.completed;
+    }
+  });
+  setReference(record, "el_download", "#download");
+
+  const prepared = await runtime.prepareDownload(scope, {
+    sessionId: record.id,
+    ref: "el_download"
+  });
+  const completed = await runtime.performDownload(scope, {
+    plan: prepared.plan,
+    approved: true,
+    timeoutMs: 2_000
+  });
+
+  assert.equal(completed.transfer.buffer.equals(bytes), true);
+  assert.equal(completed.transfer.sha256, createHash("sha256").update(bytes).digest("hex"));
+  assert.equal(completed.result.transfer_receipt.contract, "amos.browser-transfer:1");
+  assert.equal(JSON.stringify(completed.result).includes(transferRoot), false);
+  assert.equal(JSON.stringify(completed.result).includes(bytes.toString()), false);
+  runtime.closeAll();
 });
 
 test("browser runtime binds sessions and frames to the exact task scope", async () => {
@@ -291,6 +508,24 @@ test("runtime classifies safe links, consequential controls, and authentication 
   assert.equal(button.public_action.risk, "consequential");
 
   descriptor = actionDescriptor({
+    tag: "a",
+    type: "a",
+    role: "link",
+    name: "Download report",
+    href: "https://example.com/report.csv",
+    download: true
+  });
+  setReference(record, "el_download", "#download");
+  await assert.rejects(
+    runtime.prepareAction(scope, {
+      sessionId: record.id,
+      kind: "click",
+      ref: "el_download"
+    }),
+    /Use browser_download/
+  );
+
+  descriptor = actionDescriptor({
     tag: "input",
     type: "password",
     role: "textbox",
@@ -420,6 +655,93 @@ test("material page drift invalidates an already approved browser action", async
   );
 });
 
+test("generic browser actions cancel surprise downloads and require the dedicated transfer tool", async () => {
+  const browserSession = fakeSession();
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => browserSession },
+    now: () => new Date(timestamp)
+  });
+  const record = await runtime.createSession(scope);
+  record.url = "https://example.com/reports";
+  record.title = "Reports";
+  record.revision = 2;
+  record.window.webContents.capturePage = async () => fakeImage();
+  const descriptor = actionDescriptor({ tag: "button", role: "button", name: "Generate report" });
+  let canceled = false;
+  configureActionExecution(record, () => descriptor, {
+    onAction() {
+      browserSession.emit(
+        "will-download",
+        { preventDefault() {} },
+        {
+          getFilename: () => "surprise.csv",
+          cancel() { canceled = true; }
+        },
+        record.window.webContents
+      );
+    }
+  });
+  setReference(record, "el_generate", "#generate");
+  const prepared = await runtime.prepareAction(scope, {
+    sessionId: record.id,
+    kind: "click",
+    ref: "el_generate"
+  });
+
+  await assert.rejects(
+    runtime.performAction(scope, { plan: prepared.plan, approved: true, waitMs: 250 }),
+    /unapproved download.*browser_download/i
+  );
+  assert.equal(canceled, true);
+  runtime.closeAll();
+});
+
+test("approved browser downloads fail closed before accepting declared oversize payloads", async (t) => {
+  const transferRoot = await mkdtemp(join(tmpdir(), "amos-browser-oversize-test-"));
+  t.after(() => rm(transferRoot, { recursive: true, force: true }));
+  const browserSession = fakeSession();
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => browserSession },
+    transferRoot,
+    now: () => new Date(timestamp)
+  });
+  const record = await runtime.createSession(scope);
+  record.url = "https://example.com/reports";
+  record.title = "Reports";
+  record.revision = 2;
+  record.window.webContents.capturePage = async () => fakeImage();
+  const descriptor = actionDescriptor({ tag: "button", role: "button", name: "Download archive" });
+  let canceled = false;
+  configureActionExecution(record, () => descriptor, {
+    onAction() {
+      browserSession.emit(
+        "will-download",
+        { preventDefault() {} },
+        {
+          getFilename: () => "archive.zip",
+          getTotalBytes: () => 20 * 1024 * 1024 + 1,
+          cancel() { canceled = true; }
+        },
+        record.window.webContents
+      );
+    }
+  });
+  setReference(record, "el_download", "#download");
+  const prepared = await runtime.prepareDownload(scope, {
+    sessionId: record.id,
+    ref: "el_download"
+  });
+
+  await assert.rejects(
+    runtime.performDownload(scope, { plan: prepared.plan, approved: true, timeoutMs: 2_000 }),
+    /exceeds the 20 MB attachment limit/
+  );
+  assert.equal(canceled, true);
+  runtime.closeAll();
+});
+
 test("user takeover reveals and returns the same isolated session without exposing credentials", async () => {
   const runtime = new DesktopBrowserRuntime({
     BrowserWindow: FakeBrowserWindow,
@@ -474,13 +796,13 @@ function browserResult() {
 }
 
 function fakeSession() {
-  return {
+  const emitter = new EventEmitter();
+  return Object.assign(emitter, {
     setPermissionRequestHandler() {},
     setPermissionCheckHandler() {},
     setDisplayMediaRequestHandler() {},
-    on() {},
     webRequest: { onBeforeRequest() {} }
-  };
+  });
 }
 
 class FakeBrowserWindow {
@@ -490,13 +812,26 @@ class FakeBrowserWindow {
     this.title = "";
     this.loadedUrls = [];
     this.listeners = new Map();
+    this.debuggerCommands = [];
+    let debuggerAttached = false;
     this.webContents = {
       setWindowOpenHandler() {},
       on() {},
       isDestroyed: () => this.destroyed,
       isLoading: () => false,
       getURL: () => this.loadedUrls.at(-1) || "https://example.com/",
-      getTitle: () => this.title || "Example"
+      getTitle: () => this.title || "Example",
+      debugger: {
+        isAttached: () => debuggerAttached,
+        attach: () => { debuggerAttached = true; },
+        detach: () => { debuggerAttached = false; },
+        sendCommand: async (method, params = {}) => {
+          this.debuggerCommands.push({ method, params });
+          if (method === "DOM.getDocument") return { root: { nodeId: 1 } };
+          if (method === "DOM.querySelector") return { nodeId: 2 };
+          return {};
+        }
+      }
     };
   }
 
@@ -569,9 +904,10 @@ function configureActionExecution(record, descriptor, { onAction = () => {} } = 
   record.window.webContents.executeJavaScriptInIsolatedWorld = async (_world, scripts) => {
     const code = scripts[0].code;
     if (code.includes("const kind =")) {
-      onAction();
+      await onAction();
       return true;
     }
+    if (code.includes("Array.from(target.files")) return true;
     if (code.includes("document.readyState")) return true;
     if (code.includes("const maxElements")) {
       return {
@@ -583,6 +919,58 @@ function configureActionExecution(record, descriptor, { onAction = () => {} } = 
       };
     }
     return descriptor();
+  };
+}
+
+class FakeDownloadItem extends EventEmitter {
+  constructor({ name, bytes, mime = "text/csv" }) {
+    super();
+    this.name = name;
+    this.bytes = bytes;
+    this.mime = mime;
+    this.received = 0;
+    this.completed = new Promise((resolve) => { this.finish = resolve; });
+  }
+
+  getFilename() { return this.name; }
+  getTotalBytes() { return this.bytes.length; }
+  getReceivedBytes() { return this.received; }
+  getMimeType() { return this.mime; }
+  cancel() { this.emit("done", {}, "cancelled"); }
+  setSavePath(path) {
+    writeFile(path, this.bytes).then(() => {
+      this.received = this.bytes.length;
+      this.emit("updated");
+      this.emit("done", {}, "completed");
+      this.finish();
+    });
+  }
+}
+
+function transferPreparation(action, payload = {}) {
+  return {
+    plan: { id: `${action}-plan` },
+    requires_approval: true,
+    takeover_required: false,
+    public_action: {
+      action,
+      risk: "file-transfer",
+      origin: "https://example.com",
+      page_revision: 1,
+      target: { ref: `el_${action}`, role: "button", name: action, tag: "button", type: "button" },
+      payload
+    },
+    observation: browserResult()
+  };
+}
+
+function transferReceipt(action, sha256) {
+  return {
+    contract: "amos.browser-transfer:1",
+    receipt_id: `receipt-${action}`,
+    action,
+    artifact: { name: "report.csv", mime: "text/csv", bytes: 24, sha256 },
+    verified: true
   };
 }
 

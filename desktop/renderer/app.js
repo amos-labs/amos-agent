@@ -2309,6 +2309,30 @@ function renderCanvasBrowser(block) {
   safety.className = "canvas-browser-safety";
   safety.textContent = "Passwords, MFA codes, tokens, and cookies stay inside the isolated browser and are never returned to AMOS.";
   copy.append(summary, safety);
+  if (block.download) {
+    const download = document.createElement("div");
+    download.className = "canvas-browser-download";
+    const detail = document.createElement("div");
+    const name = document.createElement("strong");
+    name.textContent = block.download.name;
+    const proof = document.createElement("small");
+    proof.textContent = `${formatBytes(block.download.size)} · SHA-256 ${block.download.sha256.slice(0, 12)}…`;
+    detail.append(name, proof);
+    const save = actionButton("Save copy…", "secondary");
+    save.addEventListener("click", async () => {
+      save.disabled = true;
+      try {
+        const result = await api.saveBrowserDownload(block.download.attachmentId);
+        if (!result.canceled) toast(`Saved verified copy of ${result.name}.`);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        save.disabled = false;
+      }
+    });
+    download.append(detail, save);
+    copy.append(download);
+  }
   footer.append(copy);
   if (block.status !== "closed") {
     const controls = document.createElement("div");
@@ -4536,10 +4560,11 @@ async function runTask(event) {
     renderCanvas();
     renderPrivateMemory();
     renderDecisions();
+    const submittedIds = new Set(submitted.map((attachment) => attachment.id));
     for (const attachment of submitted) {
       await api.removeAttachment(attachment.id);
     }
-    updateAttachments([]);
+    updateAttachments((result.attachments || []).filter((attachment) => !submittedIds.has(attachment.id)));
     const failures = (result.memory || []).filter((item) => item.status === "failed");
     if (failures.length > 0) {
       toast(`Task completed, but ${failures.length} item${failures.length === 1 ? "" : "s"} could not be added to company memory.`, true);

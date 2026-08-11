@@ -33,7 +33,7 @@ Desktop exposes two request-level public-web primitives outside local-only mode:
   metadata.
 
 For JavaScript-rendered and authenticated pages, Desktop now also exposes the
-first two local browser slices:
+first three local browser slices:
 
 - `browser_open` creates or navigates a task-, tenant-, and user-bound ephemeral
   Chromium session;
@@ -45,6 +45,10 @@ first two local browser slices:
   only current opaque references and pause at the exact consequence boundary;
 - `browser_wait` performs bounded selector-free waits and returns a fresh
   semantic observation;
+- `browser_upload` assigns one exact current task attachment to a current file
+  input after one-time approval without exposing its source path;
+- `browser_download` activates one exact approved control, quarantines and
+  hashes the result, and admits only a supported attachment of at most 20 MB;
 - `browser_screenshot` refreshes an opaque local PNG frame rendered in the
   dynamic canvas; and
 - `browser_close` destroys the page and revokes its references and frame.
@@ -52,7 +56,7 @@ first two local browser slices:
 The same task-local session can be shown in a fixed-title **AMOS Secure Browser**
 for direct user control. The user enters passwords and MFA there; AMOS receives
 neither field values nor cookies. Returning control hides the window and
-refreshes the semantic observation. Downloads and uploads remain unavailable.
+refreshes the semantic observation.
 
 ## Browser runtime
 
@@ -80,13 +84,29 @@ The typed primitive set is:
   arbitrary filesystem paths; and
 - `browser_close` — destroy the task session and revoke its handles.
 
-The implemented semantic subset enforces short-lived element references tied to
+The implemented semantic and file-transfer subset enforces short-lived element references tied to
 the page revision, task, account, and tenant. Navigation invalidates prior
 references. Consequential actions also bind to a material-page marker, exact
 target descriptor, origin, payload hash, and fresh local screenshot. Drift
 while approval waits cancels execution. Free-form model text cannot mint a
-browser handle, selector, frame, approval, or privileged action. File transfer
-remains a separate delivery slice.
+browser handle, selector, frame, approval, filesystem path, or privileged
+action.
+
+Uploads begin with a current task attachment ID. Desktop re-reads retained or
+source bytes, verifies exact size and SHA-256, then stages a mode-0600 immutable
+copy inside the browser session's private transfer directory. The Electron main
+process transiently attaches Chromium's DOM protocol only long enough to assign
+that copy to the approved file input and verify the selected filename and byte
+count. Neither the renderer nor the model receives the original path, staged
+path, or protocol handle.
+
+Downloads never ride through generic `browser_click`: surprise downloads are
+canceled and the model must use `browser_download` against a fresh opaque
+reference. An approved result is quarantined, capped at 20 MB both before and
+during receipt, hashed, removed from quarantine, and passed through the existing
+supported attachment extractor. It remains a task attachment in the composer.
+The dynamic canvas shows its name, size, and digest; **Save copy…** is a separate
+native user ceremony that chooses the only external destination.
 
 ## Website data ingestion
 
@@ -191,8 +211,9 @@ execution authority.
 2. **Implemented:** isolated authenticated sessions, typed semantic
    click/type/select/check/wait, direct user takeover, material-drift detection,
    exact-action approval, and post-action receipts.
-3. Governed browser downloads/uploads through attachment hashing, workspace
-   approval, and explicit file provenance.
+3. **Implemented:** governed attachment-ID uploads, quarantined downloads,
+   attachment hashing/extraction, native user save, explicit file provenance,
+   and transfer-storage revocation.
 4. Browser recipe recording/compilation, deterministic scheduled execution,
    drift detection, and AI-assisted repair proposals.
 5. Governed visual computer-use fallback for non-semantic pages and approved

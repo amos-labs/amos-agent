@@ -410,6 +410,7 @@ function normalizeBlock(input, index, canvasSource) {
         120
       ),
       summary: optionalText(block.summary, `blocks[${index}].summary`, 1_000),
+      download: normalizeBrowserDownload(block.download, `blocks[${index}].download`),
       takeoverActive: block.takeover_active === true || block.takeoverActive === true,
       interactive: block.interactive === true
     };
@@ -459,6 +460,20 @@ function normalizeBlock(input, index, canvasSource) {
         value: primitive(value.value, `blocks[${index}].details[${detailIndex}].value`)
       };
     })
+  };
+}
+
+function normalizeBrowserDownload(input, path) {
+  if (input === undefined || input === null) return null;
+  const artifact = object(input, `${path} must be an object`);
+  const sha256 = text(artifact.sha256, `${path}.sha256`, 64).toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error(`${path}.sha256 must be a SHA-256 digest`);
+  return {
+    attachmentId: text(artifact.attachment_id || artifact.attachmentId, `${path}.attachment_id`, 128),
+    name: text(artifact.name, `${path}.name`, 240),
+    mime: text(artifact.mime || "application/octet-stream", `${path}.mime`, 200),
+    size: boundedInteger(artifact.size, `${path}.size`, 1, 20 * 1024 * 1024),
+    sha256
   };
 }
 

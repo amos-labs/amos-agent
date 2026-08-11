@@ -2,7 +2,13 @@ const SESSION_ID = { type: "string", minLength: 8, maxLength: 128 };
 const ELEMENT_REF = { type: "string", minLength: 4, maxLength: 64 };
 const ACTION_WAIT = { type: "integer", minimum: 250, maximum: 5_000 };
 
-export function createBrowserTools({ browser, scope, present = null }) {
+export function createBrowserTools({
+  browser,
+  scope,
+  present = null,
+  resolveAttachment = null,
+  registerDownload = null
+}) {
   if (!browser) throw new Error("Browser tools require a browser runtime");
   if (typeof scope !== "function") throw new Error("Browser tools require a scope provider");
 
@@ -75,6 +81,76 @@ export function createBrowserTools({ browser, scope, present = null }) {
       ...result,
       ...(canvas?.id ? { canvas_id: canvas.id } : {})
     };
+  };
+
+  const runUpload = async (args, context) => {
+    if (typeof resolveAttachment !== "function") throw new Error("Browser uploads are unavailable in this client");
+    const attachment = await resolveAttachment(args.attachment_id);
+    const prepared = await browser.prepareUpload(scope(), {
+      sessionId: args.session_id,
+      ref: args.ref,
+      attachment,
+      signal: context.signal
+    });
+    const reviewCanvas = typeof present === "function"
+      ? await present({ operation: "upload_review", ...prepared.observation })
+      : null;
+    if (prepared.takeover_required) return takeoverResult(args, prepared, reviewCanvas);
+    const approved = await context.approvals.confirm(
+      browserApprovalMessage(prepared.public_action, args),
+      { kind: "browser-action" }
+    );
+    if (!approved) {
+      await browser.cancelPreparedUpload(scope(), { plan: prepared.plan });
+      return deniedResult(args, prepared, reviewCanvas);
+    }
+    try {
+      const result = await browser.performUpload(scope(), {
+        plan: prepared.plan,
+        approved: true,
+        signal: context.signal
+      });
+      const canvas = typeof present === "function"
+        ? await present({ operation: "upload", ...result })
+        : null;
+      return { ...result, ...(canvas?.id ? { canvas_id: canvas.id } : {}) };
+    } catch (error) {
+      await browser.cancelPreparedUpload(scope(), { plan: prepared.plan }).catch(() => {});
+      throw error;
+    }
+  };
+
+  const runDownload = async (args, context) => {
+    if (typeof registerDownload !== "function") throw new Error("Browser downloads are unavailable in this client");
+    const prepared = await browser.prepareDownload(scope(), {
+      sessionId: args.session_id,
+      ref: args.ref,
+      signal: context.signal
+    });
+    const reviewCanvas = typeof present === "function"
+      ? await present({ operation: "download_review", ...prepared.observation })
+      : null;
+    if (prepared.takeover_required) return takeoverResult(args, prepared, reviewCanvas);
+    const approved = await context.approvals.confirm(
+      browserApprovalMessage(prepared.public_action, args),
+      { kind: "browser-action" }
+    );
+    if (!approved) return deniedResult(args, prepared, reviewCanvas);
+    const completed = await browser.performDownload(scope(), {
+      plan: prepared.plan,
+      approved: true,
+      timeoutMs: args.timeout_ms,
+      signal: context.signal
+    });
+    const attachment = await registerDownload(completed.transfer);
+    const result = {
+      ...completed.result,
+      downloaded_attachment: attachment
+    };
+    const canvas = typeof present === "function"
+      ? await present({ operation: "download", ...result })
+      : null;
+    return { ...result, ...(canvas?.id ? { canvas_id: canvas.id } : {}) };
   };
 
   return [
@@ -152,7 +228,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
       name: "browser_click",
       source: "desktop-local",
       description:
-        "Click one current opaque browser element reference. Ordinary public links are observational; buttons, submissions, and other potentially consequential controls pause for exact human approval. Authentication controls require direct user takeover.",
+        "Click one current opaque browser element reference. Ordinary public links are observational; buttons, submissions, and other potentially consequential controls pause for exact human approval. Authentication controls require direct user takeover. Use browser_download—not browser_click—for download controls.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -219,6 +295,40 @@ export function createBrowserTools({ browser, scope, present = null }) {
         }
       },
       handler: runAction("check")
+    },
+    {
+      name: "browser_upload",
+      source: "desktop-local",
+      description:
+        "Upload one exact current task attachment through one current file-input reference. The model receives only the attachment ID, name, size, MIME type, and SHA-256—not its local path or arbitrary filesystem access. Every upload requires exact human approval.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["session_id", "ref", "attachment_id"],
+        properties: {
+          session_id: SESSION_ID,
+          ref: ELEMENT_REF,
+          attachment_id: { type: "string", minLength: 8, maxLength: 128 }
+        }
+      },
+      handler: runUpload
+    },
+    {
+      name: "browser_download",
+      source: "desktop-local",
+      description:
+        "Activate one exact current download control after human approval. AMOS quarantines at most 20 MB, verifies SHA-256, accepts only supported task-attachment formats, and never writes to an arbitrary path. Use this instead of browser_click for downloads.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["session_id", "ref"],
+        properties: {
+          session_id: SESSION_ID,
+          ref: ELEMENT_REF,
+          timeout_ms: { type: "integer", minimum: 1_000, maximum: 60_000 }
+        }
+      },
+      handler: runDownload
     },
     {
       name: "browser_wait",
@@ -298,9 +408,49 @@ function browserApprovalMessage(action, args) {
   }
   if (action.action === "select") details.push(`Option: ${action.payload.option_name}`);
   if (action.action === "check") details.push(`New state: ${action.payload.checked ? "checked" : "unchecked"}`);
+  if (action.action === "upload") {
+    details.push(
+      `Attachment: ${action.payload.name}`,
+      `Type: ${action.payload.mime}`,
+      `Bytes: ${action.payload.bytes}`,
+      `SHA-256: ${action.payload.sha256}`,
+      "The local path is withheld from the model and the page receives an immutable staged copy."
+    );
+  }
+  if (action.action === "download") {
+    details.push(
+      "The result will be quarantined, limited to 20 MB, hashed, and admitted only as a supported task attachment."
+    );
+  }
   details.push(
     "",
     "Approval applies only to this origin, page revision, target, and payload. Any change invalidates it."
   );
   return details.filter(Boolean).join("\n");
+}
+
+function takeoverResult(args, prepared, reviewCanvas) {
+  return {
+    ok: false,
+    status: "blocked",
+    takeover_required: true,
+    session_id: args.session_id,
+    public_action: prepared.public_action,
+    message:
+      "This authentication or sensitive control cannot be operated by the model. " +
+      "Ask the user to choose Take control in the browser canvas, complete it directly, then return control to AMOS.",
+    ...(reviewCanvas?.id ? { canvas_id: reviewCanvas.id } : {})
+  };
+}
+
+function deniedResult(args, prepared, reviewCanvas) {
+  return {
+    ok: false,
+    status: "denied",
+    denied: true,
+    session_id: args.session_id,
+    public_action: prepared.public_action,
+    message: "User denied the exact browser action.",
+    ...(reviewCanvas?.id ? { canvas_id: reviewCanvas.id } : {})
+  };
 }

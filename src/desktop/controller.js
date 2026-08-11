@@ -2404,11 +2404,27 @@ export class DesktopController {
   }
 
   presentBrowserSession(input) {
-    const spec = browserSessionCanvas(input);
-    const sessionId = spec.blocks[0].session_id;
+    const sessionId = String(input.session_id || "");
     const existing = this.canvases.list().find((canvas) =>
       canvas.blocks.some((block) => block.type === "browser" && block.sessionId === sessionId)
     );
+    const previousDownload = existing?.blocks.find((block) =>
+      block.type === "browser" && block.sessionId === sessionId
+    )?.download;
+    const spec = browserSessionCanvas({
+      ...input,
+      ...(!input.downloaded_attachment && previousDownload
+        ? {
+            downloaded_attachment: {
+              id: previousDownload.attachmentId,
+              name: previousDownload.name,
+              mime: previousDownload.mime,
+              size: previousDownload.size,
+              sha256: previousDownload.sha256
+            }
+          }
+        : {})
+    });
     const canvas = existing
       ? this.canvases.update(existing.id, spec)
       : this.canvases.present(spec);
@@ -2435,6 +2451,18 @@ export class DesktopController {
     if (!visible) throw new Error("That browser frame is no longer attached to this task");
     if (!this.browserRuntime) throw new Error("The local browser runtime is unavailable");
     return this.browserRuntime.readFrame(sessionId, frameId);
+  }
+
+  browserDownloadPayload(attachmentId) {
+    const value = String(attachmentId || "");
+    const visible = this.canvases.list().some((canvas) =>
+      canvas.blocks.some((block) =>
+        block.type === "browser" &&
+        block.download?.attachmentId === value
+      )
+    );
+    if (!visible) throw new Error("That browser download is no longer attached to this task canvas");
+    return this.attachments.browserDownloadPayload(value);
   }
 
   async startBrowserTakeover(sessionId) {
@@ -3062,7 +3090,14 @@ export class DesktopController {
       extraTools.push(...createBrowserTools({
         browser: this.browserRuntime,
         scope: () => browserScope,
-        present: (input) => this.presentBrowserSession(input)
+        present: (input) => this.presentBrowserSession(input),
+        resolveAttachment: (id) => this.attachments.browserUploadPayload(id),
+        registerDownload: (transfer) => this.attachments.addBrowserDownload({
+          name: transfer.name,
+          mime: transfer.mime,
+          bytes: transfer.buffer,
+          sourceUrl: transfer.source_url
+        })
       }));
     }
     if (!isOffline && !isPersonal) {
