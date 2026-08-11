@@ -283,7 +283,24 @@
 
             <div id="contextResizeHandle" class="context-resize-handle hidden" role="separator" aria-label="Resize work surface" aria-orientation="vertical" tabindex="0"></div>
             <aside id="canvasSidecar" class="canvas-sidecar hidden" aria-label="Current AMOS work surface">
-              <div class="canvas-sidecar-scroll">
+              <section id="automationSetupSurface" class="automation-setup-surface hidden" aria-label="Guided Automation setup">
+                <div class="automation-setup-heading">
+                  <div>
+                    <span class="eyebrow accent">GUIDED AUTOMATION SETUP</span>
+                    <h2 id="automationSetupTitle">Build an Automation.</h2>
+                    <p id="automationSetupSubtitle">AMOS will walk through the exact outcome, connections, mappings, trigger, preview, and governed activation.</p>
+                  </div>
+                  <button id="automationSetupClose" class="icon-button" type="button" aria-label="Close Automation setup" title="Close Automation setup">×</button>
+                </div>
+                <ol id="automationSetupPhases" class="automation-setup-phases" aria-label="Automation setup progress"></ol>
+                <div id="automationSetupBody" class="automation-setup-body"></div>
+                <div id="automationSetupError" class="connection-modal-error hidden" role="alert"></div>
+                <div class="automation-setup-actions">
+                  <button id="automationSetupBack" class="button secondary" type="button">Back</button>
+                  <button id="automationSetupNext" class="button primary" type="button">Continue <span>→</span></button>
+                </div>
+              </section>
+              <div id="canvasSurface" class="canvas-sidecar-scroll">
                 <div class="canvas-sidecar-heading">
                   <div>
                     <span class="eyebrow">CURRENT WORK SURFACE</span>

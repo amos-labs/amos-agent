@@ -8,6 +8,12 @@ import {
 } from "./companyCache.js";
 import { createAbortError, linkAbortSignal } from "../util/abort.js";
 import { normalizeSharedContinuityManifest } from "./sessionContinuity.js";
+import {
+  emptyAutomationTemplateCatalog,
+  normalizeAutomationInstallation,
+  normalizeAutomationOperations,
+  normalizeAutomationTemplateCatalog
+} from "./automationSetup.js";
 
 export class DesktopRemoteStateClient {
   constructor({ mcpUrl, oauth, requestTimeoutMs = 30_000 }, fetchImpl = fetchCompat) {
@@ -74,18 +80,71 @@ export class DesktopRemoteStateClient {
     try {
       const result = await this.mcp.callTool("list_automations", {}, { signal });
       const payload = parseMcpJson(result, "AMOS Automations");
+      let grants = [];
+      let grantsSupported = false;
+      try {
+        const grantResult = await this.mcp.callTool("list_automation_grants", {}, { signal });
+        const grantPayload = parseMcpJson(grantResult, "AMOS Automation standing grants");
+        grantsSupported = Array.isArray(grantPayload?.standing_grants);
+        grants = grantsSupported
+          ? grantPayload.standing_grants.map(normalizeAutomationGrant).filter(Boolean)
+          : [];
+      } catch (error) {
+        if (!isUnknownTool(error, "list_automation_grants")) throw error;
+      }
       return {
         supported: true,
         automations: Array.isArray(payload?.automations)
           ? payload.automations.map(normalizeAutomation).filter(Boolean)
-          : []
+          : [],
+        grantsSupported,
+        grants
       };
     } catch (error) {
       if (isUnknownTool(error, "list_automations")) {
-        return { supported: false, automations: [] };
+        return { supported: false, automations: [], grantsSupported: false, grants: [] };
       }
       throw error;
     }
+  }
+
+  async automationTemplateCatalog({ signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("list_automation_templates", {}, { signal });
+      return normalizeAutomationTemplateCatalog(
+        parseMcpJson(result, "AMOS Automation templates")
+      );
+    } catch (error) {
+      if (isUnknownTool(error, "list_automation_templates")) {
+        return emptyAutomationTemplateCatalog();
+      }
+      throw error;
+    }
+  }
+
+  async automationOperations(connection, { signal = null } = {}) {
+    const selected = requiredText(connection, 128, "Connection");
+    const result = await this.mcp.callTool(
+      "list_connection_operations",
+      { connection: selected },
+      { signal }
+    );
+    return normalizeAutomationOperations(
+      parseMcpJson(result, "AMOS connection operations"),
+      selected
+    );
+  }
+
+  async installAutomationTemplate(args, { signal = null } = {}) {
+    const result = await this.mcp.callTool("install_automation_template", args, { signal });
+    return normalizeAutomationInstallation(
+      parseMcpJson(result, "AMOS Automation template installation")
+    );
+  }
+
+  async activateAutomationDraft(argumentsValue, { signal = null } = {}) {
+    const result = await this.mcp.callTool("set_automation", argumentsValue, { signal });
+    return parseMcpJson(result, "AMOS Automation activation");
   }
 
   async setAutomationStatus(name, active, { signal = null } = {}) {
@@ -99,6 +158,18 @@ export class DesktopRemoteStateClient {
       result,
       active ? "AMOS Automation resume" : "AMOS Automation pause"
     );
+  }
+
+  async revokeAutomationGrant(grantId, reason = "", { signal = null } = {}) {
+    const result = await this.mcp.callTool(
+      "revoke_automation_grant",
+      {
+        grant_id: requiredUuid(grantId, "Automation standing grant"),
+        ...(String(reason || "").trim() ? { reason: String(reason).trim().slice(0, 500) } : {})
+      },
+      { signal }
+    );
+    return parseMcpJson(result, "AMOS Automation standing grant revocation");
   }
 
   async runBriefing(input, { signal = null } = {}) {
@@ -936,6 +1007,14 @@ function normalizeAutomation(value) {
       : String(value.status || "unknown").slice(0, 40),
     trigger,
     liveCopySubject: String(value.live_copy_subject || "").slice(0, 500),
+    templateKey: String(value.template_key || "").slice(0, 120),
+    templateVersion: boundedCount(value.template_version),
+    blueprintKey: String(value.blueprint_key || "").slice(0, 120),
+    createdBy: String(value.created_by || "").slice(0, 128),
+    definitionVersion: boundedCount(value.definition_version),
+    definitionSha256: /^[0-9a-f]{64}$/i.test(String(value.definition_sha256 || ""))
+      ? String(value.definition_sha256).toLowerCase()
+      : "",
     steps: (Array.isArray(value.steps_summary) ? value.steps_summary : [])
       .slice(0, 40)
       .flatMap((step) => {
@@ -945,6 +1024,9 @@ function normalizeAutomation(value) {
         return [{
           action,
           stage: String(step.stage || "").slice(0, 120),
+          stepKey: String(step.step_key || "").slice(0, 120),
+          verb: String(step.verb || "").slice(0, 120),
+          approvalMode: String(step.approval_mode || "").slice(0, 80),
           subject: String(step.subject || "").slice(0, 500),
           instructions: String(step.instructions || "").slice(0, 500)
         }];
@@ -960,8 +1042,52 @@ function normalizeAutomation(value) {
       lastSentAt: safeTimestamp(stats.last_sent_at),
       calendarEventsEvaluated: boundedCount(stats.calendar_events_evaluated),
       calendarEventsMatched: boundedCount(stats.calendar_events_matched),
-      lastCalendarEventAt: safeTimestamp(stats.last_calendar_event_at)
+      lastCalendarEventAt: safeTimestamp(stats.last_calendar_event_at),
+      toolRuns: boundedCount(stats.tool_runs),
+      toolRunsExecuted: boundedCount(stats.tool_runs_executed),
+      toolRunsParked: boundedCount(stats.tool_runs_parked),
+      toolRunsFailed: boundedCount(stats.tool_runs_failed),
+      lastToolRunAt: safeTimestamp(stats.last_tool_run_at)
     },
+    createdAt: safeTimestamp(value.created_at),
+    updatedAt: safeTimestamp(value.updated_at)
+  };
+}
+
+function normalizeAutomationGrant(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = String(value.id || "").trim();
+  const automationId = String(value.automation_id || "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !/^[0-9a-f-]{36}$/i.test(automationId)) return null;
+  const status = String(value.status || "unknown").slice(0, 40);
+  return {
+    id,
+    automationId,
+    automationName: String(value.automation_name || "").slice(0, 200),
+    definitionVersion: boundedCount(value.automation_definition_version),
+    definitionSha256: /^[0-9a-f]{64}$/i.test(String(value.automation_definition_sha256 || ""))
+      ? String(value.automation_definition_sha256).toLowerCase()
+      : "",
+    stepPosition: boundedCount(value.step_position),
+    stepKey: String(value.step_key || "").slice(0, 120),
+    connectionId: String(value.connection_id || "").slice(0, 128),
+    operationContractId: String(value.operation_contract_id || "").slice(0, 128),
+    operationKey: String(value.operation_key || "").slice(0, 64),
+    triggerScope: boundedJsonValue(value.trigger_scope || {}),
+    argumentScope: boundedJsonValue(value.argument_scope || []),
+    window: ["hour", "day"].includes(value.window) ? value.window : "day",
+    maxRunsPerWindow: boundedCount(value.max_runs_per_window),
+    windowRuns: boundedCount(value.window_runs),
+    maxTotalRuns: boundedCount(value.max_total_runs),
+    totalRuns: boundedCount(value.total_runs),
+    maxConsecutiveFailures: boundedCount(value.max_consecutive_failures),
+    consecutiveFailures: boundedCount(value.consecutive_failures),
+    status,
+    expiresAt: safeTimestamp(value.expires_at),
+    lastClaimedAt: safeTimestamp(value.last_claimed_at),
+    lastSucceededAt: safeTimestamp(value.last_succeeded_at),
+    lastFailedAt: safeTimestamp(value.last_failed_at),
+    statusReason: String(value.status_reason || "").slice(0, 500),
     createdAt: safeTimestamp(value.created_at),
     updatedAt: safeTimestamp(value.updated_at)
   };

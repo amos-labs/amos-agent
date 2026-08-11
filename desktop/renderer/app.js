@@ -1,5 +1,11 @@
 import { shouldSubmitPrompt } from "../../src/desktop/input.js";
 import { parseMarkdown } from "../../src/desktop/markdown.js";
+import {
+  AUTOMATION_SETUP_PHASES,
+  compileAutomationMappings,
+  mappingRowsForOperation,
+  previewAutomationMappings
+} from "../../src/desktop/automationSetup.js";
 
 const api = window.amosDesktop;
 
@@ -68,6 +74,9 @@ let continuityConversationRestored = false;
 const transientTaskMessages = new Set();
 let resumingCheckpointId = null;
 let forkTaskSource = null;
+let automationSetupDraft = null;
+let automationSetupOperations = null;
+let automationSetupBusy = false;
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
@@ -120,6 +129,9 @@ const elements = Object.fromEntries(
     "connectionModalError", "connectionCancelButton", "connectionSubmitButton",
     "automationSummary", "automationUnavailable", "automationEmpty", "automationList",
     "refreshAutomationsButton", "buildAutomationButton", "automationEmptyBuildButton",
+    "automationSetupSurface", "automationSetupTitle", "automationSetupSubtitle",
+    "automationSetupPhases", "automationSetupBody", "automationSetupError",
+    "automationSetupBack", "automationSetupNext", "automationSetupClose", "canvasSurface",
     "taskSummary", "taskSearchInput", "taskFilterInput", "taskPlatformNotice", "taskEmpty",
     "taskList", "newTaskButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
@@ -157,6 +169,7 @@ async function initialize() {
   updateAttachments(state.attachments || []);
   selectedProvider = state.settings.provider;
   canvasSidecarOpen = Boolean(state.activeCanvasId);
+  syncAutomationSetup(state.automationSetup);
   restoreShellPreferences();
   render();
   if (running) setRunning(true);
@@ -246,8 +259,11 @@ function bindActions() {
   elements.accountUpdateButton.addEventListener("click", handleAccountUpdate);
   elements.companySwitcher.addEventListener("change", switchCompany);
   elements.refreshAutomationsButton.addEventListener("click", refreshAutomations);
-  elements.buildAutomationButton.addEventListener("click", () => openAutomationTask());
-  elements.automationEmptyBuildButton.addEventListener("click", () => openAutomationTask());
+  elements.buildAutomationButton.addEventListener("click", () => openAutomationTask(null, elements.buildAutomationButton, true));
+  elements.automationEmptyBuildButton.addEventListener("click", () => openAutomationTask(null, elements.automationEmptyBuildButton, true));
+  elements.automationSetupBack.addEventListener("click", automationSetupBack);
+  elements.automationSetupNext.addEventListener("click", automationSetupNext);
+  elements.automationSetupClose.addEventListener("click", closeAutomationSetup);
   elements.newTaskButton.addEventListener("click", () => createNewConversation(elements.newTaskButton));
   elements.newConversationButton.addEventListener("click", () => createNewConversation(elements.newConversationButton));
   elements.forkConversationButton.addEventListener("click", forkCurrentConversation);
@@ -348,6 +364,12 @@ function bindEvents() {
     if (activeCanvasId) canvasSidecarOpen = true;
     renderCanvas();
   });
+  api.on("automation-setup:requested", (setup) => {
+    if (!state) return;
+    state.automationSetup = setup;
+    syncAutomationSetup(setup);
+    showView("operator");
+  });
   api.on("offline:changed", (offline) => {
     if (!state) return;
     state.offline = offline;
@@ -366,6 +388,7 @@ function bindEvents() {
   api.on("remote:changed", (remote) => {
     if (!state) return;
     Object.assign(state, remote);
+    syncAutomationSetup(remote.automationSetup);
     renderIdentity();
     renderAccountMenu();
     renderCompanySwitcher();
@@ -877,13 +900,18 @@ function renderAutomations() {
   if (!state) return;
   const library = state.automations || {};
   const automations = Array.isArray(library.automations) ? library.automations : [];
+  const grants = Array.isArray(library.grants) ? library.grants : [];
+  const activeGrants = grants.filter((grant) => grant.status === "active").length;
   const recipeLibrary = state.browserRecipes || {};
   const recipes = Array.isArray(recipeLibrary.recipes) ? recipeLibrary.recipes : [];
   const supported = library.supported === true || recipeLibrary.supported === true;
   const active = automations.filter((automation) => automation.status === "active").length +
     recipes.filter((recipe) => recipe.status === "ready").length;
   const needsAttention = automations.filter((automation) =>
-    automation.status !== "active" || Number(automation.stats?.failed || 0) > 0
+    automation.status !== "active" ||
+    Number(automation.stats?.failed || 0) > 0 ||
+    Number(automation.stats?.toolRunsFailed || 0) > 0 ||
+    Number(automation.stats?.toolRunsParked || 0) > 0
   ).length + recipes.filter((recipe) =>
     recipe.status !== "ready" || Number(recipe.runStats?.failed || 0) > 0
   ).length;
@@ -906,7 +934,7 @@ function renderAutomations() {
 
   elements.automationSummary.replaceChildren();
   for (const [label, value, detail] of [
-    ["Ready", active, "Platform automations and local recipes ready under current policy"],
+    ["Ready", active, `${activeGrants} exact bounded write grant${activeGrants === 1 ? "" : "s"} currently active`],
     ["Needs attention", needsAttention, "paused, drifted, draft, or reporting failures"],
     ["Completed runs", totalRuns, "bounded deterministic outcomes reported by AMOS"]
   ]) {
@@ -924,6 +952,7 @@ function renderAutomations() {
   elements.automationList.replaceChildren();
   for (const recipe of recipes) renderBrowserRecipeCard(recipe);
   for (const automation of automations) {
+    const automationGrants = grants.filter((grant) => grant.automationId === automation.id);
     const card = document.createElement("article");
     card.className = "automation-card";
 
@@ -950,8 +979,11 @@ function renderAutomations() {
     for (const [label, value] of [
       ["Enrolled", Number(automation.stats?.enrolled || 0)],
       ["Completed", Number(automation.stats?.completed || 0)],
-      ["Pending", Number(automation.stats?.pending || 0)],
-      ["Failed", Number(automation.stats?.failed || 0)]
+      ["Parked", Number(automation.stats?.toolRunsParked || 0)],
+      ["Failed", Math.max(
+        Number(automation.stats?.failed || 0),
+        Number(automation.stats?.toolRunsFailed || 0)
+      )]
     ]) {
       const metric = document.createElement("span");
       const metricValue = document.createElement("strong");
@@ -966,8 +998,13 @@ function renderAutomations() {
     meta.className = "automation-meta";
     meta.textContent = [
       `${automation.steps.length} step${automation.steps.length === 1 ? "" : "s"}`,
+      automation.templateKey
+        ? `${humanizeTool(automation.blueprintKey || "blueprint")} · ${humanizeTool(automation.templateKey)} v${automation.templateVersion || 1}`
+        : "",
       automation.updatedAt ? `Updated ${relativeTime(automation.updatedAt)}` : "",
-      automation.stats?.lastSentAt
+      automation.stats?.lastToolRunAt
+        ? `Last deterministic run ${relativeTime(automation.stats.lastToolRunAt)}`
+        : automation.stats?.lastSentAt
         ? `Last delivery ${relativeTime(automation.stats.lastSentAt)}`
         : automation.stats?.lastCalendarEventAt
           ? `Last matched ${relativeTime(automation.stats.lastCalendarEventAt)}`
@@ -983,8 +1020,67 @@ function renderAutomations() {
     statusButton.addEventListener("click", () => changeAutomationStatus(automation, nextActive, statusButton));
     actions.append(edit, statusButton);
 
-    card.append(heading, description, stats, meta, actions);
+    card.append(heading, description, stats, meta);
+    if (library.grantsSupported === true) {
+      const authority = document.createElement("section");
+      authority.className = "automation-authority";
+      const authorityHeading = document.createElement("div");
+      const authorityTitle = document.createElement("strong");
+      authorityTitle.textContent = "Continuous write authority";
+      const authorityCopy = document.createElement("small");
+      authorityCopy.textContent = automationGrants.length > 0
+        ? "Exact grants are independently bounded, monitored, and revocable."
+        : "No standing grant. Connected writes use per-run approval.";
+      authorityHeading.append(authorityTitle, authorityCopy);
+      authority.append(authorityHeading);
+      for (const grant of automationGrants) authority.append(renderAutomationGrant(grant));
+      card.append(authority);
+    }
+    card.append(actions);
     elements.automationList.append(card);
+  }
+}
+
+function renderAutomationGrant(grant) {
+  const row = document.createElement("article");
+  row.className = `automation-grant ${grant.status}`;
+  const copy = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = `${humanizeTool(grant.operationKey)} · ${grant.status.replaceAll("_", " ")}`;
+  const detail = document.createElement("small");
+  detail.textContent = [
+    `${new Intl.NumberFormat().format(grant.windowRuns)} / ${new Intl.NumberFormat().format(grant.maxRunsPerWindow)} this ${grant.window}`,
+    `${new Intl.NumberFormat().format(grant.totalRuns)} / ${new Intl.NumberFormat().format(grant.maxTotalRuns)} lifetime`,
+    `failure cutoff ${grant.consecutiveFailures} / ${grant.maxConsecutiveFailures}`,
+    grant.expiresAt ? `expires ${new Date(grant.expiresAt).toLocaleDateString()}` : "",
+    grant.statusReason
+  ].filter(Boolean).join(" · ");
+  copy.append(title, detail);
+  row.append(copy);
+  if (["active", "suspended"].includes(grant.status)) {
+    const revoke = actionButton("Revoke", "secondary");
+    revoke.addEventListener("click", () => revokeAutomationGrant(grant, revoke));
+    row.append(revoke);
+  }
+  return row;
+}
+
+async function revokeAutomationGrant(grant, button) {
+  if (!window.confirm(
+    `Revoke continuous write authority for “${humanizeTool(grant.operationKey)}”?\n\nFuture exact writes will return to per-run approval. An external call already claimed at this instant may still settle and remain visible in receipts.`
+  )) return;
+  setButtonBusy(button, true, "Revoking…");
+  try {
+    const response = await api.revokeAutomationGrant(
+      grant.id,
+      "Revoked by an authorized user from AMOS Desktop"
+    );
+    state.automations = response.automations || state.automations;
+    renderAutomations();
+    toast("Continuous Automation authority revoked. Future writes require approval.");
+  } catch (error) {
+    toast(error.message, true);
+    renderAutomations();
   }
 }
 
@@ -1099,7 +1195,11 @@ async function removeBrowserRecipe(recipe, button) {
   }
 }
 
-async function openAutomationTask(automation = null, sourceButton = elements.buildAutomationButton) {
+async function openAutomationTask(
+  automation = null,
+  sourceButton = elements.buildAutomationButton,
+  guided = false
+) {
   const sourceLabel = sourceButton.textContent;
   const title = automation ? `Improve ${automation.name}` : "Build an automation";
   const objective = automation
@@ -1126,12 +1226,944 @@ async function openAutomationTask(automation = null, sourceButton = elements.bui
     showView("operator");
     elements.promptInput.value = response.launch.objective;
     elements.promptInput.focus();
-    toast("Opened a separate automation task. The prior context lane was preserved.");
+    if (guided && !automation) {
+      try {
+        await api.beginAutomationSetup({ intent: objective });
+        toast("Opened guided Automation setup beside a separate conversation.");
+      } catch (error) {
+        toast(`Opened the Automation conversation. ${friendlyError(error)}`, true);
+      }
+    } else {
+      toast("Opened a separate automation task. The prior context lane was preserved.");
+    }
   } catch (error) {
     toast(error.message, true);
   } finally {
     if (sourceButton.isConnected) setButtonBusy(sourceButton, false, sourceLabel);
   }
+}
+
+function syncAutomationSetup(setup) {
+  if (!setup) {
+    automationSetupDraft = null;
+    automationSetupOperations = null;
+    if (state) renderCanvas();
+    return;
+  }
+  if (automationSetupDraft?.setupId === setup.id) {
+    automationSetupDraft.installation = setup.installation || automationSetupDraft.installation;
+    automationSetupDraft.activation = setup.activation || automationSetupDraft.activation;
+    if (setup.installation) automationSetupDraft.phaseIndex = 5;
+  } else {
+    automationSetupDraft = {
+      setupId: setup.id,
+      intent: setup.intent || "",
+      templateKey: setup.templateKey || "",
+      name: "",
+      connection: "",
+      operation: "",
+      mappings: [],
+      cadence: { kind: "weekly", weekday: 0, hour_utc: 6, minute_utc: 0 },
+      webhook: "",
+      collection: "",
+      filter: "",
+      backfill: false,
+      approvalMode: "per_run",
+      grantWindow: "day",
+      grantMaxRunsPerWindow: 1_000,
+      grantMaxTotalRuns: 100_000,
+      grantMaxConsecutiveFailures: 5,
+      grantExpiresOn: defaultAutomationGrantExpiry(),
+      metricKeys: "",
+      unitKey: "",
+      sampleContext: JSON.stringify({ trigger: { payload: {} } }, null, 2),
+      sampleResult: null,
+      phaseIndex: Math.max(0, AUTOMATION_SETUP_PHASES.indexOf(setup.phase || "intent")),
+      installation: setup.installation || null,
+      activation: setup.activation || null
+    };
+    automationSetupOperations = null;
+  }
+  canvasSidecarOpen = true;
+  if (state) renderCanvas();
+}
+
+function renderAutomationSetup() {
+  const draft = automationSetupDraft;
+  if (!draft) return;
+  const template = selectedAutomationTemplate();
+  const phase = AUTOMATION_SETUP_PHASES[draft.phaseIndex] || "intent";
+  elements.automationSetupTitle.textContent = template?.title || "Build an Automation.";
+  elements.automationSetupSubtitle.textContent = draft.intent ||
+    "AMOS will walk through the exact outcome, connections, mappings, trigger, preview, and governed activation.";
+  elements.automationSetupPhases.replaceChildren();
+  for (const [index, key] of AUTOMATION_SETUP_PHASES.entries()) {
+    const item = document.createElement("li");
+    item.className = index < draft.phaseIndex ? "done" : index === draft.phaseIndex ? "active" : "";
+    item.textContent = key === "connections" ? "Connect" : key;
+    elements.automationSetupPhases.append(item);
+  }
+  elements.automationSetupError.textContent = "";
+  elements.automationSetupError.classList.add("hidden");
+  elements.automationSetupBody.replaceChildren();
+  if (phase === "intent") renderAutomationIntentStep();
+  if (phase === "connections") renderAutomationConnectionStep(template);
+  if (phase === "mapping") renderAutomationMappingStep(template);
+  if (phase === "trigger") renderAutomationTriggerStep(template);
+  if (phase === "preview") renderAutomationPreviewStep(template);
+  if (phase === "activate") renderAutomationActivationStep(template);
+
+  elements.automationSetupBack.classList.toggle("hidden", draft.phaseIndex === 0 || Boolean(draft.installation));
+  elements.automationSetupBack.disabled = automationSetupBusy;
+  elements.automationSetupNext.disabled = automationSetupBusy;
+  elements.automationSetupNext.classList.toggle("hidden", false);
+  elements.automationSetupNext.innerHTML = automationSetupNextLabel(phase);
+}
+
+function renderAutomationIntentStep() {
+  const body = elements.automationSetupBody;
+  body.append(automationStepCopy(
+    "What should happen?",
+    "Confirm the business outcome, then choose the closest Platform-owned starting point. Templates remove the blank page; they do not hide the final definition."
+  ));
+  const intent = setupField("Outcome", "textarea", automationSetupDraft.intent);
+  intent.control.id = "automationSetupIntent";
+  intent.control.rows = 3;
+  intent.control.maxLength = 2_000;
+  body.append(intent.label);
+
+  const name = setupField(
+    "Automation name",
+    "text",
+    automationSetupDraft.name
+  );
+  name.control.id = "automationSetupName";
+  name.control.maxLength = 120;
+  name.control.placeholder = "Choose a template to use its suggested name";
+  body.append(name.label);
+
+  const catalog = state.automationTemplates || { blueprints: [], templates: [] };
+  for (const blueprint of catalog.blueprints || []) {
+    const heading = document.createElement("div");
+    heading.className = "automation-step-copy";
+    const title = document.createElement("h3");
+    title.textContent = blueprint.title;
+    const description = document.createElement("p");
+    description.textContent = blueprint.description;
+    heading.append(title, description);
+    body.append(heading);
+    const grid = document.createElement("div");
+    grid.className = "automation-template-grid";
+    for (const template of (catalog.templates || []).filter(
+      (item) => item.blueprintKey === blueprint.key
+    )) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `automation-template-card${template.key === automationSetupDraft.templateKey ? " selected" : ""}`;
+      button.disabled = !template.installable;
+      const meta = document.createElement("small");
+      meta.textContent = template.installable
+        ? `${template.triggerModes.join(" / ") || "guided"} · model-free runtime`
+        : "Guided custom build";
+      const name = document.createElement("strong");
+      name.textContent = template.title;
+      const copy = document.createElement("span");
+      copy.textContent = template.installable ? template.description : template.whyGuided;
+      button.append(meta, name, copy);
+      button.addEventListener("click", () => {
+        captureAutomationSetupFields("intent");
+        automationSetupDraft.templateKey = template.key;
+        automationSetupDraft.name = automationSetupDraft.name || template.title;
+        automationSetupDraft.mappings = [];
+        automationSetupOperations = null;
+        renderAutomationSetup();
+      });
+      grid.append(button);
+    }
+    body.append(grid);
+  }
+}
+
+function renderAutomationConnectionStep(template) {
+  const body = elements.automationSetupBody;
+  const needsConnection = template?.requiredParameters?.includes("connection");
+  body.append(automationStepCopy(
+    "Connect the systems this workflow needs.",
+    needsConnection
+      ? "Choose the connected account that will perform the typed operation. Add a missing app here without placing credentials in chat."
+      : "This template runs against governed AMOS data and does not require an external application connection."
+  ));
+  if (!needsConnection) {
+    body.append(automationBoundary(
+      "No external credential is needed. AMOS will still revalidate the current company identity and scopes on every run."
+    ));
+    return;
+  }
+  const connections = (state.connectionsCatalog?.connections || []).filter(
+    (connection) => connection.status === "connected" && connection.usable === true
+  );
+  const list = document.createElement("div");
+  list.className = "automation-connection-list";
+  for (const connection of connections) {
+    list.append(automationChoice({
+      name: "automationConnection",
+      value: connection.id || connection.provider,
+      checked: automationSetupDraft.connection === (connection.id || connection.provider),
+      title: connection.displayName,
+      detail: `${humanizeProvider(connection.provider)} · ${connection.ownership.replaceAll("_", " ")}`,
+      badge: "Connected",
+      onChange: () => {
+        automationSetupDraft.connection = connection.id || connection.provider;
+        automationSetupDraft.operation = "";
+        automationSetupDraft.mappings = [];
+        automationSetupOperations = null;
+      }
+    }));
+  }
+  if (connections.length === 0) {
+    list.append(automationBoundary("No usable app connection is visible to this identity yet."));
+  }
+  body.append(list);
+  const available = state.connectionsCatalog?.providers || [];
+  const connectedProviders = new Set(connections.map((item) => item.provider));
+  const connectable = available.filter(
+    (provider) => provider.availability === "available" && !connectedProviders.has(provider.provider)
+  );
+  if (connectable.length > 0) {
+    const note = document.createElement("div");
+    note.className = "automation-step-copy";
+    const title = document.createElement("h3");
+    title.textContent = "Connect another app";
+    const copy = document.createElement("p");
+    copy.textContent = "Secure setup opens from this flow. Credentials remain vaulted by AMOS Platform and are never returned to Desktop.";
+    note.append(title, copy);
+    body.append(note);
+    const grid = document.createElement("div");
+    grid.className = "automation-connect-grid";
+    for (const provider of connectable) {
+      const button = actionButton(`Connect ${provider.label}`, "secondary");
+      button.addEventListener("click", () => connectProviderFromAutomation(provider, button));
+      grid.append(button);
+    }
+    body.append(grid);
+  }
+}
+
+function renderAutomationMappingStep(template) {
+  const body = elements.automationSetupBody;
+  const needsOperation = template?.requiredParameters?.includes("operation");
+  body.append(automationStepCopy(
+    needsOperation ? "Choose the operation and map its fields." : "Configure the deterministic inputs.",
+    needsOperation
+      ? "AMOS shows only active, human-reviewed operation contracts. Every destination field stays visible and inspectable."
+      : "These values become data in the durable definition; the model is not required when it runs."
+  ));
+  if (needsOperation) {
+    if (!automationSetupOperations) {
+      body.append(automationBoundary("Loading active operation contracts from AMOS Platform…"));
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "automation-operation-list";
+    for (const contract of automationSetupOperations.contracts || []) {
+      list.append(automationChoice({
+        name: "automationOperation",
+        value: contract.operationKey,
+        checked: automationSetupDraft.operation === contract.operationKey,
+        title: contract.displayName,
+        detail: `${contract.method} ${contract.pathTemplate}`,
+        badge: contract.consequence,
+        onChange: () => {
+          automationSetupDraft.operation = contract.operationKey;
+          if (contract.consequence !== "write") automationSetupDraft.approvalMode = "per_run";
+          automationSetupDraft.mappings = mappingRowsForOperation(contract).map((row) => ({
+            ...row,
+            mode: template.triggerModes.includes("schedule") ? "constant" : "reference",
+            value: ""
+          }));
+          renderAutomationSetup();
+        }
+      }));
+    }
+    if ((automationSetupOperations.contracts || []).length === 0) {
+      list.append(automationBoundary(
+        "This connection has no active typed operation contracts. Ask AMOS in chat to derive contracts from the provider documentation; a human must activate them before this workflow can be installed."
+      ));
+    }
+    body.append(list);
+    if (automationSetupDraft.operation) renderAutomationMappingRows(body);
+  }
+  if (template?.requiredParameters?.includes("metric_keys")) {
+    const field = setupField("Initiative metric keys (comma separated)", "input", automationSetupDraft.metricKeys);
+    field.control.id = "automationMetricKeys";
+    field.control.placeholder = "revenue_growth, customer_satisfaction, labor_efficiency";
+    body.append(field.label);
+  }
+  if (template?.optionalParameters?.includes("unit_key")) {
+    const field = setupField("Operating unit key (optional)", "input", automationSetupDraft.unitKey);
+    field.control.id = "automationUnitKey";
+    field.control.placeholder = "All units when left blank";
+    body.append(field.label);
+  }
+}
+
+function renderAutomationMappingRows(body) {
+  const list = document.createElement("div");
+  list.className = "automation-mapping-list";
+  for (const [index, row] of automationSetupDraft.mappings.entries()) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "automation-mapping-row";
+    const destination = document.createElement("div");
+    destination.className = "automation-mapping-destination";
+    const label = document.createElement("strong");
+    label.textContent = `${row.label}${row.required ? " *" : ""}`;
+    const path = document.createElement("code");
+    path.textContent = `${row.destination} · ${row.type}`;
+    destination.append(label, path);
+    const mode = document.createElement("select");
+    mode.dataset.mappingMode = String(index);
+    for (const [value, copy] of [["reference", "Source field"], ["constant", "Constant"]]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = copy;
+      option.selected = row.mode === value;
+      mode.append(option);
+    }
+    mode.addEventListener("change", () => {
+      automationSetupDraft.mappings[index].mode = mode.value;
+      renderAutomationSetup();
+    });
+    const value = document.createElement("input");
+    value.dataset.mappingValue = String(index);
+    value.value = row.value;
+    value.placeholder = row.mode === "reference"
+      ? "trigger.payload.customer.id"
+      : "JSON value or plain text";
+    value.addEventListener("input", () => {
+      automationSetupDraft.mappings[index].value = value.value;
+    });
+    wrapper.append(destination, mode, value);
+    list.append(wrapper);
+  }
+  if (automationSetupDraft.mappings.length === 0) {
+    list.append(automationBoundary("This operation does not advertise any path, query, or body fields."));
+  }
+  body.append(list);
+}
+
+function renderAutomationTriggerStep(template) {
+  const body = elements.automationSetupBody;
+  const mode = template?.triggerModes?.[0] || "schedule";
+  body.append(automationStepCopy(
+    "When should it run?",
+    mode === "schedule"
+      ? "Choose the durable UTC schedule. A delayed poll runs the latest due occurrence without replaying an unbounded backlog."
+      : mode === "webhook"
+        ? "Name the signed inbound event that should create one deterministic run."
+        : "Choose the AMOS collection and whether existing records should be included."
+  ));
+  if (mode === "schedule") {
+    const kind = setupField("Cadence", "select", automationSetupDraft.cadence.kind, [
+      ["interval", "Every few hours"], ["daily", "Daily"], ["weekly", "Weekly"]
+    ]);
+    kind.control.id = "automationCadenceKind";
+    kind.control.addEventListener("change", () => {
+      automationSetupDraft.cadence.kind = kind.control.value;
+      renderAutomationSetup();
+    });
+    body.append(kind.label);
+    if (automationSetupDraft.cadence.kind === "interval") {
+      const interval = setupField("Repeat every", "select", automationSetupDraft.cadence.every_minutes || 60, [
+        [60, "1 hour"], [240, "4 hours"], [480, "8 hours"], [720, "12 hours"], [1440, "24 hours"], [10080, "7 days"]
+      ]);
+      interval.control.id = "automationIntervalMinutes";
+      body.append(interval.label);
+    } else {
+      if (automationSetupDraft.cadence.kind === "weekly") {
+        const weekday = setupField("Weekday", "select", automationSetupDraft.cadence.weekday ?? 0, [
+          [0, "Monday"], [1, "Tuesday"], [2, "Wednesday"], [3, "Thursday"], [4, "Friday"], [5, "Saturday"], [6, "Sunday"]
+        ]);
+        weekday.control.id = "automationWeekday";
+        body.append(weekday.label);
+      }
+      const time = setupField(
+        "Time (UTC)",
+        "time",
+        `${String(automationSetupDraft.cadence.hour_utc ?? 6).padStart(2, "0")}:${String(automationSetupDraft.cadence.minute_utc ?? 0).padStart(2, "0")}`
+      );
+      time.control.id = "automationScheduleTime";
+      body.append(time.label);
+    }
+  } else if (mode === "webhook") {
+    const field = setupField("Signed webhook event", "input", automationSetupDraft.webhook);
+    field.control.id = "automationWebhook";
+    field.control.placeholder = "stripe.invoice.created";
+    body.append(field.label);
+    body.append(automationBoundary(
+      "This selects an existing signed tenant-webhook event. Provider-side webhook provisioning is not performed by this draft installer."
+    ));
+  } else {
+    const collection = setupField("AMOS collection", "input", automationSetupDraft.collection);
+    collection.control.id = "automationCollection";
+    collection.control.placeholder = "invoices";
+    const filter = setupField("Equality filter (optional JSON)", "textarea", automationSetupDraft.filter);
+    filter.control.id = "automationFilter";
+    filter.control.rows = 3;
+    filter.control.placeholder = '{"status":"paid"}';
+    const backfill = document.createElement("label");
+    backfill.className = "automation-choice";
+    const checkbox = document.createElement("input");
+    checkbox.id = "automationBackfill";
+    checkbox.type = "checkbox";
+    checkbox.checked = automationSetupDraft.backfill;
+    const copy = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = "Include existing matching records";
+    const detail = document.createElement("small");
+    detail.textContent = "Otherwise, only records created or changed after activation are eligible.";
+    copy.append(title, detail);
+    backfill.append(checkbox, copy);
+    body.append(collection.label, filter.label, backfill);
+  }
+  renderAutomationAuthorityStep(body, template);
+}
+
+function renderAutomationAuthorityStep(body, template) {
+  const contract = selectedAutomationOperation();
+  if (!contract || contract.consequence !== "write") return;
+  const supported = template?.optionalParameters?.includes("standing_grant") &&
+    state?.automationTemplates?.standingGrantContract?.supported === true;
+  const heading = automationStepCopy(
+    "How should repeat writes be approved?",
+    supported
+      ? "Per-run approval remains the default. Bounded continuous authority permits only this exact trigger, mapping, connection, and immutable operation contract within the limits below."
+      : "This Platform contract currently requires a governed company decision for every connected write."
+  );
+  body.append(heading);
+  if (!supported) {
+    automationSetupDraft.approvalMode = "per_run";
+    body.append(automationBoundary(
+      state?.automationTemplates?.standingGrantContract?.fallback ||
+      "Each connected write will park for an authorized human before it reaches the provider."
+    ));
+    return;
+  }
+  const choices = document.createElement("div");
+  choices.className = "automation-connection-list";
+  choices.append(
+    automationChoice({
+      name: "automationApprovalMode",
+      value: "per_run",
+      checked: automationSetupDraft.approvalMode !== "standing_grant",
+      title: "Approve every write",
+      detail: "Best for low-volume or unusually consequential operations.",
+      badge: "Default",
+      onChange: () => {
+        automationSetupDraft.approvalMode = "per_run";
+        renderAutomationSetup();
+      }
+    }),
+    automationChoice({
+      name: "automationApprovalMode",
+      value: "standing_grant",
+      checked: automationSetupDraft.approvalMode === "standing_grant",
+      title: "Approve bounded continuous operation",
+      detail: "One human approval, then exact deterministic writes run until a bound is reached or authority is revoked.",
+      badge: "Exact + revocable",
+      onChange: () => {
+        automationSetupDraft.approvalMode = "standing_grant";
+        renderAutomationSetup();
+      }
+    })
+  );
+  body.append(choices);
+  if (automationSetupDraft.approvalMode !== "standing_grant") return;
+
+  const grid = document.createElement("div");
+  grid.className = "automation-grant-grid";
+  const window = setupField("Rate window", "select", automationSetupDraft.grantWindow, [
+    ["hour", "Per hour"], ["day", "Per day"]
+  ]);
+  window.control.id = "automationGrantWindow";
+  const maxWindow = setupField("Maximum writes per window", "number", automationSetupDraft.grantMaxRunsPerWindow);
+  maxWindow.control.id = "automationGrantMaxWindow";
+  maxWindow.control.min = "1";
+  maxWindow.control.max = "1000000";
+  const maxTotal = setupField("Lifetime write ceiling", "number", automationSetupDraft.grantMaxTotalRuns);
+  maxTotal.control.id = "automationGrantMaxTotal";
+  maxTotal.control.min = "1";
+  maxTotal.control.max = "1000000000";
+  const failures = setupField("Pause after consecutive failures", "number", automationSetupDraft.grantMaxConsecutiveFailures);
+  failures.control.id = "automationGrantMaxFailures";
+  failures.control.min = "1";
+  failures.control.max = "100";
+  const expiry = setupField("Authority expires after this UTC date", "date", automationSetupDraft.grantExpiresOn);
+  expiry.control.id = "automationGrantExpiresOn";
+  expiry.control.min = automationGrantDateFromNow(1);
+  expiry.control.max = automationGrantDateFromNow(365);
+  grid.append(window.label, maxWindow.label, maxTotal.label, failures.label, expiry.label);
+  body.append(grid, automationBoundary(
+    "Pause stops claims immediately. Revocation blocks every future claim. Editing the trigger, filters, mappings, connection, operation contract, or Automation definition requires a new human approval."
+  ));
+}
+
+function renderAutomationPreviewStep(template) {
+  const body = elements.automationSetupBody;
+  body.append(automationStepCopy(
+    "Review the compiled definition.",
+    "Nothing below has been activated. Installing creates an inert draft and a proof receipt."
+  ));
+  let preview;
+  try {
+    preview = automationSetupPreview(template);
+  } catch (error) {
+    body.append(automationBoundary(error.message));
+    return;
+  }
+  body.append(reviewCard("Outcome", automationSetupDraft.intent));
+  body.append(reviewCard("Template and name", `${template.title}\n${automationSetupDraft.name}`));
+  body.append(reviewCard("Trigger", JSON.stringify(preview.trigger, null, 2), true));
+  body.append(reviewCard("Deterministic parameters and mappings", JSON.stringify(preview.parameters, null, 2), true));
+  if (containsAutomationReference(preview.parameters.arguments)) {
+    const sample = setupField("Representative trigger context (JSON)", "textarea", automationSetupDraft.sampleContext);
+    sample.control.id = "automationSampleContext";
+    sample.control.rows = 6;
+    body.append(sample.label);
+    const previewButton = actionButton("Preview mapped payload", "secondary");
+    previewButton.addEventListener("click", previewMappedAutomationPayload);
+    body.append(previewButton);
+    if (automationSetupDraft.sampleResult) {
+      body.append(reviewCard("Mapped operation payload", JSON.stringify(automationSetupDraft.sampleResult, null, 2), true));
+    }
+  }
+  body.append(automationBoundary(
+    automationSetupDraft.approvalMode === "standing_grant" && preview.parameters.standing_grant
+      ? "Definition preview performs no external call. Activation requests one exact bounded standing grant; every write still revalidates identity, RBAC, company policy, subscription, definition, contract, and atomic limits without requiring a model."
+      : "Definition preview performs no external call. Runs remain deterministic without a model. Connected writes pause for the governed company decision on each run."
+  ));
+}
+
+function renderAutomationActivationStep(template) {
+  const body = elements.automationSetupBody;
+  const installation = automationSetupDraft.installation;
+  const activation = automationSetupDraft.activation;
+  if (!installation) {
+    body.append(automationBoundary("The Automation draft has not been installed yet."));
+    return;
+  }
+  body.append(automationStepCopy(
+    activation ? "Activation submitted." : "Draft installed. Activate when ready.",
+    activation
+      ? activation.message
+      : "AMOS installed the exact reviewed definition as an inert draft. Activation re-enters current identity, RBAC, policy, approval, and proof."
+  ));
+  body.append(reviewCard("Draft", [
+    installation.automation.name,
+    `${template?.title || installation.automation.templateKey} · v${installation.automation.templateVersion || 1}`,
+    `Status: ${installation.automation.status}`,
+    installation.receiptId ? `Receipt: ${installation.receiptId}` : ""
+  ].filter(Boolean).join("\n")));
+  body.append(reviewCard(
+    "Installed trigger",
+    JSON.stringify(installation.activation.preview.trigger, null, 2),
+    true
+  ));
+  body.append(reviewCard(
+    "Installed deterministic steps",
+    JSON.stringify(installation.activation.preview.steps, null, 2),
+    true
+  ));
+  body.append(automationBoundary(
+    activation?.pendingApproval
+      ? "The activation request is parked for an authorized human. Desktop cannot self-approve it; review the exact pending company decision."
+      : activation
+        ? "AMOS accepted the activation request. The Automation page is the durable management surface."
+        : installation.activation.note
+  ));
+}
+
+async function automationSetupNext() {
+  if (!automationSetupDraft || automationSetupBusy) return;
+  const phase = AUTOMATION_SETUP_PHASES[automationSetupDraft.phaseIndex];
+  captureAutomationSetupFields(phase);
+  setAutomationSetupBusy(true);
+  try {
+    const template = selectedAutomationTemplate();
+    if (phase === "intent") {
+      if (!automationSetupDraft.intent) throw new Error("Describe the business outcome first");
+      if (!template) throw new Error("Choose an Automation template");
+      automationSetupDraft.name ||= template.title;
+      automationSetupDraft.phaseIndex = 1;
+    } else if (phase === "connections") {
+      if (template.requiredParameters.includes("connection")) {
+        if (!automationSetupDraft.connection) throw new Error("Choose or connect the system this Automation will operate");
+        automationSetupOperations = await api.automationOperations(automationSetupDraft.connection);
+      }
+      automationSetupDraft.phaseIndex = 2;
+    } else if (phase === "mapping") {
+      validateAutomationMappingStep(template);
+      automationSetupDraft.phaseIndex = 3;
+    } else if (phase === "trigger") {
+      automationSetupPreview(template);
+      automationSetupDraft.phaseIndex = 4;
+    } else if (phase === "preview") {
+      const preview = automationSetupPreview(template);
+      const response = await api.installAutomationSetup({
+        setupId: automationSetupDraft.setupId,
+        templateKey: template.key,
+        name: automationSetupDraft.name,
+        parameters: preview.parameters
+      });
+      automationSetupDraft.installation = response.installation;
+      automationSetupDraft.phaseIndex = 5;
+      if (state) state.automations = response.automations || state.automations;
+      toast(`${response.installation.automation.name} was installed as a draft.`);
+    } else if (phase === "activate") {
+      if (!automationSetupDraft.activation) {
+        const response = await api.activateAutomationSetup(automationSetupDraft.setupId);
+        automationSetupDraft.activation = response.activation;
+        if (state) {
+          state.automations = response.automations || state.automations;
+          state.approvals = response.approvals || state.approvals;
+        }
+        toast(response.activation.message);
+      } else if (automationSetupDraft.activation.pendingApproval) {
+        showView("work");
+        showWorkTab("open");
+      } else {
+        showView("automations");
+      }
+    }
+    renderCanvas();
+  } catch (error) {
+    showAutomationSetupError(friendlyError(error));
+  } finally {
+    setAutomationSetupBusy(false);
+  }
+}
+
+function automationSetupBack() {
+  if (!automationSetupDraft || automationSetupBusy || automationSetupDraft.installation) return;
+  captureAutomationSetupFields(AUTOMATION_SETUP_PHASES[automationSetupDraft.phaseIndex]);
+  automationSetupDraft.phaseIndex = Math.max(0, automationSetupDraft.phaseIndex - 1);
+  renderCanvas();
+}
+
+async function closeAutomationSetup() {
+  const setupId = automationSetupDraft?.setupId;
+  automationSetupDraft = null;
+  automationSetupOperations = null;
+  if (state) state.automationSetup = null;
+  renderCanvas();
+  if (setupId) await api.dismissAutomationSetup(setupId).catch(() => {});
+  elements.promptInput.focus();
+}
+
+function captureAutomationSetupFields(phase) {
+  if (!automationSetupDraft) return;
+  if (phase === "intent") {
+    const intent = document.getElementById("automationSetupIntent");
+    const name = document.getElementById("automationSetupName");
+    if (intent) automationSetupDraft.intent = intent.value.trim();
+    if (name) automationSetupDraft.name = name.value.trim();
+  }
+  if (phase === "mapping") {
+    const metrics = document.getElementById("automationMetricKeys");
+    const unit = document.getElementById("automationUnitKey");
+    if (metrics) automationSetupDraft.metricKeys = metrics.value;
+    if (unit) automationSetupDraft.unitKey = unit.value.trim();
+    for (const [index, row] of automationSetupDraft.mappings.entries()) {
+      row.mode = document.querySelector(`[data-mapping-mode="${index}"]`)?.value || row.mode;
+      row.value = document.querySelector(`[data-mapping-value="${index}"]`)?.value || row.value;
+    }
+  }
+  if (phase === "trigger") {
+    const kind = document.getElementById("automationCadenceKind")?.value;
+    if (kind) {
+      automationSetupDraft.cadence.kind = kind;
+      if (kind === "interval") {
+        automationSetupDraft.cadence.every_minutes = Number(
+          document.getElementById("automationIntervalMinutes")?.value || 60
+        );
+      } else {
+        const [hour, minute] = String(document.getElementById("automationScheduleTime")?.value || "06:00")
+          .split(":").map(Number);
+        automationSetupDraft.cadence.hour_utc = hour;
+        automationSetupDraft.cadence.minute_utc = minute;
+        if (kind === "weekly") {
+          automationSetupDraft.cadence.weekday = Number(document.getElementById("automationWeekday")?.value || 0);
+        }
+      }
+    }
+    const webhook = document.getElementById("automationWebhook");
+    const collection = document.getElementById("automationCollection");
+    const filter = document.getElementById("automationFilter");
+    if (webhook) automationSetupDraft.webhook = webhook.value.trim();
+    if (collection) automationSetupDraft.collection = collection.value.trim();
+    if (filter) automationSetupDraft.filter = filter.value.trim();
+    automationSetupDraft.backfill = document.getElementById("automationBackfill")?.checked || false;
+    const approval = document.querySelector('input[name="automationApprovalMode"]:checked');
+    if (approval) automationSetupDraft.approvalMode = approval.value;
+    const grantWindow = document.getElementById("automationGrantWindow");
+    if (grantWindow) automationSetupDraft.grantWindow = grantWindow.value;
+    const grantMaxWindow = document.getElementById("automationGrantMaxWindow");
+    if (grantMaxWindow) automationSetupDraft.grantMaxRunsPerWindow = Number(grantMaxWindow.value);
+    const grantMaxTotal = document.getElementById("automationGrantMaxTotal");
+    if (grantMaxTotal) automationSetupDraft.grantMaxTotalRuns = Number(grantMaxTotal.value);
+    const grantFailures = document.getElementById("automationGrantMaxFailures");
+    if (grantFailures) automationSetupDraft.grantMaxConsecutiveFailures = Number(grantFailures.value);
+    const grantExpiry = document.getElementById("automationGrantExpiresOn");
+    if (grantExpiry) automationSetupDraft.grantExpiresOn = grantExpiry.value;
+  }
+  if (phase === "preview") {
+    const sample = document.getElementById("automationSampleContext");
+    if (sample) automationSetupDraft.sampleContext = sample.value;
+  }
+}
+
+function validateAutomationMappingStep(template) {
+  if (template.requiredParameters.includes("operation")) {
+    if (!automationSetupDraft.operation) throw new Error("Choose an active operation contract");
+    for (const row of automationSetupDraft.mappings) {
+      if (row.required && !String(row.value || "").trim()) {
+        throw new Error(`Map the required destination field '${row.destination}'`);
+      }
+    }
+    compileAutomationMappings(
+      automationSetupDraft.mappings.filter((row) => String(row.value || "").trim())
+    );
+  }
+  if (template.requiredParameters.includes("metric_keys") && !automationSetupDraft.metricKeys.trim()) {
+    throw new Error("Choose at least one initiative metric key");
+  }
+}
+
+function automationSetupPreview(template) {
+  if (!template) throw new Error("Choose an Automation template");
+  validateAutomationMappingStep(template);
+  const parameters = {};
+  if (template.requiredParameters.includes("connection")) parameters.connection = automationSetupDraft.connection;
+  if (template.requiredParameters.includes("operation")) {
+    parameters.operation = automationSetupDraft.operation;
+    const populated = automationSetupDraft.mappings.filter((row) => String(row.value || "").trim());
+    parameters.arguments = compileAutomationMappings(populated);
+    const operation = selectedAutomationOperation();
+    if (
+      operation?.consequence === "write" &&
+      template.optionalParameters.includes("standing_grant") &&
+      automationSetupDraft.approvalMode === "standing_grant"
+    ) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(automationSetupDraft.grantExpiresOn)) {
+        throw new Error("Choose a valid UTC expiry date for bounded authority");
+      }
+      parameters.standing_grant = {
+        window: automationSetupDraft.grantWindow,
+        max_runs_per_window: automationSetupDraft.grantMaxRunsPerWindow,
+        max_total_runs: automationSetupDraft.grantMaxTotalRuns,
+        max_consecutive_failures: automationSetupDraft.grantMaxConsecutiveFailures,
+        expires_at: new Date(`${automationSetupDraft.grantExpiresOn}T23:59:59.000Z`).toISOString()
+      };
+    }
+  }
+  if (template.requiredParameters.includes("metric_keys")) {
+    parameters.metric_keys = automationSetupDraft.metricKeys.split(",").map((value) => value.trim()).filter(Boolean);
+  }
+  if (template.optionalParameters.includes("unit_key") && automationSetupDraft.unitKey) {
+    parameters.unit_key = automationSetupDraft.unitKey;
+  }
+  const mode = template.triggerModes[0] || "schedule";
+  let trigger;
+  if (mode === "schedule") {
+    parameters.cadence = structuredClone(automationSetupDraft.cadence);
+    trigger = { kind: "schedule", cadence: parameters.cadence };
+  } else if (mode === "webhook") {
+    if (!automationSetupDraft.webhook) throw new Error("Name the signed webhook event");
+    parameters.webhook = automationSetupDraft.webhook;
+    trigger = { kind: "webhook", webhook: parameters.webhook };
+  } else {
+    if (!automationSetupDraft.collection) throw new Error("Name the AMOS collection to watch");
+    parameters.collection = automationSetupDraft.collection;
+    parameters.backfill = automationSetupDraft.backfill;
+    if (automationSetupDraft.filter) {
+      try {
+        parameters.filter = JSON.parse(automationSetupDraft.filter);
+      } catch {
+        throw new Error("Record filter must be valid JSON");
+      }
+    }
+    trigger = {
+      kind: "record_change",
+      collection: parameters.collection,
+      backfill: parameters.backfill,
+      ...(parameters.filter ? { filter: parameters.filter } : {})
+    };
+  }
+  return { trigger, parameters };
+}
+
+function selectedAutomationOperation() {
+  return (automationSetupOperations?.contracts || []).find(
+    (contract) => contract.operationKey === automationSetupDraft?.operation
+  ) || null;
+}
+
+function defaultAutomationGrantExpiry() {
+  return automationGrantDateFromNow(90);
+}
+
+function automationGrantDateFromNow(days) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function previewMappedAutomationPayload() {
+  try {
+    captureAutomationSetupFields("preview");
+    const context = JSON.parse(automationSetupDraft.sampleContext);
+    const preview = automationSetupPreview(selectedAutomationTemplate());
+    automationSetupDraft.sampleResult = previewAutomationMappings(
+      preview.parameters.arguments || {},
+      context
+    );
+    renderAutomationSetup();
+  } catch (error) {
+    showAutomationSetupError(friendlyError(error));
+  }
+}
+
+async function connectProviderFromAutomation(provider, button) {
+  setButtonBusy(button, true, "Opening…");
+  try {
+    if (provider.setupMode === "hosted_oauth") {
+      await api.connectProvider(provider.provider);
+      toast(`Opened secure setup for ${provider.label}`);
+    } else if (provider.credentialForm) {
+      openConnectionModal(provider);
+    } else {
+      throw new Error("This provider does not advertise a supported secure setup flow");
+    }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, `Connect ${provider.label}`);
+  }
+}
+
+function selectedAutomationTemplate() {
+  return (state?.automationTemplates?.templates || []).find(
+    (template) => template.key === automationSetupDraft?.templateKey
+  ) || null;
+}
+
+function automationSetupNextLabel(phase) {
+  if (automationSetupBusy) return "Working…";
+  if (phase === "preview") return "Install draft <span>→</span>";
+  if (phase === "activate") {
+    if (!automationSetupDraft.installation) return "Return to preview";
+    if (!automationSetupDraft.activation) return "Request activation <span>→</span>";
+    return automationSetupDraft.activation.pendingApproval
+      ? "Review decision <span>→</span>"
+      : "View in Automations <span>→</span>";
+  }
+  return "Continue <span>→</span>";
+}
+
+function setAutomationSetupBusy(busy) {
+  automationSetupBusy = busy;
+  elements.automationSetupBack.disabled = busy;
+  elements.automationSetupNext.disabled = busy;
+  if (automationSetupDraft) {
+    const phase = AUTOMATION_SETUP_PHASES[automationSetupDraft.phaseIndex] || "intent";
+    elements.automationSetupNext.innerHTML = automationSetupNextLabel(phase);
+  }
+}
+
+function showAutomationSetupError(message) {
+  elements.automationSetupError.textContent = message;
+  elements.automationSetupError.classList.remove("hidden");
+}
+
+function automationStepCopy(titleText, copyText) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "automation-step-copy";
+  const title = document.createElement("h3");
+  title.textContent = titleText;
+  const copy = document.createElement("p");
+  copy.textContent = copyText;
+  wrapper.append(title, copy);
+  return wrapper;
+}
+
+function setupField(labelText, type, value, options = []) {
+  const label = document.createElement("label");
+  label.className = type === "textarea" ? "automation-intent-field" : "automation-setup-field";
+  const title = document.createElement("span");
+  title.textContent = labelText;
+  let control;
+  if (type === "textarea") control = document.createElement("textarea");
+  else if (type === "select") {
+    control = document.createElement("select");
+    for (const [optionValue, optionLabel] of options) {
+      const option = document.createElement("option");
+      option.value = String(optionValue);
+      option.textContent = optionLabel;
+      option.selected = String(optionValue) === String(value);
+      control.append(option);
+    }
+  } else {
+    control = document.createElement("input");
+    control.type = type;
+  }
+  if (type !== "select") control.value = String(value ?? "");
+  label.append(title, control);
+  return { label, control };
+}
+
+function automationChoice({ name, value, checked, title, detail, badge, onChange }) {
+  const label = document.createElement("label");
+  label.className = "automation-choice";
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = name;
+  input.value = value;
+  input.checked = checked;
+  input.addEventListener("change", onChange);
+  const copy = document.createElement("span");
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const small = document.createElement("small");
+  small.textContent = detail;
+  copy.append(strong, small);
+  const status = document.createElement("em");
+  status.textContent = badge;
+  label.append(input, copy, status);
+  return label;
+}
+
+function automationBoundary(text) {
+  const note = document.createElement("div");
+  note.className = "automation-boundary-note";
+  note.textContent = text;
+  return note;
+}
+
+function reviewCard(titleText, content, code = false) {
+  const card = document.createElement("div");
+  card.className = "automation-review-card";
+  const title = document.createElement("strong");
+  title.textContent = titleText;
+  const value = document.createElement(code ? "pre" : "div");
+  value.textContent = content;
+  card.append(title, value);
+  return card;
+}
+
+function containsAutomationReference(value) {
+  if (Array.isArray(value)) return value.some(containsAutomationReference);
+  if (!value || typeof value !== "object") return false;
+  if (typeof value.$ref === "string") return true;
+  return Object.values(value).some(containsAutomationReference);
 }
 
 function automationTriggerLabel(trigger) {
@@ -1145,7 +2177,7 @@ function automationStepSummary(steps) {
   }
   return steps
     .slice(0, 3)
-    .map((step) => step.stage || step.subject || humanizeTool(step.action))
+    .map((step) => step.stage || step.subject || step.verb || humanizeTool(step.action))
     .filter(Boolean)
     .join(" → ");
 }
@@ -1604,15 +2636,25 @@ function renderCanvas() {
   }
   const canvas = canvases.find((item) => item.id === activeCanvasId) || null;
   const hasBlocks = Boolean(canvas?.blocks?.length);
+  const setupVisible = Boolean(automationSetupDraft && currentView === "operator");
   renderBriefingLibrary();
-  if (!canvas) canvasSidecarOpen = false;
-  const sidecarVisible = Boolean(canvas && canvasSidecarOpen && currentView === "operator");
+  if (!canvas && !setupVisible) canvasSidecarOpen = false;
+  if (setupVisible) canvasSidecarOpen = true;
+  const sidecarVisible = setupVisible || Boolean(
+    canvas && canvasSidecarOpen && currentView === "operator"
+  );
   elements.operatorGrid.classList.toggle("has-context", sidecarVisible);
   elements.canvasSidecar.classList.toggle("hidden", !sidecarVisible);
   elements.contextResizeHandle.classList.toggle("hidden", !sidecarVisible);
+  elements.automationSetupSurface.classList.toggle("hidden", !setupVisible);
+  elements.canvasSurface.classList.toggle("hidden", setupVisible);
 
   elements.canvasBadge.textContent = String(canvases.length);
   elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
+  if (setupVisible) {
+    renderAutomationSetup();
+    return;
+  }
   elements.canvasEmpty.classList.toggle("hidden", hasBlocks);
   elements.canvasBlocks.classList.toggle("hidden", !hasBlocks);
   elements.canvasSourceBar.classList.toggle("hidden", !canvas);

@@ -68,6 +68,16 @@ test("remote state events project every refreshed platform surface into Desktop"
     connectionsCatalog: controller.connectionsCatalog,
     briefings: controller.briefings,
     automations: { supported: false, automations: [] },
+    automationTemplates: {
+      supported: false,
+      catalogVersion: 0,
+      blueprints: [],
+      templates: [],
+      installationContract: "",
+      standingGrantContract: { supported: false, defaultMode: "per_run", fallback: "" },
+      operatorSetupContract: { primarySurface: "", sequence: [] }
+    },
+    automationSetup: null,
     browserRecipes: { supported: false, recipes: [] },
     tasks: controller.tasks,
     companies: controller.companies,
