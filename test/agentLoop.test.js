@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { AgentLoop } from "../src/agentLoop.js";
 import { ToolRegistry } from "../src/tools/registry.js";
+import { attachModelEvidence } from "../src/model/evidence.js";
 
 test("malformed tool JSON is returned as an error and never executes", async () => {
   let calls = 0;
@@ -37,6 +38,51 @@ test("malformed tool JSON is returned as an error and never executes", async () 
 
   assert.equal(await loop.run("test"), "recovered");
   assert.equal(calls, 0);
+});
+
+test("transient visual tool evidence reaches the next model turn but not public tool events", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "observe_visual",
+    handler: async () => attachModelEvidence(
+      { ok: true, frame_id: "frame-1", frame_sha256: "a".repeat(64) },
+      [{
+        type: "image_url",
+        image_url: { url: "data:image/png;base64,cG5n", detail: "high" }
+      }]
+    )
+  });
+  const observed = [];
+  const events = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        observed.push(messages);
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{ id: "visual-1", function: { name: "observe_visual", arguments: "{}" } }]
+            }
+          };
+        }
+        const visualMessage = messages.find((message) => message.amosEphemeralEvidence === true);
+        assert.ok(visualMessage);
+        assert.equal(visualMessage.content.some((part) => part.type === "image_url"), true);
+        return { message: { role: "assistant", content: "I inspected the transient frame." } };
+      }
+    }
+  });
+  assert.equal(await loop.run("Inspect the visual", { onEvent: (event) => events.push(event) }), "I inspected the transient frame.");
+  assert.equal(JSON.stringify(events).includes("data:image/png"), false);
+  assert.equal(JSON.stringify(observed[0]).includes("data:image/png"), false);
 });
 
 test("custom operating prompt survives a cleared session", () => {

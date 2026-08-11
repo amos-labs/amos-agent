@@ -32,12 +32,16 @@ export function browserSessionCanvas(input, { generatedAt = new Date().toISOStri
       status: closed ? "closed" : input.status || "ready",
       page_revision: Math.max(0, Number(input.page_revision) || 0),
       frame_id: input.frame?.frame_id || "",
+      frame_sha256: input.frame?.sha256 || "",
       viewport: input.frame
         ? { width: input.frame.width, height: input.frame.height }
         : { width: 1280, height: 800 },
       observed_at: input.observed_at || generatedAt,
       element_count: Math.max(0, Number(input.element_count) || 0),
       summary: input.summary || "",
+      visual_fallback: input.contract === "amos.browser-visual-observation:1" ||
+        String(input.operation || "").startsWith("visual_"),
+      visual_target: input.target_description || input.public_action?.target_description || "",
       ...(download ? { download } : {}),
       takeover_active: !closed && input.takeover_active === true,
       interactive: !closed

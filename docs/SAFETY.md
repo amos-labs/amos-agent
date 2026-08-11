@@ -139,7 +139,33 @@ Browser file transfer is a separate, fail-closed capability:
   **Save copy…** and a destination in the native save dialog. Transfer storage
   is removed when its browser session is revoked.
 
-Visual pointer control remains unavailable until its separate boundary lands.
+Deterministic browser recipes add a separate local boundary:
+
+- only successful verified semantic actions can enter the task-local recorder;
+- saved recipes are encrypted and pinned to the exact operating boundary,
+  identity, and tenant;
+- recipes store origins, exact semantic contracts, named inputs, and bounded
+  waits—never selectors, typed values, credentials, cookies, paths, file bytes,
+  or approval authority;
+- replay is a typed state machine that needs no LLM, asks again for each exact
+  consequence, emits checkpoints/receipts, and stops on zero or multiple target
+  matches; and
+- runtime/task/account/company reset revokes recordings and live sessions.
+
+Bounded visual fallback remains inside the isolated task browser:
+
+- it is exposed only to provider profiles that advertise vision support;
+- authentication routes and visible credential, MFA, recovery, payment, or
+  secret fields are denied and route to direct user takeover;
+- editable values are CSS-masked before capture;
+- image bytes enter only a transient model evidence message and never public
+  tool JSON, renderer events, receipts, continuity, or task persistence;
+- click/type/key/scroll proposals bind to the exact page revision, frame ID,
+  SHA-256, viewport, coordinates, observed target, and payload;
+- every non-scroll action requires fresh exact approval and re-captures the
+  pixels before input; and
+- there is no clipboard access, OS desktop capture, unrelated-window access,
+  or generic machine-wide input capability.
 
 ## Intelligence providers
 

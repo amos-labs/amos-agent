@@ -84,8 +84,35 @@ The governed transfer slice additionally provides:
   and
 - transfer-directory destruction with browser/task/account/runtime revocation.
 
-This closes the core gap for bounded authenticated browser operation and file
-transfer. Deterministic recipes and general visual computer use remain.
+The deterministic recipe slice now additionally provides:
+
+- task-local redacted recording of successful verified semantic actions;
+- encrypted identity-pinned recipes with origins, exact semantic contracts,
+  named string/attachment inputs, bounded waits, and no stored selectors,
+  values, credentials, cookies, paths, bytes, or approval authority;
+- deterministic replay without an LLM, fresh approvals at each consequence,
+  per-step checkpoints, an aggregate run receipt, and exact drift stop;
+- local recipe management beside Platform automations; and
+- focused AI-assisted repair tasks without silent retargeting.
+
+The bounded visual browser slice now additionally provides:
+
+- editable-value-masked screenshots delivered only as transient vision-model
+  evidence, not public/persisted tool state;
+- vision-tool availability only for qualified provider profiles;
+- click, type, bounded key, and scroll inputs tied to exact task, origin, page
+  revision, frame ID, frame SHA-256, geometry, coordinates, target description,
+  descriptor, and payload;
+- fresh approval for every non-scroll action and pixel revalidation after the
+  approval wait;
+- authentication-route and visible sensitive-field blocking with direct user
+  takeover; and
+- canvas progress, target, frame hash, and safety state.
+
+This closes the AMOS Desktop gap for bounded authenticated browser operation,
+file transfer, deterministic semantic replay, and isolated browser-CUA.
+Unrestricted cross-application desktop control remains a separate capability,
+not an implicit extension of the browser grant.
 
 ## Remaining product slices
 
@@ -105,20 +132,24 @@ transfer. Deterministic recipes and general visual computer use remain.
   hashing, quarantine, supported-format admission, receipts, and native user
   save rather than model-authored filesystem paths.
 
-### 3. Deterministic browser automations
+### 3. Deterministic browser automations — implemented locally
 
-- Record successful semantic workflows as typed recipes with origins, element
-  contracts, extraction schemas, retry limits, and expected outcomes.
+- Record successful semantic workflows as typed recipes with origins, exact
+  element contracts, named runtime inputs, bounded waits, and checkpoints.
 - Run matching recipes without an LLM.
 - Stop on DOM/ARIA drift and let AI propose a reviewed repair; never silently
   retarget a different control.
 - Promote stable enterprise workflows to Platform connectors or governed
   automations when browser execution should no longer be the system of record.
 
-### 4. Visual browser fallback
+Local hidden scheduling is intentionally absent. Stable unattended workflows
+should be promoted into Platform connectors or automations with explicit
+durable credentials, schedules, policy, retries, and proof.
+
+### 4. Visual browser fallback — implemented
 
 - Add frame-hash-bound pointer and keyboard proposals only when semantic
-  references are unavailable.
+  references cannot express the target.
 - Require a qualified vision model and invalidate coordinates after every frame
   change.
 - Mask password fields and deny clipboard reads, notifications, popups, and
@@ -126,7 +157,7 @@ transfer. Deterministic recipes and general visual computer use remain.
 - Keep deterministic recipes working when the model is offline; unfamiliar
   visual states stop safely.
 
-### 5. General computer use
+### 5. General computer use — separate future grant
 
 - Treat browser CUA and desktop CUA as different capabilities. Cross-application
   control needs explicit operating-system screen-recording/accessibility grants,

@@ -66,6 +66,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:set-briefing-schedule-status", { scheduleId, active }),
   setAutomationStatus: (name, active) =>
     ipcRenderer.invoke("desktop:set-automation-status", { name, active }),
+  removeBrowserRecipe: (id) =>
+    ipcRenderer.invoke("desktop:remove-browser-recipe", id),
   startNewConversation: (input) =>
     ipcRenderer.invoke("desktop:start-new-conversation", input),
   openTask: (id) => ipcRenderer.invoke("desktop:open-task", id),

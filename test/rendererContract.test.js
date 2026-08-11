@@ -185,12 +185,17 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(html, /id="memoryView"/);
   assert.match(html, /Connect systems[\s\S]*?Understand &amp; analyze[\s\S]*?Build deterministic automation[\s\S]*?Pursue governed goals/);
   assert.match(javascript, /const library = state\.automations \|\| \{\}/);
+  assert.match(javascript, /const recipeLibrary = state\.browserRecipes \|\| \{\}/);
+  assert.match(javascript, /LOCAL BROWSER RECIPE/);
+  assert.match(javascript, /api\.removeBrowserRecipe\(recipe\.id\)/);
   assert.match(javascript, /api\.setAutomationStatus\(automation\.name, active\)/);
   assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?kind: "automation_builder"/);
   assert.match(preload, /desktop:start-new-conversation/);
   assert.match(preload, /desktop:set-automation-status/);
+  assert.match(preload, /desktop:remove-browser-recipe/);
   assert.match(main, /controller\.startNewConversation\(input\)/);
   assert.match(main, /controller\.setAutomationStatus\(input\?\.name, input\?\.active === true\)/);
+  assert.match(main, /controller\.removeBrowserRecipe\(id\)/);
   assert.match(controller, /const id = randomUUID\(\);[\s\S]*?this\.activeContextKey = `task:\$\{id\}`/);
   assert.match(controller, /continuityCapturePayload\(transition, settings, this\.activeContextKey\)/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);

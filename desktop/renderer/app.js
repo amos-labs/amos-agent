@@ -877,31 +877,38 @@ function renderAutomations() {
   if (!state) return;
   const library = state.automations || {};
   const automations = Array.isArray(library.automations) ? library.automations : [];
-  const supported = library.supported === true;
-  const active = automations.filter((automation) => automation.status === "active").length;
-  const needsAttention = automations.filter(
-    (automation) => automation.status !== "active" || automation.stats.failed > 0
+  const recipeLibrary = state.browserRecipes || {};
+  const recipes = Array.isArray(recipeLibrary.recipes) ? recipeLibrary.recipes : [];
+  const supported = library.supported === true || recipeLibrary.supported === true;
+  const active = automations.filter((automation) => automation.status === "active").length +
+    recipes.filter((recipe) => recipe.status === "ready").length;
+  const needsAttention = automations.filter((automation) =>
+    automation.status !== "active" || Number(automation.stats?.failed || 0) > 0
+  ).length + recipes.filter((recipe) =>
+    recipe.status !== "ready" || Number(recipe.runStats?.failed || 0) > 0
   ).length;
   const totalRuns = automations.reduce(
-    (sum, automation) => sum + automation.stats.completed,
-    0
+    (sum, automation) => sum + Number(automation.stats?.completed || 0),
+    recipes.reduce((sum, recipe) => sum + Number(recipe.runStats?.completed || 0), 0)
   );
+  const itemCount = automations.length + recipes.length;
 
   elements.automationBadge.textContent = String(active);
   elements.automationBadge.classList.toggle("hidden", active === 0);
   elements.automationSummary.classList.toggle("hidden", !supported);
   elements.automationUnavailable.classList.toggle("hidden", supported);
-  elements.automationEmpty.classList.toggle("hidden", !supported || automations.length > 0);
-  elements.automationList.classList.toggle("hidden", !supported || automations.length === 0);
-  elements.buildAutomationButton.disabled = state.connectionMode !== "user";
-  elements.automationEmptyBuildButton.disabled = state.connectionMode !== "user";
+  elements.automationEmpty.classList.toggle("hidden", !supported || itemCount > 0);
+  elements.automationList.classList.toggle("hidden", !supported || itemCount === 0);
+  const canBuild = state.settings?.operatingMode !== "offline";
+  elements.buildAutomationButton.disabled = !canBuild;
+  elements.automationEmptyBuildButton.disabled = !canBuild;
   elements.refreshAutomationsButton.disabled = state.connectionMode !== "user";
 
   elements.automationSummary.replaceChildren();
   for (const [label, value, detail] of [
-    ["Live", active, "running under current policy"],
-    ["Needs attention", needsAttention, "paused, draft, or reporting failures"],
-    ["Completed runs", totalRuns, "bounded outcomes reported by AMOS"]
+    ["Ready", active, "Platform automations and local recipes ready under current policy"],
+    ["Needs attention", needsAttention, "paused, drifted, draft, or reporting failures"],
+    ["Completed runs", totalRuns, "bounded deterministic outcomes reported by AMOS"]
   ]) {
     const item = document.createElement("article");
     const number = document.createElement("strong");
@@ -915,6 +922,7 @@ function renderAutomations() {
   }
 
   elements.automationList.replaceChildren();
+  for (const recipe of recipes) renderBrowserRecipeCard(recipe);
   for (const automation of automations) {
     const card = document.createElement("article");
     card.className = "automation-card";
@@ -940,10 +948,10 @@ function renderAutomations() {
     const stats = document.createElement("div");
     stats.className = "automation-stats";
     for (const [label, value] of [
-      ["Enrolled", automation.stats.enrolled],
-      ["Completed", automation.stats.completed],
-      ["Pending", automation.stats.pending],
-      ["Failed", automation.stats.failed]
+      ["Enrolled", Number(automation.stats?.enrolled || 0)],
+      ["Completed", Number(automation.stats?.completed || 0)],
+      ["Pending", Number(automation.stats?.pending || 0)],
+      ["Failed", Number(automation.stats?.failed || 0)]
     ]) {
       const metric = document.createElement("span");
       const metricValue = document.createElement("strong");
@@ -959,9 +967,9 @@ function renderAutomations() {
     meta.textContent = [
       `${automation.steps.length} step${automation.steps.length === 1 ? "" : "s"}`,
       automation.updatedAt ? `Updated ${relativeTime(automation.updatedAt)}` : "",
-      automation.stats.lastSentAt
+      automation.stats?.lastSentAt
         ? `Last delivery ${relativeTime(automation.stats.lastSentAt)}`
-        : automation.stats.lastCalendarEventAt
+        : automation.stats?.lastCalendarEventAt
           ? `Last matched ${relativeTime(automation.stats.lastCalendarEventAt)}`
           : "No completed delivery yet"
     ].filter(Boolean).join(" · ");
@@ -978,6 +986,70 @@ function renderAutomations() {
     card.append(heading, description, stats, meta, actions);
     elements.automationList.append(card);
   }
+}
+
+function renderBrowserRecipeCard(recipe) {
+  const card = document.createElement("article");
+  card.className = "automation-card browser-recipe-card";
+
+  const heading = document.createElement("div");
+  heading.className = "automation-card-heading";
+  const identity = document.createElement("div");
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "eyebrow";
+  const origins = Array.isArray(recipe.origins) ? recipe.origins : [];
+  eyebrow.textContent = `LOCAL BROWSER RECIPE${origins[0] ? ` · ${origins[0]}` : ""}`;
+  const title = document.createElement("h2");
+  title.textContent = recipe.name;
+  identity.append(eyebrow, title);
+  const status = document.createElement("span");
+  status.className = `automation-status ${recipe.status}`;
+  status.textContent = String(recipe.status || "ready").replaceAll("_", " ").toUpperCase();
+  heading.append(identity, status);
+
+  const description = document.createElement("p");
+  description.className = "automation-card-description";
+  description.textContent = recipe.description ||
+    "A deterministic semantic browser state machine. No model is needed while it runs.";
+
+  const stats = document.createElement("div");
+  stats.className = "automation-stats";
+  for (const [label, value] of [
+    ["Inputs", Array.isArray(recipe.inputs) ? recipe.inputs.length : 0],
+    ["Steps", Array.isArray(recipe.steps) ? recipe.steps.length : 0],
+    ["Completed", Number(recipe.runStats?.completed || 0)],
+    ["Drift", Number(recipe.runStats?.drifted || 0)]
+  ]) {
+    const metric = document.createElement("span");
+    const metricValue = document.createElement("strong");
+    metricValue.textContent = new Intl.NumberFormat().format(value);
+    const metricLabel = document.createElement("small");
+    metricLabel.textContent = label;
+    metric.append(metricValue, metricLabel);
+    stats.append(metric);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "automation-meta";
+  meta.textContent = [
+    "Encrypted on this computer",
+    origins.slice(1).join(", "),
+    recipe.updatedAt ? `Updated ${relativeTime(recipe.updatedAt)}` : "",
+    recipe.runStats?.lastRunAt
+      ? `Last run ${relativeTime(recipe.runStats.lastRunAt)} · ${recipe.runStats.lastStatus}`
+      : "No completed run yet"
+  ].filter(Boolean).join(" · ");
+
+  const actions = document.createElement("div");
+  actions.className = "automation-actions";
+  const edit = actionButton("Work on this with AMOS", "secondary");
+  edit.addEventListener("click", () => openAutomationTask(recipe, edit));
+  const remove = actionButton("Remove", "secondary");
+  remove.addEventListener("click", () => removeBrowserRecipe(recipe, remove));
+  actions.append(edit, remove);
+
+  card.append(heading, description, stats, meta, actions);
+  elements.automationList.append(card);
 }
 
 async function refreshAutomations() {
@@ -1011,11 +1083,29 @@ async function changeAutomationStatus(automation, active, button) {
   }
 }
 
+async function removeBrowserRecipe(recipe, button) {
+  if (!window.confirm(`Remove the local browser recipe “${recipe.name}”?\n\nThis affects only this AMOS identity on this computer.`)) {
+    return;
+  }
+  setButtonBusy(button, true, "Removing…");
+  try {
+    const response = await api.removeBrowserRecipe(recipe.id);
+    state.browserRecipes = response.browserRecipes || state.browserRecipes;
+    renderAutomations();
+    toast(`Removed ${recipe.name}.`);
+  } catch (error) {
+    toast(error.message, true);
+    renderAutomations();
+  }
+}
+
 async function openAutomationTask(automation = null, sourceButton = elements.buildAutomationButton) {
   const sourceLabel = sourceButton.textContent;
   const title = automation ? `Improve ${automation.name}` : "Build an automation";
   const objective = automation
-    ? `Open the existing AMOS automation named “${automation.name}” in a focused task. Read its current governed definition and live stats first. Help me improve the business outcome, trigger, deterministic steps, exception handling, approvals, and measurement. Do not resume or activate consequential behavior without my explicit approval.`
+    ? automation.kind === "browser_recipe"
+      ? `Open the local deterministic browser recipe named “${automation.name}” in a focused task. List and inspect its typed semantic contract and run history first. Help me test or repair target drift, inputs, checkpoints, exception handling, approvals, and measurement. Use a live browser session to record verified replacement steps when repair is necessary. Never replace semantic contracts with model-authored selectors, and do not run consequential steps without fresh exact approval.`
+      : `Open the existing AMOS automation named “${automation.name}” in a focused task. Read its current governed definition and live stats first. Help me improve the business outcome, trigger, deterministic steps, exception handling, approvals, and measurement. Do not resume or activate consequential behavior without my explicit approval.`
     : "Help me design and build a governed AMOS automation in this focused task. Start by clarifying the business outcome, trigger, deterministic steps, required connections, exception handling, approval boundaries, and measurable success criteria. Do not activate it until I explicitly approve the final design.";
   setButtonBusy(sourceButton, true, "Opening task…");
   try {
@@ -1023,7 +1113,9 @@ async function openAutomationTask(automation = null, sourceButton = elements.bui
       kind: "automation_builder",
       title,
       objective,
-      resource: automation ? { type: "automation", id: automation.id, name: automation.name } : null
+      resource: automation
+        ? { type: automation.kind === "browser_recipe" ? "browser_recipe" : "automation", id: automation.id, name: automation.name }
+        : null
     });
     state = response.state;
     currentTaskId = null;
@@ -2275,7 +2367,7 @@ function renderCanvasBrowser(block) {
     origin.textContent = block.url;
   }
   const revision = document.createElement("span");
-  revision.textContent = `page ${block.pageRevision} · ${block.elementCount} semantic elements`;
+  revision.textContent = `page ${block.pageRevision} · ${block.elementCount} semantic elements${block.visualFallback ? " · visual fallback" : ""}`;
   chrome.append(status, origin, revision);
   card.append(chrome);
 
@@ -2305,10 +2397,20 @@ function renderCanvasBrowser(block) {
   copy.className = "canvas-browser-copy";
   const summary = document.createElement("p");
   summary.textContent = block.summary || "Public page inspected in the task-isolated AMOS browser.";
+  if (block.visualFallback && block.visualTarget) {
+    const visualTarget = document.createElement("p");
+    visualTarget.className = "canvas-browser-visual-target";
+    visualTarget.textContent = `Vision target: ${block.visualTarget}${block.frameSha256 ? ` · frame ${block.frameSha256.slice(0, 12)}…` : ""}`;
+    copy.append(summary, visualTarget);
+  } else {
+    copy.append(summary);
+  }
   const safety = document.createElement("p");
   safety.className = "canvas-browser-safety";
-  safety.textContent = "Passwords, MFA codes, tokens, and cookies stay inside the isolated browser and are never returned to AMOS.";
-  copy.append(summary, safety);
+  safety.textContent = block.visualFallback
+    ? "Editable values are masked. Coordinates expire on any pixel or page change; authentication still requires direct control."
+    : "Passwords, MFA codes, tokens, and cookies stay inside the isolated browser and are never returned to AMOS.";
+  copy.append(safety);
   if (block.download) {
     const download = document.createElement("div");
     download.className = "canvas-browser-download";

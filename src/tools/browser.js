@@ -7,24 +7,29 @@ export function createBrowserTools({
   scope,
   present = null,
   resolveAttachment = null,
-  registerDownload = null
+  registerDownload = null,
+  record = null
 }) {
   if (!browser) throw new Error("Browser tools require a browser runtime");
   if (typeof scope !== "function") throw new Error("Browser tools require a scope provider");
 
   const run = (operation, handler) => async (args, context) => {
-    const result = await handler(args, context);
+    const currentScope = scope();
+    const result = await handler(args, context, currentScope);
+    const recipeRecording = await recordBrowserStep(record, currentScope, { operation, args, result });
     const canvas = typeof present === "function"
       ? await present({ operation, ...result })
       : null;
     return {
       ...result,
+      ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
       ...(canvas?.id ? { canvas_id: canvas.id } : {})
     };
   };
 
   const runAction = (kind) => async (args, context) => {
-    const prepared = await browser.prepareAction(scope(), {
+    const currentScope = scope();
+    const prepared = await browser.prepareAction(currentScope, {
       sessionId: args.session_id,
       kind,
       ref: args.ref,
@@ -68,7 +73,7 @@ export function createBrowserTools({
         };
       }
     }
-    const result = await browser.performAction(scope(), {
+    const result = await browser.performAction(currentScope, {
       plan: prepared.plan,
       approved,
       waitMs: args.wait_ms,
@@ -77,16 +82,23 @@ export function createBrowserTools({
     const canvas = typeof present === "function"
       ? await present({ operation: kind, ...result })
       : null;
+    const recipeRecording = await recordBrowserStep(record, currentScope, {
+      operation: kind,
+      args,
+      result
+    });
     return {
       ...result,
+      ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
       ...(canvas?.id ? { canvas_id: canvas.id } : {})
     };
   };
 
   const runUpload = async (args, context) => {
+    const currentScope = scope();
     if (typeof resolveAttachment !== "function") throw new Error("Browser uploads are unavailable in this client");
     const attachment = await resolveAttachment(args.attachment_id);
-    const prepared = await browser.prepareUpload(scope(), {
+    const prepared = await browser.prepareUpload(currentScope, {
       sessionId: args.session_id,
       ref: args.ref,
       attachment,
@@ -101,11 +113,11 @@ export function createBrowserTools({
       { kind: "browser-action" }
     );
     if (!approved) {
-      await browser.cancelPreparedUpload(scope(), { plan: prepared.plan });
+      await browser.cancelPreparedUpload(currentScope, { plan: prepared.plan });
       return deniedResult(args, prepared, reviewCanvas);
     }
     try {
-      const result = await browser.performUpload(scope(), {
+      const result = await browser.performUpload(currentScope, {
         plan: prepared.plan,
         approved: true,
         signal: context.signal
@@ -113,16 +125,26 @@ export function createBrowserTools({
       const canvas = typeof present === "function"
         ? await present({ operation: "upload", ...result })
         : null;
-      return { ...result, ...(canvas?.id ? { canvas_id: canvas.id } : {}) };
+      const recipeRecording = await recordBrowserStep(record, currentScope, {
+        operation: "upload",
+        args,
+        result
+      });
+      return {
+        ...result,
+        ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
+        ...(canvas?.id ? { canvas_id: canvas.id } : {})
+      };
     } catch (error) {
-      await browser.cancelPreparedUpload(scope(), { plan: prepared.plan }).catch(() => {});
+      await browser.cancelPreparedUpload(currentScope, { plan: prepared.plan }).catch(() => {});
       throw error;
     }
   };
 
   const runDownload = async (args, context) => {
+    const currentScope = scope();
     if (typeof registerDownload !== "function") throw new Error("Browser downloads are unavailable in this client");
-    const prepared = await browser.prepareDownload(scope(), {
+    const prepared = await browser.prepareDownload(currentScope, {
       sessionId: args.session_id,
       ref: args.ref,
       signal: context.signal
@@ -136,7 +158,7 @@ export function createBrowserTools({
       { kind: "browser-action" }
     );
     if (!approved) return deniedResult(args, prepared, reviewCanvas);
-    const completed = await browser.performDownload(scope(), {
+    const completed = await browser.performDownload(currentScope, {
       plan: prepared.plan,
       approved: true,
       timeoutMs: args.timeout_ms,
@@ -150,7 +172,16 @@ export function createBrowserTools({
     const canvas = typeof present === "function"
       ? await present({ operation: "download", ...result })
       : null;
-    return { ...result, ...(canvas?.id ? { canvas_id: canvas.id } : {}) };
+    const recipeRecording = await recordBrowserStep(record, currentScope, {
+      operation: "download",
+      args,
+      result
+    });
+    return {
+      ...result,
+      ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
+      ...(canvas?.id ? { canvas_id: canvas.id } : {})
+    };
   };
 
   return [
@@ -170,7 +201,7 @@ export function createBrowserTools({
           session_id: SESSION_ID
         }
       },
-      handler: run("open", (args, context) => browser.open(scope(), {
+      handler: run("open", (args, context, currentScope) => browser.open(currentScope, {
         url: args.url,
         sessionId: args.session_id,
         signal: context.signal
@@ -192,7 +223,7 @@ export function createBrowserTools({
           max_chars: { type: "integer", minimum: 500, maximum: 20_000 }
         }
       },
-      handler: run("snapshot", (args, context) => browser.snapshot(scope(), {
+      handler: run("snapshot", (args, context, currentScope) => browser.snapshot(currentScope, {
         sessionId: args.session_id,
         maxElements: args.max_elements,
         maxChars: args.max_chars,
@@ -216,7 +247,7 @@ export function createBrowserTools({
           max_chars: { type: "integer", minimum: 500, maximum: 30_000 }
         }
       },
-      handler: run("extract", (args, context) => browser.extract(scope(), {
+      handler: run("extract", (args, context, currentScope) => browser.extract(currentScope, {
         sessionId: args.session_id,
         kind: args.kind,
         ref: args.ref,
@@ -346,7 +377,7 @@ export function createBrowserTools({
           timeout_ms: { type: "integer", minimum: 250, maximum: 10_000 }
         }
       },
-      handler: run("wait", (args, context) => browser.wait(scope(), {
+      handler: run("wait", (args, context, currentScope) => browser.wait(currentScope, {
         sessionId: args.session_id,
         condition: args.condition,
         value: args.value,
@@ -366,7 +397,7 @@ export function createBrowserTools({
         required: ["session_id"],
         properties: { session_id: SESSION_ID }
       },
-      handler: run("screenshot", (args, context) => browser.screenshot(scope(), {
+      handler: run("screenshot", (args, context, currentScope) => browser.screenshot(currentScope, {
         sessionId: args.session_id,
         signal: context.signal
       }))
@@ -382,9 +413,22 @@ export function createBrowserTools({
         required: ["session_id"],
         properties: { session_id: SESSION_ID }
       },
-      handler: run("close", (args) => browser.close(scope(), { sessionId: args.session_id }))
+      handler: run("close", (args, _context, currentScope) =>
+        browser.close(currentScope, { sessionId: args.session_id }))
     }
   ];
+}
+
+async function recordBrowserStep(record, scope, input) {
+  if (typeof record !== "function") return null;
+  try {
+    return await record(scope, input);
+  } catch (error) {
+    return {
+      status: "stopped",
+      message: String(error?.message || "Browser recipe recording stopped").slice(0, 500)
+    };
+  }
 }
 
 function browserApprovalMessage(action, args) {

@@ -68,6 +68,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     connectionsCatalog: controller.connectionsCatalog,
     briefings: controller.briefings,
     automations: { supported: false, automations: [] },
+    browserRecipes: { supported: false, recipes: [] },
     tasks: controller.tasks,
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },

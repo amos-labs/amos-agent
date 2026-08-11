@@ -9,6 +9,8 @@ import { basename, join } from "node:path";
 import { DesktopBrowserRuntime } from "../desktop/browserRuntime.js";
 import { browserSessionCanvas } from "../src/desktop/browserCanvas.js";
 import { createBrowserTools } from "../src/tools/browser.js";
+import { createBrowserVisualTools } from "../src/tools/browserVisual.js";
+import { takeModelEvidence } from "../src/model/evidence.js";
 
 const timestamp = "2026-08-10T12:00:00.000Z";
 const scope = {
@@ -780,6 +782,116 @@ test("browser observations remove editable values before returning page text", (
   assert.match(source, /editable browser fields cannot be extracted/i);
 });
 
+test("visual browser fallback binds actions to a masked frame hash and fresh approval", async () => {
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => fakeSession() },
+    now: () => new Date(timestamp),
+    createId: idSequence(["browser-session-1", "frame-observe", "frame-revalidate", "frame-after", "visual-receipt"])
+  });
+  const record = await runtime.createSession(scope);
+  record.url = "https://example.com/canvas";
+  record.title = "Canvas editor";
+  record.revision = 2;
+  record.window.webContents.capturePage = async () => fakeImage();
+  configureVisualExecution(record);
+
+  const observation = await runtime.visualObserve(scope, {
+    sessionId: record.id,
+    targetDescription: "Blue canvas control"
+  });
+  assert.equal(observation.contract, "amos.browser-visual-observation:1");
+  assert.match(observation.frame.sha256, /^[a-f0-9]{64}$/);
+  const prepared = await runtime.prepareVisualAction(scope, {
+    sessionId: record.id,
+    frameId: observation.frame.frame_id,
+    action: "click",
+    targetDescription: "Blue canvas control",
+    x: 420,
+    y: 240
+  });
+  assert.equal(prepared.requires_approval, true);
+  assert.equal(prepared.public_action.point.x, 420);
+  const result = await runtime.performVisualAction(scope, {
+    plan: prepared.plan,
+    approved: true
+  });
+  assert.equal(result.visual_action_receipt.contract, "amos.browser-visual-action:1");
+  assert.equal(result.visual_action_receipt.verified, true);
+  assert.equal(record.window.inputEvents.some((event) => event.type === "mouseDown"), true);
+  runtime.closeAll();
+});
+
+test("visual browser fallback stops on changed pixels and sensitive surfaces", async () => {
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => fakeSession() },
+    now: () => new Date(timestamp),
+    createId: idSequence(["browser-session-1", "frame-observe", "frame-changed"])
+  });
+  const record = await runtime.createSession(scope);
+  record.url = "https://example.com/canvas";
+  record.title = "Canvas editor";
+  record.revision = 1;
+  let imageBytes = "png";
+  record.window.webContents.capturePage = async () => ({
+    getSize: () => ({ width: 1280, height: 800 }),
+    toPNG: () => Buffer.from(imageBytes)
+  });
+  configureVisualExecution(record);
+  const observation = await runtime.visualObserve(scope, {
+    sessionId: record.id,
+    targetDescription: "Canvas control"
+  });
+  const prepared = await runtime.prepareVisualAction(scope, {
+    sessionId: record.id,
+    frameId: observation.frame.frame_id,
+    action: "click",
+    targetDescription: "Canvas control",
+    x: 20,
+    y: 20
+  });
+  imageBytes = "changed pixels";
+  await assert.rejects(
+    runtime.performVisualAction(scope, { plan: prepared.plan, approved: true }),
+    /frame changed while approval was pending/
+  );
+  record.url = "https://example.com/login";
+  await assert.rejects(
+    runtime.visualObserve(scope, { sessionId: record.id, targetDescription: "Login" }),
+    /authentication surfaces/
+  );
+  runtime.closeAll();
+});
+
+test("visual browser tools keep image bytes in transient model evidence only", async () => {
+  const browser = {
+    async visualObserve() {
+      return {
+        ...browserResult(),
+        contract: "amos.browser-visual-observation:1",
+        frame: { ...browserResult().frame, sha256: "a".repeat(64) }
+      };
+    },
+    readFrame() {
+      return { mime: "image/png", base64: Buffer.from("png").toString("base64") };
+    }
+  };
+  const tools = createBrowserVisualTools({ browser, scope: () => scope, present: () => ({ id: "canvas-1" }) });
+  assert.deepEqual(tools.map((tool) => tool.name), ["browser_visual_observe", "browser_visual_act"]);
+  const result = await tools[0].handler({
+    session_id: "browser-session-1",
+    target_description: "Canvas control"
+  }, {
+    config: { model: { capabilities: { vision: true } } },
+    signal: new AbortController().signal
+  });
+  assert.equal(JSON.stringify(result).includes(Buffer.from("png").toString("base64")), false);
+  const evidence = takeModelEvidence(result);
+  assert.equal(evidence.length, 1);
+  assert.match(evidence[0].image_url.url, /^data:image\/png;base64,/);
+});
+
 function browserResult() {
   return {
     ok: true,
@@ -813,6 +925,8 @@ class FakeBrowserWindow {
     this.loadedUrls = [];
     this.listeners = new Map();
     this.debuggerCommands = [];
+    this.inputEvents = [];
+    this.insertedTexts = [];
     let debuggerAttached = false;
     this.webContents = {
       setWindowOpenHandler() {},
@@ -821,6 +935,10 @@ class FakeBrowserWindow {
       isLoading: () => false,
       getURL: () => this.loadedUrls.at(-1) || "https://example.com/",
       getTitle: () => this.title || "Example",
+      sendInputEvent: (event) => this.inputEvents.push(event),
+      insertText: async (value) => this.insertedTexts.push(value),
+      insertCSS: async () => "masked-css",
+      removeInsertedCSS: async () => {},
       debugger: {
         isAttached: () => debuggerAttached,
         attach: () => { debuggerAttached = true; },
@@ -847,6 +965,26 @@ class FakeBrowserWindow {
     this.destroyed = true;
     this.listeners.get("closed")?.();
   }
+}
+
+function configureVisualExecution(record, { visibleSensitiveFields = 0 } = {}) {
+  record.window.webContents.executeJavaScriptInIsolatedWorld = async (_world, scripts) => {
+    const code = scripts[0].code;
+    if (code.includes("visibleSensitiveFields")) return { visibleSensitiveFields };
+    if (code.includes("document.elementFromPoint")) {
+      return {
+        tag: "canvas",
+        type: "canvas",
+        role: "canvas",
+        name: "Canvas control",
+        disabled: false,
+        editable: false,
+        sensitive: false
+      };
+    }
+    if (code.includes("document.readyState")) return true;
+    return true;
+  };
 }
 
 class FailingBrowserWindow extends FakeBrowserWindow {

@@ -85,10 +85,13 @@ test("canvas contract normalizes every safe block type", () => {
         status: "ready",
         page_revision: 2,
         frame_id: "frame-1",
+        frame_sha256: "c".repeat(64),
         viewport: { width: 1280, height: 800 },
         observed_at: timestamp,
         element_count: 12,
         summary: "Example research page",
+        visual_fallback: true,
+        visual_target: "Canvas control",
         takeover_active: true,
         interactive: true
       },
@@ -120,6 +123,8 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.blocks[5].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
   assert.equal(canvas.blocks[6].sessionId, "browser-session-1");
   assert.equal(canvas.blocks[6].frameId, "frame-1");
+  assert.equal(canvas.blocks[6].frameSha256, "c".repeat(64));
+  assert.equal(canvas.blocks[6].visualFallback, true);
   assert.equal(canvas.blocks[6].takeoverActive, true);
   assert.equal(canvas.blocks[7].url, "http://127.0.0.1:3000/preview");
   assert.equal(canvas.blocks[9].pendingId, "pending-1");
