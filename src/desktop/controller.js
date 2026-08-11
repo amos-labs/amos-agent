@@ -72,6 +72,7 @@ import { createOfflineProposalTool } from "../tools/offlineProposal.js";
 import { createBrowserTools } from "../tools/browser.js";
 import { createBrowserRecipeTools } from "../tools/browserRecipes.js";
 import { createBrowserVisualTools } from "../tools/browserVisual.js";
+import { createLocalPreviewTool } from "../tools/localPreview.js";
 import { createAutomationSetupTool } from "../tools/automationSetup.js";
 import {
   DEMO_SYSTEM_PROMPT,
@@ -108,6 +109,7 @@ export class DesktopController {
     accountStore = null,
     offlineManager = null,
     browserRuntime = null,
+    localPreviewRuntime = null,
     browserRecipeStore = null,
     telemetry = null,
     openBrowser,
@@ -163,6 +165,7 @@ export class DesktopController {
     this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
     this.browserRuntime = browserRuntime;
+    this.localPreviewRuntime = localPreviewRuntime;
     this.browserRecipeStore = browserRecipeStore;
     this.browserRecipeRecorder = new BrowserRecipeRecorder();
     this.telemetry = telemetry;
@@ -215,6 +218,7 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
+      localTaskGrant: this.approvals.state(),
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
       briefings: structuredClone(this.briefings),
@@ -622,6 +626,25 @@ export class DesktopController {
       localApprovalWorkspace: settings.workspace,
       localApprovalKinds: [...new Set([...(settings.localApprovalKinds || []), kind])]
     });
+  }
+
+  async allowTaskLocalWork() {
+    if (!this.activeTask) throw new Error("Start a task before allowing task-scoped local work");
+    const settings = await this.settingsStore.read();
+    if (!settings.workspace) throw new Error("Choose a project folder before allowing local work");
+    const grant = this.approvals.grantTask(LOCAL_APPROVAL_KINDS);
+    this.record("settings", `Allowed bounded local work for this task in ${basename(settings.workspace)}`, {
+      task_scope: grant.scope?.key,
+      workspace: grant.scope?.workspace,
+      kinds: grant.kinds
+    });
+    return this.state();
+  }
+
+  async clearTaskLocalWork() {
+    this.approvals.clearTaskGrants();
+    this.record("settings", "Task-scoped local work returned to ask-first mode");
+    return this.state();
   }
 
   async startPersonal() {
@@ -1616,6 +1639,15 @@ export class DesktopController {
     }
     this.activeTask.workspace = settings.workspace || homedir();
     const boundary = settings.operatingMode;
+    this.approvals.setTaskScope({
+      key: localTaskGrantScope({
+        contextKey: this.activeContextKey,
+        taskRecordId: this.activeTaskRecordId,
+        boundary,
+        identity: this.identity
+      }),
+      workspace: this.activeTask.workspace
+    });
     const offline = boundary === "offline";
     const company = boundary === "online";
     const receiptEvents = this.activeTask.receiptEvents;
@@ -2264,6 +2296,7 @@ export class DesktopController {
     });
     this.automationSetup = null;
     this.pendingAutomationActivations.clear();
+    this.approvals.clearTaskGrants();
     const previousContextKey = this.activeContextKey;
     const id = randomUUID();
     this.activeContextKey = `task:${id}`;
@@ -2341,6 +2374,7 @@ export class DesktopController {
     const scope = this.taskScope(settings);
     if (!scope) throw new Error("Connect the AMOS account that owns this task");
     await this.snapshotActiveTask(settings);
+    this.approvals.clearTaskGrants();
     let task = this.taskStore ? await this.taskStore.get(scope, id) : null;
     const remoteTask = this.tasks.tasks.find((item) => item.id === id || item.contextKey === task?.contextKey);
     if (!task && remoteTask) task = await this.retainRemoteTask(settings, remoteTask, null);
@@ -2622,6 +2656,8 @@ export class DesktopController {
 
   presentBrowserSession(input) {
     const sessionId = String(input.session_id || "");
+    const preview = input.preview || this.browserRuntime?.localPreviewForSession?.(sessionId);
+    const canvasInput = preview ? { ...input, preview } : input;
     const existing = this.canvases.list().find((canvas) =>
       canvas.blocks.some((block) => block.type === "browser" && block.sessionId === sessionId)
     );
@@ -2629,7 +2665,7 @@ export class DesktopController {
       block.type === "browser" && block.sessionId === sessionId
     )?.download;
     const spec = browserSessionCanvas({
-      ...input,
+      ...canvasInput,
       ...(!input.downloaded_attachment && previousDownload
         ? {
             downloaded_attachment: {
@@ -2788,6 +2824,9 @@ export class DesktopController {
     if (this.runtime) this.runtime.runtime.loop.clear();
     if (this.runtime) this.runtime.continuityKey = null;
     this.workingContinuity = null;
+    this.approvals.clearTaskGrants();
+    this.localPreviewRuntime?.closeAll?.();
+    this.browserRuntime?.closeAll?.();
     this.attachments.clear();
     this.canvases.clear();
     this.canvasResults.clear();
@@ -3233,6 +3272,7 @@ export class DesktopController {
     this.pendingAutomationActivations?.clear();
     this.send("automation-setup:requested", null);
     this.browserRuntime?.closeAll?.();
+    this.localPreviewRuntime?.closeAll?.();
     this.browserRecipeRecorder.clear();
     let removedBrowserCanvas = false;
     for (const canvas of this.canvases.list()) {
@@ -3329,6 +3369,14 @@ export class DesktopController {
           return this.browserRecipeRecorder.record(scope, input);
         }
       }));
+      if (this.localPreviewRuntime && !contextOnly) {
+        extraTools.push(createLocalPreviewTool({
+          preview: this.localPreviewRuntime,
+          browser: this.browserRuntime,
+          scope: () => browserScope,
+          present: (input) => this.presentBrowserSession(input)
+        }));
+      }
       const recipeScope = this.browserRecipeScope(settings);
       if (this.browserRecipeStore && recipeScope) {
         extraTools.push(...createBrowserRecipeTools({
@@ -3737,7 +3785,7 @@ export class DesktopController {
     // Nothing obtained under one identity can remain actionable or visible
     // after another identity becomes active.
     this.resetRuntime();
-    this.approvals.cancelAll();
+    this.approvals.clearTaskGrants();
     this.attachments.clear();
     this.canvases.clear();
     this.canvasResults.clear();
@@ -3878,6 +3926,15 @@ function desktopBrowserScope({ identity = null, boundary = "personal", taskId = 
     tenantId: String(identity?.tenant_id || boundary || "personal"),
     taskId: String(taskId || "active")
   };
+}
+
+function localTaskGrantScope({ contextKey, taskRecordId, boundary, identity } = {}) {
+  return [
+    String(taskRecordId || contextKey || "active"),
+    String(boundary || "personal"),
+    String(identity?.sub || identity?.user?.id || "local-user"),
+    String(identity?.tenant_id || boundary || "personal")
+  ].join("\u0000");
 }
 
 function durableCanvasState(value) {
@@ -4263,6 +4320,9 @@ Current Desktop workspace grant:
 - The user selected this exact local project root for the current runtime: ${workspace}
 - Treat that folder as the current project when the user says “this project,” “the folder,” or “the workspace.”
 - Inspect the project with local read tools when its contents are relevant; do not claim the folder is missing without first checking it.
+${settings?.operatingMode === "offline"
+    ? ""
+    : "- For generated HTML/CSS/JavaScript apps, use desktop_preview_app to serve and inspect the workspace output. Do not start an unmanaged background web server or ask browser_open to open localhost or a file URL."}
 - Local approval policy: ${desktopLocalApprovalDescription(settings)}
 - This local policy never approves AMOS company operations, external-system writes, or governed decisions.`;
 }

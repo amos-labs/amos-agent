@@ -107,7 +107,7 @@ const elements = Object.fromEntries(
     "baseUrlInput", "baseUrlHelp", "bedrockAuthField", "bedrockAuthInput",
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
-    "approveButton", "denyButton", "alwaysApproveButton", "autoApproveFolderButton",
+    "approveButton", "denyButton", "taskApproveButton", "alwaysApproveButton", "autoApproveFolderButton", "approvalPersistence",
     "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
@@ -287,6 +287,9 @@ function bindActions() {
   elements.alwaysApproveButton.addEventListener("click", () =>
     resolveApproval(true, "kind")
   );
+  elements.taskApproveButton.addEventListener("click", () =>
+    resolveApproval(true, "task")
+  );
   elements.autoApproveFolderButton.addEventListener("click", () =>
     resolveApproval(true, "workspace")
   );
@@ -411,15 +414,17 @@ function bindEvents() {
     elements.approvalMessage.textContent = approval.message;
     const label = localApprovalKindLabel(approval.kind);
     elements.alwaysApproveButton.classList.toggle("hidden", !label);
+    elements.taskApproveButton.classList.toggle("hidden", !label);
+    elements.approvalPersistence.classList.toggle("hidden", !label);
     elements.alwaysApproveButton.textContent = label ? `Always allow ${label}` : "Always allow this kind";
     const browserAction = approval.kind === "browser-action";
     elements.autoApproveFolderButton.classList.toggle("hidden", !state.settings.workspace || browserAction);
     elements.approvalScopeNote.textContent = browserAction
       ? "Browser approval applies once to the exact origin, page revision, target, and payload shown above. It can never be made persistent or covered by local workspace auto-approval."
       : approval.kind === "shell"
-        ? "“Always allow local commands” applies to all shell commands started from this workspace, not only this request. Shell commands use a scrubbed environment but are not OS-sandboxed to the folder."
+        ? "“Allow for this task” also covers bounded file writes and code patches in this workspace. Shell commands start here with a scrubbed environment but are not OS-sandboxed to the folder."
         : label
-          ? `“Always allow” applies to all ${label} in this exact workspace, not only this request. “Auto-approve this folder” also covers local commands, file writes, and code patches.`
+          ? `“Allow for this task” covers local commands, file writes, and code patches in this exact workspace until you switch or clear the task. Persistent options remain available when you want them.`
           : "Auto-approve applies only to local work in the selected folder.";
     elements.messages.append(elements.approvalModal);
     elements.approvalModal.classList.remove("hidden");
@@ -539,18 +544,24 @@ function render() {
   const localApprovalKinds = state.settings.localApprovalWorkspace === state.settings.workspace
     ? state.settings.localApprovalKinds || []
     : [];
-  const localTrustActive = localAutoApprove || localApprovalKinds.length > 0;
+  const taskLocalApproval = state.localTaskGrant?.active === true &&
+    state.localTaskGrant?.scope?.workspace === state.settings.workspace;
+  const localTrustActive = localAutoApprove || localApprovalKinds.length > 0 || taskLocalApproval;
   elements.localApprovalButton.classList.toggle("hidden", !state.settings.workspace);
   elements.localApprovalButton.classList.toggle("active", localTrustActive);
   elements.localApprovalButton.setAttribute("aria-pressed", String(localTrustActive));
-  elements.localApprovalButton.title = localTrustActive
-    ? `Persistent local approval is active for ${state.settings.workspace}. Click to return to ask-first. Company decisions still use AMOS policy.`
+  elements.localApprovalButton.title = taskLocalApproval && !localAutoApprove && localApprovalKinds.length === 0
+    ? `Bounded local work is allowed for this task in ${state.settings.workspace}. Click to revoke it. Company decisions still use AMOS policy.`
+    : localTrustActive
+      ? `Persistent local approval is active for ${state.settings.workspace}. Click to return to ask-first. Company decisions still use AMOS policy.`
     : `Turn on local auto-approve for ${state.settings.workspace}. Company decisions remain separate.`;
   elements.localApprovalLabel.textContent = localAutoApprove
     ? "Auto-approve on"
     : localApprovalKinds.length > 0
       ? `Always allow: ${localApprovalKinds.map(localApprovalKindLabel).join(", ")}`
-      : "Auto-approve local work";
+      : taskLocalApproval
+        ? "Local work allowed for task"
+        : "Auto-approve local work";
   elements.localModeButton.classList.toggle(
     "selected",
     Boolean((state.mode?.personal || state.mode?.offline) && !demo)
@@ -5361,13 +5372,19 @@ async function toggleLocalApproval() {
   );
   try {
     elements.localApprovalButton.disabled = true;
-    state = await api.setLocalApprovalMode(enabled ? "ask" : "workspace");
+    const taskGrantActive = state.localTaskGrant?.active === true &&
+      state.localTaskGrant?.scope?.workspace === state.settings.workspace;
+    state = taskGrantActive && !enabled
+      ? await api.clearTaskLocalWork()
+      : await api.setLocalApprovalMode(enabled ? "ask" : "workspace");
     render();
     const nowEnabled = state.settings.localApprovalMode === "workspace" &&
       state.settings.localApprovalWorkspace === state.settings.workspace;
     toast(nowEnabled
       ? "Local auto-approve is on for this folder. Company approvals remain governed."
-      : "Local auto-approve is off. AMOS will ask before local changes.");
+      : taskGrantActive
+        ? "Task-scoped local work is off. AMOS will ask before local changes."
+        : "Local auto-approve is off. AMOS will ask before local changes.");
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -6374,6 +6391,12 @@ async function resolveApproval(approved, persistence = "once") {
   try {
     if (approved && persistence === "kind") {
       state = await api.allowLocalApprovalKind(approval.kind);
+    } else if (approved && persistence === "task") {
+      state = await api.allowTaskLocalWork();
+      if (state.localTaskGrant?.active !== true) {
+        toast("Task-scoped local work was not enabled. The current request is still waiting.");
+        return;
+      }
     } else if (approved && persistence === "workspace") {
       state = await api.setLocalApprovalMode("workspace");
       const enabled = state.settings.localApprovalMode === "workspace" &&
@@ -6389,6 +6412,8 @@ async function resolveApproval(approved, persistence = "once") {
       toast("Action denied.");
     } else if (persistence === "kind") {
       toast(`Approved. AMOS will always allow ${localApprovalKindLabel(approval.kind)} in this folder.`);
+    } else if (persistence === "task") {
+      toast("Approved. AMOS can complete bounded local work for this task without asking again.");
     } else if (persistence === "workspace") {
       toast("Approved. Local auto-approve is on for this folder; company approvals remain governed.");
     } else {

@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { DesktopBrowserRuntime } from "../desktop/browserRuntime.js";
 import { browserSessionCanvas } from "../src/desktop/browserCanvas.js";
+import { DesktopCanvasManager } from "../src/desktop/canvas.js";
 import { createBrowserTools } from "../src/tools/browser.js";
 import { createBrowserVisualTools } from "../src/tools/browserVisual.js";
 import { takeModelEvidence } from "../src/model/evidence.js";
@@ -275,6 +276,22 @@ test("browser canvas carries only an opaque local frame capability", () => {
   });
 });
 
+test("typed canvas accepts only a Desktop-attested exact loopback preview block", () => {
+  const origin = "http://127.0.0.1:43119";
+  const spec = browserSessionCanvas({
+    ...browserResult(),
+    operation: "click",
+    url: `${origin}/index.html`,
+    preview: { origin, network: "exact loopback origin only" }
+  }, { generatedAt: timestamp });
+  const manager = new DesktopCanvasManager();
+
+  const canvas = manager.present(spec);
+
+  assert.equal(canvas.blocks[0].url, `${origin}/index.html`);
+  assert.equal(JSON.stringify(canvas).includes("attestation"), false);
+});
+
 test("runtime uploads only an immutable staged attachment through main-process CDP", async (t) => {
   const transferRoot = await mkdtemp(join(tmpdir(), "amos-browser-transfer-test-"));
   t.after(() => rm(transferRoot, { recursive: true, force: true }));
@@ -422,6 +439,38 @@ test("browser request policy blocks local navigation and unsupported main-frame 
   );
 });
 
+test("browser permits only a task-granted exact loopback preview origin", async () => {
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => fakeSession() }
+  });
+  const origin = "http://127.0.0.1:43119";
+  runtime.grantLocalPreview(scope, { origin });
+
+  const target = await runtime.validateTarget(scope, `${origin}/index.html`, {
+    allowSensitiveQuery: false
+  });
+  assert.equal(target.origin, origin);
+  await runtime.validateRequest(
+    { url: `${origin}/styles.css`, resourceType: "stylesheet" },
+    { localPreviewOrigin: origin }
+  );
+  await assert.rejects(
+    runtime.validateRequest(
+      { url: "https://example.com/track", resourceType: "xhr" },
+      { localPreviewOrigin: origin }
+    ),
+    /cannot access external/
+  );
+  await assert.rejects(
+    runtime.validateTarget({ ...scope, taskId: "task-2" }, `${origin}/index.html`),
+    /Private or local/
+  );
+
+  runtime.revokeLocalPreview(scope, { origin });
+  await assert.rejects(runtime.validateTarget(scope, `${origin}/index.html`), /Private or local/);
+});
+
 test("browser observations do not expose credential-like history URLs", async () => {
   const runtime = new DesktopBrowserRuntime({
     BrowserWindow: FakeBrowserWindow,
@@ -544,6 +593,40 @@ test("runtime classifies safe links, consequential controls, and authentication 
     text: "never-send-this"
   });
   assert.equal(password.takeover_required, true);
+});
+
+test("task-bound local preview controls do not prompt because the preview cannot leave its exact origin", async () => {
+  const runtime = new DesktopBrowserRuntime({
+    BrowserWindow: FakeBrowserWindow,
+    session: { fromPartition: () => fakeSession() },
+    now: () => new Date(timestamp)
+  });
+  const record = await runtime.createSession(scope);
+  record.localPreviewOrigin = "http://127.0.0.1:43119";
+  record.url = `${record.localPreviewOrigin}/index.html`;
+  record.title = "Local dashboard";
+  record.revision = 1;
+  record.window.webContents.capturePage = async () => fakeImage();
+  record.window.webContents.executeJavaScriptInIsolatedWorld = async () => actionDescriptor({
+    tag: "button",
+    type: "button",
+    role: "button",
+    name: "Refresh dashboard"
+  });
+  setReference(record, "el_refresh", "#refresh");
+
+  const prepared = await runtime.prepareAction(scope, {
+    sessionId: record.id,
+    kind: "click",
+    ref: "el_refresh"
+  });
+
+  assert.equal(prepared.requires_approval, false);
+  assert.equal(prepared.public_action.risk, "preview");
+  assert.deepEqual(runtime.localPreviewForSession(record.id), {
+    origin: record.localPreviewOrigin,
+    network: "exact loopback origin only"
+  });
 });
 
 test("runtime binds an approved action to the exact target and returns a redacted post-action receipt", async () => {

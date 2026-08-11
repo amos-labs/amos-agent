@@ -37,6 +37,7 @@ import {
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
 import { DesktopAccountStore } from "../src/auth/tokenStore.js";
 import { DesktopBrowserRuntime } from "./browserRuntime.js";
+import { LocalPreviewRuntime } from "../src/desktop/localPreview.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const { autoUpdater } = electronUpdater;
@@ -44,6 +45,7 @@ let window;
 let controller;
 let offlineManager;
 let browserRuntime;
+let localPreviewRuntime;
 let updateManager;
 let tray;
 let remoteSyncTimer;
@@ -506,6 +508,12 @@ function registerIpc() {
   ipcMain.handle("desktop:allow-local-approval-kind", (_event, kind) =>
     controller.allowLocalApprovalKind(kind)
   );
+  ipcMain.handle("desktop:allow-task-local-work", () =>
+    controller.allowTaskLocalWork()
+  );
+  ipcMain.handle("desktop:clear-task-local-work", () =>
+    controller.clearTaskLocalWork()
+  );
   ipcMain.handle("desktop:open-approvals", () => controller.openApprovals());
   ipcMain.handle("desktop:open-document-artifact", async (_event, input) => {
     const mode = input?.mode || "open";
@@ -659,6 +667,7 @@ app.whenReady().then(async () => {
     session,
     transferRoot: join(app.getPath("userData"), "browser-transfers")
   });
+  localPreviewRuntime = new LocalPreviewRuntime();
   const telemetry = new DesktopTelemetry({
     filePath: join(app.getPath("userData"), "desktop-telemetry.json"),
     appVersion: app.getVersion(),
@@ -682,6 +691,7 @@ app.whenReady().then(async () => {
     accountStore,
     offlineManager,
     browserRuntime,
+    localPreviewRuntime,
     browserRecipeStore,
     telemetry,
     openBrowser: (url) => shell.openExternal(url),
@@ -726,6 +736,7 @@ app.on("before-quit", () => {
   controller?.interruptActiveTask().catch(() => {});
   controller?.resetRuntime();
   browserRuntime?.closeAll();
+  localPreviewRuntime?.closeAll();
   offlineManager?.shutdown().catch(() => {});
 });
 

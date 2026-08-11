@@ -108,6 +108,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:set-local-approval-mode", mode),
   allowLocalApprovalKind: (kind) =>
     ipcRenderer.invoke("desktop:allow-local-approval-kind", kind),
+  allowTaskLocalWork: () => ipcRenderer.invoke("desktop:allow-task-local-work"),
+  clearTaskLocalWork: () => ipcRenderer.invoke("desktop:clear-task-local-work"),
   openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),
   openDocumentArtifact: (path, mode = "open") =>
     ipcRenderer.invoke("desktop:open-document-artifact", { path, mode }),

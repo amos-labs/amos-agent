@@ -39,16 +39,64 @@ export class DesktopBrowserRuntime {
     if (!isAbsolute(requestedTransferRoot)) throw new Error("Browser transfer storage must be absolute");
     this.transferRoot = resolve(requestedTransferRoot);
     this.sessions = new Map();
+    this.localPreviewOrigins = new Map();
     this.publicPolicy = new PublicUrlPolicy({ now });
+  }
+
+  grantLocalPreview(scope, { origin } = {}) {
+    const normalizedScope = normalizeScope(scope);
+    const url = new URL(String(origin || ""));
+    if (
+      url.protocol !== "http:" ||
+      url.hostname !== "127.0.0.1" ||
+      !url.port ||
+      Number(url.port) < 1024 ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      url.username ||
+      url.password
+    ) {
+      throw new Error("Local previews require an exact non-privileged IPv4 loopback origin");
+    }
+    const key = scopeKey(normalizedScope);
+    this.localPreviewOrigins.set(key, new Set([url.origin]));
+    return { origin: url.origin };
+  }
+
+  revokeLocalPreview(scope, { origin } = {}) {
+    const key = scopeKey(normalizeScope(scope));
+    const origins = this.localPreviewOrigins.get(key);
+    if (!origins) return false;
+    const removed = origins.delete(String(origin || ""));
+    if (origins.size === 0) this.localPreviewOrigins.delete(key);
+    return removed;
+  }
+
+  localPreviewForSession(sessionId) {
+    const record = this.sessions.get(String(sessionId || ""));
+    if (!record?.localPreviewOrigin) return null;
+    return {
+      origin: record.localPreviewOrigin,
+      network: "exact loopback origin only"
+    };
   }
 
   async open(scope, { url, sessionId = null, signal = null } = {}) {
     throwIfAborted(signal);
-    const target = await this.publicPolicy.validate(url, { allowSensitiveQuery: false });
+    const target = await this.validateTarget(scope, url, { allowSensitiveQuery: false });
+    const previewOrigin = this.localPreviewOrigin(scope, target);
     let record = sessionId ? this.requireSession(scope, sessionId) : null;
     const created = !record;
     if (created) record = await this.createSession(scope);
     try {
+      if (record.localPreviewOrigin && record.localPreviewOrigin !== previewOrigin) {
+        throw new Error("Open public pages and local previews in separate governed browser sessions");
+      }
+      if (!record.localPreviewOrigin && previewOrigin && !created) {
+        throw new Error("Open public pages and local previews in separate governed browser sessions");
+      }
+      if (created) record.localPreviewOrigin = previewOrigin;
       assertAgentControl(record);
       throwIfAborted(signal);
       await this.load(record, target, signal);
@@ -91,7 +139,7 @@ export class DesktopBrowserRuntime {
     const observedAt = this.now().toISOString();
     record.lastObservedAt = observedAt;
     record.title = cleanText(raw?.title, 300) || record.title || "Untitled page";
-    record.url = cleanUrl(raw?.url) || record.url;
+    record.url = cleanUrl(raw?.url, record.localPreviewOrigin) || record.url;
     return {
       ok: true,
       status: "ready",
@@ -352,7 +400,10 @@ export class DesktopBrowserRuntime {
     );
     throwIfAborted(signal);
     assertStableRevision(record, expectedRevision);
-    const classification = classifyBrowserAction(actionKind, descriptor, payload);
+    const classified = classifyBrowserAction(actionKind, descriptor, payload);
+    const classification = record.localPreviewOrigin && !classified.takeoverRequired
+      ? { ...classified, risk: "preview", requiresApproval: false }
+      : classified;
     const frame = await this.capture(record);
     assertStableRevision(record, expectedRevision);
     const publicAction = publicBrowserAction({
@@ -363,7 +414,8 @@ export class DesktopBrowserRuntime {
       payload,
       classification,
       url: record.url,
-      revision: record.revision
+      revision: record.revision,
+      localPreviewOrigin: record.localPreviewOrigin
     });
     const plan = {
       sessionId: record.id,
@@ -698,9 +750,9 @@ export class DesktopBrowserRuntime {
     }
     const before = { url: record.url, page_revision: record.revision };
     const directNavigation = plan.kind === "click" &&
-      plan.publicAction.risk === "observational" &&
+      ["observational", "preview"].includes(plan.publicAction.risk) &&
       descriptor.target?.tag === "a"
-      ? await this.publicPolicy.validate(descriptor.target.href, { allowSensitiveQuery: false })
+      ? await this.validateRecordTarget(record, descriptor.target.href, { allowSensitiveQuery: false })
       : null;
     if (directNavigation) {
       await this.load(record, directNavigation, signal);
@@ -918,6 +970,12 @@ export class DesktopBrowserRuntime {
   async close(scope, { sessionId } = {}) {
     const record = this.requireSession(scope, sessionId);
     assertAgentControl(record);
+    const preview = record.localPreviewOrigin
+      ? {
+          origin: record.localPreviewOrigin,
+          network: "exact loopback origin only"
+        }
+      : null;
     const result = {
       ok: true,
       status: "closed",
@@ -927,7 +985,8 @@ export class DesktopBrowserRuntime {
       page_revision: record.revision,
       observed_at: this.now().toISOString(),
       element_count: 0,
-      summary: "Closed the task-bound browser and revoked its references and frame."
+      summary: "Closed the task-bound browser and revoked its references and frame.",
+      ...(preview ? { preview } : {})
     };
     this.destroy(record);
     return result;
@@ -955,6 +1014,7 @@ export class DesktopBrowserRuntime {
 
   closeAll() {
     for (const record of [...this.sessions.values()]) this.destroy(record);
+    this.localPreviewOrigins.clear();
   }
 
   async createSession(scope) {
@@ -1005,12 +1065,13 @@ export class DesktopBrowserRuntime {
       transferDirectory: null,
       stagedUploads: new Set(),
       pendingDownload: null,
-      blockedDownload: null
+      blockedDownload: null,
+      localPreviewOrigin: ""
     };
     this.lockSessionNetwork(browserSession, record);
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (record.userVisible) {
-        this.publicPolicy.validate(url, { allowSensitiveQuery: false })
+        this.validateRecordTarget(record, url, { allowSensitiveQuery: false })
           .then((target) => this.load(record, target, null))
           .catch(() => {});
       }
@@ -1018,7 +1079,10 @@ export class DesktopBrowserRuntime {
     });
     const navigated = (_event, value) => {
       try {
-        const next = parsePublicHttpUrl(value);
+        const next = record.localPreviewOrigin
+          ? parseBrowserHttpUrl(value)
+          : parsePublicHttpUrl(value);
+        if (record.localPreviewOrigin && next.origin !== record.localPreviewOrigin) return;
         record.revision += 1;
         record.refs.clear();
         record.frame = null;
@@ -1053,7 +1117,7 @@ export class DesktopBrowserRuntime {
     try {
       await record.window.loadURL(target.href, { httpReferrer: "" });
       throwIfAborted(signal);
-      const current = await this.publicPolicy.validate(record.window.webContents.getURL(), {
+      const current = await this.validateRecordTarget(record, record.window.webContents.getURL(), {
         allowSensitiveQuery: false
       });
       record.url = current.href;
@@ -1080,28 +1144,76 @@ export class DesktopBrowserRuntime {
         callback({ cancel });
       };
       const timer = setTimeout(() => finish(true), 5_000);
-      this.validateRequest(details)
+      this.validateRequest(details, record)
         .then(() => finish(false))
         .catch(() => finish(true));
     });
   }
 
-  async validateRequest(details) {
+  async validateRequest(details, record = null) {
     const url = new URL(details.url);
     if (["http:", "https:"].includes(url.protocol)) {
-      await this.publicPolicy.validate(url, {
-        allowSensitiveQuery: details.resourceType !== "mainFrame"
-      });
+      if (record?.localPreviewOrigin) {
+        if (url.origin !== record.localPreviewOrigin) {
+          throw new Error("Local preview sessions cannot access external or other local origins");
+        }
+        if (details.resourceType === "mainFrame" && hasCredentialLikeUrlData(url)) {
+          throw new Error("Credential-like browser URLs are not allowed");
+        }
+      } else {
+        await this.publicPolicy.validate(url, {
+          allowSensitiveQuery: details.resourceType !== "mainFrame"
+        });
+      }
       return;
     }
     if (url.protocol === "blob:") {
       if (details.resourceType === "mainFrame") throw new Error("Blob navigation is blocked");
-      await this.publicPolicy.validate(new URL(url.pathname));
+      const embedded = new URL(url.pathname);
+      if (record?.localPreviewOrigin) {
+        if (embedded.origin !== record.localPreviewOrigin) {
+          throw new Error("Local preview blobs must share the exact preview origin");
+        }
+      } else {
+        await this.publicPolicy.validate(embedded);
+      }
       return;
     }
     if (url.protocol === "data:" && details.resourceType !== "mainFrame") return;
     if (url.href === "about:blank") return;
     throw new Error("Unsupported browser request scheme");
+  }
+
+  async validateTarget(scope, value, { allowSensitiveQuery = true } = {}) {
+    const url = parseBrowserHttpUrl(value);
+    const previewOrigin = this.localPreviewOrigin(scope, url);
+    if (previewOrigin) {
+      if (!allowSensitiveQuery && hasCredentialLikeUrlData(url)) {
+        throw new Error("Credential-like browser URLs are not allowed");
+      }
+      return url;
+    }
+    return this.publicPolicy.validate(url, { allowSensitiveQuery });
+  }
+
+  async validateRecordTarget(record, value, { allowSensitiveQuery = true } = {}) {
+    const url = parseBrowserHttpUrl(value);
+    if (record.localPreviewOrigin) {
+      if (url.origin !== record.localPreviewOrigin) {
+        throw new Error("Local preview sessions cannot leave their exact loopback origin");
+      }
+      if (!allowSensitiveQuery && hasCredentialLikeUrlData(url)) {
+        throw new Error("Credential-like browser URLs are not allowed");
+      }
+      return url;
+    }
+    return this.publicPolicy.validate(url, { allowSensitiveQuery });
+  }
+
+  localPreviewOrigin(scope, value) {
+    const url = value instanceof URL ? value : parseBrowserHttpUrl(value);
+    const origins = this.localPreviewOrigins.get(scopeKey(normalizeScope(scope)));
+    return origins?.has(url.origin) ? url.origin : "";
   }
 
   referenceElement(record, input) {
@@ -1122,7 +1234,7 @@ export class DesktopBrowserRuntime {
       tag: cleanText(input?.tag, 40),
       type: cleanText(input?.type, 40),
       text: cleanText(input?.text, 300),
-      href: safeObservedHref(input?.href),
+      href: safeObservedHref(input?.href, record.localPreviewOrigin),
       disabled: input?.disabled === true,
       checked: input?.checked === true,
       selected: input?.selected === true
@@ -1866,7 +1978,17 @@ function browserTargetRequiresTakeover(target = {}) {
     /current-password|new-password|one-time-code|cc-/.test(String(target.autocomplete || ""));
 }
 
-function publicBrowserAction({ kind, ref, optionRef, descriptor, payload, classification, url, revision }) {
+function publicBrowserAction({
+  kind,
+  ref,
+  optionRef,
+  descriptor,
+  payload,
+  classification,
+  url,
+  revision,
+  localPreviewOrigin = ""
+}) {
   const target = descriptor.target;
   const page = new URL(url);
   const actionPayload = kind === "type"
@@ -1891,7 +2013,7 @@ function publicBrowserAction({ kind, ref, optionRef, descriptor, payload, classi
       name: cleanText(target.name, 300),
       tag: cleanText(target.tag, 40),
       type: cleanText(target.type, 40),
-      destination: safeObservedHref(target.href || target.form?.action)
+      destination: safeObservedHref(target.href || target.form?.action, localPreviewOrigin)
     },
     payload: actionPayload
   };
@@ -2123,10 +2245,13 @@ function scopeKey(scope) {
   return [scope.boundary, scope.subjectId, scope.tenantId, scope.taskId].join("\u0000");
 }
 
-function safeObservedHref(value) {
+function safeObservedHref(value, localPreviewOrigin = "") {
   if (!value) return "";
   try {
-    const url = assertPublicUrlSyntax(new URL(String(value)));
+    const candidate = parseBrowserHttpUrl(value);
+    const url = localPreviewOrigin && candidate.origin === localPreviewOrigin
+      ? candidate
+      : assertPublicUrlSyntax(candidate);
     return hasCredentialLikeUrlData(url) ? "" : url.href.slice(0, 2_048);
   } catch {
     return "";
@@ -2139,13 +2264,27 @@ function hasCredentialLikeUrlData(url) {
   return sensitive.test(url.hash);
 }
 
-function cleanUrl(value) {
+function cleanUrl(value, localPreviewOrigin = "") {
   try {
-    const url = assertPublicUrlSyntax(new URL(String(value)));
+    const candidate = parseBrowserHttpUrl(value);
+    const url = localPreviewOrigin && candidate.origin === localPreviewOrigin
+      ? candidate
+      : assertPublicUrlSyntax(candidate);
     return hasCredentialLikeUrlData(url) ? "" : url.href;
   } catch {
     return "";
   }
+}
+
+function parseBrowserHttpUrl(value) {
+  const url = value instanceof URL ? new URL(value.href) : new URL(String(value || ""));
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("Only http and https URLs are allowed");
+  }
+  if (url.username || url.password) {
+    throw new Error("URLs containing credentials are not allowed");
+  }
+  return url;
 }
 
 function cleanRequired(value, max, label) {

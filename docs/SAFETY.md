@@ -28,6 +28,12 @@ The core rules are:
 - From an individual local approval, the user may instead choose **Always
   allow** for that request class only: shell commands, file writes, or code
   patches. Those narrower grants are pinned and reset the same way.
+- From the same inline ceremony, the user may choose **Allow for this task**.
+  That ephemeral grant covers shell commands, file writes, and code patches
+  only for the current Desktop task, exact workspace, operating boundary,
+  identity, and tenant. Switching or clearing the task, changing the workspace,
+  or changing the account boundary revokes it. It is never stored as standing
+  workspace authority.
 - Command timeouts terminate the full process group.
 - User cancellation terminates the active process group and propagates to model,
   MCP, and web requests.
@@ -108,6 +114,22 @@ The Desktop JavaScript browser adds a narrower local boundary:
   not serialized into model tool text; and
 - closing or changing account/task/runtime revokes the page, references, and
   frame. Browser execution capabilities are never copied into a task fork.
+
+Generated static applications use a separate Desktop-owned preview capability:
+
+- `desktop_preview_app` serves only allowlisted static file types from the
+  selected workspace on an ephemeral, non-privileged IPv4 loopback port;
+- the exact origin is granted to the exact browser task scope and is revoked
+  when that runtime, task, or preview closes;
+- preview browser sessions cannot request public hosts, private-network hosts,
+  or another loopback origin, and the preview server accepts only `GET` and
+  `HEAD`;
+- CSP and response policy disable forms, object/frame/media embedding, and
+  network connections, while credential paths and workspace escapes remain
+  blocked; and
+- controls inside this inert preview do not require per-click approval because
+  they cannot leave the exact read-only origin. Authentication-like fields
+  remain unavailable to model control.
 
 Semantic browser actions use current opaque references only. Safe navigation and
 search-like input are observational. Buttons, form text, selects, checks, and

@@ -45,6 +45,13 @@ Each local approval dialog also offers **Always allow this kind**. That narrower
 choice can remember shell commands, file writes, or code patches independently
 for the exact workspace while leaving the other local action types ask-first.
 
+The recommended middle option is **Allow for this task**. It authorizes bounded
+local commands, writes, and patches for the current task and exact workspace,
+then expires when the user switches or clears the task or changes the operating
+boundary. It does not authorize AMOS company operations, connected-application
+writes, public-browser consequences, or future tasks. Persistent choices are
+kept under a secondary disclosure instead of interrupting the primary flow.
+
 Local approvals appear inline in the Operator conversation. The requested tool
 action pauses until the user decides, but the composer remains active so the
 user can keep typing and queue direction without a modal taking over the app.
@@ -131,6 +138,14 @@ receipt memory remain authoritative in managed AMOS.
 - approval-gated shell commands and local mutations;
 - scrubbed child-process environment; and
 - live tool activity.
+
+For generated static web applications, `desktop_preview_app` runs a
+Desktop-owned loopback preview, opens it directly in the governed browser
+canvas, and returns semantic plus visual evidence to the model. The preview is
+bound to the exact task and origin, serves only allowlisted workspace files,
+and cannot call the public internet or other local services. This provides the
+create → preview → inspect → iterate loop without an unmanaged background
+server or a blanket private-network browser exception.
 
 ### Durable task lifecycle
 
