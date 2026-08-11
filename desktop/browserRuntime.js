@@ -1,4 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { assertPublicUrl, assertPublicUrlSyntax, parsePublicHttpUrl } from "../src/util/publicUrl.js";
 
 const VIEWPORT = Object.freeze({ width: 1280, height: 800 });
@@ -7,10 +10,23 @@ const DEFAULT_MAX_ELEMENTS = 80;
 const DEFAULT_MAX_CHARS = 12_000;
 const MAX_SESSIONS = 6;
 const ACTION_KINDS = new Set(["click", "type", "select", "check"]);
+const VISUAL_ACTION_KINDS = new Set(["click", "type", "key", "scroll"]);
+const VISUAL_KEYS = new Set([
+  "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", "Escape", "Tab",
+  "Backspace", "Delete", "Home", "End", "PageUp", "PageDown", "Space"
+]);
 const TAKEOVER_TITLE = "AMOS Secure Browser";
+const MAX_TRANSFER_BYTES = 20 * 1024 * 1024;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 30_000;
 
 export class DesktopBrowserRuntime {
-  constructor({ BrowserWindow, session, now = () => new Date(), createId = randomUUID } = {}) {
+  constructor({
+    BrowserWindow,
+    session,
+    now = () => new Date(),
+    createId = randomUUID,
+    transferRoot = join(tmpdir(), "amos-browser-transfers")
+  } = {}) {
     if (typeof BrowserWindow !== "function" || !session?.fromPartition) {
       throw new Error("The governed browser requires Electron BrowserWindow and session APIs");
     }
@@ -18,6 +34,10 @@ export class DesktopBrowserRuntime {
     this.electronSession = session;
     this.now = now;
     this.createId = createId;
+    const requestedTransferRoot = String(transferRoot || "").trim();
+    if (!requestedTransferRoot) throw new Error("Browser transfer storage requires a private absolute directory");
+    if (!isAbsolute(requestedTransferRoot)) throw new Error("Browser transfer storage must be absolute");
+    this.transferRoot = resolve(requestedTransferRoot);
     this.sessions = new Map();
     this.publicPolicy = new PublicUrlPolicy({ now });
   }
@@ -159,6 +179,149 @@ export class DesktopBrowserRuntime {
     };
   }
 
+  async visualObserve(scope, { sessionId, targetDescription = "", signal = null } = {}) {
+    const record = this.requireSession(scope, sessionId);
+    assertAgentControl(record);
+    const expectedRevision = record.revision;
+    throwIfAborted(signal);
+    await assertVisualSurfaceAllowed(record);
+    const frame = await this.captureVisual(record);
+    assertStableRevision(record, expectedRevision);
+    return visualObservation(record, frame, this.now(), targetDescription);
+  }
+
+  async prepareVisualAction(scope, {
+    sessionId,
+    frameId,
+    action,
+    targetDescription = "",
+    x = null,
+    y = null,
+    text = "",
+    replace = true,
+    key = "",
+    deltaY = 0,
+    signal = null
+  } = {}) {
+    const record = this.requireSession(scope, sessionId);
+    assertAgentControl(record);
+    await assertVisualSurfaceAllowed(record);
+    const kind = String(action || "");
+    if (!VISUAL_ACTION_KINDS.has(kind)) throw new Error("Unsupported visual browser action");
+    const frame = requireVisualFrame(record, frameId);
+    const point = visualPoint({ kind, x, y, frame });
+    const payload = normalizeVisualPayload(kind, { text, replace, key, deltaY });
+    throwIfAborted(signal);
+    const descriptor = point
+      ? await executeIsolated(record.window.webContents, visualPointDescriptorScript(point))
+      : null;
+    throwIfAborted(signal);
+    assertStableRevision(record, frame.pageRevision);
+    const takeoverRequired = descriptor?.sensitive === true || looksLikeAuthenticationSurface(record.url);
+    const risk = kind === "scroll" ? "observational" : takeoverRequired ? "credential" : "consequential";
+    const publicAction = publicVisualAction({
+      kind,
+      targetDescription,
+      point,
+      descriptor,
+      payload,
+      risk,
+      url: record.url,
+      revision: record.revision,
+      frame
+    });
+    return {
+      plan: {
+        sessionId: record.id,
+        revision: record.revision,
+        frameId: frame.id,
+        frameSha256: frame.sha256,
+        kind,
+        point,
+        payload,
+        descriptorSha256: hashValue(descriptor),
+        publicAction,
+        requiresApproval: kind !== "scroll" && !takeoverRequired,
+        takeoverRequired
+      },
+      requires_approval: kind !== "scroll" && !takeoverRequired,
+      takeover_required: takeoverRequired,
+      public_action: publicAction,
+      observation: visualObservation(record, publicFrame(frame), this.now(), targetDescription)
+    };
+  }
+
+  async performVisualAction(scope, {
+    plan,
+    approved = false,
+    waitMs = 750,
+    signal = null
+  } = {}) {
+    if (!plan || !VISUAL_ACTION_KINDS.has(plan.kind)) {
+      throw new Error("A prepared visual browser action is required");
+    }
+    if (plan.takeoverRequired) throw new Error("Authentication and sensitive fields require direct user control");
+    if (plan.requiresApproval && approved !== true) {
+      throw new Error("This visual browser action requires exact human approval");
+    }
+    const record = this.requireSession(scope, plan.sessionId);
+    assertAgentControl(record);
+    assertStableRevision(record, plan.revision);
+    const currentFrame = requireVisualFrame(record, plan.frameId);
+    if (currentFrame.sha256 !== plan.frameSha256) throw new Error("The visual browser frame changed; observe it again");
+    throwIfAborted(signal);
+    const revalidated = await this.captureVisual(record);
+    if (
+      revalidated.sha256 !== plan.frameSha256 ||
+      revalidated.width !== currentFrame.width ||
+      revalidated.height !== currentFrame.height
+    ) {
+      throw new Error("The visual browser frame changed while approval was pending; observe it again");
+    }
+    const descriptor = plan.point
+      ? await executeIsolated(record.window.webContents, visualPointDescriptorScript(plan.point))
+      : null;
+    if (hashValue(descriptor) !== plan.descriptorSha256 || descriptor?.sensitive === true) {
+      throw new Error("The visual browser target changed while approval was pending; observe it again");
+    }
+    await sendVisualInput(record.window.webContents, plan);
+    throwIfAborted(signal);
+    await this.waitForSettled(record, boundedInteger(waitMs, 750, 250, 5_000), signal);
+    if (record.blockedDownload) {
+      throw new Error("The visual action attempted an unapproved download. Use browser_download on a fresh semantic snapshot.");
+    }
+    const frame = await this.captureVisual(record);
+    const result = visualObservation(record, frame, this.now(), plan.publicAction.target_description);
+    return {
+      ...result,
+      operation: `visual_${plan.kind}`,
+      visual_action_receipt: {
+        contract: "amos.browser-visual-action:1",
+        receipt_id: this.createId(),
+        action: plan.kind,
+        risk: plan.publicAction.risk,
+        approved: approved === true,
+        origin: plan.publicAction.origin,
+        target_description: plan.publicAction.target_description,
+        point: plan.publicAction.point,
+        payload: plan.publicAction.payload,
+        before: {
+          page_revision: plan.revision,
+          frame_id: plan.frameId,
+          frame_sha256: plan.frameSha256
+        },
+        after: {
+          page_revision: record.revision,
+          frame_id: frame.frame_id,
+          frame_sha256: frame.sha256
+        },
+        executed_at: this.now().toISOString(),
+        verified: true
+      },
+      summary: `Completed the frame-bound visual ${plan.kind} action and captured a new masked observation.`
+    };
+  }
+
   async prepareAction(scope, {
     sessionId,
     kind,
@@ -247,6 +410,264 @@ export class DesktopBrowserRuntime {
     };
   }
 
+  async prepareUpload(scope, {
+    sessionId,
+    ref,
+    attachment,
+    signal = null
+  } = {}) {
+    const record = this.requireSession(scope, sessionId);
+    assertAgentControl(record);
+    const expectedRevision = record.revision;
+    const targetReference = this.resolveReference(record, ref);
+    const artifact = normalizeUploadAttachment(attachment);
+    throwIfAborted(signal);
+    const descriptor = await executeIsolated(
+      record.window.webContents,
+      actionDescriptorScript({ selector: targetReference.selector, optionSelector: null })
+    );
+    throwIfAborted(signal);
+    assertStableRevision(record, expectedRevision);
+    if (descriptor?.target?.tag !== "input" || descriptor.target.type !== "file") {
+      throw new Error("browser_upload requires a current file-input reference");
+    }
+    const takeoverRequired = browserTargetRequiresTakeover(descriptor.target);
+    const frame = await this.capture(record);
+    assertStableRevision(record, expectedRevision);
+    const publicAction = publicTransferAction({
+      kind: "upload",
+      ref,
+      descriptor,
+      artifact,
+      url: record.url,
+      revision: record.revision
+    });
+    let stagedPath = null;
+    if (!takeoverRequired) {
+      stagedPath = await this.stageUpload(record, artifact);
+    }
+    const plan = {
+      sessionId: record.id,
+      revision: record.revision,
+      kind: "upload",
+      ref: String(ref),
+      selector: targetReference.selector,
+      artifact: publicAction.payload,
+      stagedPath,
+      fingerprint: actionFingerprint({
+        kind: "upload",
+        ref,
+        optionRef: null,
+        descriptor,
+        payload: publicAction.payload
+      }),
+      publicAction,
+      requiresApproval: !takeoverRequired,
+      takeoverRequired
+    };
+    return {
+      plan,
+      public_action: publicAction,
+      requires_approval: plan.requiresApproval,
+      takeover_required: plan.takeoverRequired,
+      observation: transferObservation(record, frame, this.now(), plan.takeoverRequired
+        ? "This sensitive upload control requires direct user control."
+        : "Review the exact attachment, destination field, and page before uploading.")
+    };
+  }
+
+  async prepareDownload(scope, { sessionId, ref, signal = null } = {}) {
+    const record = this.requireSession(scope, sessionId);
+    assertAgentControl(record);
+    const expectedRevision = record.revision;
+    const targetReference = this.resolveReference(record, ref);
+    throwIfAborted(signal);
+    const descriptor = await executeIsolated(
+      record.window.webContents,
+      actionDescriptorScript({ selector: targetReference.selector, optionSelector: null })
+    );
+    throwIfAborted(signal);
+    assertStableRevision(record, expectedRevision);
+    const takeoverRequired = browserTargetRequiresTakeover(descriptor.target);
+    const frame = await this.capture(record);
+    assertStableRevision(record, expectedRevision);
+    const publicAction = publicTransferAction({
+      kind: "download",
+      ref,
+      descriptor,
+      artifact: null,
+      url: record.url,
+      revision: record.revision
+    });
+    const plan = {
+      sessionId: record.id,
+      revision: record.revision,
+      kind: "download",
+      ref: String(ref),
+      selector: targetReference.selector,
+      fingerprint: actionFingerprint({
+        kind: "download",
+        ref,
+        optionRef: null,
+        descriptor,
+        payload: {}
+      }),
+      publicAction,
+      requiresApproval: !takeoverRequired,
+      takeoverRequired
+    };
+    return {
+      plan,
+      public_action: publicAction,
+      requires_approval: plan.requiresApproval,
+      takeover_required: plan.takeoverRequired,
+      observation: transferObservation(record, frame, this.now(), plan.takeoverRequired
+        ? "This sensitive download control requires direct user control."
+        : "Review the exact download control and page before starting a quarantined download.")
+    };
+  }
+
+  async cancelPreparedUpload(scope, { plan } = {}) {
+    if (!plan?.stagedPath) return false;
+    let record;
+    try {
+      record = this.requireSession(scope, plan.sessionId);
+    } catch {
+      return false;
+    }
+    if (plan.assigned === true) return false;
+    if (!record.stagedUploads.has(plan.stagedPath)) return false;
+    record.stagedUploads.delete(plan.stagedPath);
+    await unlink(plan.stagedPath).catch(() => {});
+    return true;
+  }
+
+  async performUpload(scope, { plan, approved = false, signal = null } = {}) {
+    if (!plan || plan.kind !== "upload" || !plan.stagedPath) {
+      throw new Error("A prepared browser upload is required");
+    }
+    if (plan.takeoverRequired) throw new Error("This upload control requires direct user control");
+    if (approved !== true) throw new Error("Browser uploads require exact human approval");
+    const record = this.requireSession(scope, plan.sessionId);
+    assertAgentControl(record);
+    assertStableRevision(record, plan.revision);
+    if (!record.stagedUploads.has(plan.stagedPath)) throw new Error("That staged browser upload expired");
+    const descriptor = await executeIsolated(
+      record.window.webContents,
+      actionDescriptorScript({ selector: plan.selector, optionSelector: null })
+    );
+    assertTransferFingerprint(plan, descriptor);
+    const bytes = await readFile(plan.stagedPath);
+    if (
+      bytes.length !== plan.artifact.bytes ||
+      createHash("sha256").update(bytes).digest("hex") !== plan.artifact.sha256
+    ) {
+      throw new Error("The staged browser upload changed before execution");
+    }
+    const before = { url: record.url, page_revision: record.revision };
+    record.blockedDownload = null;
+    await setFileInputFiles(record.window.webContents, plan.selector, [plan.stagedPath]);
+    plan.assigned = true;
+    const verified = await executeIsolated(
+      record.window.webContents,
+      verifyFileInputScript({ selector: plan.selector, artifact: plan.artifact })
+    );
+    if (verified !== true) throw new Error("The browser did not accept the approved upload attachment");
+    throwIfAborted(signal);
+    await this.waitForSettled(record, 750, signal);
+    const snapshot = await this.snapshot(scope, {
+      sessionId: record.id,
+      maxElements: DEFAULT_MAX_ELEMENTS,
+      maxChars: DEFAULT_MAX_CHARS,
+      signal
+    });
+    return {
+      ...snapshot,
+      operation: "upload",
+      transfer_receipt: transferReceipt({
+        runtime: this,
+        kind: "upload",
+        action: plan.publicAction,
+        before,
+        after: snapshot,
+        artifact: plan.artifact
+      }),
+      summary: `Uploaded ${plan.artifact.name} through the approved file input and verified the selected file metadata.`
+    };
+  }
+
+  async performDownload(scope, {
+    plan,
+    approved = false,
+    timeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS,
+    signal = null
+  } = {}) {
+    if (!plan || plan.kind !== "download") throw new Error("A prepared browser download is required");
+    if (plan.takeoverRequired) throw new Error("This download control requires direct user control");
+    if (approved !== true) throw new Error("Browser downloads require exact human approval");
+    const record = this.requireSession(scope, plan.sessionId);
+    assertAgentControl(record);
+    assertStableRevision(record, plan.revision);
+    if (record.pendingDownload) throw new Error("Another browser download is already pending");
+    const descriptor = await executeIsolated(
+      record.window.webContents,
+      actionDescriptorScript({ selector: plan.selector, optionSelector: null })
+    );
+    assertTransferFingerprint(plan, descriptor);
+    await this.ensureTransferDirectory(record);
+    const pending = deferredDownload({
+      id: this.createId(),
+      timeoutMs: boundedInteger(timeoutMs, DEFAULT_DOWNLOAD_TIMEOUT_MS, 1_000, 60_000)
+    });
+    record.pendingDownload = pending;
+    record.blockedDownload = null;
+    const before = { url: record.url, page_revision: record.revision };
+    try {
+      await executeIsolated(record.window.webContents, actionScript({
+        kind: "click",
+        selector: plan.selector,
+        optionSelector: null,
+        payload: {}
+      }));
+      const transfer = await waitForDownload(pending, signal);
+      await this.waitForSettled(record, 750, signal);
+      const snapshot = await this.snapshot(scope, {
+        sessionId: record.id,
+        maxElements: DEFAULT_MAX_ELEMENTS,
+        maxChars: DEFAULT_MAX_CHARS,
+        signal
+      });
+      const artifact = {
+        name: transfer.name,
+        mime: transfer.mime,
+        bytes: transfer.buffer.length,
+        sha256: transfer.sha256
+      };
+      return {
+        result: {
+          ...snapshot,
+          operation: "download",
+          transfer_receipt: transferReceipt({
+            runtime: this,
+            kind: "download",
+            action: plan.publicAction,
+            before,
+            after: snapshot,
+            artifact
+          }),
+          summary: `Downloaded ${transfer.name} into the task attachment quarantine and verified its SHA-256 digest.`
+        },
+        transfer: {
+          ...artifact,
+          source_url: record.url,
+          buffer: transfer.buffer
+        }
+      };
+    } finally {
+      if (record.pendingDownload === pending) record.pendingDownload = null;
+    }
+  }
+
   async performAction(scope, { plan, approved = false, waitMs = 750, signal = null } = {}) {
     if (!plan || !ACTION_KINDS.has(plan.kind)) throw new Error("A prepared browser action is required");
     if (plan.takeoverRequired) {
@@ -293,6 +714,9 @@ export class DesktopBrowserRuntime {
     }
     throwIfAborted(signal);
     await this.waitForSettled(record, boundedInteger(waitMs, 750, 250, 5_000), signal);
+    if (record.blockedDownload) {
+      throw new Error("The action attempted an unapproved download. Use browser_download on a fresh page snapshot.");
+    }
     const snapshot = await this.snapshot(scope, {
       sessionId: record.id,
       maxElements: DEFAULT_MAX_ELEMENTS,
@@ -419,6 +843,78 @@ export class DesktopBrowserRuntime {
     return false;
   }
 
+  async ensureTransferDirectory(record) {
+    if (record.transferDirectory) return record.transferDirectory;
+    await mkdir(this.transferRoot, { recursive: true, mode: 0o700 });
+    record.transferDirectory = await mkdtemp(join(this.transferRoot, "session-"));
+    return record.transferDirectory;
+  }
+
+  async stageUpload(record, artifact) {
+    const directory = await this.ensureTransferDirectory(record);
+    const staging = await mkdtemp(join(directory, "upload-"));
+    const filePath = join(staging, cleanTransferName(artifact.name));
+    await writeFile(filePath, artifact.buffer, { flag: "wx", mode: 0o600 });
+    record.stagedUploads.add(filePath);
+    return filePath;
+  }
+
+  handleDownload(record, event, item, webContents) {
+    const pending = record?.pendingDownload;
+    const wrongContents = webContents && webContents !== record.window.webContents;
+    if (!pending || wrongContents || Date.now() > pending.expiresAt || pending.item) {
+      event.preventDefault?.();
+      item?.cancel?.();
+      record.blockedDownload = {
+        at: this.now().toISOString(),
+        name: cleanTransferName(item?.getFilename?.() || "download")
+      };
+      return;
+    }
+    const declaredBytes = Number(item?.getTotalBytes?.() || 0);
+    if (declaredBytes > MAX_TRANSFER_BYTES) {
+      event.preventDefault?.();
+      item?.cancel?.();
+      pending.reject(new Error("The browser download exceeds the 20 MB attachment limit"));
+      return;
+    }
+    const name = cleanTransferName(item?.getFilename?.() || "download");
+    const filePath = join(record.transferDirectory, `${cleanId(pending.id)}-${name}`);
+    pending.item = item;
+    pending.path = filePath;
+    pending.name = name;
+    pending.mime = cleanText(item?.getMimeType?.(), 200) || "application/octet-stream";
+    item.setSavePath?.(filePath);
+    item.on?.("updated", () => {
+      if (Number(item.getReceivedBytes?.() || 0) > MAX_TRANSFER_BYTES) item.cancel?.();
+    });
+    item.once?.("done", (_doneEvent, state) => {
+      this.completeDownload(pending, state).catch((error) => pending.reject(error));
+    });
+  }
+
+  async completeDownload(pending, state) {
+    try {
+      if (state !== "completed") {
+        throw new Error(`The browser download ${state || "did not complete"}`);
+      }
+      const info = await stat(pending.path);
+      if (!info.isFile() || info.size === 0) throw new Error("The browser download was empty");
+      if (info.size > MAX_TRANSFER_BYTES) {
+        throw new Error("The browser download exceeds the 20 MB attachment limit");
+      }
+      const buffer = await readFile(pending.path);
+      pending.resolve({
+        name: pending.name,
+        mime: pending.mime,
+        sha256: createHash("sha256").update(buffer).digest("hex"),
+        buffer
+      });
+    } finally {
+      if (pending.path) await unlink(pending.path).catch(() => {});
+    }
+  }
+
   async close(scope, { sessionId } = {}) {
     const record = this.requireSession(scope, sessionId);
     assertAgentControl(record);
@@ -472,7 +968,6 @@ export class DesktopBrowserRuntime {
       .digest("hex")
       .slice(0, 24)}`;
     const browserSession = this.electronSession.fromPartition(partition, { cache: false });
-    this.lockSessionNetwork(browserSession);
     const window = new this.BrowserWindow({
       title: TAKEOVER_TITLE,
       show: false,
@@ -506,8 +1001,13 @@ export class DesktopBrowserRuntime {
       createdAt: this.now().getTime(),
       lastObservedAt: null,
       userVisible: false,
-      closing: false
+      closing: false,
+      transferDirectory: null,
+      stagedUploads: new Set(),
+      pendingDownload: null,
+      blockedDownload: null
     };
+    this.lockSessionNetwork(browserSession, record);
     window.webContents.setWindowOpenHandler(({ url }) => {
       if (record.userVisible) {
         this.publicPolicy.validate(url, { allowSensitiveQuery: false })
@@ -564,13 +1064,12 @@ export class DesktopBrowserRuntime {
     }
   }
 
-  lockSessionNetwork(browserSession) {
+  lockSessionNetwork(browserSession, record) {
     browserSession.setPermissionRequestHandler?.((_contents, _permission, callback) => callback(false));
     browserSession.setPermissionCheckHandler?.(() => false);
     browserSession.setDisplayMediaRequestHandler?.((_request, callback) => callback({}));
-    browserSession.on?.("will-download", (event, item) => {
-      event.preventDefault();
-      item?.cancel?.();
+    browserSession.on?.("will-download", (event, item, webContents) => {
+      this.handleDownload(record, event, item, webContents);
     });
     browserSession.webRequest.onBeforeRequest((details, callback) => {
       let settled = false;
@@ -650,14 +1149,35 @@ export class DesktopBrowserRuntime {
       id,
       buffer,
       width: boundedInteger(size.width, VIEWPORT.width, 1, 4_000),
-      height: boundedInteger(size.height, VIEWPORT.height, 1, 4_000)
+      height: boundedInteger(size.height, VIEWPORT.height, 1, 4_000),
+      pageRevision: record.revision,
+      sha256: createHash("sha256").update(buffer).digest("hex")
     };
     return {
       frame_id: id,
       width: record.frame.width,
       height: record.frame.height,
-      bytes: buffer.length
+      bytes: buffer.length,
+      sha256: record.frame.sha256
     };
+  }
+
+  async captureVisual(record) {
+    let cssKey = null;
+    try {
+      cssKey = await record.window.webContents.insertCSS?.([
+        "input,textarea,select,[contenteditable='true'],[contenteditable='']{",
+        "color:transparent!important;text-shadow:none!important;caret-color:transparent!important;",
+        "}",
+        "input::placeholder,textarea::placeholder{color:#687386!important;opacity:1!important;}"
+      ].join(""));
+      return await this.capture(record);
+    } finally {
+      if (cssKey) {
+        const removal = record.window.webContents.removeInsertedCSS?.(cssKey);
+        await removal?.catch(() => {});
+      }
+    }
   }
 
   requireSession(scope, sessionId) {
@@ -687,8 +1207,15 @@ export class DesktopBrowserRuntime {
     record.frame = null;
     record.closing = true;
     record.userVisible = false;
+    record.pendingDownload?.item?.cancel?.();
+    record.pendingDownload?.reject?.(new Error("The browser session closed before the download completed"));
+    record.pendingDownload = null;
     this.sessions.delete(record.id);
     if (!record.window.isDestroyed?.()) record.window.destroy();
+    if (record.transferDirectory) {
+      rm(record.transferDirectory, { recursive: true, force: true }).catch(() => {});
+      record.transferDirectory = null;
+    }
   }
 }
 
@@ -963,6 +1490,216 @@ function actionDescriptorScript({ selector, optionSelector }) {
   })()`;
 }
 
+async function assertVisualSurfaceAllowed(record) {
+  if (looksLikeAuthenticationSurface(record.url)) {
+    throw new Error("Visual browser control is blocked on authentication surfaces. Ask the user to Take control.");
+  }
+  const result = await executeIsolated(record.window.webContents, visualSurfaceSafetyScript());
+  if (Number(result?.visibleSensitiveFields || 0) > 0) {
+    throw new Error("Visual browser control is blocked while a credential or sensitive field is visible. Ask the user to Take control.");
+  }
+}
+
+function visualSurfaceSafetyScript() {
+  return `(() => {
+    const sensitive = /password|passcode|one[\\s_-]?time|\\botp\\b|verification[\\s_-]?code|security[\\s_-]?code|\\bmfa\\b|\\b2fa\\b|recovery|token|secret|api[\\s_-]?key|credit[\\s_-]?card|\\bcvv\\b|\\bcvc\\b|social[\\s_-]?security|\\bssn\\b/i;
+    const visible = (element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+    };
+    const fields = Array.from(document.querySelectorAll('input,textarea,select,[contenteditable]'));
+    return {
+      visibleSensitiveFields: fields.filter((element) => {
+        if (!visible(element)) return false;
+        const identity = [
+          element.getAttribute('type'), element.getAttribute('name'), element.getAttribute('id'),
+          element.getAttribute('autocomplete'), element.getAttribute('aria-label'), element.getAttribute('placeholder')
+        ].filter(Boolean).join(' ');
+        const form = element.form || element.closest('form');
+        return String(element.getAttribute('type') || '').toLowerCase() === 'password' ||
+          /current-password|new-password|one-time-code|cc-/.test(String(element.getAttribute('autocomplete') || '').toLowerCase()) ||
+          sensitive.test(identity) || Boolean(form?.querySelector('input[type="password"]'));
+      }).length
+    };
+  })()`;
+}
+
+function visualPointDescriptorScript({ x, y }) {
+  return `(() => {
+    const x = ${x};
+    const y = ${y};
+    const clean = (value, limit = 300) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, limit);
+    const element = document.elementFromPoint(x, y);
+    if (!element) throw new Error('No visible browser target exists at those coordinates');
+    const interactive = element.closest('a,button,input,textarea,select,[role],[contenteditable]') || element;
+    const type = clean(interactive.getAttribute('type') || interactive.tagName, 40).toLowerCase();
+    const labels = interactive.labels ? Array.from(interactive.labels).map((label) => clean(label.textContent, 120)).join(' ') : '';
+    const name = clean(interactive.getAttribute('aria-label') || labels || interactive.getAttribute('alt') || interactive.getAttribute('title') || interactive.getAttribute('placeholder') || interactive.getAttribute('name') || (['INPUT','TEXTAREA'].includes(interactive.tagName) ? 'Editable field' : interactive.textContent));
+    const identity = [type, interactive.getAttribute('role'), name, interactive.getAttribute('id'), interactive.getAttribute('name'), interactive.getAttribute('autocomplete')].filter(Boolean).join(' ');
+    const form = interactive.form || interactive.closest('form');
+    const sensitive = /password|passcode|one[\\s_-]?time|\\botp\\b|verification[\\s_-]?code|security[\\s_-]?code|\\bmfa\\b|\\b2fa\\b|recovery|token|secret|api[\\s_-]?key|credit[\\s_-]?card|\\bcvv\\b|\\bcvc\\b|social[\\s_-]?security|\\bssn\\b/i;
+    return {
+      tag: interactive.tagName.toLowerCase(),
+      type,
+      role: clean(interactive.getAttribute('role'), 80) || interactive.tagName.toLowerCase(),
+      name,
+      disabled: interactive.matches(':disabled') || interactive.getAttribute('aria-disabled') === 'true',
+      editable: ['input','textarea'].includes(interactive.tagName.toLowerCase()) || interactive.isContentEditable === true,
+      sensitive: type === 'password' || /current-password|new-password|one-time-code|cc-/.test(String(interactive.getAttribute('autocomplete') || '').toLowerCase()) || sensitive.test(identity) || Boolean(form?.querySelector('input[type="password"]'))
+    };
+  })()`;
+}
+
+function requireVisualFrame(record, frameId) {
+  const frame = record.frame;
+  if (
+    !frame || frame.id !== String(frameId || "") || frame.pageRevision !== record.revision ||
+    !/^[a-f0-9]{64}$/.test(String(frame.sha256 || ""))
+  ) {
+    throw new Error("That visual browser frame expired; observe it again");
+  }
+  return frame;
+}
+
+function publicFrame(frame) {
+  return {
+    frame_id: frame.id,
+    width: frame.width,
+    height: frame.height,
+    bytes: frame.buffer.length,
+    sha256: frame.sha256
+  };
+}
+
+function visualPoint({ kind, x, y, frame }) {
+  if (kind === "key") return null;
+  const defaultX = Math.floor(frame.width / 2);
+  const defaultY = Math.floor(frame.height / 2);
+  const parsedX = Number(x);
+  const parsedY = Number(y);
+  if (
+    ["click", "type"].includes(kind) &&
+    (!Number.isSafeInteger(parsedX) || !Number.isSafeInteger(parsedY) ||
+      parsedX < 0 || parsedX >= frame.width || parsedY < 0 || parsedY >= frame.height)
+  ) {
+    throw new Error(`Visual ${kind} requires exact coordinates inside the current frame`);
+  }
+  const point = {
+    x: boundedInteger(parsedX, defaultX, 0, frame.width - 1),
+    y: boundedInteger(parsedY, defaultY, 0, frame.height - 1)
+  };
+  return point;
+}
+
+function normalizeVisualPayload(kind, { text, replace, key, deltaY }) {
+  if (kind === "type") {
+    const value = String(text ?? "");
+    if (!value || value.length > 5_000) throw new Error("Visual browser text must contain 1-5,000 characters");
+    return { text: value, replace: replace !== false };
+  }
+  if (kind === "key") {
+    const value = String(key || "");
+    if (!VISUAL_KEYS.has(value)) throw new Error("That visual browser key is not allowed");
+    return { key: value };
+  }
+  if (kind === "scroll") {
+    const value = boundedInteger(deltaY, 0, -2_000, 2_000);
+    if (!value) throw new Error("Visual browser scroll requires a non-zero delta_y");
+    return { deltaY: value };
+  }
+  return {};
+}
+
+function publicVisualAction({ kind, targetDescription, point, descriptor, payload, risk, url, revision, frame }) {
+  const description = cleanRequired(targetDescription, 300, "visual browser target description");
+  const publicPayload = kind === "type"
+    ? {
+        characters: payload.text.length,
+        sha256: createHash("sha256").update(payload.text).digest("hex"),
+        replace: payload.replace
+      }
+    : kind === "key" ? { key: payload.key }
+      : kind === "scroll" ? { delta_y: payload.deltaY }
+        : {};
+  return {
+    action: `visual_${kind}`,
+    risk,
+    origin: new URL(url).origin,
+    page_revision: revision,
+    frame_id: frame.id,
+    frame_sha256: frame.sha256,
+    target_description: description,
+    point,
+    observed_target: descriptor ? {
+      role: cleanText(descriptor.role, 80),
+      name: cleanText(descriptor.name, 300),
+      tag: cleanText(descriptor.tag, 40),
+      type: cleanText(descriptor.type, 40)
+    } : null,
+    payload: publicPayload
+  };
+}
+
+function visualObservation(record, frame, now, targetDescription = "") {
+  return {
+    ok: true,
+    status: "ready",
+    contract: "amos.browser-visual-observation:1",
+    session_id: record.id,
+    url: record.url,
+    title: record.title,
+    page_revision: record.revision,
+    observed_at: now.toISOString(),
+    element_count: record.refs.size,
+    target_description: cleanText(targetDescription, 300),
+    frame,
+    summary: "Captured a masked task-local browser frame for bounded visual fallback. Editable values were hidden.",
+    takeover_active: false
+  };
+}
+
+async function sendVisualInput(webContents, plan) {
+  const point = plan.point;
+  if (plan.kind === "scroll") {
+    webContents.sendInputEvent({ type: "mouseMove", x: point.x, y: point.y });
+    webContents.sendInputEvent({ type: "mouseWheel", x: point.x, y: point.y, deltaY: plan.payload.deltaY, deltaX: 0 });
+    return;
+  }
+  if (plan.kind === "key") {
+    const keyCode = plan.payload.key === "Space" ? " " : plan.payload.key;
+    webContents.sendInputEvent({ type: "keyDown", keyCode });
+    webContents.sendInputEvent({ type: "keyUp", keyCode });
+    return;
+  }
+  webContents.sendInputEvent({ type: "mouseMove", x: point.x, y: point.y });
+  webContents.sendInputEvent({ type: "mouseDown", x: point.x, y: point.y, button: "left", clickCount: 1 });
+  webContents.sendInputEvent({ type: "mouseUp", x: point.x, y: point.y, button: "left", clickCount: 1 });
+  if (plan.kind !== "type") return;
+  if (plan.payload.replace) {
+    const modifiers = process.platform === "darwin" ? ["meta"] : ["control"];
+    webContents.sendInputEvent({ type: "keyDown", keyCode: "A", modifiers });
+    webContents.sendInputEvent({ type: "keyUp", keyCode: "A", modifiers });
+  }
+  if (typeof webContents.insertText !== "function") {
+    throw new Error("This AMOS Desktop build cannot insert bounded visual text");
+  }
+  await webContents.insertText(plan.payload.text);
+}
+
+function looksLikeAuthenticationSurface(value) {
+  try {
+    const url = new URL(value);
+    return /(?:^|\/)(?:login|log-in|signin|sign-in|auth|oauth|sso|mfa|2fa|verify|verification|recover|reset-password)(?:\/|$)/i.test(url.pathname);
+  } catch {
+    return true;
+  }
+}
+
+function hashValue(value) {
+  return createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
+}
+
 function actionScript({ kind, selector, optionSelector, payload }) {
   return `(() => {
     const kind = ${JSON.stringify(kind)};
@@ -1019,6 +1756,17 @@ function actionScript({ kind, selector, optionSelector, payload }) {
   })()`;
 }
 
+function verifyFileInputScript({ selector, artifact }) {
+  return `(() => {
+    const target = document.querySelector(${JSON.stringify(selector)});
+    if (!target || target.tagName !== 'INPUT' || String(target.type).toLowerCase() !== 'file') return false;
+    const files = Array.from(target.files || []);
+    return files.length === 1 &&
+      files[0].name === ${JSON.stringify(artifact.name)} &&
+      files[0].size === ${artifact.bytes};
+  })()`;
+}
+
 function waitConditionScript({ condition, value }) {
   return `(() => {
     const condition = ${JSON.stringify(condition)};
@@ -1064,10 +1812,10 @@ function classifyBrowserAction(kind, descriptor, payload) {
       throw new Error(`Browser text exceeds this field's ${target.maxLength}-character limit`);
     }
     if (authRelated) return { risk: "credential", requiresApproval: false, takeoverRequired: true };
-      const explicitSearch = target.role === "searchbox" || target.type === "search";
-      const namedSearch = /(?:^|\b)(?:q|query|search)(?:\b|$)/i.test(`${target.identifier} ${target.name}`);
-      const searchLike = (!target.form && explicitSearch) ||
-        (target.form?.method === "get" && (explicitSearch || namedSearch));
+    const explicitSearch = target.role === "searchbox" || target.type === "search";
+    const namedSearch = /(?:^|\b)(?:q|query|search)(?:\b|$)/i.test(`${target.identifier} ${target.name}`);
+    const searchLike = (!target.form && explicitSearch) ||
+      (target.form?.method === "get" && (explicitSearch || namedSearch));
     return {
       risk: searchLike ? "observational" : "consequential",
       requiresApproval: !searchLike,
@@ -1091,6 +1839,9 @@ function classifyBrowserAction(kind, descriptor, payload) {
     return { risk: "consequential", requiresApproval: true, takeoverRequired: false };
   }
   if (authRelated) return { risk: "credential", requiresApproval: false, takeoverRequired: true };
+  if (kind === "click" && target.tag === "a" && target.download) {
+    throw new Error("Use browser_download for download controls");
+  }
   const href = safeObservedHref(target.href);
   const consequenceText = `${target.name} ${href} ${target.form?.action || ""}`;
   const consequential = /delete|remove|logout|log[\s_-]?out|sign[\s_-]?out|unsubscribe|purchase|checkout|payment|\bpay\b|\bbook\b|submit|approve|accept|invite|send|publish|deploy|grant|permission|confirm/i;
@@ -1144,6 +1895,178 @@ function publicBrowserAction({ kind, ref, optionRef, descriptor, payload, classi
     },
     payload: actionPayload
   };
+}
+
+function normalizeUploadAttachment(input = {}) {
+  const buffer = Buffer.from(input.buffer || []);
+  const artifact = {
+    attachment_id: cleanRequired(input.id, 128, "browser upload attachment"),
+    name: cleanTransferName(input.name),
+    mime: cleanText(input.mime, 200) || "application/octet-stream",
+    bytes: boundedInteger(input.size, buffer.length, 1, MAX_TRANSFER_BYTES),
+    sha256: cleanText(input.sha256, 64).toLowerCase(),
+    buffer
+  };
+  if (!/^[a-f0-9]{64}$/.test(artifact.sha256)) throw new Error("The upload attachment needs a valid SHA-256 digest");
+  if (buffer.length !== artifact.bytes) throw new Error("The upload attachment byte count changed");
+  if (createHash("sha256").update(buffer).digest("hex") !== artifact.sha256) {
+    throw new Error("The upload attachment digest changed");
+  }
+  return artifact;
+}
+
+function publicTransferAction({ kind, ref, descriptor, artifact, url, revision }) {
+  const target = descriptor?.target;
+  if (!target || target.visible !== true || target.disabled) {
+    throw new Error("The referenced browser transfer control is unavailable; take a fresh snapshot");
+  }
+  const page = new URL(url);
+  return {
+    action: kind,
+    risk: "file-transfer",
+    origin: page.origin,
+    page_revision: revision,
+    target: {
+      ref: String(ref),
+      role: cleanText(target.role, 80),
+      name: cleanText(target.name, 300),
+      tag: cleanText(target.tag, 40),
+      type: cleanText(target.type, 40),
+      destination: safeObservedHref(target.href || target.form?.action)
+    },
+    payload: artifact
+      ? {
+          attachment_id: artifact.attachment_id,
+          name: artifact.name,
+          mime: artifact.mime,
+          bytes: artifact.bytes,
+          sha256: artifact.sha256
+        }
+      : {}
+  };
+}
+
+function transferObservation(record, frame, now, summary) {
+  return {
+    ok: true,
+    status: "ready",
+    session_id: record.id,
+    url: record.url,
+    title: record.title,
+    page_revision: record.revision,
+    observed_at: now.toISOString(),
+    element_count: record.refs.size,
+    summary,
+    frame,
+    takeover_active: false
+  };
+}
+
+function assertTransferFingerprint(plan, descriptor) {
+  const fingerprint = actionFingerprint({
+    kind: plan.kind,
+    ref: plan.ref,
+    optionRef: null,
+    descriptor,
+    payload: plan.kind === "upload" ? plan.artifact : {}
+  });
+  if (fingerprint !== plan.fingerprint) {
+    throw new Error("The browser transfer target changed while approval was pending; take a fresh snapshot");
+  }
+}
+
+async function setFileInputFiles(webContents, selector, files) {
+  const debugging = webContents?.debugger;
+  if (!debugging?.sendCommand || !debugging?.attach) {
+    throw new Error("This AMOS Desktop build cannot stage governed browser uploads");
+  }
+  const attachedHere = debugging.isAttached?.() !== true;
+  if (attachedHere) debugging.attach("1.3");
+  try {
+    const document = await debugging.sendCommand("DOM.getDocument", { depth: 0, pierce: false });
+    const rootNodeId = document?.root?.nodeId;
+    if (!rootNodeId) throw new Error("The upload page is no longer inspectable");
+    const target = await debugging.sendCommand("DOM.querySelector", {
+      nodeId: rootNodeId,
+      selector
+    });
+    if (!target?.nodeId) throw new Error("The approved upload field changed; take a fresh snapshot");
+    await debugging.sendCommand("DOM.setFileInputFiles", {
+      files,
+      nodeId: target.nodeId
+    });
+  } finally {
+    if (attachedHere && debugging.isAttached?.()) debugging.detach();
+  }
+}
+
+function transferReceipt({ runtime, kind, action, before, after, artifact }) {
+  return {
+    contract: "amos.browser-transfer:1",
+    receipt_id: runtime.createId(),
+    action: kind,
+    risk: "file-transfer",
+    approved: true,
+    target: action.target,
+    artifact: {
+      ...(artifact.attachment_id ? { attachment_id: artifact.attachment_id } : {}),
+      name: artifact.name,
+      mime: artifact.mime,
+      bytes: artifact.bytes,
+      sha256: artifact.sha256
+    },
+    before,
+    after: { url: after.url, page_revision: after.page_revision },
+    executed_at: runtime.now().toISOString(),
+    verified: true
+  };
+}
+
+function deferredDownload({ id, timeoutMs }) {
+  let resolvePromise;
+  let rejectPromise;
+  const promise = new Promise((resolveValue, rejectValue) => {
+    resolvePromise = resolveValue;
+    rejectPromise = rejectValue;
+  });
+  return {
+    id,
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+    expiresAt: Date.now() + timeoutMs,
+    timeoutMs,
+    item: null,
+    path: null,
+    name: "",
+    mime: ""
+  };
+}
+
+function waitForDownload(pending, signal = null) {
+  return new Promise((resolveValue, rejectValue) => {
+    let settled = false;
+    const finish = (handler, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      handler(value);
+    };
+    const timeout = setTimeout(() => {
+      pending.item?.cancel?.();
+      finish(rejectValue, new Error("The approved browser control did not produce a download before the timeout"));
+    }, pending.timeoutMs);
+    const abort = () => {
+      pending.item?.cancel?.();
+      finish(rejectValue, new Error("Browser operation canceled"));
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    pending.promise.then(
+      (value) => finish(resolveValue, value),
+      (error) => finish(rejectValue, error)
+    );
+  });
 }
 
 function actionFingerprint({ kind, ref, optionRef, descriptor, payload }) {
@@ -1233,6 +2156,16 @@ function cleanRequired(value, max, label) {
 
 function cleanText(value, max = 1_000) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function cleanTransferName(value) {
+  return basename(String(value || "download").replaceAll("\\", "/"))
+    .replace(/[\u0000-\u001f]/g, "")
+    .slice(0, 200) || "download";
+}
+
+function cleanId(value) {
+  return String(value || "transfer").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80) || "transfer";
 }
 
 function boundedInteger(value, fallback, min, max) {

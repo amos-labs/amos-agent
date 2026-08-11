@@ -33,7 +33,7 @@ Desktop exposes two request-level public-web primitives outside local-only mode:
   metadata.
 
 For JavaScript-rendered and authenticated pages, Desktop now also exposes the
-first two local browser slices:
+governed local browser stack:
 
 - `browser_open` creates or navigates a task-, tenant-, and user-bound ephemeral
   Chromium session;
@@ -45,14 +45,23 @@ first two local browser slices:
   only current opaque references and pause at the exact consequence boundary;
 - `browser_wait` performs bounded selector-free waits and returns a fresh
   semantic observation;
+- `browser_upload` assigns one exact current task attachment to a current file
+  input after one-time approval without exposing its source path;
+- `browser_download` activates one exact approved control, quarantines and
+  hashes the result, and admits only a supported attachment of at most 20 MB;
 - `browser_screenshot` refreshes an opaque local PNG frame rendered in the
   dynamic canvas; and
 - `browser_close` destroys the page and revokes its references and frame.
+- `browser_recipe_save`, `browser_recipe_list`, `browser_recipe_run`, and
+  `browser_recipe_remove` compile and replay encrypted typed semantic recipes;
+  and
+- `browser_visual_observe` and `browser_visual_act` provide a masked,
+  frame-hash-bound vision fallback inside that same isolated browser.
 
 The same task-local session can be shown in a fixed-title **AMOS Secure Browser**
 for direct user control. The user enters passwords and MFA there; AMOS receives
 neither field values nor cookies. Returning control hides the window and
-refreshes the semantic observation. Downloads and uploads remain unavailable.
+refreshes the semantic observation.
 
 ## Browser runtime
 
@@ -79,14 +88,34 @@ The typed primitive set is:
 - `browser_upload` — select an already approved local artifact without exposing
   arbitrary filesystem paths; and
 - `browser_close` — destroy the task session and revoke its handles.
+- `browser_recipe_*` — save, list, deterministically run, and remove encrypted
+  identity-pinned semantic workflows; and
+- `browser_visual_observe` / `browser_visual_act` — transiently show a masked
+  browser frame to a qualified vision model and execute one frame-bound input.
 
-The implemented semantic subset enforces short-lived element references tied to
+The implemented semantic and file-transfer subset enforces short-lived element references tied to
 the page revision, task, account, and tenant. Navigation invalidates prior
 references. Consequential actions also bind to a material-page marker, exact
 target descriptor, origin, payload hash, and fresh local screenshot. Drift
 while approval waits cancels execution. Free-form model text cannot mint a
-browser handle, selector, frame, approval, or privileged action. File transfer
-remains a separate delivery slice.
+browser handle, selector, frame, approval, filesystem path, or privileged
+action.
+
+Uploads begin with a current task attachment ID. Desktop re-reads retained or
+source bytes, verifies exact size and SHA-256, then stages a mode-0600 immutable
+copy inside the browser session's private transfer directory. The Electron main
+process transiently attaches Chromium's DOM protocol only long enough to assign
+that copy to the approved file input and verify the selected filename and byte
+count. Neither the renderer nor the model receives the original path, staged
+path, or protocol handle.
+
+Downloads never ride through generic `browser_click`: surprise downloads are
+canceled and the model must use `browser_download` against a fresh opaque
+reference. An approved result is quarantined, capped at 20 MB both before and
+during receipt, hashed, removed from quarantine, and passed through the existing
+supported attachment extractor. It remains a task attachment in the composer.
+The dynamic canvas shows its name, size, and digest; **Save copy…** is a separate
+native user ceremony that chooses the only external destination.
 
 ## Website data ingestion
 
@@ -103,11 +132,19 @@ Loading website data is not one undifferentiated feature:
   proposal with source URL, capture time, content hash, tenant, and freshness.
   Merely viewing a page never promotes it to company truth.
 
-Repeated browser extraction can compile into a deterministic automation recipe
-with declared origins, selectors, fields, schedules, retry rules, and output
-schema. The recipe should continue without a model when the declared page
-contract still holds. DOM drift produces a bounded failure and may request AI
-repair; it never silently changes the target or submits a different form.
+Successful browser work can compile into an encrypted deterministic automation
+recipe with declared origins, exact semantic element contracts, named runtime
+inputs, bounded waits, zero implicit retries, checkpoints, and receipts. The
+recipe continues without a model while the declared page contract holds. It
+stores no CSS/XPath selectors, typed values, credentials, cookies, attachment
+paths, file bytes, or replay authority. DOM/ARIA drift produces a bounded
+failure and opens an AI-assisted repair task; it never silently changes the
+target or submits a different form.
+
+Local recipes run on demand in the current Desktop identity and task boundary.
+Unattended schedules belong to a governed Platform automation or connector,
+where durable credentials, policy, device availability, retries, and proof can
+be operated explicitly rather than hidden in a laptop cron job.
 
 ## Authentication and session isolation
 
@@ -147,25 +184,33 @@ it.
 
 ## Computer-use fallback
 
-Visual computer use observes screenshots and proposes pointer/keyboard actions
-when semantic browser references do not exist. It is deliberately narrower and
-higher-friction than DOM automation:
+Visual browser use observes screenshots and proposes pointer/keyboard actions
+when semantic browser references cannot express the target. It is deliberately
+narrower and higher-friction than semantic automation:
 
 - each observation and action is tied to the current window, screen geometry,
   application identity, and frame hash;
-- password fields, secure system surfaces, notifications, and unrelated windows
-  are masked or unavailable;
-- clipboard reads are denied by default and writes are bounded to declared text;
+- authentication routes and visible credential/payment/recovery fields are
+  unavailable, while every editable value is visually masked;
+- the model receives only a transient PNG evidence message—not image bytes in
+  tool JSON, activity, receipts, continuity, or renderer state;
+- clipboard access is absent and typed text is bounded to the exact approved
+  payload;
 - destructive or external actions always pause at the consequence boundary;
 - a changed frame invalidates stale coordinates; and
 - the system records bounded screenshots and action receipts without retaining
   hidden credentials or unrelated screen content.
 
-Local models can handle deterministic snapshots and simple navigation. A
-stronger vision model may be selected only for an explicitly declared visual
-fallback. The browser/computer runtime remains useful when that model is
-offline: saved deterministic recipes continue, while unrecognized visual states
-stop safely.
+Only a provider profile advertising vision receives the visual tools. Local
+models can still handle deterministic snapshots and recipes. The browser
+runtime remains useful when vision is offline: saved deterministic recipes
+continue, while unrecognized visual states stop safely.
+
+This slice does not expose the operating-system desktop, other applications,
+notifications, the system clipboard, or unrestricted keyboard/mouse control.
+General cross-application computer use requires a separate named-app grant,
+operating-system accessibility/screen-recording ceremony, secure-surface
+masking, and qualification before it can become an AMOS capability.
 
 ## Desktop experience
 
@@ -191,14 +236,20 @@ execution authority.
 2. **Implemented:** isolated authenticated sessions, typed semantic
    click/type/select/check/wait, direct user takeover, material-drift detection,
    exact-action approval, and post-action receipts.
-3. Governed browser downloads/uploads through attachment hashing, workspace
-   approval, and explicit file provenance.
-4. Browser recipe recording/compilation, deterministic scheduled execution,
-   drift detection, and AI-assisted repair proposals.
-5. Governed visual computer-use fallback for non-semantic pages and approved
-   desktop applications.
-6. Platform promotion path for browser workflows that should become durable
-   connectors, automations, or company-data ingestion adapters.
+3. **Implemented:** governed attachment-ID uploads, quarantined downloads,
+   attachment hashing/extraction, native user save, explicit file provenance,
+   and transfer-storage revocation.
+4. **Implemented:** redacted browser recording, encrypted identity-pinned
+   semantic recipe compilation, deterministic model-independent replay,
+   checkpoints, drift stop, Automations management, and AI-assisted repair
+   tasks.
+5. **Implemented for the isolated browser:** masked transient vision evidence,
+   exact frame/pixel/page binding, bounded click/type/key/scroll, fresh
+   approvals, canvas visibility, and authentication takeover.
+6. **Desktop handoff implemented:** stable recipes can open focused automation
+   tasks for promotion. Durable schedules, connectors, and company-data
+   ingestion remain governed Platform deployments rather than laptop-local
+   hidden authority.
 
 ## Acceptance criteria
 
@@ -215,6 +266,9 @@ execution authority.
   boundaries.
 - Deterministic recipes run without an LLM while their declared page contract
   remains valid and stop safely on drift.
+- Visual fallback is offered only to a vision-capable profile, masks editable
+  values, binds every coordinate to the exact frame hash, keeps screenshots out
+  of persisted/public tool state, and never crosses outside the task browser.
 - Browser-created company context retains source, capture time, hash, and
   freshness and is never promoted merely because it was viewed.
 - Claude, Codex, and other clients retain the equivalent governed platform

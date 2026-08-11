@@ -12,6 +12,7 @@ import {
   Tray
 } from "electron";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { basename, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
@@ -28,6 +29,7 @@ import { SavedViewStore } from "../src/desktop/savedViewStore.js";
 import { SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
 import { DesktopTaskStore } from "../src/desktop/taskStore.js";
 import { DecisionKeyStore } from "../src/desktop/decisionKeyStore.js";
+import { BrowserRecipeStore } from "../src/desktop/browserRecipeStore.js";
 import {
   DesktopUpdateManager,
   shouldEnableDesktopUpdates
@@ -368,6 +370,9 @@ function registerIpc() {
   ipcMain.handle("desktop:set-automation-status", (_event, input) =>
     controller.setAutomationStatus(input?.name, input?.active === true)
   );
+  ipcMain.handle("desktop:remove-browser-recipe", (_event, id) =>
+    controller.removeBrowserRecipe(id)
+  );
   ipcMain.handle("desktop:start-new-conversation", (_event, input) =>
     controller.startNewConversation(input)
   );
@@ -514,6 +519,21 @@ function registerIpc() {
   ipcMain.handle("desktop:finish-browser-takeover", (_event, input) =>
     controller.finishBrowserTakeover(input?.sessionId)
   );
+  ipcMain.handle("desktop:save-browser-download", async (_event, input) => {
+    const artifact = controller.browserDownloadPayload(input?.attachmentId);
+    const result = await dialog.showSaveDialog(window, {
+      title: "Save verified browser download",
+      defaultPath: artifact.name
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    await writeFile(result.filePath, artifact.buffer, { mode: 0o600 });
+    return {
+      canceled: false,
+      name: artifact.name,
+      size: artifact.size,
+      sha256: artifact.sha256
+    };
+  });
   ipcMain.handle("desktop:open-external", async (_event, value) => {
     if (typeof value !== "string" || value.length > 2_048) {
       throw new Error("AMOS blocked an invalid external link");
@@ -592,6 +612,11 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
+  const browserRecipeStore = new BrowserRecipeStore({
+    filePath: join(app.getPath("userData"), "browser-recipes.json"),
+    encrypt,
+    decrypt
+  });
   const accountStore = new DesktopAccountStore({
     filePath: join(app.getPath("userData"), "accounts.json"),
     legacyFilePath: join(app.getPath("userData"), "oauth.json"),
@@ -611,7 +636,11 @@ app.whenReady().then(async () => {
     routerBundlePath: join(localResourcesPath, "router"),
     emit: (payload) => send("offline:changed", payload)
   });
-  browserRuntime = new DesktopBrowserRuntime({ BrowserWindow, session });
+  browserRuntime = new DesktopBrowserRuntime({
+    BrowserWindow,
+    session,
+    transferRoot: join(app.getPath("userData"), "browser-transfers")
+  });
   const telemetry = new DesktopTelemetry({
     filePath: join(app.getPath("userData"), "desktop-telemetry.json"),
     appVersion: app.getVersion(),
@@ -635,6 +664,7 @@ app.whenReady().then(async () => {
     accountStore,
     offlineManager,
     browserRuntime,
+    browserRecipeStore,
     telemetry,
     openBrowser: (url) => shell.openExternal(url),
     emit: send,

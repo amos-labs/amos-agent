@@ -311,9 +311,13 @@ The example environment file documents provider and advanced CLI configuration:
 - `web_fetch` and optional `web_search`
 - Desktop-only `browser_open`, `browser_snapshot`, `browser_extract`,
   `browser_click`, `browser_type`, `browser_select`, `browser_check`,
-  `browser_wait`, `browser_screenshot`, and `browser_close` for governed
-  JavaScript pages with isolated authentication, exact-action approvals,
-  direct user takeover, and redacted post-action receipts;
+  `browser_upload`, `browser_download`, `browser_wait`, `browser_screenshot`,
+  `browser_close`, `browser_recipe_list`, `browser_recipe_save`,
+  `browser_recipe_run`, `browser_recipe_remove`, `browser_visual_observe`, and
+  `browser_visual_act` for governed JavaScript pages with isolated
+  authentication, attachment-ID-only file transfer, exact-action approvals,
+  deterministic model-independent replay, masked frame-bound visual fallback,
+  direct user takeover, quarantine hashing, and redacted receipts;
 
 AMOS tools begin with a compact bootstrap:
 
@@ -351,8 +355,9 @@ as the AMOS platform grows.
 The near-term product path is:
 
 1. add spreadsheet and presentation engines beside the completed DOCX/PDF artifact system;
-2. add governed browser file transfer, deterministic recipes, and bounded visual
-   computer-use fallback on the authenticated semantic runtime;
+2. qualify and promote stable Desktop browser recipes into governed Platform
+   connectors and scheduled automations where browser execution should not be
+   the system of record;
 3. finish consent-aware Router learning and richer typed company work surfaces;
 4. add signed device identity, revocable environment grants, and fleet-management controls; and
 5. deliver Windows on Arm and managed-store distribution when customer demand warrants them.

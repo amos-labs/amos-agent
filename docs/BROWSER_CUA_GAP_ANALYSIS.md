@@ -45,8 +45,8 @@ Implemented in the first governed slice:
 - public HTTP/HTTPS validation before navigation and on browser requests;
 - private, loopback, link-local, metadata, unsupported-scheme, credential-bearing,
   and credential-like main-frame URL rejection;
-- sandboxed, no-Node, no-preload, permission-denied, popup-denied, download-denied
-  ephemeral Chromium sessions;
+- sandboxed, no-Node, no-preload, permission-denied, popup-denied,
+  unapproved-download-denied ephemeral Chromium sessions;
 - exact boundary binding across user, tenant, task, and operating mode;
 - bounded semantic snapshots with opaque revision-bound element references;
 - deterministic article, table, list, form-structure, and referenced-region
@@ -71,12 +71,52 @@ The authenticated semantic slice now additionally provides:
 - direct user control of the same isolated session through a fixed-title
   native window, without cookie copying or credential extraction.
 
-This closes the core gap for bounded authenticated browser operation. File
-transfer, deterministic recipes, and general visual computer use remain.
+The governed transfer slice additionally provides:
+
+- `browser_upload` over one current attachment ID and one current file-input
+  reference, with exact byte/digest revalidation and one-time approval;
+- private mode-0600 staging and main-process-only transient Chromium DOM
+  assignment, without revealing local paths or a debugger capability;
+- `browser_download` as the only approved download route, with surprise-download
+  cancellation, private quarantine, a 20 MB limit, SHA-256 verification, and
+  admission through the existing supported attachment pipeline;
+- a typed canvas download summary and separate native **Save copy…** ceremony;
+  and
+- transfer-directory destruction with browser/task/account/runtime revocation.
+
+The deterministic recipe slice now additionally provides:
+
+- task-local redacted recording of successful verified semantic actions;
+- encrypted identity-pinned recipes with origins, exact semantic contracts,
+  named string/attachment inputs, bounded waits, and no stored selectors,
+  values, credentials, cookies, paths, bytes, or approval authority;
+- deterministic replay without an LLM, fresh approvals at each consequence,
+  per-step checkpoints, an aggregate run receipt, and exact drift stop;
+- local recipe management beside Platform automations; and
+- focused AI-assisted repair tasks without silent retargeting.
+
+The bounded visual browser slice now additionally provides:
+
+- editable-value-masked screenshots delivered only as transient vision-model
+  evidence, not public/persisted tool state;
+- vision-tool availability only for qualified provider profiles;
+- click, type, bounded key, and scroll inputs tied to exact task, origin, page
+  revision, frame ID, frame SHA-256, geometry, coordinates, target description,
+  descriptor, and payload;
+- fresh approval for every non-scroll action and pixel revalidation after the
+  approval wait;
+- authentication-route and visible sensitive-field blocking with direct user
+  takeover; and
+- canvas progress, target, frame hash, and safety state.
+
+This closes the AMOS Desktop gap for bounded authenticated browser operation,
+file transfer, deterministic semantic replay, and isolated browser-CUA.
+Unrestricted cross-application desktop control remains a separate capability,
+not an implicit extension of the browser grant.
 
 ## Remaining product slices
 
-### 2. Authenticated semantic browser actions — implemented core
+### 2. Authenticated semantic browser actions and file transfer — implemented
 
 - `browser_click`, `browser_type`, `browser_select`, `browser_check`, and
   `browser_wait` use only current opaque element references—never raw model
@@ -88,23 +128,28 @@ transfer, deterministic recipes, and general visual computer use remain.
   observational. Buttons and form changes bind to an exact approval containing
   page revision, page-material marker, origin, target, payload hash, and a fresh
   local screenshot.
-- Remaining sub-slice: route downloads and uploads through the existing
-  attachment, hashing, workspace, and approval boundaries.
+- Uploads and downloads use separate exact-action tools, attachment IDs,
+  hashing, quarantine, supported-format admission, receipts, and native user
+  save rather than model-authored filesystem paths.
 
-### 3. Deterministic browser automations
+### 3. Deterministic browser automations — implemented locally
 
-- Record successful semantic workflows as typed recipes with origins, element
-  contracts, extraction schemas, retry limits, and expected outcomes.
+- Record successful semantic workflows as typed recipes with origins, exact
+  element contracts, named runtime inputs, bounded waits, and checkpoints.
 - Run matching recipes without an LLM.
 - Stop on DOM/ARIA drift and let AI propose a reviewed repair; never silently
   retarget a different control.
 - Promote stable enterprise workflows to Platform connectors or governed
   automations when browser execution should no longer be the system of record.
 
-### 4. Visual browser fallback
+Local hidden scheduling is intentionally absent. Stable unattended workflows
+should be promoted into Platform connectors or automations with explicit
+durable credentials, schedules, policy, retries, and proof.
+
+### 4. Visual browser fallback — implemented
 
 - Add frame-hash-bound pointer and keyboard proposals only when semantic
-  references are unavailable.
+  references cannot express the target.
 - Require a qualified vision model and invalidate coordinates after every frame
   change.
 - Mask password fields and deny clipboard reads, notifications, popups, and
@@ -112,7 +157,7 @@ transfer, deterministic recipes, and general visual computer use remain.
 - Keep deterministic recipes working when the model is offline; unfamiliar
   visual states stop safely.
 
-### 5. General computer use
+### 5. General computer use — separate future grant
 
 - Treat browser CUA and desktop CUA as different capabilities. Cross-application
   control needs explicit operating-system screen-recording/accessibility grants,

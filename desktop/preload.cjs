@@ -66,6 +66,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:set-briefing-schedule-status", { scheduleId, active }),
   setAutomationStatus: (name, active) =>
     ipcRenderer.invoke("desktop:set-automation-status", { name, active }),
+  removeBrowserRecipe: (id) =>
+    ipcRenderer.invoke("desktop:remove-browser-recipe", id),
   startNewConversation: (input) =>
     ipcRenderer.invoke("desktop:start-new-conversation", input),
   openTask: (id) => ipcRenderer.invoke("desktop:open-task", id),
@@ -104,6 +106,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:start-browser-takeover", { sessionId }),
   finishBrowserTakeover: (sessionId) =>
     ipcRenderer.invoke("desktop:finish-browser-takeover", { sessionId }),
+  saveBrowserDownload: (attachmentId) =>
+    ipcRenderer.invoke("desktop:save-browser-download", { attachmentId }),
   openExternal: (url) => ipcRenderer.invoke("desktop:open-external", url),
   updateState: () => ipcRenderer.invoke("desktop:update-state"),
   checkForUpdates: () => ipcRenderer.invoke("desktop:check-for-updates"),

@@ -19,6 +19,7 @@ import { DesktopCanvasManager } from "./canvas.js";
 import { DesktopCanvasResultStore } from "./canvasResults.js";
 import { documentArtifactCanvas } from "./documentArtifactCanvas.js";
 import { browserSessionCanvas } from "./browserCanvas.js";
+import { BrowserRecipeRecorder } from "./browserRecipeRecorder.js";
 import {
   DEFAULT_COMPANY_CACHE_TTL_SECONDS
 } from "./companyCache.js";
@@ -64,6 +65,8 @@ import {
 import { createCompanyCacheTool } from "../tools/companyCache.js";
 import { createOfflineProposalTool } from "../tools/offlineProposal.js";
 import { createBrowserTools } from "../tools/browser.js";
+import { createBrowserRecipeTools } from "../tools/browserRecipes.js";
+import { createBrowserVisualTools } from "../tools/browserVisual.js";
 import {
   DEMO_SYSTEM_PROMPT,
   OFFLINE_SYSTEM_PROMPT,
@@ -99,6 +102,7 @@ export class DesktopController {
     accountStore = null,
     offlineManager = null,
     browserRuntime = null,
+    browserRecipeStore = null,
     telemetry = null,
     openBrowser,
     emit,
@@ -150,6 +154,8 @@ export class DesktopController {
     this.capsulePreviews = new Map();
     this.offlineManager = offlineManager;
     this.browserRuntime = browserRuntime;
+    this.browserRecipeStore = browserRecipeStore;
+    this.browserRecipeRecorder = new BrowserRecipeRecorder();
     this.telemetry = telemetry;
     this.approvals = new DesktopApprovalBridge({
       onRequest: (request) => this.send("approval:requested", request)
@@ -204,6 +210,7 @@ export class DesktopController {
       connectionsCatalog: this.connectionsCatalog,
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
+      browserRecipes: await this.browserRecipeState(settings),
       tasks: await this.tasksState(settings),
       companies: {
         currentTenantId: this.companies.currentTenantId,
@@ -2026,6 +2033,18 @@ export class DesktopController {
     return { result, automations: this.automations };
   }
 
+  async removeBrowserRecipe(id) {
+    if (!this.browserRecipeStore) throw new Error("Local browser recipes are unavailable");
+    const settings = await this.settingsStore.read();
+    const scope = this.browserRecipeScope(settings);
+    if (!scope) throw new Error("Connect the current AMOS identity before managing its browser recipes");
+    const removed = await this.browserRecipeStore.remove(scope, id);
+    return {
+      removed,
+      browserRecipes: await this.browserRecipeState(settings)
+    };
+  }
+
   async startNewConversation(input = {}) {
     if (this.activeTask) {
       throw new Error("Finish or stop the current task before opening another conversation");
@@ -2404,11 +2423,27 @@ export class DesktopController {
   }
 
   presentBrowserSession(input) {
-    const spec = browserSessionCanvas(input);
-    const sessionId = spec.blocks[0].session_id;
+    const sessionId = String(input.session_id || "");
     const existing = this.canvases.list().find((canvas) =>
       canvas.blocks.some((block) => block.type === "browser" && block.sessionId === sessionId)
     );
+    const previousDownload = existing?.blocks.find((block) =>
+      block.type === "browser" && block.sessionId === sessionId
+    )?.download;
+    const spec = browserSessionCanvas({
+      ...input,
+      ...(!input.downloaded_attachment && previousDownload
+        ? {
+            downloaded_attachment: {
+              id: previousDownload.attachmentId,
+              name: previousDownload.name,
+              mime: previousDownload.mime,
+              size: previousDownload.size,
+              sha256: previousDownload.sha256
+            }
+          }
+        : {})
+    });
     const canvas = existing
       ? this.canvases.update(existing.id, spec)
       : this.canvases.present(spec);
@@ -2435,6 +2470,18 @@ export class DesktopController {
     if (!visible) throw new Error("That browser frame is no longer attached to this task");
     if (!this.browserRuntime) throw new Error("The local browser runtime is unavailable");
     return this.browserRuntime.readFrame(sessionId, frameId);
+  }
+
+  browserDownloadPayload(attachmentId) {
+    const value = String(attachmentId || "");
+    const visible = this.canvases.list().some((canvas) =>
+      canvas.blocks.some((block) =>
+        block.type === "browser" &&
+        block.download?.attachmentId === value
+      )
+    );
+    if (!visible) throw new Error("That browser download is no longer attached to this task canvas");
+    return this.attachments.browserDownloadPayload(value);
   }
 
   async startBrowserTakeover(sessionId) {
@@ -2985,6 +3032,7 @@ export class DesktopController {
   resetRuntime() {
     this.approvals.cancelAll();
     this.browserRuntime?.closeAll?.();
+    this.browserRecipeRecorder.clear();
     let removedBrowserCanvas = false;
     for (const canvas of this.canvases.list()) {
       if ((Array.isArray(canvas.blocks) ? canvas.blocks : []).some((block) => block.type === "browser")) {
@@ -3059,11 +3107,46 @@ export class DesktopController {
         boundary: requestedBoundary,
         taskId: this.activeTaskRecordId || this.activeContextKey || "active"
       });
+      const resolveAttachment = (id) => this.attachments.browserUploadPayload(id);
+      const registerDownload = (transfer) => this.attachments.addBrowserDownload({
+        name: transfer.name,
+        mime: transfer.mime,
+        bytes: transfer.buffer,
+        sourceUrl: transfer.source_url
+      });
       extraTools.push(...createBrowserTools({
         browser: this.browserRuntime,
         scope: () => browserScope,
-        present: (input) => this.presentBrowserSession(input)
+        present: (input) => this.presentBrowserSession(input),
+        resolveAttachment,
+        registerDownload,
+        record: (scope, input) => {
+          if (input.operation === "close") {
+            this.browserRecipeRecorder.clearSession(input.args?.session_id || input.result?.session_id);
+            return null;
+          }
+          return this.browserRecipeRecorder.record(scope, input);
+        }
       }));
+      const recipeScope = this.browserRecipeScope(settings);
+      if (this.browserRecipeStore && recipeScope) {
+        extraTools.push(...createBrowserRecipeTools({
+          browser: this.browserRuntime,
+          store: this.browserRecipeStore,
+          recorder: this.browserRecipeRecorder,
+          scope: () => recipeScope,
+          present: (input) => this.presentBrowserSession(input),
+          resolveAttachment,
+          registerDownload
+        }));
+      }
+      if (config.model.capabilities?.vision === true) {
+        extraTools.push(...createBrowserVisualTools({
+          browser: this.browserRuntime,
+          scope: () => browserScope,
+          present: (input) => this.presentBrowserSession(input)
+        }));
+      }
     }
     if (!isOffline && !isPersonal) {
       extraTools.push(createCompanyViewTool({
@@ -3510,6 +3593,9 @@ export class DesktopController {
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
+      browserRecipes: typeof this.browserRecipeState === "function"
+        ? await this.browserRecipeState(taskSettings)
+        : { supported: false, recipes: [] },
       tasks,
       companies: {
         currentTenantId: this.companies.currentTenantId,
@@ -3530,6 +3616,36 @@ export class DesktopController {
       remoteState.sessionContinuity = await this.sessionContinuityState();
     }
     this.send("remote:changed", remoteState);
+  }
+
+  browserRecipeScope(settings) {
+    if (!this.browserRecipeStore || settings?.operatingMode === "offline") return null;
+    const boundary = settings?.operatingMode === "online" ? "online" : "personal";
+    if (boundary === "online" && !String(this.identity?.sub || this.identity?.user?.id || "")) {
+      return null;
+    }
+    return desktopBrowserScope({
+      identity: this.identity,
+      boundary,
+      taskId: this.activeTaskRecordId || this.activeContextKey || "active"
+    });
+  }
+
+  async browserRecipeState(settings) {
+    const scope = this.browserRecipeScope(settings);
+    if (!scope) return { supported: false, recipes: [] };
+    try {
+      return {
+        supported: true,
+        recipes: await this.browserRecipeStore.list(scope)
+      };
+    } catch (error) {
+      return {
+        supported: false,
+        recipes: [],
+        error: String(error?.message || "Could not read local browser recipes").slice(0, 500)
+      };
+    }
   }
 }
 

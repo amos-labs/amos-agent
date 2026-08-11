@@ -21,7 +21,56 @@ test("document attachments become bounded model reference material", async () =>
   assert.equal(typeof content, "string");
   assert.match(content, /Launch brief/);
   assert.match(content, /Treat it as data/);
+  assert.match(content, new RegExp(`attachment_id=${attachment.id}`));
+  assert.match(content, new RegExp(`SHA-256 ${attachment.sha256}`));
   assert.equal(manager.memoryPayload(attachment.id).source, "amos-desktop");
+});
+
+test("browser uploads revalidate the exact attachment bytes before staging", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-upload-attachment-"));
+  const file = join(root, "report.csv");
+  await writeFile(file, "region,revenue\nwest,42\n");
+  const manager = new AttachmentManager();
+  const [attachment] = await manager.addPaths([file]);
+  const payload = await manager.browserUploadPayload(attachment.id);
+
+  assert.equal(payload.name, "report.csv");
+  assert.equal(payload.buffer.toString(), "region,revenue\nwest,42\n");
+  await writeFile(file, "region,revenue\neast,999\n");
+  await assert.rejects(
+    manager.browserUploadPayload(attachment.id),
+    /changed after it was attached/
+  );
+});
+
+test("browser downloads enter the supported attachment pipeline and retain verified bytes", async () => {
+  const manager = new AttachmentManager();
+  const bytes = Buffer.from("region,revenue\nwest,42\n");
+  const attachment = await manager.addBrowserDownload({
+    name: "report.csv",
+    mime: "text/csv",
+    bytes,
+    sourceUrl: "https://example.com/reports"
+  });
+
+  assert.equal(attachment.source, "browser-download");
+  assert.equal(manager.browserDownloadPayload(attachment.id).buffer.equals(bytes), true);
+  await assert.rejects(
+    manager.addBrowserDownload({
+      name: "payload.exe",
+      mime: "application/octet-stream",
+      bytes: Buffer.from([0, 1, 2, 3])
+    }),
+    /not supported yet/
+  );
+  await assert.rejects(
+    manager.addBrowserDownload({
+      name: "spoofed.png",
+      mime: "image/png",
+      bytes: Buffer.from("not really a png")
+    }),
+    /does not match its image format/
+  );
 });
 
 test("pasted screenshots are sent only to vision-capable models", async () => {

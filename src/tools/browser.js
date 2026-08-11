@@ -2,23 +2,34 @@ const SESSION_ID = { type: "string", minLength: 8, maxLength: 128 };
 const ELEMENT_REF = { type: "string", minLength: 4, maxLength: 64 };
 const ACTION_WAIT = { type: "integer", minimum: 250, maximum: 5_000 };
 
-export function createBrowserTools({ browser, scope, present = null }) {
+export function createBrowserTools({
+  browser,
+  scope,
+  present = null,
+  resolveAttachment = null,
+  registerDownload = null,
+  record = null
+}) {
   if (!browser) throw new Error("Browser tools require a browser runtime");
   if (typeof scope !== "function") throw new Error("Browser tools require a scope provider");
 
   const run = (operation, handler) => async (args, context) => {
-    const result = await handler(args, context);
+    const currentScope = scope();
+    const result = await handler(args, context, currentScope);
+    const recipeRecording = await recordBrowserStep(record, currentScope, { operation, args, result });
     const canvas = typeof present === "function"
       ? await present({ operation, ...result })
       : null;
     return {
       ...result,
+      ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
       ...(canvas?.id ? { canvas_id: canvas.id } : {})
     };
   };
 
   const runAction = (kind) => async (args, context) => {
-    const prepared = await browser.prepareAction(scope(), {
+    const currentScope = scope();
+    const prepared = await browser.prepareAction(currentScope, {
       sessionId: args.session_id,
       kind,
       ref: args.ref,
@@ -62,7 +73,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
         };
       }
     }
-    const result = await browser.performAction(scope(), {
+    const result = await browser.performAction(currentScope, {
       plan: prepared.plan,
       approved,
       waitMs: args.wait_ms,
@@ -71,8 +82,104 @@ export function createBrowserTools({ browser, scope, present = null }) {
     const canvas = typeof present === "function"
       ? await present({ operation: kind, ...result })
       : null;
+    const recipeRecording = await recordBrowserStep(record, currentScope, {
+      operation: kind,
+      args,
+      result
+    });
     return {
       ...result,
+      ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
+      ...(canvas?.id ? { canvas_id: canvas.id } : {})
+    };
+  };
+
+  const runUpload = async (args, context) => {
+    const currentScope = scope();
+    if (typeof resolveAttachment !== "function") throw new Error("Browser uploads are unavailable in this client");
+    const attachment = await resolveAttachment(args.attachment_id);
+    const prepared = await browser.prepareUpload(currentScope, {
+      sessionId: args.session_id,
+      ref: args.ref,
+      attachment,
+      signal: context.signal
+    });
+    const reviewCanvas = typeof present === "function"
+      ? await present({ operation: "upload_review", ...prepared.observation })
+      : null;
+    if (prepared.takeover_required) return takeoverResult(args, prepared, reviewCanvas);
+    const approved = await context.approvals.confirm(
+      browserApprovalMessage(prepared.public_action, args),
+      { kind: "browser-action" }
+    );
+    if (!approved) {
+      await browser.cancelPreparedUpload(currentScope, { plan: prepared.plan });
+      return deniedResult(args, prepared, reviewCanvas);
+    }
+    try {
+      const result = await browser.performUpload(currentScope, {
+        plan: prepared.plan,
+        approved: true,
+        signal: context.signal
+      });
+      const canvas = typeof present === "function"
+        ? await present({ operation: "upload", ...result })
+        : null;
+      const recipeRecording = await recordBrowserStep(record, currentScope, {
+        operation: "upload",
+        args,
+        result
+      });
+      return {
+        ...result,
+        ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
+        ...(canvas?.id ? { canvas_id: canvas.id } : {})
+      };
+    } catch (error) {
+      await browser.cancelPreparedUpload(currentScope, { plan: prepared.plan }).catch(() => {});
+      throw error;
+    }
+  };
+
+  const runDownload = async (args, context) => {
+    const currentScope = scope();
+    if (typeof registerDownload !== "function") throw new Error("Browser downloads are unavailable in this client");
+    const prepared = await browser.prepareDownload(currentScope, {
+      sessionId: args.session_id,
+      ref: args.ref,
+      signal: context.signal
+    });
+    const reviewCanvas = typeof present === "function"
+      ? await present({ operation: "download_review", ...prepared.observation })
+      : null;
+    if (prepared.takeover_required) return takeoverResult(args, prepared, reviewCanvas);
+    const approved = await context.approvals.confirm(
+      browserApprovalMessage(prepared.public_action, args),
+      { kind: "browser-action" }
+    );
+    if (!approved) return deniedResult(args, prepared, reviewCanvas);
+    const completed = await browser.performDownload(currentScope, {
+      plan: prepared.plan,
+      approved: true,
+      timeoutMs: args.timeout_ms,
+      signal: context.signal
+    });
+    const attachment = await registerDownload(completed.transfer);
+    const result = {
+      ...completed.result,
+      downloaded_attachment: attachment
+    };
+    const canvas = typeof present === "function"
+      ? await present({ operation: "download", ...result })
+      : null;
+    const recipeRecording = await recordBrowserStep(record, currentScope, {
+      operation: "download",
+      args,
+      result
+    });
+    return {
+      ...result,
+      ...(recipeRecording ? { recipe_recording: recipeRecording } : {}),
       ...(canvas?.id ? { canvas_id: canvas.id } : {})
     };
   };
@@ -94,7 +201,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
           session_id: SESSION_ID
         }
       },
-      handler: run("open", (args, context) => browser.open(scope(), {
+      handler: run("open", (args, context, currentScope) => browser.open(currentScope, {
         url: args.url,
         sessionId: args.session_id,
         signal: context.signal
@@ -116,7 +223,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
           max_chars: { type: "integer", minimum: 500, maximum: 20_000 }
         }
       },
-      handler: run("snapshot", (args, context) => browser.snapshot(scope(), {
+      handler: run("snapshot", (args, context, currentScope) => browser.snapshot(currentScope, {
         sessionId: args.session_id,
         maxElements: args.max_elements,
         maxChars: args.max_chars,
@@ -140,7 +247,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
           max_chars: { type: "integer", minimum: 500, maximum: 30_000 }
         }
       },
-      handler: run("extract", (args, context) => browser.extract(scope(), {
+      handler: run("extract", (args, context, currentScope) => browser.extract(currentScope, {
         sessionId: args.session_id,
         kind: args.kind,
         ref: args.ref,
@@ -152,7 +259,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
       name: "browser_click",
       source: "desktop-local",
       description:
-        "Click one current opaque browser element reference. Ordinary public links are observational; buttons, submissions, and other potentially consequential controls pause for exact human approval. Authentication controls require direct user takeover.",
+        "Click one current opaque browser element reference. Ordinary public links are observational; buttons, submissions, and other potentially consequential controls pause for exact human approval. Authentication controls require direct user takeover. Use browser_download—not browser_click—for download controls.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -221,6 +328,40 @@ export function createBrowserTools({ browser, scope, present = null }) {
       handler: runAction("check")
     },
     {
+      name: "browser_upload",
+      source: "desktop-local",
+      description:
+        "Upload one exact current task attachment through one current file-input reference. The model receives only the attachment ID, name, size, MIME type, and SHA-256—not its local path or arbitrary filesystem access. Every upload requires exact human approval.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["session_id", "ref", "attachment_id"],
+        properties: {
+          session_id: SESSION_ID,
+          ref: ELEMENT_REF,
+          attachment_id: { type: "string", minLength: 8, maxLength: 128 }
+        }
+      },
+      handler: runUpload
+    },
+    {
+      name: "browser_download",
+      source: "desktop-local",
+      description:
+        "Activate one exact current download control after human approval. AMOS quarantines at most 20 MB, verifies SHA-256, accepts only supported task-attachment formats, and never writes to an arbitrary path. Use this instead of browser_click for downloads.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["session_id", "ref"],
+        properties: {
+          session_id: SESSION_ID,
+          ref: ELEMENT_REF,
+          timeout_ms: { type: "integer", minimum: 1_000, maximum: 60_000 }
+        }
+      },
+      handler: runDownload
+    },
+    {
       name: "browser_wait",
       source: "desktop-local",
       description:
@@ -236,7 +377,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
           timeout_ms: { type: "integer", minimum: 250, maximum: 10_000 }
         }
       },
-      handler: run("wait", (args, context) => browser.wait(scope(), {
+      handler: run("wait", (args, context, currentScope) => browser.wait(currentScope, {
         sessionId: args.session_id,
         condition: args.condition,
         value: args.value,
@@ -256,7 +397,7 @@ export function createBrowserTools({ browser, scope, present = null }) {
         required: ["session_id"],
         properties: { session_id: SESSION_ID }
       },
-      handler: run("screenshot", (args, context) => browser.screenshot(scope(), {
+      handler: run("screenshot", (args, context, currentScope) => browser.screenshot(currentScope, {
         sessionId: args.session_id,
         signal: context.signal
       }))
@@ -272,9 +413,22 @@ export function createBrowserTools({ browser, scope, present = null }) {
         required: ["session_id"],
         properties: { session_id: SESSION_ID }
       },
-      handler: run("close", (args) => browser.close(scope(), { sessionId: args.session_id }))
+      handler: run("close", (args, _context, currentScope) =>
+        browser.close(currentScope, { sessionId: args.session_id }))
     }
   ];
+}
+
+async function recordBrowserStep(record, scope, input) {
+  if (typeof record !== "function") return null;
+  try {
+    return await record(scope, input);
+  } catch (error) {
+    return {
+      status: "stopped",
+      message: String(error?.message || "Browser recipe recording stopped").slice(0, 500)
+    };
+  }
 }
 
 function browserApprovalMessage(action, args) {
@@ -298,9 +452,49 @@ function browserApprovalMessage(action, args) {
   }
   if (action.action === "select") details.push(`Option: ${action.payload.option_name}`);
   if (action.action === "check") details.push(`New state: ${action.payload.checked ? "checked" : "unchecked"}`);
+  if (action.action === "upload") {
+    details.push(
+      `Attachment: ${action.payload.name}`,
+      `Type: ${action.payload.mime}`,
+      `Bytes: ${action.payload.bytes}`,
+      `SHA-256: ${action.payload.sha256}`,
+      "The local path is withheld from the model and the page receives an immutable staged copy."
+    );
+  }
+  if (action.action === "download") {
+    details.push(
+      "The result will be quarantined, limited to 20 MB, hashed, and admitted only as a supported task attachment."
+    );
+  }
   details.push(
     "",
     "Approval applies only to this origin, page revision, target, and payload. Any change invalidates it."
   );
   return details.filter(Boolean).join("\n");
+}
+
+function takeoverResult(args, prepared, reviewCanvas) {
+  return {
+    ok: false,
+    status: "blocked",
+    takeover_required: true,
+    session_id: args.session_id,
+    public_action: prepared.public_action,
+    message:
+      "This authentication or sensitive control cannot be operated by the model. " +
+      "Ask the user to choose Take control in the browser canvas, complete it directly, then return control to AMOS.",
+    ...(reviewCanvas?.id ? { canvas_id: reviewCanvas.id } : {})
+  };
+}
+
+function deniedResult(args, prepared, reviewCanvas) {
+  return {
+    ok: false,
+    status: "denied",
+    denied: true,
+    session_id: args.session_id,
+    public_action: prepared.public_action,
+    message: "User denied the exact browser action.",
+    ...(reviewCanvas?.id ? { canvas_id: reviewCanvas.id } : {})
+  };
 }

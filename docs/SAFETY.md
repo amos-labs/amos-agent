@@ -99,8 +99,8 @@ The Desktop JavaScript browser adds a narrower local boundary:
 - each browser session is ephemeral and bound to one operating mode, user,
   tenant, and task;
 - every HTTP(S) request is checked against the public-network policy, while
-  popups, downloads, permissions, unsupported schemes, and credential-like
-  main-frame URLs are denied;
+  popups, unapproved downloads, permissions, unsupported schemes, and
+  credential-like main-frame URLs are denied;
 - page inspection executes in an isolated JavaScript world and returns opaque,
   page-revision-bound element references rather than raw selectors;
 - form extraction returns structure, never entered values or password content;
@@ -120,8 +120,52 @@ Authentication fields, password forms, MFA/recovery/token controls, payment
 credentials, and sign-in submissions cannot be model-operated. The user may
 take direct control of the same fixed-title isolated window; field values and
 cookies remain inside that ephemeral session. Returning control refreshes a
-value-free semantic snapshot. File transfer and visual pointer control remain
-unavailable until their separate boundaries land.
+value-free semantic snapshot.
+
+Browser file transfer is a separate, fail-closed capability:
+
+- uploads accept only an opaque ID for a current task attachment; AMOS
+  revalidates its exact byte count and SHA-256 digest, stages a private immutable
+  copy, and requires one-time approval bound to the page and file-input target;
+- the main process uses a transient Chromium protocol attachment only to assign
+  the approved staged file. No local path or debugging surface reaches the
+  renderer or model;
+- downloads run only through `browser_download`; a download produced by a
+  generic click is canceled;
+- approved downloads enter a private quarantine, stop above 20 MB, are hashed,
+  and must pass the existing supported attachment/extraction pipeline before
+  becoming task-visible; and
+- writing a downloaded artifact outside AMOS requires the user to choose
+  **Save copy…** and a destination in the native save dialog. Transfer storage
+  is removed when its browser session is revoked.
+
+Deterministic browser recipes add a separate local boundary:
+
+- only successful verified semantic actions can enter the task-local recorder;
+- saved recipes are encrypted and pinned to the exact operating boundary,
+  identity, and tenant;
+- recipes store origins, exact semantic contracts, named inputs, and bounded
+  waits—never selectors, typed values, credentials, cookies, paths, file bytes,
+  or approval authority;
+- replay is a typed state machine that needs no LLM, asks again for each exact
+  consequence, emits checkpoints/receipts, and stops on zero or multiple target
+  matches; and
+- runtime/task/account/company reset revokes recordings and live sessions.
+
+Bounded visual fallback remains inside the isolated task browser:
+
+- it is exposed only to provider profiles that advertise vision support;
+- authentication routes and visible credential, MFA, recovery, payment, or
+  secret fields are denied and route to direct user takeover;
+- editable values are CSS-masked before capture;
+- image bytes enter only a transient model evidence message and never public
+  tool JSON, renderer events, receipts, continuity, or task persistence;
+- click/type/key/scroll proposals bind to the exact page revision, frame ID,
+  SHA-256, viewport, coordinates, observed target, and payload;
+- every non-scroll action requires fresh exact approval and re-captures the
+  pixels before input; and
+- there is no clipboard access, OS desktop capture, unrelated-window access,
+  or generic machine-wide input capability.
 
 ## Intelligence providers
 

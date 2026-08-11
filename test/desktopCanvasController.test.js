@@ -210,6 +210,33 @@ test("browser canvas refreshes one local frame, supports user takeover, and remo
     () => controller.readBrowserFrame("browser-session-1", "frame-1"),
     /no longer attached/
   );
+  const downloaded = await controller.attachments.addBrowserDownload({
+    name: "report.csv",
+    mime: "text/csv",
+    bytes: Buffer.from("region,revenue\nwest,42\n")
+  });
+  const downloadCanvas = controller.presentBrowserSession({
+    operation: "download",
+    status: "ready",
+    session_id: "browser-session-1",
+    url: "https://example.com/next",
+    title: "Example next",
+    page_revision: 2,
+    observed_at: timestamp,
+    element_count: 8,
+    summary: "Verified download",
+    frame: { frame_id: "frame-2", width: 1280, height: 800 },
+    downloaded_attachment: downloaded
+  });
+  assert.equal(downloadCanvas.blocks[0].download.attachmentId, downloaded.id);
+  assert.equal(
+    controller.browserDownloadPayload(downloaded.id).buffer.toString(),
+    "region,revenue\nwest,42\n"
+  );
+  assert.throws(
+    () => controller.browserDownloadPayload("not-attached"),
+    /no longer attached to this task canvas/
+  );
   await controller.startBrowserTakeover("browser-session-1");
   assert.equal(
     controller.canvases.list()[0].blocks[0].takeoverActive,
