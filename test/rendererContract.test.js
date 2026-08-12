@@ -133,11 +133,11 @@ test("background remote refresh projects live Connections into the renderer", as
 
   assert.match(
     javascript,
-    /api\.on\("remote:changed",[\s\S]*?Object\.assign\(state, remote\)[\s\S]*?renderConnections\(\)/
+    /api\.on\("remote:changed",[\s\S]*?Object\.assign\(state, next\)[\s\S]*?renderConnections\(\)/
   );
   assert.match(
     javascript,
-    /api\.on\("remote:changed",[\s\S]*?Object\.assign\(state, remote\)[\s\S]*?renderHistory\(\)/
+    /api\.on\("remote:changed",[\s\S]*?Object\.assign\(state, next\)[\s\S]*?renderHistory\(\)/
   );
 });
 

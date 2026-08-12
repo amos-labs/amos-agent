@@ -163,6 +163,16 @@ export class AgentLoop {
           }
         });
 
+        onEvent({
+          type: "usage",
+          turn,
+          inputTokens: response.usage?.input_tokens || 0,
+          outputTokens: response.usage?.output_tokens || 0,
+          totalTokens: response.usage?.total_tokens || 0,
+          costUsedMicrousd: response.usage?.cost_used_microusd ||
+            response.usage?.raw?.cost_used_microusd || 0
+        });
+
         throwIfAborted(signal);
         const assistantMessage = response.message;
         this.messages.push(assistantMessage);
@@ -542,6 +552,15 @@ export class AgentLoop {
       onDelta: (delta, text) => {
         onEvent({ type: "assistant_delta", turn: turn + 1, delta, text });
       }
+    });
+    onEvent({
+      type: "usage",
+      turn: turn + 1,
+      inputTokens: response.usage?.input_tokens || 0,
+      outputTokens: response.usage?.output_tokens || 0,
+      totalTokens: response.usage?.total_tokens || 0,
+      costUsedMicrousd: response.usage?.cost_used_microusd ||
+        response.usage?.raw?.cost_used_microusd || 0
     });
     throwIfAborted(signal);
     this.messages.push(response.message);

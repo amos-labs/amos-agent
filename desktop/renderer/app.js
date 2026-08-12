@@ -371,17 +371,27 @@ function bindEvents() {
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
     if ((state?.settings?.appearance || "system") === "system") applyAppearance("system");
   });
-  api.on("agent:event", renderLiveEvent);
+  api.on("agent:event", (event) => {
+    if (eventMatchesActiveTask(event)) renderLiveEvent(event);
+  });
   api.on("agent:status", (taskStatus) => {
+    if (!eventMatchesActiveTask(taskStatus)) return;
     currentTaskId = taskStatus?.running ? taskStatus.taskId || currentTaskId : null;
     if (!taskStatus?.running && pendingApproval) clearInlineApproval();
     setRunning(Boolean(taskStatus?.running));
   });
+  api.on("desktop-runs:changed", (runs) => {
+    if (!state) return;
+    state.activeRuns = Array.isArray(runs) ? runs : [];
+    renderProjects();
+    renderTasks();
+  });
   api.on("activity:changed", (activity) => {
-    if (state) state.activity = activity;
+    const envelope = Array.isArray(activity) ? { items: activity } : activity || {};
+    if (state && eventMatchesActiveTask(envelope)) state.activity = envelope.items || [];
   });
   api.on("canvas:changed", (canvasState) => {
-    if (!state) return;
+    if (!state || !eventMatchesActiveTask(canvasState)) return;
     state.canvases = canvasState.canvases || [];
     state.activeCanvasId = canvasState.activeCanvasId || null;
     activeCanvasId = state.activeCanvasId;
@@ -389,7 +399,7 @@ function bindEvents() {
     renderCanvas();
   });
   api.on("automation-setup:requested", (setup) => {
-    if (!state) return;
+    if (!state || !eventMatchesActiveTask(setup)) return;
     state.automationSetup = setup;
     syncAutomationSetup(setup);
     showView("operator");
@@ -411,8 +421,15 @@ function bindEvents() {
   });
   api.on("remote:changed", (remote) => {
     if (!state) return;
-    Object.assign(state, remote);
-    syncAutomationSetup(remote.automationSetup);
+    const next = { ...remote };
+    if (!eventMatchesActiveTask(remote)) {
+      delete next.activeContextKey;
+      delete next.activeTaskRecordId;
+      delete next.workingContinuity;
+      delete next.automationSetup;
+    }
+    Object.assign(state, next);
+    if (eventMatchesActiveTask(remote)) syncAutomationSetup(remote.automationSetup);
     renderIdentity();
     renderAccountMenu();
     renderCompanySwitcher();
@@ -432,6 +449,10 @@ function bindEvents() {
     renderUpdate();
   });
   api.on("approval:requested", (approval) => {
+    if (!eventMatchesActiveTask(approval)) {
+      toast("A background task needs local approval. Open it from Tasks to review.");
+      return;
+    }
     pendingApproval = approval;
     elements.approvalMessage.textContent = approval.message;
     const label = localApprovalKindLabel(approval.kind);
@@ -2585,6 +2606,11 @@ function renderTasks() {
 }
 
 function taskCard(task) {
+  const activeRun = (state.activeRuns || []).find((run) =>
+    run.taskRecordId === task.id || (task.remoteId && run.remoteTaskId === task.remoteId)
+  );
+  const taskRunning = task.running || Boolean(activeRun);
+  const taskRunPhase = activeRun?.phase || task.runPhase || "";
   const card = document.createElement("article");
   card.className = `task-card${task.active ? " active" : ""}`;
   const heading = document.createElement("div");
@@ -2614,6 +2640,14 @@ function taskCard(task) {
     current.textContent = "OPEN IN OPERATOR";
     meta.append(current);
   }
+  if (taskRunning) {
+    const worker = document.createElement("span");
+    worker.className = "task-lineage-chip current";
+    worker.textContent = taskRunPhase
+      ? `RUNNING · ${String(taskRunPhase).replaceAll("_", " ").toUpperCase()}`
+      : "RUNNING";
+    meta.append(worker);
+  }
   const title = document.createElement("h2");
   title.textContent = task.title;
   copy.append(meta, title);
@@ -2641,7 +2675,7 @@ function taskCard(task) {
   const actions = document.createElement("div");
   actions.className = "task-card-actions";
   const archived = Boolean(task.archivedAt || task.archived);
-  const open = actionButton(task.active ? "Open in Operator" : "Resume", "primary");
+  const open = actionButton(task.active || taskRunning ? "Open in Operator" : "Resume", "primary");
   open.disabled = archived;
   open.addEventListener("click", () => openManagedTask(task, open));
   const fork = actionButton("Fork", "secondary");
@@ -2772,12 +2806,14 @@ function adoptOpenedTask(response) {
   resetSessionView();
   state = response.state;
   currentTaskId = state.activeTask?.id || null;
+  running = Boolean(state.activeTask);
   streamingMessage = null;
   continuityConversationRestored = false;
   activeCanvasId = state.activeCanvasId || null;
   canvasSidecarOpen = Boolean(activeCanvasId);
   updateAttachments(state.attachments || []);
   render();
+  setRunning(running);
   showView("operator");
   restoreConversationFromContinuity();
 }
@@ -4792,9 +4828,9 @@ function renderConversationChrome() {
 }
 
 function renderConversationActions() {
-  elements.newConversationButton.disabled = running;
+  elements.newConversationButton.disabled = false;
   const active = activeDurableTask();
-  elements.forkConversationButton.disabled = running || !active;
+  elements.forkConversationButton.disabled = !active;
   elements.forkConversationButton.title = active
     ? "Create a governed branch from the latest retained milestone"
     : "Start a conversation before creating a fork";
@@ -6070,6 +6106,11 @@ async function runTask(event) {
     return;
   }
   if (!prompt && attachments.length === 0) return;
+  const submittedTask = {
+    taskRecordId: String(state?.activeTaskRecordId || state?.tasks?.activeTaskId || ""),
+    contextKey: String(state?.activeContextKey || "active")
+  };
+  const isStillVisible = () => eventMatchesActiveTask(submittedTask);
   const attachmentSummary = attachments.length > 0
     ? `\n\nAttached: ${attachments.map((item) => item.name).join(", ")}`
     : "";
@@ -6089,6 +6130,10 @@ async function runTask(event) {
       resumeTaskId: resumingCheckpointId,
       attachments: submitted.map((item) => ({ id: item.id, retention: item.retention }))
     });
+    if (!isStillVisible() || !eventMatchesActiveTask(result)) {
+      toast("A background task completed. Open it from Tasks or Projects to review the result.");
+      return;
+    }
     resumingCheckpointId = null;
     streamingMessage = null;
     clearTransientTaskMessages();
@@ -6115,6 +6160,10 @@ async function runTask(event) {
       toast(`Task completed, but ${failures.length} item${failures.length === 1 ? "" : "s"} could not be added to company memory.`, true);
     }
   } catch (error) {
+    if (!isStillVisible()) {
+      toast(`A background task stopped: ${error.message}`, true);
+      return;
+    }
     resumingCheckpointId = null;
     streamingMessage = null;
     clearTransientTaskMessages();
@@ -6140,7 +6189,7 @@ async function runTask(event) {
     } catch {
       // Task completion must not be masked if a local memory refresh fails.
     }
-    setRunning(false);
+    if (isStillVisible()) setRunning(false);
   }
 }
 
@@ -6302,6 +6351,18 @@ function activeDurableTask() {
   return (state?.tasks?.tasks || []).find((task) =>
     task.id === state.tasks?.activeTaskId || task.id === state.activeTaskRecordId
   ) || null;
+}
+
+function eventMatchesActiveTask(value = {}) {
+  const taskRecordId = String(value?.taskRecordId || "");
+  const contextKey = String(value?.contextKey || "");
+  if (!taskRecordId && !contextKey) return true;
+  const activeTaskId = String(state?.activeTaskRecordId || state?.tasks?.activeTaskId || "");
+  const activeContext = String(state?.activeContextKey || "active");
+  return Boolean(
+    (taskRecordId && (taskRecordId === activeTaskId || (!activeTaskId && taskRecordId === activeContext))) ||
+    (contextKey && contextKey === activeContext)
+  );
 }
 
 function renderMarkdown(container, source) {
