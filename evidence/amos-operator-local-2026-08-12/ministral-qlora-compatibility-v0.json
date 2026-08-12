@@ -1,0 +1,62 @@
+{
+  "schema": "amos.local-student-training-evidence",
+  "version": 1,
+  "created_at": "2026-08-12T15:31:00Z",
+  "claim": "train_save_reload_infer_compatibility_only",
+  "quality_claim": false,
+  "hardware": {
+    "cpu": "Apple M1 Max",
+    "unified_memory_gib": 64,
+    "power": "AC"
+  },
+  "framework": {
+    "mlx_vlm": "0.6.12",
+    "mlx": "0.32.0",
+    "datasets": "5.0.1",
+    "python": "3.12.13",
+    "environment": "uv isolated"
+  },
+  "model": {
+    "repository": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+    "revision": "182f003f01daa75f9de0f2c4d379722fd0bc1c61",
+    "vision_trained": false
+  },
+  "dataset": {
+    "source_identity_sha256": "25586b0c7f5a198defd9ce98174939cc76640ed6756cf6d77d4f96e1c451a55f",
+    "compiled_records": 3,
+    "source_type": "synthetic",
+    "contains_customer_data": false,
+    "tools_excluded_for_text_compatibility_spike": true
+  },
+  "training": {
+    "fine_tune_type": "QLoRA",
+    "completion_only_loss": true,
+    "rank": 8,
+    "alpha": 16,
+    "dropout": 0,
+    "learning_rate": 0.0001,
+    "batch_size": 1,
+    "iterations": 2,
+    "max_sequence_length": 512,
+    "trainable_parameters": 22282240,
+    "all_parameters": 8918026240,
+    "trainable_percent": 0.25,
+    "losses": [5.21423912, 2.92076135],
+    "peak_memory_gb": 6.84
+  },
+  "adapter": {
+    "bytes": 89187578,
+    "sha256": "f14dcaf053702db9d5b07d761c6a75fd060a4f0783b138fc2627121694c222a8",
+    "temporary_artifact_committed": false,
+    "reload_passed": true
+  },
+  "reload_smoke": {
+    "expected_semantic_answer": "No",
+    "actual_answer": "No.",
+    "prompt_tokens": 40,
+    "prompt_tokens_per_second": 53.513,
+    "generated_tokens": 3,
+    "generation_tokens_per_second": 29.337,
+    "peak_memory_gb": 6.079
+  }
+}

@@ -1,0 +1,860 @@
+{
+  "schema": "amos.paired-model-qualification-report",
+  "version": 1,
+  "created_at": "2026-08-12T13:29:36.546Z",
+  "suite": {
+    "schema": "amos.paired-model-qualification-suite",
+    "version": 1,
+    "status": "frozen",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+    "selected_cases": [
+      "fencing-transfer",
+      "collider-transfer",
+      "correlated-bayes",
+      "simpson-policy",
+      "authority-receipt-conflict",
+      "causal-abstention",
+      "deadline-optimization",
+      "temporal-evidence-chain",
+      "stale-reference-recovery",
+      "idempotent-approval",
+      "portfolio-code",
+      "event-reconciliation-code"
+    ]
+  },
+  "configuration": {
+    "max_tokens": 4096,
+    "request_timeout_ms": 1800000
+  },
+  "targets": [
+    {
+      "target": {
+        "id": "candidate",
+        "label": "Muse Glimmer 30B local",
+        "model": "muse-glimmer-30b",
+        "protocol": "openai-chat-completions",
+        "reasoning_strength": "low",
+        "temperature": 1,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "score": 24,
+      "maximum": 32,
+      "accuracy": 0.75,
+      "critical_failures": [],
+      "inference": {
+        "calls": 18,
+        "request_wall_seconds": 713.1568892899999,
+        "input_tokens": 7983,
+        "output_tokens": 4134,
+        "local_decode_tokens_per_second": 6.3112586350429964
+      },
+      "cases": [
+        {
+          "id": "fencing-transfer",
+          "category": "distributed-systems-transfer",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 22.700859292,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"B\",\"reason\":\"Token 41 is below the fencing floor 42 so L's write is rejected and N's write remains.\"}",
+          "calls": [
+            {
+              "wall_seconds": 22.700627166,
+              "usage": {
+                "completion_tokens": 146,
+                "prompt_tokens": 186,
+                "total_tokens": 332,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              },
+              "timings": {
+                "prompt_n": 186,
+                "prompt_ms": 1947.075,
+                "predicted_n": 146,
+                "predicted_ms": 20737.277
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "collider-transfer",
+          "category": "causal-transfer",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 21.348334209,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "C",
+            "missing_reason_groups": [
+              [
+                "not condition",
+                "removed",
+                "every applicant",
+                "full population"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"C\",\"reason\":\"The audit samples the full applicant population without conditioning on admission, so the two traits remain independent as in the population.\"}",
+          "calls": [
+            {
+              "wall_seconds": 21.348202249999996,
+              "usage": {
+                "completion_tokens": 138,
+                "prompt_tokens": 170,
+                "total_tokens": 308,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 121,
+                "prompt_ms": 2077.694,
+                "predicted_n": 138,
+                "predicted_ms": 19261.581
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "correlated-bayes",
+          "category": "bayesian-causal",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 53.308230707999996,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "A",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "shared",
+                "contamination",
+                "correl"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"A\",\"reason\":\"P(++|D)=0.81 and P(++|¬D)=0.04+0.96×0.01²≈0.0401, so posterior ≈0.01×0.81/(0.01×0.81+0.99×0.0401)≈0.17, closest to 17%.\"}",
+          "calls": [
+            {
+              "wall_seconds": 53.308091250000004,
+              "usage": {
+                "completion_tokens": 322,
+                "prompt_tokens": 175,
+                "total_tokens": 497,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 126,
+                "prompt_ms": 2665.454,
+                "predicted_n": 322,
+                "predicted_ms": 50632.664
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "simpson-policy",
+          "category": "causal-decision",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 44.030753958,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "A",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "90",
+                "9/10"
+              ],
+              [
+                "80",
+                "80/100"
+              ],
+              [
+                "40",
+                "40/100"
+              ],
+              [
+                "30",
+                "3/10"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"A\",\"reason\":\"Treatment A has 0.9 vs 0.8 conversion on easy leads and 0.4 vs 0.3 on hard leads, so it is better within both strata, a classic Simpson's paradox.\"}",
+          "calls": [
+            {
+              "wall_seconds": 44.030723167000005,
+              "usage": {
+                "completion_tokens": 263,
+                "prompt_tokens": 176,
+                "total_tokens": 439,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 127,
+                "prompt_ms": 2379.741,
+                "predicted_n": 263,
+                "predicted_ms": 41641.981
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "authority-receipt-conflict",
+          "category": "temporal-authority",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 30.21564850000001,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"B\",\"reason\":\"The signed Wednesday policy supersedes the cached Monday policy and sets the approval threshold at $2,000, and the execution receipt confirms campaign C9 was executed under policy_revision wed-7.\"}",
+          "calls": [
+            {
+              "wall_seconds": 30.21561508300001,
+              "usage": {
+                "completion_tokens": 180,
+                "prompt_tokens": 194,
+                "total_tokens": 374,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 145,
+                "prompt_ms": 2958.064,
+                "predicted_n": 180,
+                "predicted_ms": 27248.891
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "causal-abstention",
+          "category": "calibrated-abstention",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 19.50278191599998,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "C",
+            "missing_reason_groups": [
+              [
+                "not identified",
+                "cannot attribute",
+                "confound"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"C\",\"reason\":\"Multiple simultaneous changes without randomization or adjustment prevent causal attribution of the lift to onboarding.\"}",
+          "calls": [
+            {
+              "wall_seconds": 19.50271541599999,
+              "usage": {
+                "completion_tokens": 112,
+                "prompt_tokens": 186,
+                "total_tokens": 298,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 137,
+                "prompt_ms": 2684.567,
+                "predicted_n": 112,
+                "predicted_ms": 16808.4
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "deadline-optimization",
+          "category": "bounded-planning",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 65.146071834,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "A",
+            "expected_label": "A",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"A\",\"reason\":\"A then B finishes by deadlines with value 15 and is the highest feasible schedule, while D is infeasible because B would finish at hour 5 exceeding its deadline.\"}",
+          "calls": [
+            {
+              "wall_seconds": 65.14602745799999,
+              "usage": {
+                "completion_tokens": 395,
+                "prompt_tokens": 202,
+                "total_tokens": 597,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 153,
+                "prompt_ms": 2767.129,
+                "predicted_n": 395,
+                "predicted_ms": 62372.171
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "temporal-evidence-chain",
+          "category": "evidence-integration",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 26.19523004199998,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"B\",\"reason\":\"The $700 refund requires finance approval under policy R8 and the proposal shows pending_approval with executed false, so it has not been sent.\"}",
+          "calls": [
+            {
+              "wall_seconds": 26.195196708999983,
+              "usage": {
+                "completion_tokens": 149,
+                "prompt_tokens": 207,
+                "total_tokens": 356,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 158,
+                "prompt_ms": 2859.003,
+                "predicted_n": 149,
+                "predicted_ms": 23326.589
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "stale-reference-recovery",
+          "category": "dependent-tool-recovery",
+          "kind": "tool_flow",
+          "weight": 4,
+          "critical": true,
+          "passed": true,
+          "wall_seconds": 132.770726708,
+          "evaluation": {
+            "passed": true,
+            "missing_final_groups": [],
+            "forbidden_final_terms_present": [],
+            "sequence": [
+              {
+                "step": 1,
+                "expected_function": "get_campaign",
+                "actual_function": "get_campaign",
+                "expected_arguments": {
+                  "name": "spring-renewal"
+                },
+                "actual_arguments": {
+                  "name": "spring-renewal"
+                },
+                "passed": true
+              },
+              {
+                "step": 2,
+                "expected_function": "get_page_metrics",
+                "actual_function": "get_page_metrics",
+                "expected_arguments": {
+                  "page_id": "page_old"
+                },
+                "actual_arguments": {
+                  "page_id": "page_old"
+                },
+                "passed": true
+              },
+              {
+                "step": 3,
+                "expected_function": "refresh_campaign",
+                "actual_function": "refresh_campaign",
+                "expected_arguments": {
+                  "campaign_id": "cmp_9"
+                },
+                "actual_arguments": {
+                  "campaign_id": "cmp_9"
+                },
+                "passed": true
+              },
+              {
+                "step": 4,
+                "expected_function": "get_page_metrics",
+                "actual_function": "get_page_metrics",
+                "expected_arguments": {
+                  "page_id": "page_new"
+                },
+                "actual_arguments": {
+                  "page_id": "page_new"
+                },
+                "passed": true
+              }
+            ],
+            "unexpected_final_tools": []
+          },
+          "response": "The campaign record for **spring-renewal** is:\n\n* `campaign_id`: cmp_9\n* initial `landing_page_id`: page_old, revision 7\n\n`get_page_metrics(page_id = page_old)` returned:\n```\n{\"ok\":false,\"error\":\"stale_reference\",\"current_revision\":8}\n```\nThe page reference is stale. The authoritative campaign was refreshed:\n\n`refresh_campaign(campaign_id = cmp_9)` → \n```\n{\"campaign_id\":\"cmp_9\",\"landing_page_id\":\"page_new\",\"revision\":8}\n```\n\nMetrics for the current authoritative page `page_new`:\n```\n{\"landing_page_visits\":1000,\"playground_sessions\":100,\"signups\":5}\n```\n\nFunnel stages:\n* Landing page visits → Playground sessions\n  * Visits: 1,000 → Sessions: 100\n  * Absolute loss: 900\n  * Relative loss: 900/1,000 = 90.0%\n\n* Playground sessions → Signups\n  * Sessions: 100 → Signups: 5\n  * Absolute loss: 95\n  * Relative loss: 95/100 = 95.0%\n\nLargest measured funnel loss is **Playground sessions → Signups**, \n95 of 100 sessions lost, a 95% drop. In absolute terms the visits→playground step loses 900 users, but the highest percentage loss in the measured funnel is the playground-to-signup step.\n",
+          "calls": [
+            {
+              "wall_seconds": 24.51630558299995,
+              "usage": {
+                "completion_tokens": 94,
+                "prompt_tokens": 595,
+                "total_tokens": 689,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              },
+              "timings": {
+                "prompt_n": 595,
+                "prompt_ms": 9571.683,
+                "predicted_n": 94,
+                "predicted_ms": 14932.56
+              },
+              "tool_calls": [
+                {
+                  "name": "get_campaign",
+                  "arguments": {
+                    "name": "spring-renewal"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 15.558446499999961,
+              "usage": {
+                "completion_tokens": 80,
+                "prompt_tokens": 728,
+                "total_tokens": 808,
+                "prompt_tokens_details": {
+                  "cached_tokens": 590
+                }
+              },
+              "timings": {
+                "prompt_n": 138,
+                "prompt_ms": 2809.497,
+                "predicted_n": 80,
+                "predicted_ms": 12740.73
+              },
+              "tool_calls": [
+                {
+                  "name": "get_page_metrics",
+                  "arguments": {
+                    "page_id": "page_old"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 12.68024433299998,
+              "usage": {
+                "completion_tokens": 65,
+                "prompt_tokens": 846,
+                "total_tokens": 911,
+                "prompt_tokens_details": {
+                  "cached_tokens": 723
+                }
+              },
+              "timings": {
+                "prompt_n": 123,
+                "prompt_ms": 2299.368,
+                "predicted_n": 65,
+                "predicted_ms": 10371.846
+              },
+              "tool_calls": [
+                {
+                  "name": "refresh_campaign",
+                  "arguments": {
+                    "campaign_id": "cmp_9"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 11.590051750000042,
+              "usage": {
+                "completion_tokens": 61,
+                "prompt_tokens": 950,
+                "total_tokens": 1011,
+                "prompt_tokens_details": {
+                  "cached_tokens": 841
+                }
+              },
+              "timings": {
+                "prompt_n": 109,
+                "prompt_ms": 2199.814,
+                "predicted_n": 61,
+                "predicted_ms": 9380.248
+              },
+              "tool_calls": [
+                {
+                  "name": "get_page_metrics",
+                  "arguments": {
+                    "page_id": "page_new"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 68.425093834,
+              "usage": {
+                "completion_tokens": 429,
+                "prompt_tokens": 1054,
+                "total_tokens": 1483,
+                "prompt_tokens_details": {
+                  "cached_tokens": 945
+                }
+              },
+              "timings": {
+                "prompt_n": 109,
+                "prompt_ms": 2167.873,
+                "predicted_n": 429,
+                "predicted_ms": 66246.365
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "idempotent-approval",
+          "category": "governed-tool-sequence",
+          "kind": "tool_flow",
+          "weight": 4,
+          "critical": true,
+          "passed": true,
+          "wall_seconds": 65.01573708300002,
+          "evaluation": {
+            "passed": true,
+            "missing_final_groups": [],
+            "forbidden_final_terms_present": [],
+            "sequence": [
+              {
+                "step": 1,
+                "expected_function": "get_launch_policy",
+                "actual_function": "get_launch_policy",
+                "expected_arguments": {},
+                "actual_arguments": {},
+                "passed": true
+              },
+              {
+                "step": 2,
+                "expected_function": "propose_campaign",
+                "actual_function": "propose_campaign",
+                "expected_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "actual_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "passed": true
+              }
+            ],
+            "unexpected_final_tools": []
+          },
+          "response": "Current launch policy:\n- revision: launch-12\n- approval_required: true\n\nCampaign proposal submitted:\n- name: autumn-test\n- idempotency_key: launch-autumn-test-v1\n- proposal_id: P12\n- status: pending_approval\n- executed: false\n- policy_revision: launch-12\n\nThe proposal was created successfully but was **not executed** — it is pending approval per the current launch policy. I will not retry it.\n",
+          "calls": [
+            {
+              "wall_seconds": 20.849513999999967,
+              "usage": {
+                "completion_tokens": 83,
+                "prompt_tokens": 526,
+                "total_tokens": 609,
+                "prompt_tokens_details": {
+                  "cached_tokens": 78
+                }
+              },
+              "timings": {
+                "prompt_n": 448,
+                "prompt_ms": 7369.214,
+                "predicted_n": 83,
+                "predicted_ms": 13433.75
+              },
+              "tool_calls": [
+                {
+                  "name": "get_launch_policy",
+                  "arguments": {}
+                }
+              ]
+            },
+            {
+              "wall_seconds": 20.728925665999995,
+              "usage": {
+                "completion_tokens": 114,
+                "prompt_tokens": 643,
+                "total_tokens": 757,
+                "prompt_tokens_details": {
+                  "cached_tokens": 521
+                }
+              },
+              "timings": {
+                "prompt_n": 122,
+                "prompt_ms": 2218.849,
+                "predicted_n": 114,
+                "predicted_ms": 18501.375
+              },
+              "tool_calls": [
+                {
+                  "name": "propose_campaign",
+                  "arguments": {
+                    "name": "autumn-test",
+                    "idempotency_key": "launch-autumn-test-v1"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 23.43712625000003,
+              "usage": {
+                "completion_tokens": 125,
+                "prompt_tokens": 802,
+                "total_tokens": 927,
+                "prompt_tokens_details": {
+                  "cached_tokens": 638
+                }
+              },
+              "timings": {
+                "prompt_n": 164,
+                "prompt_ms": 3143.518,
+                "predicted_n": 125,
+                "predicted_ms": 20276.36
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "portfolio-code",
+          "category": "verified-optimization-code",
+          "kind": "javascript",
+          "weight": 4,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 112.81181724999996,
+          "evaluation": {
+            "passed": true,
+            "outcomes": [
+              {
+                "passed": true,
+                "detail": {
+                  "expected": [
+                    "b",
+                    "d"
+                  ],
+                  "actual": [
+                    "b",
+                    "d"
+                  ]
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": [
+                    "alpha",
+                    "beta"
+                  ],
+                  "actual": [
+                    "alpha",
+                    "beta"
+                  ]
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": [
+                    "a"
+                  ],
+                  "actual": [
+                    "a"
+                  ]
+                }
+              }
+            ],
+            "code": "function selectPortfolio(items, budget){\n    const n = items.length;\n    let bestValue = -1;\n    let bestSpend = Infinity;\n    let bestIds = null;\n    const idToItem = new Map();\n    for(const it of items) idToItem.set(it.id, it);\n    const totalMasks = 1 << n;\n    for(let mask = 0; mask < totalMasks; mask++){\n        let spend = 0;\n        let value = 0;\n        const chosen = [];\n        const groups = new Set();\n        let feasible = true;\n        for(let i = 0; i < n; i++){\n            if(mask & (1 << i)){\n                const it = items[i];\n                chosen.push(it);\n                spend += it.spend;\n                value += it.value;\n                if(it.group != null && it.group !== undefined){\n                    if(groups.has(it.group)){ feasible = false; break; }\n                    groups.add(it.group);\n                }\n            }\n        }\n        if(!feasible || spend > budget) continue;\n        const chosenIds = new Set(chosen.map(it=>it.id));\n        for(const it of chosen){\n            const req = it.requires;\n            if(!req) continue;\n            if(Array.isArray(req)){\n                for(const r of req){\n                    if(!chosenIds.has(r)){ feasible = false; break; }\n                }\n            }else if(typeof req === 'string'){\n                if(!chosenIds.has(req)){ feasible = false; break; }\n            }\n            if(!feasible) break;\n        }\n        if(!feasible) continue;\n        const idsSorted = chosen.map(it=>it.id).sort();\n        if(value > bestValue || (value === bestValue && spend < bestSpend) || (value === bestValue && spend === bestSpend && bestIds && idsSorted.join(',') < bestIds.join(','))){\n            bestValue = value;\n            bestSpend = spend;\n            bestIds = idsSorted;\n        }else if(value === bestValue && spend === bestSpend && bestIds === null){\n            bestIds = idsSorted;\n        }\n    }\n    return bestIds ? bestIds : [];\n}"
+          },
+          "response": "function selectPortfolio(items, budget){\n    const n = items.length;\n    let bestValue = -1;\n    let bestSpend = Infinity;\n    let bestIds = null;\n    const idToItem = new Map();\n    for(const it of items) idToItem.set(it.id, it);\n    const totalMasks = 1 << n;\n    for(let mask = 0; mask < totalMasks; mask++){\n        let spend = 0;\n        let value = 0;\n        const chosen = [];\n        const groups = new Set();\n        let feasible = true;\n        for(let i = 0; i < n; i++){\n            if(mask & (1 << i)){\n                const it = items[i];\n                chosen.push(it);\n                spend += it.spend;\n                value += it.value;\n                if(it.group != null && it.group !== undefined){\n                    if(groups.has(it.group)){ feasible = false; break; }\n                    groups.add(it.group);\n                }\n            }\n        }\n        if(!feasible || spend > budget) continue;\n        const chosenIds = new Set(chosen.map(it=>it.id));\n        for(const it of chosen){\n            const req = it.requires;\n            if(!req) continue;\n            if(Array.isArray(req)){\n                for(const r of req){\n                    if(!chosenIds.has(r)){ feasible = false; break; }\n                }\n            }else if(typeof req === 'string'){\n                if(!chosenIds.has(req)){ feasible = false; break; }\n            }\n            if(!feasible) break;\n        }\n        if(!feasible) continue;\n        const idsSorted = chosen.map(it=>it.id).sort();\n        if(value > bestValue || (value === bestValue && spend < bestSpend) || (value === bestValue && spend === bestSpend && bestIds && idsSorted.join(',') < bestIds.join(','))){\n            bestValue = value;\n            bestSpend = spend;\n            bestIds = idsSorted;\n        }else if(value === bestValue && spend === bestSpend && bestIds === null){\n            bestIds = idsSorted;\n        }\n    }\n    return bestIds ? bestIds : [];\n}\n",
+          "calls": [
+            {
+              "wall_seconds": 112.80856012500001,
+              "usage": {
+                "completion_tokens": 651,
+                "prompt_tokens": 162,
+                "total_tokens": 813,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              },
+              "timings": {
+                "prompt_n": 162,
+                "prompt_ms": 2956.519,
+                "predicted_n": 651,
+                "predicted_ms": 109829.529
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "event-reconciliation-code",
+          "category": "verified-temporal-code",
+          "kind": "javascript",
+          "weight": 4,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 120.11644983299996,
+          "evaluation": {
+            "passed": true,
+            "outcomes": [
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 13,
+                      "version": 3
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 13,
+                      "version": 3
+                    }
+                  }
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 4,
+                      "version": 0
+                    },
+                    "b": {
+                      "balance": 5,
+                      "version": 3
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 4,
+                      "version": 0
+                    },
+                    "b": {
+                      "balance": 5,
+                      "version": 3
+                    }
+                  }
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 0,
+                      "version": 0
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 0,
+                      "version": 0
+                    }
+                  }
+                }
+              }
+            ],
+            "code": "function reconcileBalances(events, initial) {\n  const seen = new Set();\n  const uniqEvents = [];\n  for (const e of events) {\n    if (!seen.has(e.eventId)) {\n      seen.add(e.eventId);\n      uniqEvents.push(e);\n    }\n  }\n\n  const byAccount = new Map();\n  for (const e of uniqEvents) {\n    if (!byAccount.has(e.accountId)) byAccount.set(e.accountId, []);\n    byAccount.get(e.accountId).push(e);\n  }\n\n  const result = {};\n  for (const accountId in initial) {\n    if (!Object.prototype.hasOwnProperty.call(initial, accountId)) continue;\n    const init = initial[accountId];\n    let balance = init.balance;\n    let version = init.version;\n    const evts = byAccount.get(accountId) || [];\n    const versionMap = new Map();\n    for (const e of evts) {\n      if (!versionMap.has(e.version)) versionMap.set(e.version, []);\n      versionMap.get(e.version).push(e);\n    }\n    let next = version + 1;\n    let stopped = false;\n    while (true) {\n      const candidates = versionMap.get(next);\n      if (!candidates || candidates.length === 0) break;\n      if (candidates.length > 1) {\n        const ids = new Set(candidates.map(c => c.eventId));\n        if (ids.size > 1) {\n          stopped = true;\n          break;\n        }\n      }\n      if (candidates.length !== 1) {\n        stopped = true;\n        break;\n      }\n      const ev = candidates[0];\n      if (ev.version !== next) break;\n      balance += ev.delta;\n      version = next;\n      next = version + 1;\n    }\n    result[accountId] = { balance, version };\n  }\n  return result;\n}"
+          },
+          "response": "function reconcileBalances(events, initial) {\n  const seen = new Set();\n  const uniqEvents = [];\n  for (const e of events) {\n    if (!seen.has(e.eventId)) {\n      seen.add(e.eventId);\n      uniqEvents.push(e);\n    }\n  }\n\n  const byAccount = new Map();\n  for (const e of uniqEvents) {\n    if (!byAccount.has(e.accountId)) byAccount.set(e.accountId, []);\n    byAccount.get(e.accountId).push(e);\n  }\n\n  const result = {};\n  for (const accountId in initial) {\n    if (!Object.prototype.hasOwnProperty.call(initial, accountId)) continue;\n    const init = initial[accountId];\n    let balance = init.balance;\n    let version = init.version;\n    const evts = byAccount.get(accountId) || [];\n    const versionMap = new Map();\n    for (const e of evts) {\n      if (!versionMap.has(e.version)) versionMap.set(e.version, []);\n      versionMap.get(e.version).push(e);\n    }\n    let next = version + 1;\n    let stopped = false;\n    while (true) {\n      const candidates = versionMap.get(next);\n      if (!candidates || candidates.length === 0) break;\n      if (candidates.length > 1) {\n        const ids = new Set(candidates.map(c => c.eventId));\n        if (ids.size > 1) {\n          stopped = true;\n          break;\n        }\n      }\n      if (candidates.length !== 1) {\n        stopped = true;\n        break;\n      }\n      const ev = candidates[0];\n      if (ev.version !== next) break;\n      balance += ev.delta;\n      version = next;\n      next = version + 1;\n    }\n    result[accountId] = { balance, version };\n  }\n  return result;\n}\n",
+          "calls": [
+            {
+              "wall_seconds": 120.11542275000002,
+              "usage": {
+                "completion_tokens": 727,
+                "prompt_tokens": 181,
+                "total_tokens": 908,
+                "prompt_tokens_details": {
+                  "cached_tokens": 49
+                }
+              },
+              "timings": {
+                "prompt_n": 132,
+                "prompt_ms": 2820.779,
+                "predicted_n": 727,
+                "predicted_ms": 117277.583
+              },
+              "tool_calls": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "paired": null
+}

@@ -43,6 +43,24 @@ first model should target:
 Governance remains code. A better-trained model does not replace tenant
 scoping, policy, budgets, approval gates, or receipt generation.
 
+Muse Glimmer 30B is now a parallel Operator candidate rather than only a
+routine-model candidate. Its first hypothesis is to cover Haiku-class work at
+low reasoning strength; its second is to cover bounded, non-deep Sonnet work at
+the empirically qualified reasoning configuration when paired with AMOS
+retrieval, decomposition, verification, repair, and calibrated escalation. The
+executable plan and protocol constraints are recorded in
+[Muse Glimmer 30B qualification](MUSE_GLIMMER_QUALIFICATION.md).
+
+The first physical-host signal favors low strength rather than high: two
+official-sampling low-strength runs completed the hard suite at 16/16, while
+high strength and temperature-zero treatments each scored 13/16 by failing the
+coding scenario. A clean AC run generated 8.6 tokens/second, below the 15
+tokens/second Operator gate. A 10-case integration discovery set produced no
+base-model integration failures, but repeated atomics exposed unstable fencing
+and collider concepts. The immediate work is therefore paired managed-model
+evaluation, concept-stability training data, harder integration cases, and
+latency work—not a default routing change or an always-on workspace.
+
 ## A model family, not one giant model
 
 The likely end state is:

@@ -4,6 +4,11 @@ import http from "node:http";
 import https from "node:https";
 import { performance } from "node:perf_hooks";
 import {
+  normalizeStandardReasoningEffort,
+  normalizeTemplateReasoningStrength,
+  openAiChatReasoningFields
+} from "../src/model/openAiChatReasoning.js";
+import {
   aggregateIntegrationResults,
   atomicPrompts,
   buildIntegrationPrompt,
@@ -28,19 +33,40 @@ const baseUrl = readOption(args, "--url") ||
 const protocol = normalizeProtocol(readOption(args, "--protocol") || "ollama");
 const arm = normalizeArm(readOption(args, "--arm") || "all");
 const output = readOption(args, "--output");
+const experimentalIdentity = {
+  treatment: optionalText(readOption(args, "--treatment")),
+  hardware_profile: optionalText(readOption(args, "--hardware-profile")),
+  runtime_revision: optionalText(readOption(args, "--runtime-revision")),
+  artifact_sha256: optionalSha256(readOption(args, "--artifact-sha256")),
+  power_source: optionalText(readOption(args, "--power-source")),
+  run_state: optionalText(readOption(args, "--run-state"))
+};
 const only = new Set((readOption(args, "--only") || "").split(",").filter(Boolean));
 const timeoutMs = boundedInteger(readOption(args, "--request-timeout-seconds"), 30, 7200, 600) * 1000;
 const maxTokens = boundedInteger(readOption(args, "--max-tokens"), 32, 4096, 768);
 const contextLength = boundedInteger(readOption(args, "--context"), 4096, 131072, 32768);
-const reasoningEffort = normalizeReasoningEffort(readOption(args, "--reasoning-effort"));
+const temperature = boundedNumber(readOption(args, "--temperature"), 0, 2, 0);
+const topP = optionalBoundedNumber(readOption(args, "--top-p"), 0.01, 1);
+const topK = optionalBoundedInteger(readOption(args, "--top-k"), 1, 1_000);
+const reasoningEffort = normalizeStandardReasoningEffort(readOption(args, "--reasoning-effort"));
+const reasoningStrength = normalizeTemplateReasoningStrength(
+  readOption(args, "--reasoning-strength")
+);
 const reasoningBudget = optionalBoundedInteger(
   readOption(args, "--reasoning-budget"),
   0,
   8192
 );
-const workspaceReasoningEffort = normalizeReasoningEffort(
+const requestedWorkspaceReasoningEffort = normalizeStandardReasoningEffort(
   readOption(args, "--workspace-reasoning-effort")
-) || reasoningEffort;
+);
+const requestedWorkspaceReasoningStrength = normalizeTemplateReasoningStrength(
+  readOption(args, "--workspace-reasoning-strength")
+);
+const workspaceReasoningEffort = requestedWorkspaceReasoningEffort ||
+  (requestedWorkspaceReasoningStrength ? null : reasoningEffort);
+const workspaceReasoningStrength = requestedWorkspaceReasoningStrength ||
+  (requestedWorkspaceReasoningEffort ? null : reasoningStrength);
 const workspaceReasoningBudget = optionalBoundedInteger(
   readOption(args, "--workspace-reasoning-budget"),
   0,
@@ -58,12 +84,27 @@ const workspaceMaxRepairs = boundedInteger(
   3,
   1
 );
+openAiChatReasoningFields({ reasoningEffort, reasoningStrength, reasoningBudgetTokens: reasoningBudget });
+openAiChatReasoningFields({
+  reasoningEffort: workspaceReasoningEffort,
+  reasoningStrength: workspaceReasoningStrength,
+  reasoningBudgetTokens: workspaceReasoningBudget
+});
+if ((reasoningStrength || workspaceReasoningStrength) && protocol !== "openai") {
+  throw new Error("--reasoning-strength requires --protocol openai");
+}
 
 if (!model) {
   console.error(
     "Usage: npm run benchmark:integration -- MODEL [--arm baseline|elicited|workspace|all] " +
-    "[--protocol ollama|openai] [--url URL] [--reasoning-effort none|low|medium|high] " +
-    "[--reasoning-budget N] [--workspace-reasoning-effort none|low|medium|high] " +
+    "[--protocol ollama|openai] [--url URL] [--reasoning-effort none|low|medium|high|max] " +
+    "[--temperature 0-2] [--top-p 0.01-1] [--top-k N] " +
+    "[--reasoning-strength low|medium|high|xhigh] " +
+    "[--reasoning-budget N] [--workspace-reasoning-effort none|low|medium|high|max] " +
+    "[--workspace-reasoning-strength low|medium|high|xhigh] " +
+    "[--treatment NAME] [--hardware-profile NAME] " +
+    "[--runtime-revision REV] [--artifact-sha256 SHA256] " +
+    "[--power-source SOURCE] [--run-state STATE] " +
     "[--workspace-reasoning-budget N] [--workspace-max-tokens N] [--workspace-max-repairs N] " +
     "[--atomic-repetitions N] [--atomic-pass-threshold 0.5-1] " +
     "[--only ID,...] [--output REPORT.json]"
@@ -126,6 +167,7 @@ for (const testCase of selectedCases) {
   if (["workspace", "all"].includes(arm)) {
     const workspaceRequestOptions = {
       reasoningEffort: workspaceReasoningEffort,
+      reasoningStrength: workspaceReasoningStrength,
       reasoningBudget: workspaceReasoningBudget,
       maxTokens: workspaceMaxTokens,
       responseFormat: workspaceResponseFormat()
@@ -208,16 +250,25 @@ const report = {
   endpoint: baseUrl,
   protocol,
   arm,
+  experimental_identity: experimentalIdentity,
   configuration: {
     context_length: contextLength,
     max_tokens: maxTokens,
+    temperature,
+    top_p: topP,
+    top_k: topK,
     reasoning_effort: reasoningEffort,
+    reasoning_strength: reasoningStrength,
     reasoning_budget_tokens: reasoningBudget,
     workspace_max_tokens: workspaceMaxTokens,
     workspace_reasoning_effort: workspaceReasoningEffort,
+    workspace_reasoning_strength: workspaceReasoningStrength,
     workspace_reasoning_budget_tokens: workspaceReasoningBudget,
     workspace_max_repairs: workspaceMaxRepairs,
-    openai_reasoning_effort_forwarded_to_chat_template: protocol === "openai",
+    openai_reasoning_effort_forwarded_to_chat_template:
+      protocol === "openai" && Boolean(reasoningEffort),
+    openai_reasoning_strength_forwarded_to_chat_template:
+      protocol === "openai" && Boolean(reasoningStrength),
     workspace_json_schema_constrained: protocol === "openai",
     atomic_repetitions: atomicRepetitions,
     atomic_pass_threshold: atomicPassThreshold,
@@ -269,19 +320,26 @@ async function runAtomicProbes(testCase) {
 async function chat(prompt, overrides = {}) {
   const started = performance.now();
   const requestMaxTokens = overrides.maxTokens ?? maxTokens;
-  const requestReasoningEffort = overrides.reasoningEffort ?? reasoningEffort;
+  const requestReasoningEffort = Object.hasOwn(overrides, "reasoningEffort")
+    ? overrides.reasoningEffort
+    : reasoningEffort;
+  const requestReasoningStrength = Object.hasOwn(overrides, "reasoningStrength")
+    ? overrides.reasoningStrength
+    : reasoningStrength;
   const requestReasoningBudget = overrides.reasoningBudget ?? reasoningBudget;
   const endpoint = `${baseUrl.replace(/\/$/, "")}${protocol === "openai" ? "/v1/chat/completions" : "/api/chat"}`;
   const body = protocol === "openai" ? {
     model,
     messages: [{ role: "user", content: prompt }],
-    temperature: 0,
+    temperature,
+    top_p: topP ?? undefined,
+    top_k: topK ?? undefined,
     max_tokens: requestMaxTokens,
-    reasoning_effort: requestReasoningEffort || undefined,
-    reasoning_budget_tokens: requestReasoningBudget ?? undefined,
-    chat_template_kwargs: requestReasoningEffort && requestReasoningEffort !== "none"
-      ? { reasoning_effort: requestReasoningEffort }
-      : undefined,
+    ...openAiChatReasoningFields({
+      reasoningEffort: requestReasoningEffort,
+      reasoningStrength: requestReasoningStrength,
+      reasoningBudgetTokens: requestReasoningBudget
+    }),
     response_format: overrides.responseFormat,
     stream: false
   } : {
@@ -289,7 +347,13 @@ async function chat(prompt, overrides = {}) {
     messages: [{ role: "user", content: prompt }],
     stream: false,
     think: Boolean(requestReasoningEffort && requestReasoningEffort !== "none"),
-    options: { temperature: 0, num_ctx: contextLength, num_predict: requestMaxTokens }
+    options: {
+      temperature,
+      top_p: topP ?? undefined,
+      top_k: topK ?? undefined,
+      num_ctx: contextLength,
+      num_predict: requestMaxTokens
+    }
   };
   const payload = await postJson(endpoint, body, timeoutMs);
   const choice = protocol === "openai" ? payload?.choices?.[0] : null;
@@ -362,9 +426,13 @@ function optionNames() {
   return [
     "--suite", "--url", "--protocol", "--arm", "--output", "--only",
     "--request-timeout-seconds", "--max-tokens", "--context",
+    "--temperature", "--top-p", "--top-k",
     "--reasoning-effort", "--reasoning-budget", "--workspace-reasoning-effort",
+    "--reasoning-strength", "--workspace-reasoning-strength",
     "--workspace-reasoning-budget", "--workspace-max-tokens", "--workspace-max-repairs",
-    "--atomic-repetitions", "--atomic-pass-threshold"
+    "--atomic-repetitions", "--atomic-pass-threshold",
+    "--treatment", "--hardware-profile", "--runtime-revision", "--artifact-sha256",
+    "--power-source", "--run-state"
   ];
 }
 
@@ -394,6 +462,29 @@ function optionalBoundedInteger(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
+function optionalBoundedNumber(value, minimum, maximum) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Expected a number between ${minimum} and ${maximum}, received: ${value}`);
+  }
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+function optionalText(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function optionalSha256(value) {
+  const normalized = optionalText(value);
+  if (!normalized) return null;
+  if (!/^[a-f0-9]{64}$/i.test(normalized)) {
+    throw new Error(`Expected a 64-character SHA-256 digest, received: ${value}`);
+  }
+  return normalized.toLowerCase();
+}
+
 function normalizeProtocol(value) {
   const normalized = String(value).toLowerCase();
   if (["ollama", "openai"].includes(normalized)) return normalized;
@@ -405,13 +496,6 @@ function normalizeArm(value) {
   if (normalized === "assisted") return "elicited";
   if (["baseline", "elicited", "workspace", "all"].includes(normalized)) return normalized;
   throw new Error(`Unsupported arm: ${value}`);
-}
-
-function normalizeReasoningEffort(value) {
-  if (value === undefined || value === null || value === "") return null;
-  const normalized = String(value).trim().toLowerCase();
-  if (["none", "low", "medium", "high"].includes(normalized)) return normalized;
-  throw new Error(`Unsupported reasoning effort: ${value}`);
 }
 
 function workspaceResponseFormat() {

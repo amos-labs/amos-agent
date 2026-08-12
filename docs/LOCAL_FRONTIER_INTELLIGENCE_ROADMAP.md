@@ -204,6 +204,31 @@ adapter or controller to reproduce useful activation and reconciliation steps
 with fewer inference passes. Compare against the explicit engine on held-out
 domains and workflow versions.
 
+The first two compact-model treatments now constrain this stage. Rank-16 v0.1
+learned its narrow generator but catastrophically regressed broader capability.
+Rank-8 v0.2 added 50% capability replay and improved a newly sealed suite from
+16/40 to 20/40 at step 150, but scored only raw 8/32 with two critical failures
+on the independent original suite. It learned bounded tool, authority, causal,
+and exact-grounding patterns; it did not acquire reliable correlated arithmetic,
+schedule search, executable algorithms, or complete long-flow synthesis.
+
+Stage B2 therefore proceeds only after an integration-first v0.3 produces
+verified multi-turn successes:
+
+1. route probability arithmetic and bounded planning into deterministic local
+   calculators or solvers;
+2. run code through generate, execute, diagnose, and repair rather than judging
+   one-shot source text;
+3. derive mandatory receipt fields from schemas and tool results before any
+   optional natural-language summary; and
+4. distill those successful engine traces while retaining broad replay and two
+   independent evaluation suites.
+
+The kill criterion is now system-level: no treatment advances unless it gains
+on both independent suites, has no critical receipt failure, improves
+executable code after one repair turn, and recovers base decode speed after
+adapter merge.
+
 ### Stage B3 — learned latent prediction
 
 Only after B1 identifies repeated failures or excessive scaffolding cost,
@@ -217,6 +242,69 @@ prototype a JEPA-inspired module. Candidate objectives include:
 
 The learned predictor is a planning and consistency component. It is not
 memory, authorization, proof, or a replacement for the language/tool model.
+
+## Track C: AMOS compact local model
+
+The primary product path is a purpose-trained 8–14B AMOS student that fits as a
+resident model on a physical 16 GB Apple Silicon Mac. Muse Glimmer 30B becomes
+its teacher, local reviewer, and fallback rather than the default interactive
+worker. A qualified frontier model remains the final escalation lane.
+
+The first deployment target is approximately 7 GB at four-bit precision with
+an 8 GB artifact ceiling, at least 8K context, no critical memory pressure, no
+more than 1 GB swap growth during qualification, and at least 10 sustained
+decode tokens/second on the physical 16 GB host. The product target is 15
+tokens/second while retaining the frozen workflow contract.
+
+Two construction strategies race:
+
+1. distill verified AMOS trajectories into a runtime-native model with mature
+   training, Metal, `llama.cpp`, and GGUF support; and
+2. create a structurally reduced Muse student through layer or width reduction
+   plus representation, logit, trajectory, and outcome distillation.
+
+The runtime-native arm is the default. The Muse-derived arm proceeds only if
+its training and export spike avoids custom-kernel debt and early checkpoints
+beat the runtime-native arm at equal artifact size.
+
+The training corpus is governed by an executable contract. Synthetic examples
+contain no customer data. Product-derived records are disabled unless the
+compiler is explicitly authorized and every record is minimized and tied to a
+training-consent receipt. Teacher agreement alone cannot create a gold record;
+deterministic, executable, or human verification is required. Entire scenario
+families belong to one split so surface variants cannot leak into evaluation.
+
+The first base race selected Ministral 3 8B for v0. On the M1 Max its official
+5.20 GB Q4_K_M artifact sustained 28.29 decode tok/s, used 1,128 output tokens
+on the frozen suite, and scored adjudicated 20/32. Qwen 3.5 9B decoded at 24.74
+tok/s but its production-shaped arm scored adjudicated 18/32, failed both
+critical tool flows, used 4,719 output tokens, and took 256.38 seconds. Qwen is
+retained as a secondary capability/teacher arm, not the initial deployment
+base.
+
+Ministral then passed a local QLoRA architecture spike with a 6.84 GB training
+peak and a reloadable 89.2 MB adapter. This is a toolchain proof, not a tuned
+candidate. The corpus gate now passes with 1,000 verified synthetic training
+records and 200 validation records across 600 split-isolated families. Its
+registered mix includes authority/idempotency, deterministic constraints,
+tool recovery/evidence, executable code/repair, and abstention/escalation.
+
+The training path also passed a tool-aware QLoRA smoke. The adapter explicitly
+injects row-level tool definitions into Ministral's native template and rejects
+any render missing available-tool, tool-call, or tool-result markers. Four tool
+trajectories trained for two steps at a 9.84 GB peak. Neither corpus size nor a
+falling two-step loss establishes product quality.
+
+The subsequent rank-16 pilot proved that distinction. It reached 34/36 exact
+on unseen synthetic families and reduced held-out loss from 1.133 to 0.023,
+but step 200 scored only 12/32 after conservative frozen-suite adjudication and
+step 600 fell to 6/32. Both trail the unadapted base at 20/32, and critical
+receipt/tool failures remain. Rank 32 is cancelled. The next treatment reduces
+rank, rate, and steps; mixes 50% broad verified capability replay with targeted
+AMOS trajectories; adds harder probability, causality, scheduling, algorithm,
+event-reconciliation, and receipt-grounding families; and selects checkpoints
+on behavioral retention as well as target lift. Since frozen v1 has now
+informed the redesign, v0.2 also requires a newly sealed evaluation suite.
 
 ## Combined experiments
 
@@ -257,15 +345,21 @@ result and redirects the next experiment.
 
 ## Immediate execution backlog
 
-1. Land the benchmark schema, deterministic evaluator, and first diagnostic
-   fixtures.
-2. Run baseline and explicit-integration arms on GPT-OSS 20B.
-3. Audit cases where all atomic probes pass but synthesis fails.
-4. Expand to 50 cases using those observed failure modes, not generated volume
-   alone.
-5. Run the same frozen cases through ExpertCache 120B and a frontier control.
-6. In parallel, implement the registered 20B-draft/120B-verify experiment in
-   ExpertCache.
+1. Replace the brittle exact-substring rationale checks in a new paired-suite
+   version, then expand it with observed failures and untouched holdouts.
+2. Build consent-safe shortest-correct Muse trajectories for the routine and
+   bounded-balanced AMOS lanes, including tool recovery and escalation.
+3. Measure base, deterministic-tool, elicited-note, and explicit-workspace arms
+   only on repeatable local failure families.
+4. Build the v0.2 capability-preserving mix and a new sealed suite, then train
+   a lower-pressure rank-8 treatment with 50-step behavioral checkpoints.
+   Promote no checkpoint that regresses the separate preservation suite, even
+   if target loss improves. Keep Muse-derived training as a challenger, not
+   the critical path.
+5. Re-run the quantized adapted model against the frozen Sonnet and Haiku
+   controls with quality, output-token, latency, and critical-safety gates.
+6. Continue the registered ExpertCache 120B speed experiments independently;
+   do not transfer sparse-expert cache mechanisms to dense Muse.
 7. Select the first AMOS shadow workflows only after the benchmark identifies
    a repeatable lift and cost envelope.
 

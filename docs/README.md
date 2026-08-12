@@ -25,6 +25,7 @@
 
 - [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Local frontier intelligence research roadmap](LOCAL_FRONTIER_INTELLIGENCE_ROADMAP.md)
+- [Muse Glimmer 30B qualification plan](MUSE_GLIMMER_QUALIFICATION.md)
 - [Knowledge integration experimental results](KNOWLEDGE_INTEGRATION_RESULTS.md)
 - [ExpertCache research boundary](EXPERTCACHE.md)
 - [AMOS model program](AMOS_MODEL_PROGRAM.md)

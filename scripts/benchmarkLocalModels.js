@@ -4,6 +4,11 @@ import http from "node:http";
 import https from "node:https";
 import vm from "node:vm";
 import { performance } from "node:perf_hooks";
+import {
+  normalizeStandardReasoningEffort,
+  normalizeTemplateReasoningStrength,
+  openAiChatReasoningFields
+} from "../src/model/openAiChatReasoning.js";
 
 const args = process.argv.slice(2);
 const models = readModels(args);
@@ -25,6 +30,14 @@ const protocol = normalizeProtocol(
     "ollama"
 );
 const output = readOption(args, "--output");
+const experimentalIdentity = {
+  treatment: optionalText(readOption(args, "--treatment")),
+  hardware_profile: optionalText(readOption(args, "--hardware-profile")),
+  runtime_revision: optionalText(readOption(args, "--runtime-revision")),
+  artifact_sha256: optionalSha256(readOption(args, "--artifact-sha256")),
+  power_source: optionalText(readOption(args, "--power-source")),
+  run_state: optionalText(readOption(args, "--run-state"))
+};
 const requestTimeoutSeconds = boundedInteger(
   readOption(args, "--request-timeout-seconds") ||
     process.env.AMOS_LOCAL_BENCHMARK_REQUEST_TIMEOUT_SECONDS,
@@ -38,10 +51,24 @@ const maxTokens = boundedInteger(
   4_096,
   768
 );
-const reasoningEffort = normalizeReasoningEffort(
+const temperature = boundedNumber(readOption(args, "--temperature"), 0, 2, 0);
+const topP = optionalBoundedNumber(readOption(args, "--top-p"), 0.01, 1);
+const topK = optionalBoundedInteger(readOption(args, "--top-k"), 1, 1_000);
+const reasoningEffort = normalizeStandardReasoningEffort(
   readOption(args, "--reasoning-effort") ||
     process.env.AMOS_LOCAL_BENCHMARK_REASONING_EFFORT
 );
+const reasoningStrength = normalizeTemplateReasoningStrength(
+  readOption(args, "--reasoning-strength") ||
+    process.env.AMOS_LOCAL_BENCHMARK_REASONING_STRENGTH
+);
+const reasoningFields = openAiChatReasoningFields({
+  reasoningEffort,
+  reasoningStrength
+});
+if (reasoningStrength && protocol !== "openai") {
+  throw new Error("--reasoning-strength requires --protocol openai");
+}
 const onlyScenarios = new Set(
   (readOption(args, "--only") || process.env.AMOS_LOCAL_BENCHMARK_ONLY || "")
     .split(",")
@@ -54,7 +81,12 @@ if (models.length === 0) {
     "Usage: npm run benchmark:local -- <model> [model...] " +
     "[--suite smoke|qualification|all] [--url URL] [--context TOKENS] " +
     "[--request-timeout-seconds SECONDS] [--max-tokens TOKENS] " +
-    "[--reasoning-effort low|medium|high] " +
+    "[--temperature 0-2] [--top-p 0.01-1] [--top-k N] " +
+    "[--reasoning-effort none|low|medium|high|max] " +
+    "[--reasoning-strength low|medium|high|xhigh] " +
+    "[--treatment NAME] [--hardware-profile NAME] " +
+    "[--runtime-revision REV] [--artifact-sha256 SHA256] " +
+    "[--power-source SOURCE] [--run-state STATE] " +
     "[--protocol ollama|openai] [--only SCENARIO,...] [--output REPORT.json]"
   );
   process.exit(2);
@@ -90,7 +122,12 @@ if (output) {
     suite,
     context_length: contextLength,
     max_tokens: maxTokens,
+    temperature,
+    top_p: topP,
+    top_k: topK,
     reasoning_effort: reasoningEffort,
+    reasoning_strength: reasoningStrength,
+    experimental_identity: experimentalIdentity,
     only_scenarios: onlyScenarios.size > 0 ? [...onlyScenarios] : null,
     results
   }, null, 2)}\n`);
@@ -594,12 +631,11 @@ async function chat(model, messages, tools = []) {
     messages,
     tools: tools.length > 0 ? tools : undefined,
     stream: false,
-    temperature: 0,
+    temperature,
+    top_p: topP ?? undefined,
+    top_k: topK ?? undefined,
     max_tokens: maxTokens,
-    reasoning_effort: reasoningEffort || undefined,
-    chat_template_kwargs: reasoningEffort
-      ? { reasoning_effort: reasoningEffort }
-      : undefined
+    ...reasoningFields
   } : {
     model,
     messages,
@@ -607,7 +643,9 @@ async function chat(model, messages, tools = []) {
     stream: false,
     think: false,
     options: {
-      temperature: 0,
+      temperature,
+      top_p: topP ?? undefined,
+      top_k: topK ?? undefined,
       num_ctx: contextLength,
       num_predict: maxTokens
     }
@@ -682,9 +720,19 @@ function isOptionWithValue(value) {
     "--protocol",
     "--only",
     "--max-tokens",
+    "--temperature",
+    "--top-p",
+    "--top-k",
     "--reasoning-effort",
+    "--reasoning-strength",
     "--request-timeout-seconds",
-    "--output"
+    "--output",
+    "--treatment",
+    "--hardware-profile",
+    "--runtime-revision",
+    "--artifact-sha256",
+    "--power-source",
+    "--run-state"
   ].includes(value);
 }
 
@@ -741,6 +789,44 @@ function boundedInteger(value, minimum, maximum, fallback) {
   return Math.min(maximum, Math.max(minimum, parsed));
 }
 
+function boundedNumber(value, minimum, maximum, fallback) {
+  if (value === undefined || value === null || String(value).trim() === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+}
+
+function optionalBoundedInteger(value, minimum, maximum) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`Expected an integer between ${minimum} and ${maximum}, received: ${value}`);
+  }
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+function optionalBoundedNumber(value, minimum, maximum) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`Expected a number between ${minimum} and ${maximum}, received: ${value}`);
+  }
+  return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+function optionalText(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function optionalSha256(value) {
+  const normalized = optionalText(value);
+  if (!normalized) return null;
+  if (!/^[a-f0-9]{64}$/i.test(normalized)) {
+    throw new Error(`Expected a 64-character SHA-256 digest, received: ${value}`);
+  }
+  return normalized.toLowerCase();
+}
+
 function normalizeSuite(value) {
   const normalized = String(value || "").trim().toLowerCase();
   if (["smoke", "qualification", "all"].includes(normalized)) return normalized;
@@ -753,12 +839,6 @@ function normalizeProtocol(value) {
   throw new Error(`Unknown benchmark protocol: ${value}`);
 }
 
-function normalizeReasoningEffort(value) {
-  if (value === undefined || value === null || value === "") return null;
-  const normalized = String(value).trim().toLowerCase();
-  if (["low", "medium", "high"].includes(normalized)) return normalized;
-  throw new Error(`Unsupported reasoning effort: ${value}`);
-}
 
 function normalizedText(value) {
   return String(value || "")

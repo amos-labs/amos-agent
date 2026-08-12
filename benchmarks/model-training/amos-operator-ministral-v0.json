@@ -1,0 +1,218 @@
+{
+  "schema": "amos.local-student-training-plan",
+  "version": 1,
+  "status": "pilot_v02_rejected_for_production_partial_research_success",
+  "student": {
+    "name": "AMOS Operator Local v0",
+    "base_model": "mistralai/Ministral-3-8B-Instruct-2512",
+    "training_checkpoint": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+    "training_checkpoint_revision": "182f003f01daa75f9de0f2c4d379722fd0bc1c61",
+    "deployment_format": "GGUF Q4_K_M",
+    "vision_training": false
+  },
+  "frozen_evaluation_exclusions": [
+    {
+      "path": "benchmarks/muse-sonnet-paired-v1.json",
+      "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+      "rule": "Never copy prompts, values, answers, or code solutions into training or validation. Train only analogous skills in isolated synthetic families."
+    },
+    {
+      "path": "benchmarks/amos-operator-preservation-v2.json",
+      "sha256": "41d09dad0f44247f804d8fffb3cb36df6f7e7e42ccacfe90c25dc5dc789ab078",
+      "rule": "Frozen before v0.2 training data generation. Never copy prompts, values, answers, tool sequences, or code solutions into training or validation."
+    }
+  ],
+  "compatibility_spike": {
+    "date": "2026-08-12",
+    "framework": "mlx-vlm 0.6.12",
+    "mlx": "0.32.0",
+    "fine_tune_type": "QLoRA",
+    "trainable_parameters": 22282240,
+    "trainable_parameter_percent": 0.25,
+    "rank": 8,
+    "alpha": 16,
+    "learning_rate": 0.0001,
+    "batch_size": 1,
+    "iterations": 2,
+    "max_sequence_length": 512,
+    "completion_only_loss": true,
+    "verified_text_trajectories": 3,
+    "dataset_sha256": "25586b0c7f5a198defd9ce98174939cc76640ed6756cf6d77d4f96e1c451a55f",
+    "first_loss": 5.21423912,
+    "second_loss": 2.92076135,
+    "peak_memory_gb": 6.84,
+    "adapter_bytes": 89187578,
+    "adapter_sha256": "f14dcaf053702db9d5b07d761c6a75fd060a4f0783b138fc2627121694c222a8",
+    "adapter_reload": "passed",
+    "reload_peak_memory_gb": 6.079,
+    "reload_generation_tokens_per_second": 29.337,
+    "quality_claim": false
+  },
+  "verified_pilot_corpus": {
+    "date": "2026-08-12",
+    "generator": "src/research/syntheticDistillationPilot.js",
+    "seed": "amos-operator-pilot-v1",
+    "trajectories": 1200,
+    "train": 1000,
+    "validation": 200,
+    "families": 600,
+    "variants_per_family": 2,
+    "whole_family_split_isolation": true,
+    "synthetic_customer_records": 0,
+    "tool_trajectories": 660,
+    "executable_trajectories": 180,
+    "code_repair_trajectories": 90,
+    "sha256": "e91df542b734f363dd1abbd02cd5d2e08eb1c3efae248d19fe9a0d7eefabfe95",
+    "target_mix": {
+      "authority_receipts_and_idempotency": 0.25,
+      "deterministic_math_and_constraint_checking": 0.25,
+      "tool_recovery_and_evidence_reconciliation": 0.2,
+      "executable_code_and_repair": 0.15,
+      "causal_abstention_and_escalation": 0.15
+    },
+    "reproduction_command": "npm run dataset:synthetic -- --profile pilot --output /private/tmp/amos-operator-pilot.json",
+    "quality_scope": "Deterministically or executably verified synthetic AMOS behaviors. Count and structure gates pass; adaptation quality remains unmeasured."
+  },
+  "tool_aware_compatibility_spike": {
+    "date": "2026-08-12",
+    "framework": "mlx-vlm 0.6.12",
+    "adapter": "scripts/trainMinistralStudent.py",
+    "verified_tool_trajectories": 4,
+    "tool_calls": 4,
+    "tool_results": 4,
+    "native_template_markers": [
+      "[AVAILABLE_TOOLS]",
+      "[TOOL_CALLS]",
+      "[TOOL_RESULTS]"
+    ],
+    "iterations": 2,
+    "rank": 8,
+    "alpha": 16,
+    "learning_rate": 0.0001,
+    "max_sequence_length": 512,
+    "completion_only_loss": true,
+    "assistant_span_policy": "all assistant turns, including tool calls",
+    "first_loss": 1.07893836,
+    "second_loss": 0.40179074,
+    "first_validation_loss": 1.064,
+    "second_validation_loss": 0.352,
+    "peak_memory_gb": 9.843,
+    "dataset_bytes": 4978,
+    "dataset_sha256": "cebf63cda8086c6848e9e3d33b74665cd16b12ab061d0ac61f57ecaa0b62d715",
+    "adapter_bytes": 89187578,
+    "adapter_sha256": "6c9093eb784e7f02b71f858e47444f348664f2f3f660514a144e0a4c16cc77b3",
+    "quality_claim": false
+  },
+  "rank16_pilot_v01": {
+    "status": "rejected",
+    "evidence": "evidence/amos-operator-local-2026-08-12/ministral-r16-pilot-v01.json",
+    "trained_tokens": 200562,
+    "peak_memory_gb": 11.468,
+    "best_synthetic_validation_loss": 0.023,
+    "held_out_synthetic_exact": "34/36",
+    "frozen_suite_step200_raw": "6/32",
+    "frozen_suite_step200_conservative_adjudicated": "12/32",
+    "frozen_suite_step600_raw": "0/32",
+    "frozen_suite_step600_conservative_adjudicated": "6/32",
+    "pre_adaptation_frozen_adjudicated": "20/32",
+    "rank32_decision": "cancelled",
+    "finding": "Synthetic validation alone selected a checkpoint that catastrophically narrowed broader capability."
+  },
+  "pilot_v02": {
+    "status": "rejected_for_production_partial_research_success",
+    "adaptation_pressure": {
+      "rank": 8,
+      "alpha": 16,
+      "learning_rate": 0.00001,
+      "checkpoint_interval": 50,
+      "maximum_initial_steps": 300
+    },
+    "data_mix": {
+      "broad_verified_capability_replay": 0.5,
+      "amos_tool_and_authority_trajectories": 0.25,
+      "hard_algorithmic_code_and_repair": 0.15,
+      "receipt_grounding_and_exact_value_copy": 0.1
+    },
+    "required_new_families": [
+      "correlated evidence and Bayesian inference",
+      "selection bias, causal graphs, and Simpson aggregation",
+      "deadline scheduling and bounded optimization",
+      "graph dependency and combinatorial optimization code",
+      "unordered event reconciliation and conflict handling",
+      "multi-step tool recovery with complete final receipts",
+      "multi-digit argument preservation and result-grounded arithmetic"
+    ],
+    "selection_rule": "A checkpoint must improve held-out target outcomes and retain the base on a separate capability-preservation suite. Loss alone cannot select a checkpoint.",
+    "verified_corpus": {
+      "generator": "src/research/syntheticDistillationRetention.js",
+      "trajectories": 2400,
+      "train": 2000,
+      "validation": 400,
+      "families": 1200,
+      "canonical_identity_sha256": "4480c9b945369c2aab6889987ea989992a34dc9416153c911a19ce0800af298d"
+    },
+    "result": {
+      "evidence": "evidence/amos-operator-local-2026-08-12/ministral-r8-pilot-v02.json",
+      "trained_tokens": 78382,
+      "peak_memory_gb": 13.018,
+      "selected_checkpoint": 150,
+      "selected_adapter_sha256": "5788ae48ec93d0b427cbfa9c283fc78829ffe9ab80bdf7472923ec45eb9ed20c",
+      "sealed_v2_base": "16/40",
+      "sealed_v2_step150": "20/40",
+      "sealed_v2_step150_critical_failures": 0,
+      "sealed_v2_step300": "18/40",
+      "original_v1_step150_raw": "8/32",
+      "original_v1_step150_critical_failures": 2,
+      "held_out_exact": "21/39",
+      "decision": "Do not promote or export. Continue through an integration-first treatment."
+    },
+    "new_sealed_evaluation_required": false
+  },
+  "pilot_v03": {
+    "status": "planned_integration_first",
+    "architecture": {
+      "correlated_math": "Local deterministic probability/calculation tool; the model supplies structure and reports checked values.",
+      "scheduling_and_optimization": "Bounded local solver with a machine-checkable plan receipt.",
+      "code": "Generate, execute tests in a sandbox, return structured failures, and repair before accepting output.",
+      "tool_receipts": "Render required material fields from a schema before optional natural-language compression.",
+      "training": "Distill only verified multi-turn engine trajectories, while retaining broad base replay and independent sealed suites."
+    },
+    "kill_criteria": [
+      "No improvement on both independent suites",
+      "Any critical receipt or false-execution failure",
+      "No executable-code gain after one repair turn",
+      "Merged inference cannot recover the base model's local decode rate"
+    ]
+  },
+  "pilot": {
+    "name": "v0.1 shortest-correct SFT",
+    "minimum_verified_train_trajectories": 1000,
+    "minimum_verified_validation_trajectories": 200,
+    "whole_family_split_isolation": true,
+    "target_mix": {
+      "authority_receipts_and_idempotency": 0.25,
+      "deterministic_math_and_constraint_checking": 0.25,
+      "tool_recovery_and_evidence_reconciliation": 0.2,
+      "executable_code_and_repair": 0.15,
+      "causal_abstention_and_escalation": 0.15
+    },
+    "treatments": [
+      { "rank": 16, "alpha": 32, "learning_rate": 0.00005 },
+      { "rank": 32, "alpha": 64, "learning_rate": 0.00005 }
+    ],
+    "selection_metric": "verified held-out outcome per generated token",
+    "must_not_regress": [
+      "exact tool order and arguments",
+      "receipt-complete final reports",
+      "no false execution",
+      "required escalation",
+      "base behaviors already correct on the frozen suite"
+    ]
+  },
+  "promotion_gates": [
+    "adjudicated frozen-suite score improves without a critical contract failure",
+    "held-out synthetic families improve over the unadapted base",
+    "adapter merge and GGUF conversion preserve the measured gain",
+    "exact deployment artifact passes the physical 16GB memory, swap, context, and speed gate"
+  ]
+}

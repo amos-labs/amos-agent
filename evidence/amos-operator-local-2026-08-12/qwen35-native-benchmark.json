@@ -1,0 +1,45 @@
+{
+  "schema": "amos.local-model-native-benchmark",
+  "version": 1,
+  "created_at": "2026-08-12T14:09:26Z",
+  "hardware": {
+    "cpu": "Apple M1 Max",
+    "gpu": "Apple M1 Max",
+    "unified_memory_gib": 64,
+    "power": "AC"
+  },
+  "runtime": {
+    "name": "llama.cpp",
+    "build_commit": "f8def7fe168bab245fbf15d3f18b26dbb1ef73c8",
+    "build_number": 10353,
+    "backends": ["Metal", "Accelerate"],
+    "load_mode": "mmap"
+  },
+  "model": {
+    "base_repository": "Qwen/Qwen3.5-9B",
+    "quant_repository": "openresearchtools/Qwen3.5-9B-GGUF",
+    "filename": "Qwen3.5-9B-Q4_K_M.gguf",
+    "artifact_bytes": 5629109056,
+    "loaded_model_bytes": 5618141184,
+    "parameters": 8953803264,
+    "sha256": "148ffb97ac1d4cbbaef95ff36dbc02948b9c25746d6df3bc86533b859060380a"
+  },
+  "treatments": [
+    {
+      "prompt_tokens": 512,
+      "generated_tokens": 0,
+      "repetitions": 3,
+      "average_tokens_per_second": 312.928584,
+      "standard_deviation": 142.550758,
+      "samples_tokens_per_second": [428.106, 153.5, 357.179]
+    },
+    {
+      "prompt_tokens": 0,
+      "generated_tokens": 128,
+      "repetitions": 3,
+      "average_tokens_per_second": 24.737314,
+      "standard_deviation": 0.568378,
+      "samples_tokens_per_second": [24.8287, 25.2545, 24.1288]
+    }
+  ]
+}

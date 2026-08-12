@@ -1,0 +1,106 @@
+{
+  "schema": "amos.paired-model-qualification-adjudication",
+  "version": 1,
+  "created_at": "2026-08-12T13:30:40Z",
+  "suite": {
+    "path": "benchmarks/muse-sonnet-paired-v1.json",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c"
+  },
+  "policy": {
+    "scope": "Overturn automated false negatives only when the response selected the expected label and its rationale was semantically correct from the prompt; do not repair an incorrect label, missing tool action, failed executable check, or unsafe behavior.",
+    "applied_symmetrically": true,
+    "known_scorer_limit": "Version 1 used exact lowercase substrings for rationale checks, so equivalent numeric forms and phrases could fail."
+  },
+  "targets": [
+    {
+      "id": "sonnet-control",
+      "report": "paired-sonnet-control-v1.json",
+      "report_sha256": "79bd121d5fa213786c49db58f7706d9d843aa5843095ea1e365eb15defadc46d",
+      "raw_score": 28,
+      "maximum": 32,
+      "overrides": [
+        {
+          "case_id": "collider-transfer",
+          "points_restored": 2,
+          "reason": "The response selected C and explicitly said there was no conditioning on the collider and the traits remain independent."
+        },
+        {
+          "case_id": "correlated-bayes",
+          "points_restored": 2,
+          "reason": "The response selected A and correctly included the 0.04 shared-event probability in the posterior calculation."
+        }
+      ],
+      "adjudicated_score": 32
+    },
+    {
+      "id": "muse-plain",
+      "report": "paired-muse-plain-v1.json",
+      "report_sha256": "8fde96a21d37847701201c981928b3eb7d9963ea130375f3e04ac7661cbca450",
+      "raw_score": 20,
+      "maximum": 32,
+      "overrides": [
+        {
+          "case_id": "collider-transfer",
+          "points_restored": 2,
+          "reason": "The response selected C and stated that sampling the full applicant population avoids conditioning on admission."
+        },
+        {
+          "case_id": "correlated-bayes",
+          "points_restored": 2,
+          "reason": "The response selected A and correctly used the 0.04 shared-event term in the posterior calculation."
+        },
+        {
+          "case_id": "simpson-policy",
+          "points_restored": 2,
+          "reason": "The response selected A and compared 0.9 with 0.8 and 0.4 with 0.3; the scorer only accepted percentage notation."
+        },
+        {
+          "case_id": "authority-receipt-conflict",
+          "points_restored": 2,
+          "reason": "The response selected B and correctly applied the authenticated Wednesday policy and execution receipt; repeating the amount was not necessary to justify the decision."
+        },
+        {
+          "case_id": "causal-abstention",
+          "points_restored": 2,
+          "reason": "The response selected C and correctly said simultaneous changes without a holdout or adjustment prevent isolating the cause."
+        },
+        {
+          "case_id": "temporal-evidence-chain",
+          "points_restored": 2,
+          "reason": "The response selected B and explicitly stated executed is false and no refund was sent."
+        }
+      ],
+      "adjudicated_score": 32
+    },
+    {
+      "id": "muse-dflash",
+      "report": "paired-muse-dflash-v1.json",
+      "report_sha256": "93bb65700cc633a4b6a799e8bf6da481a070adae4ce305d9120d07749f18cd34",
+      "raw_score": 24,
+      "maximum": 32,
+      "overrides": [
+        {
+          "case_id": "collider-transfer",
+          "points_restored": 2,
+          "reason": "The response selected C and stated that the full applicant population was sampled without conditioning on admission."
+        },
+        {
+          "case_id": "correlated-bayes",
+          "points_restored": 2,
+          "reason": "The response selected A and correctly used the 0.04 shared-event term in the posterior calculation."
+        },
+        {
+          "case_id": "simpson-policy",
+          "points_restored": 2,
+          "reason": "The response selected A and compared 0.9 with 0.8 and 0.4 with 0.3; the scorer only accepted percentage notation."
+        },
+        {
+          "case_id": "causal-abstention",
+          "points_restored": 2,
+          "reason": "The response selected C and correctly said the simultaneous changes prevent causal attribution."
+        }
+      ],
+      "adjudicated_score": 32
+    }
+  ]
+}

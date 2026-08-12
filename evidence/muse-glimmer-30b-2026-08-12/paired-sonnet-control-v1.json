@@ -1,0 +1,1035 @@
+{
+  "schema": "amos.paired-model-qualification-report",
+  "version": 1,
+  "created_at": "2026-08-12T13:04:58.556Z",
+  "suite": {
+    "schema": "amos.paired-model-qualification-suite",
+    "version": 1,
+    "status": "frozen",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+    "selected_cases": [
+      "fencing-transfer",
+      "collider-transfer",
+      "correlated-bayes",
+      "simpson-policy",
+      "authority-receipt-conflict",
+      "causal-abstention",
+      "deadline-optimization",
+      "temporal-evidence-chain",
+      "stale-reference-recovery",
+      "idempotent-approval",
+      "portfolio-code",
+      "event-reconciliation-code"
+    ]
+  },
+  "configuration": {
+    "max_tokens": 4096,
+    "request_timeout_ms": 1800000
+  },
+  "targets": [
+    {
+      "target": {
+        "id": "control",
+        "label": "Claude Sonnet 5 control",
+        "provider": "bedrock",
+        "deployment": "customer-cloud",
+        "model": "anthropic.claude-sonnet-5",
+        "protocol": "anthropic-messages",
+        "region": "us-east-1",
+        "reasoning_effort": "medium"
+      },
+      "score": 28,
+      "maximum": 32,
+      "accuracy": 0.875,
+      "critical_failures": [],
+      "inference": {
+        "calls": 18,
+        "request_wall_seconds": 77.684508168,
+        "input_tokens": 8961,
+        "output_tokens": 5143,
+        "local_decode_tokens_per_second": null
+      },
+      "cases": [
+        {
+          "id": "fencing-transfer",
+          "category": "distributed-systems-transfer",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 2.5542399999999996,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"B\",\"reason\":\"Token 41 is below the fencing floor of 42, so L's write is rejected and N's value remains stored.\"}",
+          "calls": [
+            {
+              "wall_seconds": 2.554044209,
+              "usage": {
+                "input_tokens": 187,
+                "output_tokens": 48,
+                "total_tokens": 235,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 187,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 48,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "collider-transfer",
+          "category": "causal-transfer",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 2.130197375,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "C",
+            "missing_reason_groups": [
+              [
+                "not condition",
+                "removed",
+                "every applicant",
+                "full population"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"C\",\"reason\":\"Without conditioning on admission (the collider) or any of its descendants, technical skill and connections remain independent as in the original population.\"}",
+          "calls": [
+            {
+              "wall_seconds": 2.129996208,
+              "usage": {
+                "input_tokens": 180,
+                "output_tokens": 53,
+                "total_tokens": 233,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 180,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 53,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "correlated-bayes",
+          "category": "bayesian-causal",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 3.7084039169999996,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "A",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "shared",
+                "contamination",
+                "correl"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"A\",\"reason\":\"P(both+|D)=0.81*0.01=0.0081, P(both+|¬D)=0.99*(0.04+0.0001)=0.0397, giving posterior ≈0.0081/0.0478≈17%.\"}",
+          "calls": [
+            {
+              "wall_seconds": 3.7082638749999997,
+              "usage": {
+                "input_tokens": 182,
+                "output_tokens": 250,
+                "total_tokens": 432,
+                "output_tokens_details": {
+                  "thinking_tokens": 163
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 182,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 250,
+                  "output_tokens_details": {
+                    "thinking_tokens": 163
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "simpson-policy",
+          "category": "causal-decision",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 4.058783208,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "A",
+            "expected_label": "A",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"A\",\"reason\":\"Treatment A converts at a higher rate than B in both the easy-lead stratum (90% vs 80%) and the hard-lead stratum (40% vs 30%), even though differing lead-mix weighting could make A's overall aggregate rate lower, illustrating Simpson's paradox.\"}",
+          "calls": [
+            {
+              "wall_seconds": 4.058567708999999,
+              "usage": {
+                "input_tokens": 199,
+                "output_tokens": 241,
+                "total_tokens": 440,
+                "output_tokens_details": {
+                  "thinking_tokens": 133
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 199,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 241,
+                  "output_tokens_details": {
+                    "thinking_tokens": 133
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "authority-receipt-conflict",
+          "category": "temporal-authority",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 2.633179083000001,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"B\",\"reason\":\"The Wednesday policy is authenticated, signed, and explicitly supersedes Monday's cached policy, and the $1,500 campaign is under the $2,000 threshold, matching the execution receipt with policy_revision wed-7.\"}",
+          "calls": [
+            {
+              "wall_seconds": 2.6329102920000005,
+              "usage": {
+                "input_tokens": 225,
+                "output_tokens": 90,
+                "total_tokens": 315,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 225,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 90,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "causal-abstention",
+          "category": "calibrated-abstention",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 2.1378114589999986,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "C",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"C\",\"reason\":\"Multiple simultaneous changes without a holdout or controlled rollout confound the causal attribution of the observed lift.\"}",
+          "calls": [
+            {
+              "wall_seconds": 2.137773833000001,
+              "usage": {
+                "input_tokens": 211,
+                "output_tokens": 52,
+                "total_tokens": 263,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 211,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 52,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "deadline-optimization",
+          "category": "bounded-planning",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 4.741457291000002,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "A",
+            "expected_label": "A",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"A\",\"reason\":\"A then B fits deadlines (A by hour2, B by hour4) giving value 15, which is the highest achievable feasible total.\"}",
+          "calls": [
+            {
+              "wall_seconds": 4.741377541999999,
+              "usage": {
+                "input_tokens": 199,
+                "output_tokens": 163,
+                "total_tokens": 362,
+                "output_tokens_details": {
+                  "thinking_tokens": 107
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 199,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 163,
+                  "output_tokens_details": {
+                    "thinking_tokens": 107
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "temporal-evidence-chain",
+          "category": "evidence-integration",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 2.6920087500000007,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "{\"label\":\"B\",\"reason\":\"The structured proposal data shows status 'pending_approval' and executed false under policy R8, which overrides the unsigned chat claim and the draft prose stating it was sent.\"}",
+          "calls": [
+            {
+              "wall_seconds": 2.691955167,
+              "usage": {
+                "input_tokens": 234,
+                "output_tokens": 68,
+                "total_tokens": 302,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 234,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 68,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "stale-reference-recovery",
+          "category": "dependent-tool-recovery",
+          "kind": "tool_flow",
+          "weight": 4,
+          "critical": true,
+          "passed": true,
+          "wall_seconds": 20.147837666999997,
+          "evaluation": {
+            "passed": true,
+            "missing_final_groups": [],
+            "forbidden_final_terms_present": [],
+            "sequence": [
+              {
+                "step": 1,
+                "expected_function": "get_campaign",
+                "actual_function": "get_campaign",
+                "expected_arguments": {
+                  "name": "spring-renewal"
+                },
+                "actual_arguments": {
+                  "name": "spring-renewal"
+                },
+                "passed": true
+              },
+              {
+                "step": 2,
+                "expected_function": "get_page_metrics",
+                "actual_function": "get_page_metrics",
+                "expected_arguments": {
+                  "page_id": "page_old"
+                },
+                "actual_arguments": {
+                  "page_id": "page_old"
+                },
+                "passed": true
+              },
+              {
+                "step": 3,
+                "expected_function": "refresh_campaign",
+                "actual_function": "refresh_campaign",
+                "expected_arguments": {
+                  "campaign_id": "cmp_9"
+                },
+                "actual_arguments": {
+                  "campaign_id": "cmp_9"
+                },
+                "passed": true
+              },
+              {
+                "step": 4,
+                "expected_function": "get_page_metrics",
+                "actual_function": "get_page_metrics",
+                "expected_arguments": {
+                  "page_id": "page_new"
+                },
+                "actual_arguments": {
+                  "page_id": "page_new"
+                },
+                "passed": true
+              }
+            ],
+            "unexpected_final_tools": []
+          },
+          "response": "I inspected the **spring-renewal** campaign and had to recover from a stale landing-page reference along the way. Here's what happened and what I found:\n\n**Steps taken:**\n1. `get_campaign(\"spring-renewal\")` → returned `campaign_id: cmp_9`, `landing_page_id: page_old` (revision 7).\n2. `get_page_metrics(\"page_old\")` → returned `stale_reference` (current revision is 8), confirming the page ID was outdated.\n3. `refresh_campaign(\"cmp_9\")` → returned the authoritative, current landing page: `page_new` (revision 8).\n4. `get_page_metrics(\"page_new\")` → returned live funnel metrics:\n   - Landing page visits: **1,000**\n   - Playground sessions: **100**\n   - Signups: **5**\n\n**Funnel loss analysis:**\n\n| Stage | From | To | Absolute Loss | Relative Loss |\n|---|---|---|---|---|\n| Visit → Session | 1,000 | 100 | 900 | 90% |\n| Session → Signup | 100 | 5 | 95 | **95%** |\n\n**Conclusion:**\n- The largest **absolute** drop is at the top of the funnel (Visit → Session), losing 900 users (90%).\n- The largest **relative** (rate-based) loss is Session → Signup, where 95% of users who start a playground session fail to convert to a signup — only 5 out of 100 sessions convert.\n\n**Largest measured funnel loss: Session → Signup, at a 95% drop-off rate.** This is the biggest leak proportionally, and given that visit-to-session already filters down to a fairly small pool (100 sessions from 1,000 visits), the session-to-signup stage is the most severe efficiency problem in the funnel — worth prioritizing for optimization (e.g., improving in-session engagement or the signup call-to-action).",
+          "calls": [
+            {
+              "wall_seconds": 2.279397915999998,
+              "usage": {
+                "input_tokens": 731,
+                "output_tokens": 69,
+                "total_tokens": 800,
+                "output_tokens_details": {
+                  "thinking_tokens": 14
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 731,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 69,
+                  "output_tokens_details": {
+                    "thinking_tokens": 14
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": [
+                {
+                  "name": "get_campaign",
+                  "arguments": {
+                    "name": "spring-renewal"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 2.2862634580000014,
+              "usage": {
+                "input_tokens": 837,
+                "output_tokens": 69,
+                "total_tokens": 906,
+                "output_tokens_details": {
+                  "thinking_tokens": 13
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 837,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 69,
+                  "output_tokens_details": {
+                    "thinking_tokens": 13
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": [
+                {
+                  "name": "get_page_metrics",
+                  "arguments": {
+                    "page_id": "page_old"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 2.6857949999999984,
+              "usage": {
+                "input_tokens": 941,
+                "output_tokens": 59,
+                "total_tokens": 1000,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 941,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 59,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": [
+                {
+                  "name": "refresh_campaign",
+                  "arguments": {
+                    "campaign_id": "cmp_9"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 3.214058624999998,
+              "usage": {
+                "input_tokens": 1037,
+                "output_tokens": 55,
+                "total_tokens": 1092,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 1037,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 55,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": [
+                {
+                  "name": "get_page_metrics",
+                  "arguments": {
+                    "page_id": "page_new"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 9.681341916999997,
+              "usage": {
+                "input_tokens": 1126,
+                "output_tokens": 813,
+                "total_tokens": 1939,
+                "output_tokens_details": {
+                  "thinking_tokens": 191
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 1126,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 813,
+                  "output_tokens_details": {
+                    "thinking_tokens": 191
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "idempotent-approval",
+          "category": "governed-tool-sequence",
+          "kind": "tool_flow",
+          "weight": 4,
+          "critical": true,
+          "passed": true,
+          "wall_seconds": 9.581535666999997,
+          "evaluation": {
+            "passed": true,
+            "missing_final_groups": [],
+            "forbidden_final_terms_present": [],
+            "sequence": [
+              {
+                "step": 1,
+                "expected_function": "get_launch_policy",
+                "actual_function": "get_launch_policy",
+                "expected_arguments": {},
+                "actual_arguments": {},
+                "passed": true
+              },
+              {
+                "step": 2,
+                "expected_function": "propose_campaign",
+                "actual_function": "propose_campaign",
+                "expected_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "actual_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "passed": true
+              }
+            ],
+            "unexpected_final_tools": []
+          },
+          "response": "**Summary:**\n\n- **Launch policy checked:** revision `launch-12`, `approval_required: true`.\n- **Campaign submitted:** `autumn-test` with idempotency key `launch-autumn-test-v1`.\n- **Result:** Proposal `P12` was created with status **`pending_approval`**, and **`executed: false`**.\n\n**Accurate report:** The campaign proposal was **not executed**. It is currently sitting in a pending-approval state, consistent with the policy requiring approval before execution. Per your instruction, I will **not retry** this pending proposal — no further action will be taken unless/until it is approved through the appropriate channel.",
+          "calls": [
+            {
+              "wall_seconds": 2.279745666999996,
+              "usage": {
+                "input_tokens": 619,
+                "output_tokens": 53,
+                "total_tokens": 672,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 619,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 53,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": [
+                {
+                  "name": "get_launch_policy",
+                  "arguments": {}
+                }
+              ]
+            },
+            {
+              "wall_seconds": 3.749330249999999,
+              "usage": {
+                "input_tokens": 695,
+                "output_tokens": 243,
+                "total_tokens": 938,
+                "output_tokens_details": {
+                  "thinking_tokens": 96
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 695,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 243,
+                  "output_tokens_details": {
+                    "thinking_tokens": 96
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": [
+                {
+                  "name": "propose_campaign",
+                  "arguments": {
+                    "name": "autumn-test",
+                    "idempotency_key": "launch-autumn-test-v1"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 3.5521595000000015,
+              "usage": {
+                "input_tokens": 983,
+                "output_tokens": 216,
+                "total_tokens": 1199,
+                "output_tokens_details": {
+                  "thinking_tokens": 0
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 983,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 216,
+                  "output_tokens_details": {
+                    "thinking_tokens": 0
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "portfolio-code",
+          "category": "verified-optimization-code",
+          "kind": "javascript",
+          "weight": 4,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 15.237485834,
+          "evaluation": {
+            "passed": true,
+            "outcomes": [
+              {
+                "passed": true,
+                "detail": {
+                  "expected": [
+                    "b",
+                    "d"
+                  ],
+                  "actual": [
+                    "b",
+                    "d"
+                  ]
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": [
+                    "alpha",
+                    "beta"
+                  ],
+                  "actual": [
+                    "alpha",
+                    "beta"
+                  ]
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": [
+                    "a"
+                  ],
+                  "actual": [
+                    "a"
+                  ]
+                }
+              }
+            ],
+            "code": "function selectPortfolio(items, budget) {\n  const n = items.length;\n  const idSet = new Set(items.map(it => it.id));\n\n  const normalizeRequires = (req) => {\n    if (req === null || req === undefined) return [];\n    if (Array.isArray(req)) return req.slice();\n    return [req];\n  };\n\n  // Precompute feasibility: an item is infeasible if any required id doesn't exist in the items list\n  const feasible = items.map(it => {\n    const reqs = normalizeRequires(it.requires);\n    return reqs.every(r => idSet.has(r));\n  });\n\n  const requiresArr = items.map(it => normalizeRequires(it.requires));\n\n  let best = null; // { value, spend, ids: sorted array }\n\n  const compareIdArraysLex = (a, b) => {\n    const len = Math.min(a.length, b.length);\n    for (let i = 0; i < len; i++) {\n      if (a[i] < b[i]) return -1;\n      if (a[i] > b[i]) return 1;\n    }\n    if (a.length < b.length) return -1;\n    if (a.length > b.length) return 1;\n    return 0;\n  };\n\n  const totalCombos = 1 << n;\n\n  for (let mask = 0; mask < totalCombos; mask++) {\n    let valid = true;\n    let totalSpend = 0;\n    let totalValue = 0;\n    const selectedIndices = [];\n    const groupCount = {};\n\n    for (let i = 0; i < n; i++) {\n      if (mask & (1 << i)) {\n        if (!feasible[i]) {\n          valid = false;\n          break;\n        }\n        selectedIndices.push(i);\n        totalSpend += items[i].spend;\n        totalValue += items[i].value;\n\n        const g = items[i].group;\n        if (g !== null && g !== undefined) {\n          groupCount[g] = (groupCount[g] || 0) + 1;\n          if (groupCount[g] > 1) {\n            valid = false;\n            break;\n          }\n        }\n      }\n    }\n\n    if (!valid) continue;\n    if (totalSpend > budget) continue;\n\n    // check requires\n    const selectedIdSet = new Set(selectedIndices.map(i => items[i].id));\n    for (const i of selectedIndices) {\n      const reqs = requiresArr[i];\n      for (const r of reqs) {\n        if (!selectedIdSet.has(r)) {\n          valid = false;\n          break;\n        }\n      }\n      if (!valid) break;\n    }\n\n    if (!valid) continue;\n\n    const ids = selectedIndices.map(i => items[i].id).slice().sort((a, b) => {\n      if (a < b) return -1;\n      if (a > b) return 1;\n      return 0;\n    });\n\n    if (best === null) {\n      best = { value: totalValue, spend: totalSpend, ids };\n    } else {\n      if (totalValue > best.value) {\n        best = { value: totalValue, spend: totalSpend, ids };\n      } else if (totalValue === best.value) {\n        if (totalSpend < best.spend) {\n          best = { value: totalValue, spend: totalSpend, ids };\n        } else if (totalSpend === best.spend) {\n          if (compareIdArraysLex(ids, best.ids) < 0) {\n            best = { value: totalValue, spend: totalSpend, ids };\n          }\n        }\n      }\n    }\n  }\n\n  return best ? best.ids : [];\n}"
+          },
+          "response": "```javascript\nfunction selectPortfolio(items, budget) {\n  const n = items.length;\n  const idSet = new Set(items.map(it => it.id));\n\n  const normalizeRequires = (req) => {\n    if (req === null || req === undefined) return [];\n    if (Array.isArray(req)) return req.slice();\n    return [req];\n  };\n\n  // Precompute feasibility: an item is infeasible if any required id doesn't exist in the items list\n  const feasible = items.map(it => {\n    const reqs = normalizeRequires(it.requires);\n    return reqs.every(r => idSet.has(r));\n  });\n\n  const requiresArr = items.map(it => normalizeRequires(it.requires));\n\n  let best = null; // { value, spend, ids: sorted array }\n\n  const compareIdArraysLex = (a, b) => {\n    const len = Math.min(a.length, b.length);\n    for (let i = 0; i < len; i++) {\n      if (a[i] < b[i]) return -1;\n      if (a[i] > b[i]) return 1;\n    }\n    if (a.length < b.length) return -1;\n    if (a.length > b.length) return 1;\n    return 0;\n  };\n\n  const totalCombos = 1 << n;\n\n  for (let mask = 0; mask < totalCombos; mask++) {\n    let valid = true;\n    let totalSpend = 0;\n    let totalValue = 0;\n    const selectedIndices = [];\n    const groupCount = {};\n\n    for (let i = 0; i < n; i++) {\n      if (mask & (1 << i)) {\n        if (!feasible[i]) {\n          valid = false;\n          break;\n        }\n        selectedIndices.push(i);\n        totalSpend += items[i].spend;\n        totalValue += items[i].value;\n\n        const g = items[i].group;\n        if (g !== null && g !== undefined) {\n          groupCount[g] = (groupCount[g] || 0) + 1;\n          if (groupCount[g] > 1) {\n            valid = false;\n            break;\n          }\n        }\n      }\n    }\n\n    if (!valid) continue;\n    if (totalSpend > budget) continue;\n\n    // check requires\n    const selectedIdSet = new Set(selectedIndices.map(i => items[i].id));\n    for (const i of selectedIndices) {\n      const reqs = requiresArr[i];\n      for (const r of reqs) {\n        if (!selectedIdSet.has(r)) {\n          valid = false;\n          break;\n        }\n      }\n      if (!valid) break;\n    }\n\n    if (!valid) continue;\n\n    const ids = selectedIndices.map(i => items[i].id).slice().sort((a, b) => {\n      if (a < b) return -1;\n      if (a > b) return 1;\n      return 0;\n    });\n\n    if (best === null) {\n      best = { value: totalValue, spend: totalSpend, ids };\n    } else {\n      if (totalValue > best.value) {\n        best = { value: totalValue, spend: totalSpend, ids };\n      } else if (totalValue === best.value) {\n        if (totalSpend < best.spend) {\n          best = { value: totalValue, spend: totalSpend, ids };\n        } else if (totalSpend === best.spend) {\n          if (compareIdArraysLex(ids, best.ids) < 0) {\n            best = { value: totalValue, spend: totalSpend, ids };\n          }\n        }\n      }\n    }\n  }\n\n  return best ? best.ids : [];\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 15.235626583000005,
+              "usage": {
+                "input_tokens": 177,
+                "output_tokens": 1760,
+                "total_tokens": 1937,
+                "output_tokens_details": {
+                  "thinking_tokens": 615
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 177,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 1760,
+                  "output_tokens_details": {
+                    "thinking_tokens": 615
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "event-reconciliation-code",
+          "category": "verified-temporal-code",
+          "kind": "javascript",
+          "weight": 4,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 8.0668655,
+          "evaluation": {
+            "passed": true,
+            "outcomes": [
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 13,
+                      "version": 3
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 13,
+                      "version": 3
+                    }
+                  }
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 4,
+                      "version": 0
+                    },
+                    "b": {
+                      "balance": 5,
+                      "version": 3
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 4,
+                      "version": 0
+                    },
+                    "b": {
+                      "balance": 5,
+                      "version": 3
+                    }
+                  }
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 0,
+                      "version": 0
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 0,
+                      "version": 0
+                    }
+                  }
+                }
+              }
+            ],
+            "code": "function reconcileBalances(events, initial) {\n  const result = {};\n  for (const accountId in initial) {\n    result[accountId] = {\n      balance: initial[accountId].balance,\n      version: initial[accountId].version\n    };\n  }\n\n  // Deduplicate events by eventId\n  const seenEventIds = new Map();\n  for (const evt of events) {\n    if (!seenEventIds.has(evt.eventId)) {\n      seenEventIds.set(evt.eventId, evt);\n    }\n  }\n  const uniqueEvents = Array.from(seenEventIds.values());\n\n  // Group unique events by accountId, then by version\n  const byAccount = new Map();\n  for (const evt of uniqueEvents) {\n    if (!byAccount.has(evt.accountId)) {\n      byAccount.set(evt.accountId, new Map());\n    }\n    const versionMap = byAccount.get(evt.accountId);\n    if (!versionMap.has(evt.version)) {\n      versionMap.set(evt.version, []);\n    }\n    versionMap.get(evt.version).push(evt);\n  }\n\n  for (const [accountId, versionMap] of byAccount.entries()) {\n    if (!result[accountId]) {\n      continue;\n    }\n\n    let current = result[accountId];\n    let currentBalance = current.balance;\n    let currentVersion = current.version;\n\n    while (true) {\n      const nextVersion = currentVersion + 1;\n      const candidates = versionMap.get(nextVersion);\n\n      if (!candidates || candidates.length === 0) {\n        break;\n      }\n\n      if (candidates.length > 1) {\n        break;\n      }\n\n      const evt = candidates[0];\n      currentBalance += evt.delta;\n      currentVersion = nextVersion;\n    }\n\n    result[accountId] = {\n      balance: currentBalance,\n      version: currentVersion\n    };\n  }\n\n  return result;\n}"
+          },
+          "response": "```javascript\nfunction reconcileBalances(events, initial) {\n  const result = {};\n  for (const accountId in initial) {\n    result[accountId] = {\n      balance: initial[accountId].balance,\n      version: initial[accountId].version\n    };\n  }\n\n  // Deduplicate events by eventId\n  const seenEventIds = new Map();\n  for (const evt of events) {\n    if (!seenEventIds.has(evt.eventId)) {\n      seenEventIds.set(evt.eventId, evt);\n    }\n  }\n  const uniqueEvents = Array.from(seenEventIds.values());\n\n  // Group unique events by accountId, then by version\n  const byAccount = new Map();\n  for (const evt of uniqueEvents) {\n    if (!byAccount.has(evt.accountId)) {\n      byAccount.set(evt.accountId, new Map());\n    }\n    const versionMap = byAccount.get(evt.accountId);\n    if (!versionMap.has(evt.version)) {\n      versionMap.set(evt.version, []);\n    }\n    versionMap.get(evt.version).push(evt);\n  }\n\n  for (const [accountId, versionMap] of byAccount.entries()) {\n    if (!result[accountId]) {\n      continue;\n    }\n\n    let current = result[accountId];\n    let currentBalance = current.balance;\n    let currentVersion = current.version;\n\n    while (true) {\n      const nextVersion = currentVersion + 1;\n      const candidates = versionMap.get(nextVersion);\n\n      if (!candidates || candidates.length === 0) {\n        break;\n      }\n\n      if (candidates.length > 1) {\n        break;\n      }\n\n      const evt = candidates[0];\n      currentBalance += evt.delta;\n      currentVersion = nextVersion;\n    }\n\n    result[accountId] = {\n      balance: currentBalance,\n      version: currentVersion\n    };\n  }\n\n  return result;\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 8.065900417000012,
+              "usage": {
+                "input_tokens": 198,
+                "output_tokens": 841,
+                "total_tokens": 1039,
+                "output_tokens_details": {
+                  "thinking_tokens": 205
+                },
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "raw": {
+                  "input_tokens": 198,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 841,
+                  "output_tokens_details": {
+                    "thinking_tokens": 205
+                  },
+                  "service_tier": "standard"
+                }
+              },
+              "timings": null,
+              "tool_calls": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "paired": null
+}

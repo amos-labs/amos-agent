@@ -1,0 +1,203 @@
+{
+  "schema": "amos.local-model-program",
+  "version": 1,
+  "status": "experimental",
+  "decision": {
+    "primary_product_path": "distilled_compact_student",
+    "selected_v0_base": "mistralai/Ministral-3-8B-Instruct-2512",
+    "dense_muse_optimization_role": "bounded_runtime_maintenance",
+    "teacher": "meta-muse-glimmer-30b",
+    "local_reviewer": "meta-muse-glimmer-30b",
+    "frontier_fallback_required": true
+  },
+  "product_contract": {
+    "deployment_name": "AMOS Operator Local",
+    "primary_deployment_hardware": "physical_apple_silicon_16gb",
+    "parameter_range_billions": [8, 14],
+    "maximum_quantized_artifact_bytes": 8589934592,
+    "target_quantized_artifact_bytes": 7516192768,
+    "minimum_m1_max_sustained_decode_tokens_per_second": 15,
+    "maximum_plain_muse_output_token_ratio": 0.6,
+    "physical_16gb_gate": {
+      "required": true,
+      "maximum_process_working_set_bytes": 12348030976,
+      "maximum_swap_growth_bytes": 1073741824,
+      "minimum_context_tokens": 8192,
+      "minimum_sustained_decode_tokens_per_second": 10,
+      "target_sustained_decode_tokens_per_second": 15,
+      "no_memory_pressure_termination": true
+    },
+    "quality": {
+      "paired_noninferiority_required": true,
+      "zero_critical_contract_failures": true,
+      "quantized_export_must_retain_contract": true,
+      "calibrated_local_escalation_required": true
+    }
+  },
+  "candidate_race": [
+    {
+      "id": "amos-operator-runtime-native",
+      "priority": 1,
+      "status": "selected_v0",
+      "strategy": "Select an open, commercially adaptable 8B-14B base with mature training, Metal, llama.cpp, and GGUF support; distill verified AMOS behavior into it.",
+      "base_model": "mistralai/Ministral-3-8B-Instruct-2512",
+      "selection_gates": [
+        "license and teacher-output training rights reviewed",
+        "LoRA or full fine-tuning works in a maintained framework",
+        "fused export converts to a llama.cpp-supported GGUF architecture",
+        "tool and structured-output protocol survives conversion",
+        "base artifact meets the size and physical-host speed envelope"
+      ]
+    },
+    {
+      "id": "amos-glimmer-structured-student",
+      "priority": 2,
+      "strategy": "Create a smaller Muse-derived student through structured layer or width reduction plus representation, logit, trajectory, and outcome distillation.",
+      "base_model": "meta-models/Muse-Glimmer-30B",
+      "continue_only_if": [
+        "training framework loads the full-precision Muse architecture",
+        "student configuration can be serialized and trained",
+        "conversion and inference work without a private long-lived runtime fork",
+        "early distilled checkpoints outperform the runtime-native arm at equal artifact size"
+      ]
+    }
+  ],
+  "runtime_native_shortlist": [
+    {
+      "id": "mistralai/Ministral-3-8B-Instruct-2512",
+      "role": "selected_v0_student_base",
+      "language_parameters_billions": 8.4,
+      "license": "Apache-2.0",
+      "official_gguf": "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+      "q4_k_m_bytes": 5198911904,
+      "strengths": [
+        "native function calling and JSON output",
+        "edge-oriented release",
+        "official GGUF artifact",
+        "conventional Mistral training and runtime path"
+      ],
+      "risks": [
+        "base model is 20/32 rather than parity on the frozen AMOS suite",
+        "physical 16GB qualification remains pending",
+        "vision weights and features are out of the first text-only deployment"
+      ],
+      "measured": {
+        "m1_max_native_decode_tokens_per_second": 28.224554,
+        "m1_max_sustained_512_decode_tokens_per_second": 28.293557,
+        "frozen_suite_raw_score": 14,
+        "frozen_suite_adjudicated_score": 20,
+        "frozen_suite_maximum": 32,
+        "frozen_suite_request_wall_seconds": 83.421454,
+        "frozen_suite_output_tokens": 1128,
+        "qlora_compatibility": "passed",
+        "qlora_peak_memory_gb": 6.84,
+        "adapter_reload": "passed"
+      },
+      "source": "https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512"
+    },
+    {
+      "id": "Qwen/Qwen3.5-9B",
+      "role": "secondary_capability_and_teacher_challenger",
+      "parameters_billions": 9.7,
+      "license": "Apache-2.0",
+      "measured_q4_k_m_bytes": 5629109056,
+      "strengths": [
+        "explicit agentic and tool-calling target",
+        "strong capability per parameter hypothesis",
+        "stock llama.cpp inference support"
+      ],
+      "risks": [
+        "non-thinking arm failed two critical tool contracts",
+        "non-thinking arm generated more output than plain Muse on the frozen suite",
+        "thinking mode required 156-185 seconds for short math and planning cases",
+        "open MLX LoRA resource-leak report",
+        "reported llama.cpp LoRA-conversion failure",
+        "large vocabulary increases artifact and output-head cost"
+      ],
+      "measured": {
+        "m1_max_native_decode_tokens_per_second": 24.737314,
+        "frozen_suite_non_thinking_raw_score": 12,
+        "frozen_suite_non_thinking_adjudicated_score": 18,
+        "frozen_suite_maximum": 32,
+        "frozen_suite_non_thinking_request_wall_seconds": 256.379299,
+        "frozen_suite_non_thinking_output_tokens": 4719,
+        "primary_student_selection": "rejected_v0"
+      },
+      "source": "https://huggingface.co/Qwen/Qwen3.5-9B"
+    },
+    {
+      "id": "google/gemma-4-12B",
+      "role": "deferred_quality_challenger",
+      "parameters_billions": 11.95,
+      "license": "Apache-2.0",
+      "strengths": [
+        "reasoning and agentic design target",
+        "current MLX inference and tool-parser support",
+        "larger student capacity"
+      ],
+      "risks": [
+        "larger artifact and working set",
+        "new multimodal architecture increases training and export surface",
+        "physical 16GB headroom may be marginal"
+      ],
+      "source": "https://huggingface.co/google/gemma-4-12B"
+    }
+  ],
+  "training_sequence": [
+    {
+      "stage": "D0",
+      "name": "data contract and simulators",
+      "exit_gate": "Every train record is verified, provenance-labelled, consent-safe, and family-isolated from evaluation."
+    },
+    {
+      "stage": "D1",
+      "name": "base-model selection",
+      "exit_gate": "At least one runtime-native base and the Muse-derived feasibility arm have model-only quality, artifact-size, and physical-host baselines."
+    },
+    {
+      "stage": "D2",
+      "name": "shortest-correct supervised distillation",
+      "exit_gate": "The student improves verified task outcome per generated token on held-out workflow families."
+    },
+    {
+      "stage": "D3",
+      "name": "preference and escalation calibration",
+      "exit_gate": "The student prefers concise verified trajectories and escalates before false success."
+    },
+    {
+      "stage": "D4",
+      "name": "merge, quantize, and physical qualification",
+      "exit_gate": "The exact deployment artifact passes quality, safety, speed, memory, and cancellation gates."
+    },
+    {
+      "stage": "D5",
+      "name": "bounded shadow deployment",
+      "exit_gate": "Workflow-specific local promotion passes representative paired outcome and latency gates with hosted fallback retained."
+    }
+  ],
+  "teacher_policy": {
+    "candidate_teachers": [
+      "meta-muse-glimmer-30b",
+      "qualified_sonnet_control",
+      "qualified_frontier_control"
+    ],
+    "teacher_output_is_gold_by_default": false,
+    "accepted_verification": [
+      "deterministic",
+      "executable",
+      "human"
+    ],
+    "stronger_model_judgment_alone_is_sufficient": false
+  },
+  "first_dataset_families": [
+    "authority_and_receipts",
+    "stale_reference_recovery",
+    "idempotent_actions",
+    "evidence_reconciliation",
+    "bounded_tool_planning",
+    "deterministic_calculation",
+    "executable_code_and_repair",
+    "causal_abstention",
+    "local_escalation"
+  ]
+}

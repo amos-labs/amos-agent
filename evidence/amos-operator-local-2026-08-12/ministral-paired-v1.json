@@ -1,0 +1,859 @@
+{
+  "schema": "amos.paired-model-qualification-report",
+  "version": 1,
+  "created_at": "2026-08-12T14:03:55.725Z",
+  "suite": {
+    "schema": "amos.paired-model-qualification-suite",
+    "version": 1,
+    "status": "frozen",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+    "selected_cases": [
+      "fencing-transfer",
+      "collider-transfer",
+      "correlated-bayes",
+      "simpson-policy",
+      "authority-receipt-conflict",
+      "causal-abstention",
+      "deadline-optimization",
+      "temporal-evidence-chain",
+      "stale-reference-recovery",
+      "idempotent-approval",
+      "portfolio-code",
+      "event-reconciliation-code"
+    ]
+  },
+  "configuration": {
+    "max_tokens": 4096,
+    "request_timeout_ms": 1800000
+  },
+  "targets": [
+    {
+      "target": {
+        "id": "candidate",
+        "label": "Ministral 3 8B Q4_K_M local",
+        "model": "ministral-3-8b",
+        "protocol": "openai-chat-completions",
+        "reasoning_dialect": "none",
+        "reasoning_strength": null,
+        "temperature": 0.2,
+        "top_p": 0.95,
+        "top_k": 40
+      },
+      "score": 14,
+      "maximum": 32,
+      "accuracy": 0.4375,
+      "critical_failures": [
+        "idempotent-approval"
+      ],
+      "inference": {
+        "calls": 18,
+        "request_wall_seconds": 83.421453999,
+        "input_tokens": 13306,
+        "output_tokens": 1128,
+        "local_decode_tokens_per_second": 16.461420384748926
+      },
+      "cases": [
+        {
+          "id": "fencing-transfer",
+          "category": "distributed-systems-transfer",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 3.389024834,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"B\",\n  \"reason\": \"the storage service rejects token 41 as it is below the current fencing floor of 42, so N's value remains the final stored value\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 3.387407,
+              "usage": {
+                "completion_tokens": 51,
+                "prompt_tokens": 674,
+                "total_tokens": 725,
+                "prompt_tokens_details": {
+                  "cached_tokens": 533
+                }
+              },
+              "timings": {
+                "prompt_n": 141,
+                "prompt_ms": 383.042,
+                "predicted_n": 51,
+                "predicted_ms": 2921.183
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "collider-transfer",
+          "category": "causal-transfer",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 4.24811675,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "C",
+            "missing_reason_groups": [
+              [
+                "independent",
+                "no association"
+              ],
+              [
+                "not condition",
+                "removed",
+                "every applicant",
+                "full population"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"C\",\n  \"reason\": \"the audit avoids conditioning on the collider 'admission,' restoring the original independence between technical skill and connections\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 4.247990375,
+              "usage": {
+                "completion_tokens": 41,
+                "prompt_tokens": 652,
+                "total_tokens": 693,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 118,
+                "prompt_ms": 437.043,
+                "predicted_n": 41,
+                "predicted_ms": 3774.287
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "correlated-bayes",
+          "category": "bayesian-causal",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 2.9565854170000003,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "17"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"C\",\n  \"reason\": \"Using Bayes' theorem with the given conditional probabilities and contamination event yields approximately 89% posterior probability.\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 2.9564915420000006,
+              "usage": {
+                "completion_tokens": 40,
+                "prompt_tokens": 661,
+                "total_tokens": 701,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 127,
+                "prompt_ms": 741.454,
+                "predicted_n": 40,
+                "predicted_ms": 2210.881
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "simpson-policy",
+          "category": "causal-decision",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 7.093451416999998,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "A",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "strat",
+                "difficulty",
+                "simpson"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"A\",\n  \"reason\": \"Treatment A converts 90% of easy leads (9/10) vs. B’s 80% (80/100), and 40% of hard leads (40/100) vs. B’s 3% (3/10).\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 7.0933065420000005,
+              "usage": {
+                "completion_tokens": 81,
+                "prompt_tokens": 663,
+                "total_tokens": 744,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 129,
+                "prompt_ms": 1437.746,
+                "predicted_n": 81,
+                "predicted_ms": 5650.387
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "authority-receipt-conflict",
+          "category": "temporal-authority",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 4.888512332999999,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"B\",\n  \"reason\": \"The $1,500 campaign (C9) executed under the Wednesday policy ($2,000+ threshold) with explicit supersession, confirmed by the 'wed-7' revision.\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 4.888411083000003,
+              "usage": {
+                "completion_tokens": 60,
+                "prompt_tokens": 684,
+                "total_tokens": 744,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 150,
+                "prompt_ms": 1253.616,
+                "predicted_n": 60,
+                "predicted_ms": 3630.349
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "causal-abstention",
+          "category": "calibrated-abstention",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 5.05576325,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "C",
+            "missing_reason_groups": [
+              [
+                "not identified",
+                "cannot attribute",
+                "confound"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"C\",\n  \"reason\": \"Without a randomized holdout, staggered rollout, or credible adjustment, the causal attribution of the lift to any single factor (onboarding, paid acquisition, targeting, or promotion) cannot be definitively identified.\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 5.055730750000002,
+              "usage": {
+                "completion_tokens": 61,
+                "prompt_tokens": 670,
+                "total_tokens": 731,
+                "prompt_tokens_details": {
+                  "cached_tokens": 535
+                }
+              },
+              "timings": {
+                "prompt_n": 135,
+                "prompt_ms": 1437.212,
+                "predicted_n": 61,
+                "predicted_ms": 3614.26
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "deadline-optimization",
+          "category": "bounded-planning",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 4.232144042,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "D",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "15"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"D\",\n  \"reason\": \"Scheduling C first allows A and B to finish on time, maximizing total value (4 + 7 + 8 = 19)\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 4.232106583000001,
+              "usage": {
+                "completion_tokens": 48,
+                "prompt_tokens": 685,
+                "total_tokens": 733,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 151,
+                "prompt_ms": 1400.923,
+                "predicted_n": 48,
+                "predicted_ms": 2827.302
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "temporal-evidence-chain",
+          "category": "evidence-integration",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 4.553886957999995,
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "missing_reason_groups": [],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"B\",\n  \"reason\": \"The $700 refund proposal (P7) is pending finance approval under policy revision R8 and has not executed, despite the unsigned chat message claiming an exception.\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 4.553851999999999,
+              "usage": {
+                "completion_tokens": 53,
+                "prompt_tokens": 698,
+                "total_tokens": 751,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 164,
+                "prompt_ms": 1318.82,
+                "predicted_n": 53,
+                "predicted_ms": 3230.523
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "stale-reference-recovery",
+          "category": "dependent-tool-recovery",
+          "kind": "tool_flow",
+          "weight": 4,
+          "critical": true,
+          "passed": true,
+          "wall_seconds": 13.707914250000002,
+          "evaluation": {
+            "passed": true,
+            "missing_final_groups": [],
+            "forbidden_final_terms_present": [],
+            "sequence": [
+              {
+                "step": 1,
+                "expected_function": "get_campaign",
+                "actual_function": "get_campaign",
+                "expected_arguments": {
+                  "name": "spring-renewal"
+                },
+                "actual_arguments": {
+                  "name": "spring-renewal"
+                },
+                "passed": true
+              },
+              {
+                "step": 2,
+                "expected_function": "get_page_metrics",
+                "actual_function": "get_page_metrics",
+                "expected_arguments": {
+                  "page_id": "page_old"
+                },
+                "actual_arguments": {
+                  "page_id": "page_old"
+                },
+                "passed": true
+              },
+              {
+                "step": 3,
+                "expected_function": "refresh_campaign",
+                "actual_function": "refresh_campaign",
+                "expected_arguments": {
+                  "campaign_id": "cmp_9"
+                },
+                "actual_arguments": {
+                  "campaign_id": "cmp_9"
+                },
+                "passed": true
+              },
+              {
+                "step": 4,
+                "expected_function": "get_page_metrics",
+                "actual_function": "get_page_metrics",
+                "expected_arguments": {
+                  "page_id": "page_new"
+                },
+                "actual_arguments": {
+                  "page_id": "page_new"
+                },
+                "passed": true
+              }
+            ],
+            "unexpected_final_tools": []
+          },
+          "response": "The campaign **spring-renewal** (ID: `cmp_9`) shows the following funnel metrics after refreshing the landing page:\n\n- **Landing page visits**: 1,000\n- **Playground sessions**: 100\n- **Signups**: 5\n\n### **Largest Measured Funnel Loss**\nThe **biggest drop** occurs between **landing page visits (1,000) and playground sessions (100)**, representing a **90% loss** (900 drop-offs).\n\nWould you like a deeper breakdown of conversion stages or additional insights?",
+          "calls": [
+            {
+              "wall_seconds": 2.8742419999999984,
+              "usage": {
+                "completion_tokens": 16,
+                "prompt_tokens": 789,
+                "total_tokens": 805,
+                "prompt_tokens_details": {
+                  "cached_tokens": 533
+                }
+              },
+              "timings": {
+                "prompt_n": 256,
+                "prompt_ms": 1919.179,
+                "predicted_n": 16,
+                "predicted_ms": 949.772
+              },
+              "tool_calls": [
+                {
+                  "name": "get_campaign",
+                  "arguments": {
+                    "name": "spring-renewal"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 0.9873557910000018,
+              "usage": {
+                "completion_tokens": 15,
+                "prompt_tokens": 828,
+                "total_tokens": 843,
+                "prompt_tokens_details": {
+                  "cached_tokens": 804
+                }
+              },
+              "timings": {
+                "prompt_n": 24,
+                "prompt_ms": 224.64,
+                "predicted_n": 15,
+                "predicted_ms": 756.123
+              },
+              "tool_calls": [
+                {
+                  "name": "get_page_metrics",
+                  "arguments": {
+                    "page_id": "page_old"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 1.104871583,
+              "usage": {
+                "completion_tokens": 17,
+                "prompt_tokens": 862,
+                "total_tokens": 879,
+                "prompt_tokens_details": {
+                  "cached_tokens": 842
+                }
+              },
+              "timings": {
+                "prompt_n": 20,
+                "prompt_ms": 211.119,
+                "predicted_n": 17,
+                "predicted_ms": 887.503
+              },
+              "tool_calls": [
+                {
+                  "name": "refresh_campaign",
+                  "arguments": {
+                    "campaign_id": "cmp_9"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 1.1253509579999954,
+              "usage": {
+                "completion_tokens": 15,
+                "prompt_tokens": 902,
+                "total_tokens": 917,
+                "prompt_tokens_details": {
+                  "cached_tokens": 878
+                }
+              },
+              "timings": {
+                "prompt_n": 24,
+                "prompt_ms": 233.789,
+                "predicted_n": 15,
+                "predicted_ms": 884.152
+              },
+              "tool_calls": [
+                {
+                  "name": "get_page_metrics",
+                  "arguments": {
+                    "page_id": "page_new"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 7.615627583000001,
+              "usage": {
+                "completion_tokens": 126,
+                "prompt_tokens": 945,
+                "total_tokens": 1071,
+                "prompt_tokens_details": {
+                  "cached_tokens": 916
+                }
+              },
+              "timings": {
+                "prompt_n": 29,
+                "prompt_ms": 270.86,
+                "predicted_n": 126,
+                "predicted_ms": 7337.123
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "idempotent-approval",
+          "category": "governed-tool-sequence",
+          "kind": "tool_flow",
+          "weight": 4,
+          "critical": true,
+          "passed": false,
+          "wall_seconds": 11.313870958999999,
+          "evaluation": {
+            "passed": false,
+            "missing_final_groups": [
+              [
+                "p12"
+              ],
+              [
+                "not executed",
+                "has not executed",
+                "unexecuted"
+              ]
+            ],
+            "forbidden_final_terms_present": [],
+            "sequence": [
+              {
+                "step": 1,
+                "expected_function": "get_launch_policy",
+                "actual_function": "get_launch_policy",
+                "expected_arguments": {},
+                "actual_arguments": {},
+                "passed": true
+              },
+              {
+                "step": 2,
+                "expected_function": "propose_campaign",
+                "actual_function": "propose_campaign",
+                "expected_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "actual_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "passed": true
+              }
+            ],
+            "unexpected_final_tools": []
+          },
+          "response": "Here’s the current status of your request:\n\n1. **Launch Policy Check**:\n   - The current policy (`launch-12`) requires **approval** before execution.\n\n2. **Campaign Submission**:\n   - The campaign `autumn-test` was proposed with idempotency key `launch-autumn-test-v1`.\n   - **Status**: `pending_approval` (not yet executed).\n   - **No retry** will be attempted unless explicitly instructed.\n\n**Next Steps**:\n- If approval is needed, you must trigger the approval process (e.g., via your platform’s workflow).\n- I will not retry the proposal unless you confirm otherwise.",
+          "calls": [
+            {
+              "wall_seconds": 1.7857874169999997,
+              "usage": {
+                "completion_tokens": 8,
+                "prompt_tokens": 724,
+                "total_tokens": 732,
+                "prompt_tokens_details": {
+                  "cached_tokens": 549
+                }
+              },
+              "timings": {
+                "prompt_n": 175,
+                "prompt_ms": 1378.608,
+                "predicted_n": 8,
+                "predicted_ms": 402.521
+              },
+              "tool_calls": [
+                {
+                  "name": "get_launch_policy",
+                  "arguments": {}
+                }
+              ]
+            },
+            {
+              "wall_seconds": 1.5034049580000064,
+              "usage": {
+                "completion_tokens": 31,
+                "prompt_tokens": 748,
+                "total_tokens": 779,
+                "prompt_tokens_details": {
+                  "cached_tokens": 731
+                }
+              },
+              "timings": {
+                "prompt_n": 17,
+                "prompt_ms": 202.297,
+                "predicted_n": 31,
+                "predicted_ms": 1296.248
+              },
+              "tool_calls": [
+                {
+                  "name": "propose_campaign",
+                  "arguments": {
+                    "name": "autumn-test",
+                    "idempotency_key": "launch-autumn-test-v1"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 8.024554666999997,
+              "usage": {
+                "completion_tokens": 132,
+                "prompt_tokens": 810,
+                "total_tokens": 942,
+                "prompt_tokens_details": {
+                  "cached_tokens": 778
+                }
+              },
+              "timings": {
+                "prompt_n": 32,
+                "prompt_ms": 166.107,
+                "predicted_n": 132,
+                "predicted_ms": 7851.781
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "portfolio-code",
+          "category": "verified-optimization-code",
+          "kind": "javascript",
+          "weight": 4,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 2.2647531669999954,
+          "evaluation": {
+            "passed": false,
+            "outcomes": [
+              {
+                "passed": false,
+                "detail": {
+                  "expected": [
+                    "b",
+                    "d"
+                  ],
+                  "actual": []
+                }
+              },
+              {
+                "passed": false,
+                "detail": {
+                  "expected": [
+                    "alpha",
+                    "beta"
+                  ],
+                  "actual": []
+                }
+              },
+              {
+                "passed": false,
+                "detail": {
+                  "expected": [
+                    "a"
+                  ],
+                  "actual": []
+                }
+              }
+            ],
+            "code": "function selectPortfolio(items, budget) {\n    // Implementation would go here\n}"
+          },
+          "response": "```javascript\nfunction selectPortfolio(items, budget) {\n    // Implementation would go here\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 2.2636157499999974,
+              "usage": {
+                "completion_tokens": 22,
+                "prompt_tokens": 647,
+                "total_tokens": 669,
+                "prompt_tokens_details": {
+                  "cached_tokens": 533
+                }
+              },
+              "timings": {
+                "prompt_n": 114,
+                "prompt_ms": 955.57,
+                "predicted_n": 22,
+                "predicted_ms": 1304.152
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "event-reconciliation-code",
+          "category": "verified-temporal-code",
+          "kind": "javascript",
+          "weight": 4,
+          "critical": false,
+          "passed": true,
+          "wall_seconds": 19.722436959000007,
+          "evaluation": {
+            "passed": true,
+            "outcomes": [
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 13,
+                      "version": 3
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 13,
+                      "version": 3
+                    }
+                  }
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 4,
+                      "version": 0
+                    },
+                    "b": {
+                      "balance": 5,
+                      "version": 3
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 4,
+                      "version": 0
+                    },
+                    "b": {
+                      "balance": 5,
+                      "version": 3
+                    }
+                  }
+                }
+              },
+              {
+                "passed": true,
+                "detail": {
+                  "expected": {
+                    "a": {
+                      "balance": 0,
+                      "version": 0
+                    }
+                  },
+                  "actual": {
+                    "a": {
+                      "balance": 0,
+                      "version": 0
+                    }
+                  }
+                }
+              }
+            ],
+            "code": "function reconcileBalances(events, initial) {\n    const result = {};\n    const processedEvents = new Map();\n    const eventMap = new Map();\n\n    // Deduplicate events by eventId\n    events.forEach(event => {\n        if (!eventMap.has(event.eventId)) {\n            eventMap.set(event.eventId, event);\n        }\n    });\n\n    // Process each account\n    for (const [accountId, { balance, version }] of Object.entries(initial)) {\n        result[accountId] = { balance, version };\n        let currentVersion = version;\n        let conflict = false;\n\n        while (!conflict) {\n            const nextVersion = currentVersion + 1;\n            const nextEvent = Array.from(eventMap.values()).find(\n                e => e.accountId === accountId && e.version === nextVersion\n            );\n\n            if (!nextEvent) break; // No more events for this account\n\n            // Check for conflicts with other events\n            const conflictingEvents = Array.from(eventMap.values()).filter(\n                e => e.accountId === accountId && e.version === nextVersion && e.eventId !== nextEvent.eventId\n            );\n\n            if (conflictingEvents.length > 0) {\n                conflict = true;\n                break;\n            }\n\n            // Apply the event\n            result[accountId].balance += nextEvent.delta;\n            result[accountId].version = nextVersion;\n            currentVersion = nextVersion;\n        }\n    }\n\n    return result;\n}"
+          },
+          "response": "```javascript\nfunction reconcileBalances(events, initial) {\n    const result = {};\n    const processedEvents = new Map();\n    const eventMap = new Map();\n\n    // Deduplicate events by eventId\n    events.forEach(event => {\n        if (!eventMap.has(event.eventId)) {\n            eventMap.set(event.eventId, event);\n        }\n    });\n\n    // Process each account\n    for (const [accountId, { balance, version }] of Object.entries(initial)) {\n        result[accountId] = { balance, version };\n        let currentVersion = version;\n        let conflict = false;\n\n        while (!conflict) {\n            const nextVersion = currentVersion + 1;\n            const nextEvent = Array.from(eventMap.values()).find(\n                e => e.accountId === accountId && e.version === nextVersion\n            );\n\n            if (!nextEvent) break; // No more events for this account\n\n            // Check for conflicts with other events\n            const conflictingEvents = Array.from(eventMap.values()).filter(\n                e => e.accountId === accountId && e.version === nextVersion && e.eventId !== nextEvent.eventId\n            );\n\n            if (conflictingEvents.length > 0) {\n                conflict = true;\n                break;\n            }\n\n            // Apply the event\n            result[accountId].balance += nextEvent.delta;\n            result[accountId].version = nextVersion;\n            currentVersion = nextVersion;\n        }\n    }\n\n    return result;\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 19.721347416999997,
+              "usage": {
+                "completion_tokens": 311,
+                "prompt_tokens": 664,
+                "total_tokens": 975,
+                "prompt_tokens_details": {
+                  "cached_tokens": 538
+                }
+              },
+              "timings": {
+                "prompt_n": 126,
+                "prompt_ms": 721.348,
+                "predicted_n": 311,
+                "predicted_ms": 18995.309
+              },
+              "tool_calls": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "paired": null
+}
