@@ -137,6 +137,7 @@ export class DesktopTaskStore {
       ...(Object.hasOwn(changes, "archived")
         ? { archivedAt: changes.archived === true ? this.now().toISOString() : null }
         : {}),
+      ...(Object.hasOwn(changes, "projectId") ? { projectId: changes.projectId } : {}),
       ...(Object.hasOwn(changes, "canvasState") ? { canvasState: changes.canvasState } : {}),
       ...(Object.hasOwn(changes, "workspace") ? { workspace: changes.workspace } : {}),
       updatedAt: this.now().toISOString()
@@ -238,6 +239,7 @@ function normalizeTask(value) {
     pinned: value?.pinned === true,
     archivedAt: optionalTimestamp(value?.archivedAt),
     parentTaskId: cleanText(value?.parentTaskId, 128),
+    projectId: optionalUuid(value?.projectId),
     sourceEventId: cleanText(value?.sourceEventId, 160),
     contextScope: enumValue(value?.contextScope, CONTEXT_SCOPES, "from_here"),
     workspaceMode,
@@ -320,6 +322,15 @@ function normalizeIdentifier(value, max, label) {
   const result = cleanRequired(value, max, label);
   if (!/^[A-Za-z0-9._:-]+$/.test(result)) throw new Error(`AMOS ${label} is invalid`);
   return result;
+}
+
+function optionalUuid(value) {
+  const id = cleanText(value, 128);
+  if (!id) return "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error("task Project id is invalid");
+  }
+  return id;
 }
 
 function enumValue(value, allowed, fallback) {

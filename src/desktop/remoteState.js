@@ -341,6 +341,155 @@ export class DesktopRemoteStateClient {
     }
   }
 
+  async projectsLibrary({ includeArchived = true, includeTerminal = true, signal = null } = {}) {
+    try {
+      const [projectsResult, inboxResult] = await Promise.all([
+        this.mcp.callTool("list_projects", {
+          include_archived: includeArchived === true,
+          limit: 100
+        }, { signal }),
+        this.mcp.callTool("list_task_inbox", {
+          include_terminal: includeTerminal === true,
+          limit: 200
+        }, { signal })
+      ]);
+      const projectsPayload = parseMcpJson(projectsResult, "AMOS Projects");
+      const inboxPayload = parseMcpJson(inboxResult, "AMOS task inbox");
+      return {
+        supported: true,
+        projects: (Array.isArray(projectsPayload?.projects) ? projectsPayload.projects : [])
+          .map(normalizeProject)
+          .filter(Boolean),
+        inbox: (Array.isArray(inboxPayload?.items) ? inboxPayload.items : [])
+          .map(normalizeTaskRun)
+          .filter(Boolean),
+        stalledCount: boundedCount(inboxPayload?.stalled_count),
+        projectContract: boundedContract(projectsPayload?.contract),
+        runContract: boundedContract(inboxPayload?.contract)
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "list_projects") || isUnknownTool(error, "list_task_inbox")) {
+        return emptyProjectsLibrary();
+      }
+      throw error;
+    }
+  }
+
+  async project(id, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool(
+        "get_project",
+        { project_id: requiredUuid(id, "Project") },
+        { signal }
+      ),
+      "AMOS Project"
+    );
+    const project = normalizeProject(payload?.project);
+    if (!project) throw new Error("AMOS Project returned an invalid response");
+    return {
+      project,
+      tasks: (Array.isArray(payload?.tasks) ? payload.tasks : [])
+        .map(normalizeTaskResource)
+        .filter(Boolean),
+      runs: (Array.isArray(payload?.runs) ? payload.runs : [])
+        .map(normalizeTaskRun)
+        .filter(Boolean),
+      contract: boundedContract(payload?.contract)
+    };
+  }
+
+  async createProject(input, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("create_project", projectMutationArgs(input), { signal }),
+      "AMOS Project creation"
+    );
+    const project = normalizeProject(payload?.project);
+    if (!project) throw new Error("AMOS Project creation returned an invalid response");
+    return { project, contract: boundedContract(payload?.contract) };
+  }
+
+  async updateProject(id, changes, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool(
+        "update_project",
+        { project_id: requiredUuid(id, "Project"), ...projectMutationArgs(changes, { partial: true }) },
+        { signal }
+      ),
+      "AMOS Project update"
+    );
+    const project = normalizeProject(payload?.project);
+    if (!project) throw new Error("AMOS Project update returned an invalid response");
+    return { project, changed: normalizeStringList(payload?.changed, 20, 80) };
+  }
+
+  async assignTaskToProject(taskId, projectId = null, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool(
+        "assign_task_to_project",
+        {
+          task_id: requiredUuid(taskId, "Task"),
+          ...(projectId ? { project_id: requiredUuid(projectId, "Project") } : {})
+        },
+        { signal }
+      ),
+      "AMOS Project task assignment"
+    );
+    const task = normalizeTaskResource(payload?.task);
+    if (!task) throw new Error("AMOS Project task assignment returned an invalid task");
+    return { task, contract: boundedContract(payload?.contract) };
+  }
+
+  async startTaskRun(input, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("start_task_run", taskRunStartArgs(input), { signal }),
+      "AMOS task-run admission"
+    );
+    const run = normalizeTaskRun(payload?.run);
+    if (!run) throw new Error("AMOS task-run admission returned an invalid run");
+    return {
+      run,
+      accepted: payload?.accepted === true,
+      idempotent: payload?.idempotent === true,
+      continue: payload?.continue !== false,
+      contract: boundedContract(payload?.contract)
+    };
+  }
+
+  async reportTaskRun(input, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("report_task_run", taskRunReportArgs(input), { signal }),
+      "AMOS task-run report"
+    );
+    const run = normalizeTaskRun(payload?.run);
+    if (!run) throw new Error("AMOS task-run report returned an invalid run");
+    return {
+      run,
+      accepted: payload?.accepted === true,
+      continue: payload?.continue !== false,
+      reason: String(payload?.reason || "").slice(0, 160),
+      contract: boundedContract(payload?.contract)
+    };
+  }
+
+  async cancelTaskRun(id, reason = "", { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool(
+        "request_task_run_cancel",
+        {
+          run_id: requiredUuid(id, "Task run"),
+          ...(String(reason || "").trim()
+            ? { reason: String(reason).trim().slice(0, 1_000) }
+            : {})
+        },
+        { signal }
+      ),
+      "AMOS task-run cancellation"
+    );
+    const run = normalizeTaskRun(payload?.run);
+    if (!run) throw new Error("AMOS task-run cancellation returned an invalid run");
+    return { run, continue: false, contract: boundedContract(payload?.contract) };
+  }
+
   async registerTask(input, { signal = null } = {}) {
     const payload = parseMcpJson(
       await this.mcp.callTool("register_task", taskRegistrationArgs(input), { signal }),
@@ -1119,6 +1268,7 @@ function normalizeTaskResource(value) {
     archived: value.archived === true,
     archivedAt: safeTimestamp(value.archived_at || value.archivedAt),
     parentTaskId: String(value.parent_task_id || value.parentTaskId || "").slice(0, 128),
+    projectId: validUuidOrEmpty(value.project_id || value.projectId),
     sourceEventId: String(value.source_event_id || value.sourceEventId || "").slice(0, 160),
     workspaceMode: ["same_directory", "new_worktree", "context_only"].includes(workspaceMode)
       ? workspaceMode
@@ -1130,6 +1280,205 @@ function normalizeTaskResource(value) {
     createdAt: safeTimestamp(value.created_at || value.createdAt),
     updatedAt: safeTimestamp(value.updated_at || value.updatedAt)
   };
+}
+
+function emptyProjectsLibrary() {
+  return {
+    supported: false,
+    projects: [],
+    inbox: [],
+    stalledCount: 0,
+    projectContract: null,
+    runContract: null
+  };
+}
+
+function normalizeProject(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = validUuidOrEmpty(value.id);
+  const name = String(value.name || "").trim().slice(0, 160);
+  if (!id || !name) return null;
+  const budget = value.default_budget && typeof value.default_budget === "object"
+    ? value.default_budget
+    : {};
+  return {
+    id,
+    name,
+    instructions: String(value.instructions || "").trim().slice(0, 12_000),
+    status: ["active", "paused", "completed"].includes(value.status)
+      ? value.status
+      : "active",
+    pinned: value.pinned === true,
+    archived: value.archived === true,
+    archivedAt: safeTimestamp(value.archived_at || value.archivedAt),
+    resourceRefs: normalizeStringList(value.resource_refs || value.resourceRefs, 40, 1_024),
+    maxParallelRuns: boundedPositive(value.max_parallel_runs || value.maxParallelRuns, 4, 32),
+    defaultBudget: {
+      tokenLimit: boundedPositive(budget.token_limit, 200_000, 1_000_000_000),
+      costLimitMicrousd: boundedPositive(budget.cost_limit_microusd, 50_000_000, 100_000_000_000),
+      toolCallLimit: boundedPositive(budget.tool_call_limit, 200, 100_000),
+      wallTimeLimitSeconds: boundedPositive(budget.wall_time_limit_seconds, 14_400, 604_800)
+    },
+    taskCount: boundedCount(value.task_count || value.taskCount),
+    runningCount: boundedCount(value.running_count || value.runningCount),
+    createdAt: safeTimestamp(value.created_at || value.createdAt),
+    updatedAt: safeTimestamp(value.updated_at || value.updatedAt)
+  };
+}
+
+function normalizeTaskRun(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = validUuidOrEmpty(value.id);
+  const projectId = validUuidOrEmpty(value.project_id || value.projectId);
+  const taskId = validUuidOrEmpty(value.task_id || value.taskId);
+  if (!id || !projectId || !taskId) return null;
+  const budget = value.budget && typeof value.budget === "object" ? value.budget : {};
+  const usage = value.usage && typeof value.usage === "object" ? value.usage : {};
+  const status = [
+    "scheduled", "running", "waiting", "blocked", "cancel_requested",
+    "completed", "failed", "cancelled", "interrupted"
+  ].includes(value.status) ? value.status : "scheduled";
+  const executionMode = value.execution_mode || value.executionMode;
+  return {
+    id,
+    projectId,
+    projectName: String(value.project_name || value.projectName || "").slice(0, 160),
+    taskId,
+    taskTitle: String(value.task_title || value.taskTitle || "").slice(0, 160),
+    sourceClient: String(value.source_client || value.sourceClient || "unknown").slice(0, 64),
+    clientRunId: String(value.client_run_id || value.clientRunId || "").slice(0, 160),
+    executionMode: ["local", "hosted", "external"].includes(executionMode)
+      ? executionMode
+      : "local",
+    status,
+    sequence: boundedCount(value.sequence),
+    phase: String(value.phase || "").slice(0, 160),
+    progressSummary: String(value.progress_summary || value.progressSummary || "").slice(0, 4_000),
+    resultSummary: String(value.result_summary || value.resultSummary || "").slice(0, 8_000),
+    stopReason: String(value.stop_reason || value.stopReason || "").slice(0, 1_000),
+    budget: {
+      tokenLimit: boundedPositive(budget.token_limit, 1, 1_000_000_000),
+      costLimitMicrousd: boundedPositive(budget.cost_limit_microusd, 1, 100_000_000_000),
+      toolCallLimit: boundedPositive(budget.tool_call_limit, 1, 100_000),
+      wallTimeLimitSeconds: boundedPositive(budget.wall_time_limit_seconds, 1, 604_800)
+    },
+    usage: {
+      tokensUsed: boundedCount(usage.tokens_used),
+      costUsedMicrousd: boundedCount(usage.cost_used_microusd),
+      toolCallsUsed: boundedCount(usage.tool_calls_used)
+    },
+    continue: value.continue !== false && status !== "cancel_requested" &&
+      !["completed", "failed", "cancelled", "interrupted"].includes(status),
+    stalled: value.stalled === true,
+    cancelRequestedAt: safeTimestamp(value.cancel_requested_at || value.cancelRequestedAt),
+    startedAt: safeTimestamp(value.started_at || value.startedAt),
+    heartbeatAt: safeTimestamp(value.heartbeat_at || value.heartbeatAt),
+    finishedAt: safeTimestamp(value.finished_at || value.finishedAt),
+    createdAt: safeTimestamp(value.created_at || value.createdAt),
+    updatedAt: safeTimestamp(value.updated_at || value.updatedAt)
+  };
+}
+
+function projectMutationArgs(input = {}, { partial = false } = {}) {
+  const args = {};
+  if (!partial || Object.hasOwn(input, "name")) {
+    args.name = requiredBoundedText(input.name, 160, "Project name");
+  }
+  for (const [source, target, limit] of [
+    ["instructions", "instructions", 12_000]
+  ]) {
+    if (Object.hasOwn(input, source)) args[target] = String(input[source] || "").slice(0, limit);
+  }
+  if (Object.hasOwn(input, "status")) {
+    if (!["active", "paused", "completed"].includes(input.status)) {
+      throw new Error("AMOS blocked an invalid Project status");
+    }
+    args.status = input.status;
+  }
+  for (const [source, target] of [["pinned", "pinned"], ["archived", "archived"]]) {
+    if (Object.hasOwn(input, source)) args[target] = input[source] === true;
+  }
+  if (Object.hasOwn(input, "resourceRefs")) {
+    args.resource_refs = normalizeStringList(input.resourceRefs, 40, 1_024);
+  }
+  for (const [source, target, fallback, maximum] of [
+    ["maxParallelRuns", "max_parallel_runs", 4, 32],
+    ["tokenLimit", "token_limit", 200_000, 1_000_000_000],
+    ["costLimitMicrousd", "cost_limit_microusd", 50_000_000, 100_000_000_000],
+    ["toolCallLimit", "tool_call_limit", 200, 100_000],
+    ["wallTimeLimitSeconds", "wall_time_limit_seconds", 14_400, 604_800]
+  ]) {
+    if (Object.hasOwn(input, source)) args[target] = boundedPositive(input[source], fallback, maximum);
+  }
+  if (partial && Object.keys(args).length === 0) {
+    throw new Error("Choose at least one Project field to update");
+  }
+  return args;
+}
+
+function taskRunStartArgs(input = {}) {
+  const executionMode = String(input.executionMode || "local");
+  const status = String(input.status || "running");
+  if (!["local", "hosted", "external"].includes(executionMode)) {
+    throw new Error("AMOS blocked an invalid task-run execution mode");
+  }
+  if (!["scheduled", "running"].includes(status)) {
+    throw new Error("AMOS blocked an invalid task-run status");
+  }
+  const args = {
+    project_id: requiredUuid(input.projectId, "Project"),
+    task_id: requiredUuid(input.taskId, "Task"),
+    source_client: requiredIdentifier(input.sourceClient || "amos_desktop", 64, "Task-run source"),
+    client_run_id: requiredIdentifier(input.clientRunId, 160, "Task-run client id"),
+    execution_mode: executionMode,
+    status
+  };
+  for (const [source, target, maximum] of [
+    ["tokenLimit", "token_limit", 1_000_000_000],
+    ["costLimitMicrousd", "cost_limit_microusd", 100_000_000_000],
+    ["toolCallLimit", "tool_call_limit", 100_000],
+    ["wallTimeLimitSeconds", "wall_time_limit_seconds", 604_800]
+  ]) {
+    if (Object.hasOwn(input, source)) args[target] = boundedPositive(input[source], 1, maximum);
+  }
+  return args;
+}
+
+function taskRunReportArgs(input = {}) {
+  const status = String(input.status || "running");
+  if (!["running", "waiting", "blocked", "completed", "failed", "cancelled", "interrupted"].includes(status)) {
+    throw new Error("AMOS blocked an invalid task-run report status");
+  }
+  return {
+    run_id: requiredUuid(input.runId, "Task run"),
+    sequence: boundedPositive(input.sequence, 1, Number.MAX_SAFE_INTEGER),
+    status,
+    phase: String(input.phase || "").slice(0, 160),
+    progress_summary: String(input.progressSummary || "").slice(0, 4_000),
+    result_summary: String(input.resultSummary || "").slice(0, 8_000),
+    tokens_used: boundedCount(input.tokensUsed),
+    cost_used_microusd: boundedCount(input.costUsedMicrousd),
+    tool_calls_used: boundedCount(input.toolCallsUsed)
+  };
+}
+
+function boundedPositive(value, fallback, maximum) {
+  const number = Number(value);
+  return Number.isSafeInteger(number) && number >= 1
+    ? Math.min(number, maximum)
+    : fallback;
+}
+
+function boundedContract(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return boundedJsonValue(value);
+}
+
+function validUuidOrEmpty(value) {
+  const id = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    ? id
+    : "";
 }
 
 function normalizeTaskMutation(value, action) {

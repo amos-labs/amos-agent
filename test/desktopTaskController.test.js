@@ -121,6 +121,72 @@ test("desktop cancellation aborts the active task signal and pending local appro
   assert.equal(abortController.signal.aborted, true);
 });
 
+test("desktop manages private Projects and cooperative task-run stops through Platform", async () => {
+  const projectId = "11111111-1111-4111-8111-111111111111";
+  const runId = "22222222-2222-4222-8222-222222222222";
+  const calls = [];
+  const project = {
+    id: projectId,
+    name: "Neighborly rollout",
+    maxParallelRuns: 4,
+    defaultBudget: {},
+    status: "active"
+  };
+  const remote = {
+    async createProject(input) {
+      calls.push(["create", input]);
+      return { project };
+    },
+    async updateProject(id, changes) {
+      calls.push(["update", id, changes]);
+      return { project: { ...project, pinned: true }, changed: ["pinned"] };
+    },
+    async cancelTaskRun(id, reason) {
+      calls.push(["cancel", id, reason]);
+      return {
+        run: {
+          id,
+          projectId,
+          taskId: "33333333-3333-4333-8333-333333333333",
+          stopReason: reason
+        }
+      };
+    },
+    async projectsLibrary() {
+      return {
+        supported: true,
+        projects: [project],
+        inbox: [],
+        stalledCount: 0,
+        projectContract: { execution_authority: false },
+        runContract: { execution_proof: false }
+      };
+    }
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-projects",
+    settingsStore: settingsStore(),
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.personalRemote = async () => remote;
+  controller.sendRemoteState = async () => {};
+
+  const created = await controller.createProject({ name: project.name, maxParallelRuns: 4 });
+  const updated = await controller.updateProjectResource(projectId, { pinned: true });
+  const stopped = await controller.cancelSupervisedTaskRun(runId, "operator_requested");
+
+  assert.equal(created.projects.supported, true);
+  assert.equal(updated.project.pinned, true);
+  assert.equal(stopped.run.stopReason, "operator_requested");
+  assert.deepEqual(calls, [
+    ["create", { name: project.name, maxParallelRuns: 4 }],
+    ["update", projectId, { pinned: true }],
+    ["cancel", runId, "operator_requested"]
+  ]);
+  assert.equal(controller.activity.at(-1).detail.cooperative, true);
+});
+
 test("desktop queues user steering on the active task and records the direction", async () => {
   const emitted = [];
   const controller = new DesktopController({

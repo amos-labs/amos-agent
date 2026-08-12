@@ -86,6 +86,14 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   openTask: (id) => ipcRenderer.invoke("desktop:open-task", id),
   updateTask: (id, changes) => ipcRenderer.invoke("desktop:update-task", { id, changes }),
   forkTask: (input) => ipcRenderer.invoke("desktop:fork-task", input),
+  createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
+  updateProject: (id, changes) =>
+    ipcRenderer.invoke("desktop:update-project", { id, changes }),
+  assignTaskProject: (taskId, projectId) =>
+    ipcRenderer.invoke("desktop:assign-task-project", { taskId, projectId }),
+  cancelSupervisedRun: (runId, reason) =>
+    ipcRenderer.invoke("desktop:cancel-supervised-run", { runId, reason }),
+  refreshProjects: () => ipcRenderer.invoke("desktop:refresh-projects"),
   removeSavedView: (id) => ipcRenderer.invoke("desktop:remove-saved-view", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),
