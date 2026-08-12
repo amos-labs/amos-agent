@@ -644,7 +644,9 @@ client-neutral `list_automations`, `set_automation`, `pause_automation`, and
 Claude, Codex, and other compatible MCP clients retain the same capability.
 
 The Automations page is for durable management: status, trigger and step
-summaries, bounded outcome metrics, refresh, pause, resume, and entry into
+summaries, bounded outcome metrics, recent run history, a production failure
+inbox, exact zero-effect simulation, human-attested repair, refresh, pause,
+resume, and entry into
 conversational authoring. Direct controls remain typed platform calls. The AI
 helps a user design, explain, revise, and validate the definition; once saved,
 the durable automation should continue through deterministic primitives when

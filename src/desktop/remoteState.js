@@ -77,35 +77,54 @@ export class DesktopRemoteStateClient {
   }
 
   async automationsLibrary({ signal = null } = {}) {
-    try {
-      const result = await this.mcp.callTool("list_automations", {}, { signal });
-      const payload = parseMcpJson(result, "AMOS Automations");
-      let grants = [];
-      let grantsSupported = false;
-      try {
-        const grantResult = await this.mcp.callTool("list_automation_grants", {}, { signal });
-        const grantPayload = parseMcpJson(grantResult, "AMOS Automation standing grants");
-        grantsSupported = Array.isArray(grantPayload?.standing_grants);
-        grants = grantsSupported
-          ? grantPayload.standing_grants.map(normalizeAutomationGrant).filter(Boolean)
-          : [];
-      } catch (error) {
-        if (!isUnknownTool(error, "list_automation_grants")) throw error;
+    const [automationsResult, grantsResult, failuresResult, runsResult] = await Promise.allSettled([
+      this.mcp.callTool("list_automations", {}, { signal }),
+      this.mcp.callTool("list_automation_grants", {}, { signal }),
+      this.mcp.callTool("list_automation_failures", { limit: 100 }, { signal }),
+      this.mcp.callTool("list_automation_runs", { limit: 100 }, { signal })
+    ]);
+    if (automationsResult.status === "rejected") {
+      if (isUnknownTool(automationsResult.reason, "list_automations")) {
+        return emptyAutomationsLibrary();
       }
-      return {
-        supported: true,
-        automations: Array.isArray(payload?.automations)
-          ? payload.automations.map(normalizeAutomation).filter(Boolean)
-          : [],
-        grantsSupported,
-        grants
-      };
-    } catch (error) {
-      if (isUnknownTool(error, "list_automations")) {
-        return { supported: false, automations: [], grantsSupported: false, grants: [] };
-      }
-      throw error;
+      throw automationsResult.reason;
     }
+    const payload = parseMcpJson(automationsResult.value, "AMOS Automations");
+    const grantsPayload = optionalAutomationPayload(
+      grantsResult,
+      "list_automation_grants",
+      "AMOS Automation standing grants"
+    );
+    const failuresPayload = optionalAutomationPayload(
+      failuresResult,
+      "list_automation_failures",
+      "AMOS Automation failures"
+    );
+    const runsPayload = optionalAutomationPayload(
+      runsResult,
+      "list_automation_runs",
+      "AMOS Automation runs"
+    );
+    return {
+      supported: true,
+      automations: Array.isArray(payload?.automations)
+        ? payload.automations.map(normalizeAutomation).filter(Boolean)
+        : [],
+      grantsSupported: Array.isArray(grantsPayload?.standing_grants),
+      grants: Array.isArray(grantsPayload?.standing_grants)
+        ? grantsPayload.standing_grants.map(normalizeAutomationGrant).filter(Boolean)
+        : [],
+      operationsSupported: Boolean(failuresPayload && runsPayload),
+      failures: Array.isArray(failuresPayload?.items)
+        ? failuresPayload.items.map(normalizeAutomationFailure).filter(Boolean)
+        : [],
+      runs: Array.isArray(runsPayload?.runs)
+        ? runsPayload.runs.map(normalizeAutomationRun).filter(Boolean)
+        : [],
+      operationsContract: boundedJsonValue(
+        failuresPayload?.contract || runsPayload?.contract || {}
+      )
+    };
   }
 
   async automationTemplateCatalog({ signal = null } = {}) {
@@ -170,6 +189,47 @@ export class DesktopRemoteStateClient {
       { signal }
     );
     return parseMcpJson(result, "AMOS Automation standing grant revocation");
+  }
+
+  async simulateAutomation(automationId, sampleTrigger = null, { signal = null } = {}) {
+    const args = { automation_id: requiredUuid(automationId, "Automation") };
+    if (sampleTrigger !== null && sampleTrigger !== undefined) {
+      if (!sampleTrigger || typeof sampleTrigger !== "object" || Array.isArray(sampleTrigger)) {
+        throw new Error("Automation simulation needs a JSON object as its sample trigger");
+      }
+      args.sample_trigger = sampleTrigger;
+    } else {
+      args.historical_runs = 5;
+    }
+    const result = await this.mcp.callTool("simulate_automation", args, { signal });
+    return parseMcpJson(result, "AMOS Automation simulation");
+  }
+
+  async repairAutomationFailure(incidentId, input = {}, { signal = null } = {}) {
+    const action = String(input.action || "");
+    if (!["retry", "settle_applied", "dismiss"].includes(action)) {
+      throw new Error("Choose a valid Automation failure resolution");
+    }
+    const note = requiredText(input.note, 1_000, "Repair note");
+    const effectState = String(input.externalEffectState || "unknown");
+    if (!["unknown", "not_applied", "applied"].includes(effectState)) {
+      throw new Error("Choose whether the external effect was applied");
+    }
+    const result = input.result && typeof input.result === "object" && !Array.isArray(input.result)
+      ? input.result
+      : {};
+    const response = await this.mcp.callTool(
+      "repair_automation_failure",
+      {
+        incident_id: requiredUuid(incidentId, "Automation failure"),
+        action,
+        external_effect_state: effectState,
+        result,
+        note
+      },
+      { signal }
+    );
+    return parseMcpJson(response, "AMOS Automation failure repair");
   }
 
   async runBriefing(input, { signal = null } = {}) {
@@ -1200,6 +1260,104 @@ function normalizeAutomation(value) {
     },
     createdAt: safeTimestamp(value.created_at),
     updatedAt: safeTimestamp(value.updated_at)
+  };
+}
+
+function emptyAutomationsLibrary() {
+  return {
+    supported: false,
+    automations: [],
+    grantsSupported: false,
+    grants: [],
+    operationsSupported: false,
+    failures: [],
+    runs: [],
+    operationsContract: {}
+  };
+}
+
+function optionalAutomationPayload(settled, tool, label) {
+  if (settled.status === "fulfilled") return parseMcpJson(settled.value, label);
+  if (isUnknownTool(settled.reason, tool)) return null;
+  throw settled.reason;
+}
+
+function normalizeAutomationFailure(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = validUuidOrEmpty(value.id);
+  const automationId = validUuidOrEmpty(value.automation_id);
+  const enrollmentId = validUuidOrEmpty(value.enrollment_id);
+  if (!id || !automationId || !enrollmentId) return null;
+  const notification = value.notification && typeof value.notification === "object"
+    ? value.notification
+    : {};
+  return {
+    id,
+    automationId,
+    automationName: String(value.automation_name || "Automation").slice(0, 200),
+    enrollmentId,
+    subjectKey: String(value.subject_key || "").slice(0, 200),
+    runStatus: String(value.run_status || "failed").slice(0, 40),
+    stepPosition: boundedCount(value.step_position),
+    stepKey: String(value.step_key || "").slice(0, 120),
+    failureKind: ["retryable", "configuration", "ambiguous", "permanent"].includes(
+      value.failure_kind
+    ) ? value.failure_kind : "permanent",
+    replaySafe: value.replay_safe === true,
+    externalEffectState: ["unknown", "not_applied", "applied"].includes(
+      value.external_effect_state
+    ) ? value.external_effect_state : "unknown",
+    status: String(value.status || "open").slice(0, 40),
+    error: String(value.error || "Automation step failed").slice(0, 1_000),
+    occurrenceCount: boundedCount(value.occurrence_count),
+    notificationState: String(notification.state || "pending").slice(0, 40),
+    notificationError: String(notification.error || "").slice(0, 500),
+    notifiedAt: safeTimestamp(notification.notified_at),
+    definitionVersion: boundedCount(value.definition_version),
+    definitionSha256: /^[0-9a-f]{64}$/i.test(String(value.definition_sha256 || ""))
+      ? String(value.definition_sha256).toLowerCase()
+      : "",
+    firstFailedAt: safeTimestamp(value.first_failed_at),
+    lastFailedAt: safeTimestamp(value.last_failed_at),
+    resolvedAt: safeTimestamp(value.resolved_at),
+    resolutionNote: String(value.resolution_note || "").slice(0, 1_000)
+  };
+}
+
+function normalizeAutomationRun(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = validUuidOrEmpty(value.id);
+  const automationId = validUuidOrEmpty(value.automation_id);
+  if (!id || !automationId) return null;
+  const step = value.step && typeof value.step === "object" ? value.step : {};
+  const incident = value.incident && typeof value.incident === "object" ? value.incident : null;
+  return {
+    id,
+    automationId,
+    automationName: String(value.automation_name || "Automation").slice(0, 200),
+    subjectKey: String(value.subject_key || "").slice(0, 200),
+    currentPosition: boundedCount(value.current_position),
+    status: String(value.status || "unknown").slice(0, 40),
+    attempts: boundedCount(value.attempts),
+    exitReason: String(value.exit_reason || "").slice(0, 500),
+    trigger: boundedJsonValue(value.trigger || {}),
+    startedAt: safeTimestamp(value.started_at),
+    updatedAt: safeTimestamp(value.updated_at),
+    durationMs: boundedCount(value.duration_ms),
+    nextRunAt: safeTimestamp(value.next_run_at),
+    step: {
+      id: validUuidOrEmpty(step.id),
+      key: String(step.key || "").slice(0, 120),
+      status: String(step.status || "").slice(0, 40),
+      startedAt: safeTimestamp(step.started_at),
+      completedAt: safeTimestamp(step.completed_at)
+    },
+    incident: incident ? {
+      id: validUuidOrEmpty(incident.id),
+      kind: String(incident.kind || "").slice(0, 40),
+      replaySafe: incident.replay_safe === true,
+      status: String(incident.status || "").slice(0, 40)
+    } : null
   };
 }
 

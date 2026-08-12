@@ -70,6 +70,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:set-automation-status", { name, active }),
   revokeAutomationGrant: (grantId, reason) =>
     ipcRenderer.invoke("desktop:revoke-automation-grant", { grantId, reason }),
+  simulateAutomation: (automationId, sampleTrigger) =>
+    ipcRenderer.invoke("desktop:simulate-automation", { automationId, sampleTrigger }),
+  repairAutomationFailure: (incidentId, resolution) =>
+    ipcRenderer.invoke("desktop:repair-automation-failure", { incidentId, resolution }),
   beginAutomationSetup: (input) =>
     ipcRenderer.invoke("desktop:begin-automation-setup", input),
   automationOperations: (connection) =>

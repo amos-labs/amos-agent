@@ -260,6 +260,64 @@ test("Desktop Automations project platform-owned definitions, live stats, and go
                 expires_at: "2026-11-01T00:00:00.000Z"
               }]
             }
+          : request.params.name === "list_automation_failures"
+            ? {
+                items: [{
+                  id: "55555555-5555-4555-8555-555555555555",
+                  automation_id: "11111111-1111-4111-8111-111111111111",
+                  automation_name: "Franchise scorecard follow-up",
+                  enrollment_id: "66666666-6666-4666-8666-666666666666",
+                  subject_key: "franchise-42",
+                  run_status: "failed",
+                  step_position: 0,
+                  step_key: "sync_target",
+                  failure_kind: "ambiguous",
+                  replay_safe: false,
+                  external_effect_state: "unknown",
+                  status: "open",
+                  error: "provider response timed out",
+                  occurrence_count: 1,
+                  notification: { state: "sent", notified_at: "2026-08-10T08:05:00.000Z" },
+                  definition_version: 3,
+                  definition_sha256: "a".repeat(64),
+                  first_failed_at: "2026-08-10T08:04:00.000Z",
+                  last_failed_at: "2026-08-10T08:04:00.000Z"
+                }],
+                contract: { external_dispatch: "at_most_once" }
+              }
+          : request.params.name === "list_automation_runs"
+            ? {
+                runs: [{
+                  id: "66666666-6666-4666-8666-666666666666",
+                  automation_id: "11111111-1111-4111-8111-111111111111",
+                  automation_name: "Franchise scorecard follow-up",
+                  subject_key: "franchise-42",
+                  current_position: 0,
+                  status: "failed",
+                  attempts: 0,
+                  trigger: { record_id: "scorecard-42" },
+                  started_at: "2026-08-10T08:00:00.000Z",
+                  updated_at: "2026-08-10T08:04:00.000Z",
+                  duration_ms: 240000,
+                  step: { key: "sync_target", status: "failed" },
+                  incident: {
+                    id: "55555555-5555-4555-8555-555555555555",
+                    kind: "ambiguous",
+                    replay_safe: false,
+                    status: "open"
+                  }
+                }],
+                contract: { external_dispatch: "at_most_once" }
+              }
+          : request.params.name === "simulate_automation"
+            ? {
+                automation: { id: "11111111-1111-4111-8111-111111111111", name: "Franchise scorecard follow-up" },
+                simulations: [{ valid: true, totals: { tool_calls: 1, external_writes: 1 } }],
+                provider_calls: 0,
+                mutations_performed: 0
+              }
+          : request.params.name === "repair_automation_failure"
+            ? { ok: true, status: "retry_authorized", replay_dispatched: false }
           : request.params.name === "revoke_automation_grant"
             ? {
                 revoked: true,
@@ -288,6 +346,18 @@ test("Desktop Automations project platform-owned definitions, live stats, and go
     "22222222-2222-4222-8222-222222222222",
     "Operator stopped the sync"
   );
+  const simulation = await client.simulateAutomation(
+    "11111111-1111-4111-8111-111111111111",
+    { record_id: "scorecard-42" }
+  );
+  const repair = await client.repairAutomationFailure(
+    "55555555-5555-4555-8555-555555555555",
+    {
+      action: "retry",
+      externalEffectState: "not_applied",
+      note: "Verified in the provider that no update was created"
+    }
+  );
 
   assert.equal(library.supported, true);
   assert.equal(library.automations[0].stats.enrolled, 42);
@@ -299,15 +369,82 @@ test("Desktop Automations project platform-owned definitions, live stats, and go
   assert.equal(library.grantsSupported, true);
   assert.equal(library.grants[0].maxRunsPerWindow, 1000);
   assert.equal(library.grants[0].argumentScope[0].path, "body.score");
+  assert.equal(library.operationsSupported, true);
+  assert.equal(library.failures[0].replaySafe, false);
+  assert.equal(library.runs[0].incident.kind, "ambiguous");
+  assert.equal(simulation.provider_calls, 0);
+  assert.equal(repair.replay_dispatched, false);
   assert.deepEqual(calls.map((call) => call.name), [
-    "list_automations", "list_automation_grants", "pause_automation", "resume_automation",
-    "revoke_automation_grant"
+    "list_automations", "list_automation_grants", "list_automation_failures",
+    "list_automation_runs", "pause_automation", "resume_automation",
+    "revoke_automation_grant", "simulate_automation", "repair_automation_failure"
   ]);
-  assert.deepEqual(calls[2].arguments, { name: "Franchise scorecard follow-up" });
-  assert.deepEqual(calls[4].arguments, {
+  assert.deepEqual(calls[4].arguments, { name: "Franchise scorecard follow-up" });
+  assert.deepEqual(calls[6].arguments, {
     grant_id: "22222222-2222-4222-8222-222222222222",
     reason: "Operator stopped the sync"
   });
+  assert.deepEqual(calls[8].arguments, {
+    incident_id: "55555555-5555-4555-8555-555555555555",
+    action: "retry",
+    external_effect_state: "not_applied",
+    result: {},
+    note: "Verified in the provider that no update was created"
+  });
+});
+
+test("Desktop keeps the Automation library available during an operations-tool rollout", async () => {
+  const calls = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://older.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "automation-rollout-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      const name = request.params.name;
+      calls.push(name);
+      if (["list_automation_failures", "list_automation_runs"].includes(name)) {
+        return response(200, {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: `unknown tool '${name}'` }
+        });
+      }
+      const payload = name === "list_automations"
+        ? {
+            automations: [{
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Existing Automation",
+              status: "active",
+              trigger: { type: "schedule" },
+              steps_summary: [],
+              stats: {}
+            }]
+          }
+        : { standing_grants: [] };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const library = await client.automationsLibrary();
+
+  assert.deepEqual(calls.sort(), [
+    "list_automation_failures",
+    "list_automation_grants",
+    "list_automation_runs",
+    "list_automations"
+  ]);
+  assert.equal(library.supported, true);
+  assert.equal(library.automations[0].name, "Existing Automation");
+  assert.equal(library.grantsSupported, true);
+  assert.equal(library.operationsSupported, false);
+  assert.deepEqual(library.failures, []);
+  assert.deepEqual(library.runs, []);
 });
 
 test("Desktop consumes the Platform Automation setup contract without moving activation authority into the renderer", async () => {

@@ -375,6 +375,12 @@ function registerIpc() {
   ipcMain.handle("desktop:revoke-automation-grant", (_event, input) =>
     controller.revokeAutomationGrant(input?.grantId, input?.reason)
   );
+  ipcMain.handle("desktop:simulate-automation", (_event, input) =>
+    controller.simulateAutomation(input?.automationId, input?.sampleTrigger ?? null)
+  );
+  ipcMain.handle("desktop:repair-automation-failure", (_event, input) =>
+    controller.repairAutomationFailure(input?.incidentId, input?.resolution)
+  );
   ipcMain.handle("desktop:begin-automation-setup", (_event, input) =>
     controller.beginAutomationSetup(input)
   );
