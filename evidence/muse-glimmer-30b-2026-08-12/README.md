@@ -11,7 +11,10 @@ or a declaration of parity with a managed model.
 - model SHA-256: `7e9b74b7c8875e9e265695df9613bf6290f2392e479ce740495a129019c488d8`;
 - model repository revision: `a0532f7263ee67f1e0a5f5c5fdcd50dd62fc9aa4`;
 - runtime: `llama.cpp` commit `f8def7fe168bab245fbf15d3f18b26dbb1ef73c8` (`b10353`);
-- server: loopback-only, one slot, 32,768-token context, Metal, Jinja chat template; and
+- server: loopback-only, one slot, Metal, Jinja chat template; the original
+  qualification used a 32,768-token context and the paired suite used 131,072;
+- DFlash artifact: official `dflash-kquant.gguf`, 1,631,205,312 bytes, SHA-256
+  `27d9a805fa29b943cfb6ad4843367cd4eaaaf06bd452d8cc3e00a2cd18a677bc`;
 - primary sampling: reasoning strength `low`, temperature `1`, top-p `0.95`, top-k `64`.
 
 The model artifact and runtime build live in ExpertCache's ignored `.cache`
@@ -28,6 +31,10 @@ tree and are not committed here.
 | `qualification-high.json` | high strength, official sampling | 13/16, 855.7s, 8.3 tok/s; coding exhausted the completion budget before a final answer |
 | `integration-authority-low.json` | two authority/receipt counterfactuals, all ablation arms | all arms 2/2; no integration lift |
 | `integration-development-baseline-low-ac.json` | five families plus five variants, base-only failure discovery | 10/10 combined cases; 26/30 atomic attempts; zero observed integration failures |
+| `paired-sonnet-control-v1.json` | frozen hard suite, Sonnet 5 medium control | raw 28/32; adjudicated 32/32; 77.7s request time |
+| `paired-muse-plain-v1.json` | identical frozen hard suite, plain Muse | raw 20/32; adjudicated 32/32; 593.0s; 7.19 tok/s |
+| `paired-muse-dflash-v1.json` | identical suite, Meta DFlash drafter | raw 24/32; adjudicated 32/32; 713.2s; 6.31 tok/s |
+| `paired-adjudication-v1.json` | symmetric review of exact-substring false negatives | all treatments 32/32; raw evidence and hashes preserved |
 
 The first three pre-clean-restart runs were executed while the machine was on
 battery. The temperature-zero run crossed from battery to AC. Their capability
@@ -53,3 +60,16 @@ Atomic knowledge was unstable in stale-writer fencing and collider conditioning,
 so those are teaching/distillation targets rather than integration-engine
 targets. The development set must become harder before another broad workspace
 ablation would be informative.
+
+The frozen paired diagnostic then showed model-only outcome parity with the
+Sonnet control on all 12 cases after adjudication. The automated scorer was too
+brittle to treat numeric and semantically equivalent rationale forms as equal;
+its raw scores are retained as evidence of that evaluator defect rather than
+rewritten.
+
+Speed is now the primary observed gap. Plain Muse took 593.0 seconds across 18
+calls and 3,873 output tokens. DFlash took 713.2 seconds across the same cases,
+generated 4,134 output tokens, and reduced measured decode throughput by 12.2%.
+The 20.3% wall-time regression rejects DFlash for this pinned M1 Max treatment.
+The next speed work prioritizes shorter verified trajectories, avoided calls,
+and deterministic integration shortcuts before another speculative arm.

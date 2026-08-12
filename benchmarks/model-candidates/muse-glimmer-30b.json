@@ -85,6 +85,22 @@
       "wall_seconds": 377.466302833,
       "tokens_per_second": 8.554095734272563
     },
+    "paired_sonnet_diagnostic": {
+      "suite_sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+      "cases": 12,
+      "maximum": 32,
+      "sonnet_raw_score": 28,
+      "sonnet_adjudicated_score": 32,
+      "muse_plain_raw_score": 20,
+      "muse_plain_adjudicated_score": 32,
+      "muse_plain_request_wall_seconds": 593.0006324180001,
+      "muse_plain_decode_tokens_per_second": 7.190677215139497,
+      "muse_dflash_raw_score": 24,
+      "muse_dflash_adjudicated_score": 32,
+      "muse_dflash_request_wall_seconds": 713.1568892899999,
+      "muse_dflash_decode_tokens_per_second": 6.3112586350429964,
+      "dflash_decision": "rejected_for_pinned_m1_max_treatment"
+    },
     "routing_status": "not_promoted"
   },
   "treatments": [

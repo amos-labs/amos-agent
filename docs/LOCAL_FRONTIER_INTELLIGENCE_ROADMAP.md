@@ -257,15 +257,18 @@ result and redirects the next experiment.
 
 ## Immediate execution backlog
 
-1. Land the benchmark schema, deterministic evaluator, and first diagnostic
-   fixtures.
-2. Run baseline and explicit-integration arms on GPT-OSS 20B.
-3. Audit cases where all atomic probes pass but synthesis fails.
-4. Expand to 50 cases using those observed failure modes, not generated volume
-   alone.
-5. Run the same frozen cases through ExpertCache 120B and a frontier control.
-6. In parallel, implement the registered 20B-draft/120B-verify experiment in
-   ExpertCache.
+1. Replace the brittle exact-substring rationale checks in a new paired-suite
+   version, then expand it with observed failures and untouched holdouts.
+2. Build consent-safe shortest-correct Muse trajectories for the routine and
+   bounded-balanced AMOS lanes, including tool recovery and escalation.
+3. Measure base, deterministic-tool, elicited-note, and explicit-workspace arms
+   only on repeatable local failure families.
+4. Complete the Muse adapter, merge, export, and GGUF compatibility spike; then
+   compare supervised and preference adaptation as separate treatments.
+5. Re-run the quantized adapted model against the frozen Sonnet and Haiku
+   controls with quality, output-token, latency, and critical-safety gates.
+6. Continue the registered ExpertCache 120B speed experiments independently;
+   do not transfer sparse-expert cache mechanisms to dense Muse.
 7. Select the first AMOS shadow workflows only after the benchmark identifies
    a repeatable lift and cost envelope.
 

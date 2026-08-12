@@ -15,8 +15,8 @@ repeatedly failing work remains on the stronger route until separately proven.
 ## Initial measured signal — August 12, 2026
 
 The first physical M1 Max 64 GB run is strong enough to continue, but not yet
-strong enough to declare Haiku or Sonnet parity. The official 16.8 GB K-Quant
-artifact ran fully local in a pinned `llama.cpp` build with one 32K slot.
+strong enough to declare production Haiku or Sonnet parity. The official 16.8
+GB K-Quant artifact ran fully local in a pinned `llama.cpp` build.
 
 | Treatment | Score | Wall time | Generation | Interpretation |
 | --- | ---: | ---: | ---: | --- |
@@ -25,6 +25,36 @@ artifact ran fully local in a pinned `llama.cpp` build with one 32K slot.
 | hard qualification, low strength, official sampling, clean AC restart | 16/16 | 377.5s | 8.6 tok/s | replicated all seven scenarios and the hidden coding checks |
 | hard qualification, low strength, temperature zero, mixed battery/AC | 13/16 | 416.8s | 5.6 tok/s | all non-code scenarios passed; generated code failed the hidden harness |
 | hard qualification, high strength, official sampling | 13/16 | 855.7s | 8.3 tok/s | coding consumed the completion budget in reasoning and returned no final answer |
+
+### Frozen paired Sonnet diagnostic
+
+A subsequently frozen 12-case, 32-point suite tested causal and temporal
+transfer, Bayesian and Simpson reasoning, policy/receipt precedence, calibrated
+abstention, dependent tool recovery, idempotent approval, and two executable
+coding tasks. The suite SHA-256 was
+`266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c`.
+
+| Treatment | Automated score | Adjudicated score | Request time | Output tokens | Local decode |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Claude Sonnet 5, medium | 28/32 | 32/32 | 77.7s | 5,143 | hosted |
+| Muse, low, plain decode | 20/32 | 32/32 | 593.0s | 3,873 | 7.19 tok/s |
+| Muse, low, official DFlash | 24/32 | 32/32 | 713.2s | 4,134 | 6.31 tok/s |
+
+Every automated deduction was an exact-substring false negative. All three
+treatments selected every expected label, both Muse arms completed the two
+dependent tool workflows and both executable coding checks, and the rationales
+were semantically correct. The symmetric adjudication policy and report hashes
+are frozen in `paired-adjudication-v1.json`; the raw reports remain unchanged.
+
+This is a model-only parity signal on a small synthetic diagnostic, not a
+production parity declaration. Its strongest consequence is that a targeted
+AMOS adaptation program is justified. The latency result is equally clear:
+plain local Muse took 7.63x the Sonnet request time, and DFlash regressed local
+decode throughput by 12.2% while increasing request time by 20.3%.
+
+The DFlash treatment used Meta's official 1.6 GB drafter with the target and
+draft fully on Metal. It is rejected for the pinned M1 Max/runtime/workload
+combination. Re-test only after a material runtime, hardware, or drafter change.
 
 The initial default is therefore **low reasoning strength with Meta's published
 sampling**, not temperature zero and not high strength. Higher reasoning must
@@ -55,13 +85,16 @@ collider conditioning were unstable, leaving 6/10 cases eligible for the strict
 fail observations. The current development set therefore identifies teaching
 targets, but is too easy to measure integration-engine uplift for this model.
 
-The next experiment has two separate inputs:
+The next experiment has three separate inputs:
 
 1. add verified teaching examples for fencing and collider conditioning, then
    re-run untouched counterfactuals to test concept stability; and
 2. build a harder, sealed integration set with longer dependency chains,
    misleading but non-authoritative cues, transfer between surface forms, and
-   enough cases to estimate recovery confidence intervals.
+   enough cases to estimate recovery confidence intervals; and
+3. build the first shortest-correct AMOS trajectory corpus, then separately
+   measure prompt/integration changes, supervised adaptation, preference
+   training, and post-quantization retention.
 
 The second lane matters strategically. Replacing only routine calls could move
 roughly 60% of the first measured call sample local. Absorbing a meaningful
@@ -239,6 +272,10 @@ training, merge, GGUF conversion, and runtime loading are a separate
 compatibility spike. Full BF16 weights are available for research and
 fine-tuning, but AMOS must not assume that every current PEFT or conversion path
 already handles this architecture correctly.
+
+The first-principles architecture, latency model, adaptation targets, and
+immediate experimental sequence are developed in
+`docs/MUSE_LOCAL_INTELLIGENCE_FIRST_PRINCIPLES.md`.
 
 ## Promotion gates
 
