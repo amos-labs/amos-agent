@@ -1,0 +1,47 @@
+{
+  "schema": "amos.paired-model-qualification-adjudication",
+  "version": 1,
+  "created_at": "2026-08-12T14:25:00Z",
+  "suite": {
+    "path": "benchmarks/muse-sonnet-paired-v1.json",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c"
+  },
+  "policy": {
+    "scope": "Overturn automated false negatives only when the response selected the expected label and its rationale was semantically correct from the prompt; do not repair an incorrect label, extra action, missing tool call, failed executable check, or format/termination failure.",
+    "applied_symmetrically": true
+  },
+  "targets": [
+    {
+      "id": "qwen35-9b-q4-k-m-non-thinking",
+      "report": "qwen35-nonthinking-paired-v1.json",
+      "report_sha256": "cae6f5c29dd29eb8c2c7cec865a18e2795a4562c24db2614ef99fcf781e5686f",
+      "raw_score": 12,
+      "maximum": 32,
+      "overrides": [
+        {
+          "case_id": "collider-transfer",
+          "points_restored": 2,
+          "reason": "The response selected C and explicitly explained that sampling all applicants without conditioning removes collider bias and reveals the underlying independence."
+        },
+        {
+          "case_id": "causal-abstention",
+          "points_restored": 2,
+          "reason": "The response selected C and correctly said concurrent changes without a control prevent isolating the cause."
+        },
+        {
+          "case_id": "temporal-evidence-chain",
+          "points_restored": 2,
+          "reason": "The response selected B and correctly said the current system state is pending and unexecuted and overrides the unsigned chat message."
+        }
+      ],
+      "confirmed_failures": [
+        "correlated-bayes",
+        "authority-receipt-conflict",
+        "deadline-optimization",
+        "stale-reference-recovery",
+        "idempotent-approval"
+      ],
+      "adjudicated_score": 18
+    }
+  ]
+}

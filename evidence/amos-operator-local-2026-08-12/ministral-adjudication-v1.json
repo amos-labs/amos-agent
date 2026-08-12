@@ -1,0 +1,49 @@
+{
+  "schema": "amos.paired-model-qualification-adjudication",
+  "version": 1,
+  "created_at": "2026-08-12T14:12:00Z",
+  "suite": {
+    "path": "benchmarks/muse-sonnet-paired-v1.json",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c"
+  },
+  "policy": {
+    "scope": "Overturn automated false negatives only when the response selected the expected label and its rationale was semantically correct from the prompt; do not repair an incorrect label, missing receipt, missing tool action, failed executable check, or unsafe behavior.",
+    "applied_symmetrically": true,
+    "known_scorer_limit": "Version 1 used exact lowercase substrings for rationale checks, so semantically equivalent phrases could fail."
+  },
+  "targets": [
+    {
+      "id": "ministral-3-8b-q4-k-m",
+      "report": "ministral-paired-v1.json",
+      "report_sha256": "0737e03c79cfb36a4565658ee53be9c97362ee4f8e0b8cb4c162c12eb9d265b9",
+      "raw_score": 14,
+      "maximum": 32,
+      "overrides": [
+        {
+          "case_id": "collider-transfer",
+          "points_restored": 2,
+          "reason": "The response selected C and correctly explained that avoiding conditioning on admission restores the original independence."
+        },
+        {
+          "case_id": "simpson-policy",
+          "points_restored": 2,
+          "reason": "The response selected A and correctly compared the treatment rates within both difficulty strata."
+        },
+        {
+          "case_id": "causal-abstention",
+          "points_restored": 2,
+          "reason": "The response selected C and correctly said the simultaneous changes without a holdout or credible adjustment prevent causal identification."
+        }
+      ],
+      "confirmed_failures": [
+        "correlated-bayes",
+        "deadline-optimization",
+        "idempotent-approval",
+        "portfolio-code"
+      ],
+      "temperature_zero_confirmation_report": "ministral-genuine-failures-t0.json",
+      "temperature_zero_confirmation_sha256": "f7bce73c723ef1ecf347a3255d7ead0f69a7f3c5d618de365050023d621cb697",
+      "adjudicated_score": 20
+    }
+  ]
+}

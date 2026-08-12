@@ -1,0 +1,77 @@
+{
+  "schema": "amos.local-student-training-plan",
+  "version": 1,
+  "status": "compatibility_passed",
+  "student": {
+    "name": "AMOS Operator Local v0",
+    "base_model": "mistralai/Ministral-3-8B-Instruct-2512",
+    "training_checkpoint": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+    "training_checkpoint_revision": "182f003f01daa75f9de0f2c4d379722fd0bc1c61",
+    "deployment_format": "GGUF Q4_K_M",
+    "vision_training": false
+  },
+  "frozen_evaluation_exclusions": [
+    {
+      "path": "benchmarks/muse-sonnet-paired-v1.json",
+      "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+      "rule": "Never copy prompts, values, answers, or code solutions into training or validation. Train only analogous skills in isolated synthetic families."
+    }
+  ],
+  "compatibility_spike": {
+    "date": "2026-08-12",
+    "framework": "mlx-vlm 0.6.12",
+    "mlx": "0.32.0",
+    "fine_tune_type": "QLoRA",
+    "trainable_parameters": 22282240,
+    "trainable_parameter_percent": 0.25,
+    "rank": 8,
+    "alpha": 16,
+    "learning_rate": 0.0001,
+    "batch_size": 1,
+    "iterations": 2,
+    "max_sequence_length": 512,
+    "completion_only_loss": true,
+    "verified_text_trajectories": 3,
+    "dataset_sha256": "25586b0c7f5a198defd9ce98174939cc76640ed6756cf6d77d4f96e1c451a55f",
+    "first_loss": 5.21423912,
+    "second_loss": 2.92076135,
+    "peak_memory_gb": 6.84,
+    "adapter_bytes": 89187578,
+    "adapter_sha256": "f14dcaf053702db9d5b07d761c6a75fd060a4f0783b138fc2627121694c222a8",
+    "adapter_reload": "passed",
+    "reload_peak_memory_gb": 6.079,
+    "reload_generation_tokens_per_second": 29.337,
+    "quality_claim": false
+  },
+  "pilot": {
+    "name": "v0.1 shortest-correct SFT",
+    "minimum_verified_train_trajectories": 1000,
+    "minimum_verified_validation_trajectories": 200,
+    "whole_family_split_isolation": true,
+    "target_mix": {
+      "authority_receipts_and_idempotency": 0.25,
+      "deterministic_math_and_constraint_checking": 0.25,
+      "tool_recovery_and_evidence_reconciliation": 0.2,
+      "executable_code_and_repair": 0.15,
+      "causal_abstention_and_escalation": 0.15
+    },
+    "treatments": [
+      { "rank": 16, "alpha": 32, "learning_rate": 0.00005 },
+      { "rank": 32, "alpha": 64, "learning_rate": 0.00005 }
+    ],
+    "selection_metric": "verified held-out outcome per generated token",
+    "must_not_regress": [
+      "exact tool order and arguments",
+      "receipt-complete final reports",
+      "no false execution",
+      "required escalation",
+      "base behaviors already correct on the frozen suite"
+    ]
+  },
+  "promotion_gates": [
+    "adjudicated frozen-suite score improves without a critical contract failure",
+    "held-out synthetic families improve over the unadapted base",
+    "adapter merge and GGUF conversion preserve the measured gain",
+    "exact deployment artifact passes the physical 16GB memory, swap, context, and speed gate"
+  ]
+}

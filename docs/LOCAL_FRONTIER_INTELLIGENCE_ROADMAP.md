@@ -218,6 +218,51 @@ prototype a JEPA-inspired module. Candidate objectives include:
 The learned predictor is a planning and consistency component. It is not
 memory, authorization, proof, or a replacement for the language/tool model.
 
+## Track C: AMOS compact local model
+
+The primary product path is a purpose-trained 8–14B AMOS student that fits as a
+resident model on a physical 16 GB Apple Silicon Mac. Muse Glimmer 30B becomes
+its teacher, local reviewer, and fallback rather than the default interactive
+worker. A qualified frontier model remains the final escalation lane.
+
+The first deployment target is approximately 7 GB at four-bit precision with
+an 8 GB artifact ceiling, at least 8K context, no critical memory pressure, no
+more than 1 GB swap growth during qualification, and at least 10 sustained
+decode tokens/second on the physical 16 GB host. The product target is 15
+tokens/second while retaining the frozen workflow contract.
+
+Two construction strategies race:
+
+1. distill verified AMOS trajectories into a runtime-native model with mature
+   training, Metal, `llama.cpp`, and GGUF support; and
+2. create a structurally reduced Muse student through layer or width reduction
+   plus representation, logit, trajectory, and outcome distillation.
+
+The runtime-native arm is the default. The Muse-derived arm proceeds only if
+its training and export spike avoids custom-kernel debt and early checkpoints
+beat the runtime-native arm at equal artifact size.
+
+The training corpus is governed by an executable contract. Synthetic examples
+contain no customer data. Product-derived records are disabled unless the
+compiler is explicitly authorized and every record is minimized and tied to a
+training-consent receipt. Teacher agreement alone cannot create a gold record;
+deterministic, executable, or human verification is required. Entire scenario
+families belong to one split so surface variants cannot leak into evaluation.
+
+The first base race selected Ministral 3 8B for v0. On the M1 Max its official
+5.20 GB Q4_K_M artifact sustained 28.29 decode tok/s, used 1,128 output tokens
+on the frozen suite, and scored adjudicated 20/32. Qwen 3.5 9B decoded at 24.74
+tok/s but its production-shaped arm scored adjudicated 18/32, failed both
+critical tool flows, used 4,719 output tokens, and took 256.38 seconds. Qwen is
+retained as a secondary capability/teacher arm, not the initial deployment
+base.
+
+Ministral then passed a local QLoRA architecture spike with a 6.84 GB training
+peak and a reloadable 89.2 MB adapter. This is a toolchain proof, not a tuned
+candidate. The next gate is a minimum 1,000-record verified training corpus plus
+200 family-isolated validation records, followed by rank-16 and rank-32 SFT
+treatments. The exact frozen paired suite remains evaluation-only.
+
 ## Combined experiments
 
 Every benchmark release should compare at least:
@@ -263,8 +308,10 @@ result and redirects the next experiment.
    bounded-balanced AMOS lanes, including tool recovery and escalation.
 3. Measure base, deterministic-tool, elicited-note, and explicit-workspace arms
    only on repeatable local failure families.
-4. Complete the Muse adapter, merge, export, and GGUF compatibility spike; then
-   compare supervised and preference adaptation as separate treatments.
+4. Scale the verified Ministral training corpus, compare rank-16 and rank-32
+   completion-only QLoRA treatments, then merge, export, and re-qualify the
+   exact GGUF artifact. Keep Muse-derived training as a challenger, not the
+   critical path.
 5. Re-run the quantized adapted model against the frozen Sonnet and Haiku
    controls with quality, output-token, latency, and critical-safety gates.
 6. Continue the registered ExpertCache 120B speed experiments independently;

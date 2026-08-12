@@ -1,0 +1,53 @@
+{
+  "schema": "amos.local-model-native-benchmark",
+  "version": 1,
+  "created_at": "2026-08-12T13:59:17Z",
+  "hardware": {
+    "cpu": "Apple M1 Max",
+    "gpu": "Apple M1 Max",
+    "unified_memory_gib": 64,
+    "power": "AC"
+  },
+  "runtime": {
+    "name": "llama.cpp",
+    "build_commit": "f8def7fe168bab245fbf15d3f18b26dbb1ef73c8",
+    "build_number": 10353,
+    "backends": ["Metal", "Accelerate"],
+    "load_mode": "mmap"
+  },
+  "model": {
+    "repository": "mistralai/Ministral-3-8B-Instruct-2512-GGUF",
+    "revision": "0102285ad796bd99af90f58de616092e5630e970",
+    "filename": "Ministral-3-8B-Instruct-2512-Q4_K_M.gguf",
+    "artifact_bytes": 5198911904,
+    "loaded_model_bytes": 5190500352,
+    "parameters": 8489553920,
+    "sha256": "33e7a72cf5e6e2cfc2f2847075acc013d68bba023e35310cef86b5cf8fdca761"
+  },
+  "treatments": [
+    {
+      "prompt_tokens": 512,
+      "generated_tokens": 0,
+      "repetitions": 3,
+      "average_tokens_per_second": 466.574,
+      "standard_deviation": 0.460,
+      "samples_tokens_per_second": [466.156, 467.068, 466.499]
+    },
+    {
+      "prompt_tokens": 0,
+      "generated_tokens": 128,
+      "repetitions": 3,
+      "average_tokens_per_second": 28.224554,
+      "standard_deviation": 1.470933,
+      "samples_tokens_per_second": [29.9218, 27.3208, 27.431]
+    },
+    {
+      "prompt_tokens": 0,
+      "generated_tokens": 512,
+      "repetitions": 3,
+      "average_tokens_per_second": 28.293557,
+      "standard_deviation": 2.831023,
+      "samples_tokens_per_second": [31.494, 27.2699, 26.1167]
+    }
+  ]
+}

@@ -20,6 +20,58 @@ Muse, Sonnet, and Muse with DFlash each reached 32/32 after symmetric human
 adjudication of exact-keyword scorer false negatives. That is not yet a
 production parity claim, but it makes adaptation worth pursuing.
 
+### Program decision — August 12, 2026
+
+The primary product path is now a compact AMOS-specific student, not continued
+optimization of the unchanged 30B target. Muse remains the capability teacher,
+local reviewer/fallback, and regression control. Dense Muse runtime work
+continues only when a bounded experiment has a plausible path to a material
+gain.
+
+The student contract is deliberately physical:
+
+| Property | Gate |
+| --- | ---: |
+| Primary deployment host | physical 16 GB Apple Silicon Mac |
+| Target quantized artifact | approximately 7 GB |
+| Hard artifact ceiling | 8 GB |
+| Minimum context | 8,192 tokens |
+| Maximum qualification swap growth | 1 GB |
+| Initial 16 GB speed floor | 10 sustained decode tok/s |
+| 16 GB product target | 15 sustained decode tok/s |
+| M1 Max development target | 15 sustained decode tok/s |
+| Output-token target | at most 60% of plain Muse on matched verified work |
+
+Two students race under the same contract: a runtime-native 8–14B model with a
+mature Metal/training/export path, and a structurally reduced Muse derivative.
+The Muse-derived arm continues only if it can be trained and exported without a
+long-lived private runtime fork and beats the runtime-native arm at equal
+artifact size.
+
+### First base race and training proof — August 12, 2026
+
+Ministral 3 8B is the selected v0 runtime-native student base. Its official
+5.20 GB Q4_K_M artifact sustained 28.29 decode tok/s on the M1 Max and completed
+the frozen AMOS suite in 83.42 seconds with 1,128 output tokens. It scored raw
+14/32 and adjudicated 20/32. The remaining failures—correlated Bayes, deadline
+feasibility, receipt-complete reporting, and executable portfolio code—are
+specific verified teaching targets, not evidence of parity.
+
+Qwen 3.5 9B cleared the native speed screen at 24.74 tok/s but lost the product
+comparison. Its non-thinking arm scored raw 12/32 and adjudicated 18/32, failed
+both critical tool flows, emitted 4,719 output tokens, and required 256.38
+seconds. Thinking mode fixed two generic reasoning cases only after 156–185
+seconds per case and still failed the authority/receipt case. Qwen remains a
+secondary teacher/capability experiment rather than the v0 student base.
+
+The Ministral path also passed a complete local QLoRA compatibility spike with
+`mlx-vlm` 0.6.12: 22.28 million LoRA parameters trained for two steps at a 6.84
+GB peak, the 89.2 MB adapter saved, and the adapter reloaded for correct local
+inference at 29.34 tok/s. This proves the architecture and toolchain can train;
+three examples and two gradient steps make no quality claim. The next pilot
+starts only after at least 1,000 verified training and 200 family-isolated
+validation trajectories exist.
+
 ## 1. The physical inference system
 
 Muse Glimmer is a dense transformer. The evaluated GGUF contains approximately
@@ -204,20 +256,26 @@ solution:
 
 ## 5. Immediate experiment sequence
 
-1. Repair the paired evaluator in a new suite version and expand the sealed set
+1. Generate and validate family-isolated synthetic AMOS trajectories under the
+   executable data contract; teacher agreement alone never creates a gold
+   record.
+2. Repair the paired evaluator in a new suite version and expand the sealed set
    with genuinely discriminating cases rather than exact-wording traps.
-2. Replay a consent-safe sample of routine and balanced routes through Muse and
+3. Replay a consent-safe sample of routine and balanced routes through Muse and
    the current controls, recording verified outcomes, output tokens, latency,
    repairs, and escalation decisions.
-3. Add inference-time integration only to observed failure families. Compare
+4. Add inference-time integration only to observed failure families. Compare
    base, elicited-note, explicit-workspace, and deterministic-tool arms.
-4. Create a small audited corpus of shortest-correct trajectories, including
+5. Create a small audited corpus of shortest-correct trajectories, including
    negative examples and required escalation.
-5. Run the Muse adapter/export compatibility spike, then supervised adaptation
-   and preference training as separately measured treatments.
-6. Quantize the adapted model and repeat model-only, integrated, critical-
+6. Treat Ministral 3 8B as the selected v0 base; keep Qwen 3.5 9B as a secondary
+   teacher/capability challenger and defer the Muse-derived arm until its export
+   economics can beat the working runtime-native path.
+7. Run supervised adaptation and preference training as separately measured
+   treatments.
+8. Quantize the adapted model and repeat model-only, integrated, critical-
    safety, and sustained-speed gates on physical hardware.
-7. Shadow only workflows that meet both parity and latency gates. Keep hosted
+9. Shadow only workflows that meet both parity and latency gates. Keep hosted
    fallback until local false-success and escalation calibration are measured.
 
 The primary product metric is verified local work completed per wall-clock

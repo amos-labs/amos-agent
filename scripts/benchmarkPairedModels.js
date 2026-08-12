@@ -183,21 +183,33 @@ function caseResult(testCase, response, evaluation, calls, started) {
 function candidateTarget() {
   const url = String(readOption(args, "--candidate-url") || "http://127.0.0.1:18080").replace(/\/$/, "");
   const model = readOption(args, "--candidate-model") || "muse-glimmer-30b";
+  const label = readOption(args, "--candidate-label") || "Muse Glimmer 30B local";
   const reasoningStrength = readOption(args, "--candidate-reasoning-strength") || "low";
+  const reasoningDialect = normalizeReasoningDialect(
+    readOption(args, "--candidate-reasoning-dialect") || "muse"
+  );
+  const enableThinking = booleanOption(args, "--candidate-enable-thinking", true);
   const temperature = boundedNumber(readOption(args, "--candidate-temperature"), 0, 2, 1);
   const topP = boundedNumber(readOption(args, "--candidate-top-p"), 0.01, 1, 0.95);
   const topK = boundedInteger(readOption(args, "--candidate-top-k"), 1, 1_000, 64);
+  const presencePenaltyValue = readOption(args, "--candidate-presence-penalty");
+  const presencePenalty = presencePenaltyValue === undefined
+    ? null
+    : boundedNumber(presencePenaltyValue, -2, 2, 0);
   return {
-    label: "Muse Glimmer 30B local",
+    label,
     publicIdentity: {
       id: "candidate",
-      label: "Muse Glimmer 30B local",
+      label,
       model,
       protocol: "openai-chat-completions",
-      reasoning_strength: reasoningStrength,
+      reasoning_dialect: reasoningDialect,
+      reasoning_strength: reasoningDialect === "muse" ? reasoningStrength : null,
+      enable_thinking: reasoningDialect === "qwen" ? enableThinking : null,
       temperature,
       top_p: topP,
-      top_k: topK
+      top_k: topK,
+      presence_penalty: presencePenalty
     },
     async chat({ messages, tools = [] }) {
       const started = performance.now();
@@ -212,7 +224,12 @@ function candidateTarget() {
           temperature,
           top_p: topP,
           top_k: topK,
-          chat_template_kwargs: { reasoning_strength: reasoningStrength },
+          presence_penalty: presencePenalty ?? undefined,
+          chat_template_kwargs: candidateChatTemplateKwargs({
+            reasoningDialect,
+            reasoningStrength,
+            enableThinking
+          }),
           stream: false
         }),
         signal: AbortSignal.timeout(timeoutMs)
@@ -227,6 +244,28 @@ function candidateTarget() {
       };
     }
   };
+}
+
+function normalizeReasoningDialect(value) {
+  const normalized = String(value).trim().toLowerCase();
+  if (!["muse", "qwen", "none"].includes(normalized)) {
+    throw new Error("--candidate-reasoning-dialect must be muse, qwen, or none");
+  }
+  return normalized;
+}
+
+function candidateChatTemplateKwargs({ reasoningDialect, reasoningStrength, enableThinking }) {
+  if (reasoningDialect === "muse") return { reasoning_strength: reasoningStrength };
+  if (reasoningDialect === "qwen") return { enable_thinking: enableThinking };
+  return undefined;
+}
+
+function booleanOption(values, name, fallback) {
+  const raw = readOption(values, name);
+  if (raw === undefined) return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  throw new Error(`${name} must be true or false`);
 }
 
 function controlTarget() {

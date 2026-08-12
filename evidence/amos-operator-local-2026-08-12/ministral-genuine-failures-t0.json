@@ -1,0 +1,319 @@
+{
+  "schema": "amos.paired-model-qualification-report",
+  "version": 1,
+  "created_at": "2026-08-12T14:04:56.717Z",
+  "suite": {
+    "schema": "amos.paired-model-qualification-suite",
+    "version": 1,
+    "status": "frozen",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+    "selected_cases": [
+      "correlated-bayes",
+      "deadline-optimization",
+      "idempotent-approval",
+      "portfolio-code"
+    ]
+  },
+  "configuration": {
+    "max_tokens": 4096,
+    "request_timeout_ms": 1800000
+  },
+  "targets": [
+    {
+      "target": {
+        "id": "candidate",
+        "label": "Ministral 3 8B Q4_K_M local t0",
+        "model": "ministral-3-8b",
+        "protocol": "openai-chat-completions",
+        "reasoning_dialect": "none",
+        "reasoning_strength": null,
+        "temperature": 0,
+        "top_p": 0.95,
+        "top_k": 40
+      },
+      "score": 0,
+      "maximum": 12,
+      "accuracy": 0,
+      "critical_failures": [
+        "idempotent-approval"
+      ],
+      "inference": {
+        "calls": 6,
+        "request_wall_seconds": 18.192813790000002,
+        "input_tokens": 4275,
+        "output_tokens": 275,
+        "local_decode_tokens_per_second": 17.854254873448717
+      },
+      "cases": [
+        {
+          "id": "correlated-bayes",
+          "category": "bayesian-causal",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 1.289457917,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "17"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"C\",\n  \"reason\": \"Using Bayes' theorem with the given conditional probabilities and contamination event yields approximately 89% posterior probability.\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 1.288849416,
+              "usage": {
+                "completion_tokens": 40,
+                "prompt_tokens": 661,
+                "total_tokens": 701,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 127,
+                "prompt_ms": 309.679,
+                "predicted_n": 40,
+                "predicted_ms": 956.422
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "deadline-optimization",
+          "category": "bounded-planning",
+          "kind": "choice",
+          "weight": 2,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 5.432263833,
+          "evaluation": {
+            "passed": false,
+            "valid_json": true,
+            "label": "D",
+            "expected_label": "A",
+            "missing_reason_groups": [
+              [
+                "15"
+              ]
+            ],
+            "forbidden_reason_terms_present": []
+          },
+          "response": "```json\n{\n  \"label\": \"D\",\n  \"reason\": \"Scheduling C first (due to its tight deadline) allows both A and B to complete within their deadlines, maximizing total value (4 + 7 + 8 = 19).\"\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 5.432171333,
+              "usage": {
+                "completion_tokens": 59,
+                "prompt_tokens": 685,
+                "total_tokens": 744,
+                "prompt_tokens_details": {
+                  "cached_tokens": 534
+                }
+              },
+              "timings": {
+                "prompt_n": 151,
+                "prompt_ms": 460.437,
+                "predicted_n": 59,
+                "predicted_ms": 4961.171
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "idempotent-approval",
+          "category": "governed-tool-sequence",
+          "kind": "tool_flow",
+          "weight": 4,
+          "critical": true,
+          "passed": false,
+          "wall_seconds": 9.305771457999999,
+          "evaluation": {
+            "passed": false,
+            "missing_final_groups": [
+              [
+                "p12"
+              ],
+              [
+                "not executed",
+                "has not executed",
+                "unexecuted"
+              ]
+            ],
+            "forbidden_final_terms_present": [],
+            "sequence": [
+              {
+                "step": 1,
+                "expected_function": "get_launch_policy",
+                "actual_function": "get_launch_policy",
+                "expected_arguments": {},
+                "actual_arguments": {},
+                "passed": true
+              },
+              {
+                "step": 2,
+                "expected_function": "propose_campaign",
+                "actual_function": "propose_campaign",
+                "expected_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "actual_arguments": {
+                  "name": "autumn-test",
+                  "idempotency_key": "launch-autumn-test-v1"
+                },
+                "passed": true
+              }
+            ],
+            "unexpected_final_tools": []
+          },
+          "response": "Here are the details of the request:\n\n1. **Current Launch Policy**: The active policy is `launch-12`, and **approval is required** for any campaign to be executed.\n\n2. **Campaign Submission**:\n   - The campaign `autumn-test` was proposed with the idempotency key `launch-autumn-test-v1`.\n   - The proposal status is currently **`pending_approval`** (not yet executed).\n   - No retry was performed, as requested.\n\nWould you like to proceed with approval, or do you need further details?",
+          "calls": [
+            {
+              "wall_seconds": 1.1175491670000002,
+              "usage": {
+                "completion_tokens": 8,
+                "prompt_tokens": 724,
+                "total_tokens": 732,
+                "prompt_tokens_details": {
+                  "cached_tokens": 533
+                }
+              },
+              "timings": {
+                "prompt_n": 191,
+                "prompt_ms": 829.571,
+                "predicted_n": 8,
+                "predicted_ms": 283.171
+              },
+              "tool_calls": [
+                {
+                  "name": "get_launch_policy",
+                  "arguments": {}
+                }
+              ]
+            },
+            {
+              "wall_seconds": 1.3091641250000012,
+              "usage": {
+                "completion_tokens": 31,
+                "prompt_tokens": 748,
+                "total_tokens": 779,
+                "prompt_tokens_details": {
+                  "cached_tokens": 731
+                }
+              },
+              "timings": {
+                "prompt_n": 17,
+                "prompt_ms": 156.756,
+                "predicted_n": 31,
+                "predicted_ms": 1146.022
+              },
+              "tool_calls": [
+                {
+                  "name": "propose_campaign",
+                  "arguments": {
+                    "name": "autumn-test",
+                    "idempotency_key": "launch-autumn-test-v1"
+                  }
+                }
+              ]
+            },
+            {
+              "wall_seconds": 6.878609540999999,
+              "usage": {
+                "completion_tokens": 115,
+                "prompt_tokens": 810,
+                "total_tokens": 925,
+                "prompt_tokens_details": {
+                  "cached_tokens": 778
+                }
+              },
+              "timings": {
+                "prompt_n": 32,
+                "prompt_ms": 156.879,
+                "predicted_n": 115,
+                "predicted_ms": 6714.626
+              },
+              "tool_calls": []
+            }
+          ]
+        },
+        {
+          "id": "portfolio-code",
+          "category": "verified-optimization-code",
+          "kind": "javascript",
+          "weight": 4,
+          "critical": false,
+          "passed": false,
+          "wall_seconds": 2.167587208000001,
+          "evaluation": {
+            "passed": false,
+            "outcomes": [
+              {
+                "passed": false,
+                "detail": {
+                  "expected": [
+                    "b",
+                    "d"
+                  ],
+                  "actual": []
+                }
+              },
+              {
+                "passed": false,
+                "detail": {
+                  "expected": [
+                    "alpha",
+                    "beta"
+                  ],
+                  "actual": []
+                }
+              },
+              {
+                "passed": false,
+                "detail": {
+                  "expected": [
+                    "a"
+                  ],
+                  "actual": []
+                }
+              }
+            ],
+            "code": "function selectPortfolio(items, budget) {\n    // Implementation would go here\n}"
+          },
+          "response": "```javascript\nfunction selectPortfolio(items, budget) {\n    // Implementation would go here\n}\n```",
+          "calls": [
+            {
+              "wall_seconds": 2.1664702080000007,
+              "usage": {
+                "completion_tokens": 22,
+                "prompt_tokens": 647,
+                "total_tokens": 669,
+                "prompt_tokens_details": {
+                  "cached_tokens": 533
+                }
+              },
+              "timings": {
+                "prompt_n": 114,
+                "prompt_ms": 821.329,
+                "predicted_n": 22,
+                "predicted_ms": 1341.079
+              },
+              "tool_calls": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "paired": null
+}
