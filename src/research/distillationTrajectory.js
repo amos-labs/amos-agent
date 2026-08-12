@@ -27,6 +27,7 @@ export function validateDistillationTrajectory(value, options = {}) {
   validateTask(value);
   validateMessages(value.id, "input.messages", value.input?.messages, { requireFinalAssistant: false });
   validateMessages(value.id, "target.messages", value.target?.messages, { requireFinalAssistant: true });
+  validateToolContract(value);
   validateTarget(value);
   validateVerification(value);
   validateEfficiency(value);
@@ -59,15 +60,20 @@ export function compileVerifiedSft(records, options = {}) {
   validateDistillationDataset(records, options);
   const split = options.split || "train";
   if (!SPLITS.has(split)) throw new Error(`Unsupported compiled split: ${split}`);
-  return records
+  if (options.limit !== undefined && (!Number.isInteger(options.limit) || options.limit < 1)) {
+    throw new Error("Compiled record limit must be a positive integer");
+  }
+  const compiled = records
     .filter((record) => record.split === split)
     .filter((record) => options.includeTools !== false || !record.input?.tools?.length)
+    .filter((record) => options.onlyTools !== true || record.input?.tools?.length > 0)
     .map((record) => ({
       messages: [...record.input.messages, ...record.target.messages],
       ...(Array.isArray(record.input.tools) && record.input.tools.length > 0
         ? { tools: record.input.tools }
         : {})
     }));
+  return options.limit === undefined ? compiled : compiled.slice(0, options.limit);
 }
 
 export function datasetIdentity(records) {
@@ -162,6 +168,74 @@ function validateTarget(value) {
     }
   } else if (value.target.escalation) {
     throw new Error(`Local-answer trajectory ${value.id} cannot include escalation authority`);
+  }
+}
+
+function validateToolContract(value) {
+  const tools = value.input?.tools || [];
+  if (!Array.isArray(tools)) {
+    throw new Error(`Trajectory ${value.id} input.tools must be an array`);
+  }
+
+  const toolNames = new Set();
+  for (const [index, tool] of tools.entries()) {
+    const name = tool?.type === "function" ? tool.function?.name : null;
+    if (!name || typeof tool.function?.parameters !== "object") {
+      throw new Error(`Trajectory ${value.id} has invalid input.tools[${index}]`);
+    }
+    if (toolNames.has(name)) {
+      throw new Error(`Trajectory ${value.id} defines duplicate tool ${name}`);
+    }
+    toolNames.add(name);
+  }
+
+  const pendingCalls = new Set();
+  for (const [messageIndex, message] of value.target.messages.entries()) {
+    for (const call of message.tool_calls || []) {
+      const callId = call?.id;
+      const name = call?.type === "function" ? call.function?.name : null;
+      if (!callId || !name || !toolNames.has(name)) {
+        throw new Error(
+          `Trajectory ${value.id} has invalid tool call in target.messages[${messageIndex}]`
+        );
+      }
+      if (pendingCalls.has(callId)) {
+        throw new Error(`Trajectory ${value.id} reuses tool call id ${callId}`);
+      }
+      const argumentsValue = call.function.arguments;
+      if (typeof argumentsValue === "string") {
+        try {
+          const parsed = JSON.parse(argumentsValue);
+          if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error();
+        } catch {
+          throw new Error(`Trajectory ${value.id} tool call ${callId} has invalid JSON arguments`);
+        }
+      } else if (!argumentsValue || Array.isArray(argumentsValue) || typeof argumentsValue !== "object") {
+        throw new Error(`Trajectory ${value.id} tool call ${callId} requires object arguments`);
+      }
+      pendingCalls.add(callId);
+    }
+
+    if (message.role === "tool") {
+      if (!pendingCalls.delete(message.tool_call_id)) {
+        throw new Error(
+          `Trajectory ${value.id} has unmatched tool result ${message.tool_call_id}`
+        );
+      }
+      try {
+        JSON.parse(message.content);
+      } catch {
+        throw new Error(
+          `Trajectory ${value.id} tool result ${message.tool_call_id} must contain JSON`
+        );
+      }
+    }
+  }
+
+  if (pendingCalls.size > 0) {
+    throw new Error(
+      `Trajectory ${value.id} is missing tool results for ${[...pendingCalls].join(", ")}`
+    );
   }
 }
 

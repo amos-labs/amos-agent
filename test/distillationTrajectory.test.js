@@ -68,6 +68,35 @@ test("tool trajectories can be omitted for a text-only trainer spike", () => {
   assert.equal(compiled[0].messages.at(-1).content, direct.target.messages[0].content);
 });
 
+test("tool-only compilation can produce a bounded template smoke dataset", () => {
+  const direct = fixture();
+  const firstTool = toolFixture();
+  const secondTool = toolFixture();
+  secondTool.id = "authority-tool-003";
+  secondTool.family_id = "authority-tools-v3";
+  const compiled = compileVerifiedSft([direct, firstTool, secondTool], {
+    onlyTools: true,
+    limit: 1
+  });
+  assert.equal(compiled.length, 1);
+  assert.equal(compiled[0].tools[0].function.name, "read");
+  assert.throws(() => compileVerifiedSft([direct], { limit: 0 }), /positive integer/);
+});
+
+test("tool trajectories reject undefined calls, malformed arguments, and missing results", () => {
+  const undefinedTool = toolFixture();
+  undefinedTool.target.messages[0].tool_calls[0].function.name = "write";
+  assert.throws(() => validateDistillationTrajectory(undefinedTool), /invalid tool call/);
+
+  const malformedArguments = toolFixture();
+  malformedArguments.target.messages[0].tool_calls[0].function.arguments = "{bad";
+  assert.throws(() => validateDistillationTrajectory(malformedArguments), /invalid JSON arguments/);
+
+  const missingResult = toolFixture();
+  missingResult.target.messages.splice(1, 1);
+  assert.throws(() => validateDistillationTrajectory(missingResult), /missing tool results/);
+});
+
 function fixture(overrides = {}) {
   return {
     schema: "amos.distillation-trajectory",
@@ -111,4 +140,29 @@ function fixture(overrides = {}) {
       max_target_output_tokens: 20
     }
   };
+}
+
+function toolFixture() {
+  const record = fixture({ id: "authority-tool-002", family_id: "authority-tools-v2" });
+  record.input.tools = [{
+    type: "function",
+    function: {
+      name: "read",
+      parameters: { type: "object", properties: {}, additionalProperties: false }
+    }
+  }];
+  record.target.messages = [
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{
+        id: "read-1",
+        type: "function",
+        function: { name: "read", arguments: "{}" }
+      }]
+    },
+    { role: "tool", tool_call_id: "read-1", content: "{\"executed\":false}" },
+    { role: "assistant", content: "No. The current receipt records executed=false." }
+  ];
+  return record;
 }

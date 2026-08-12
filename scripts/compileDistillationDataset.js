@@ -13,7 +13,7 @@ const options = parseArguments(process.argv.slice(2));
 if (!options.input) {
   throw new Error(
     "Usage: npm run dataset:distillation -- --input PATH [--output PATH] " +
-    "[--split train|validation|evaluation] [--exclude-tools]"
+    "[--split train|validation|evaluation] [--exclude-tools|--only-tools] [--limit N]"
   );
 }
 
@@ -29,7 +29,9 @@ if (options.output) {
   const compiled = compileVerifiedSft(records, {
     allowConsentedProduct: options.allowConsentedProduct,
     split: options.split,
-    includeTools: options.includeTools
+    includeTools: options.includeTools,
+    onlyTools: options.onlyTools,
+    limit: options.limit
   });
   await writeFile(outputPath, `${compiled.map((record) => JSON.stringify(record)).join("\n")}\n`, {
     mode: 0o600
@@ -38,6 +40,7 @@ if (options.output) {
     ...identity,
     compiled_split: options.split,
     include_tools: options.includeTools,
+    only_tools: options.onlyTools,
     compiled_records: compiled.length,
     output: outputPath
   }, null, 2));
@@ -51,6 +54,8 @@ function parseArguments(args) {
     output: null,
     split: "train",
     includeTools: true,
+    onlyTools: false,
+    limit: undefined,
     allowConsentedProduct: false
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -59,6 +64,14 @@ function parseArguments(args) {
     else if (argument === "--output") parsed.output = args[++index];
     else if (argument === "--split") parsed.split = args[++index];
     else if (argument === "--exclude-tools") parsed.includeTools = false;
+    else if (argument === "--only-tools") parsed.onlyTools = true;
+    else if (argument === "--limit") {
+      const value = args[++index];
+      if (!/^\d+$/.test(value || "") || Number(value) < 1) {
+        throw new Error("--limit must be a positive integer");
+      }
+      parsed.limit = Number(value);
+    }
     else if (argument === "--allow-consented-product") parsed.allowConsentedProduct = true;
     else throw new Error(`Unknown argument: ${argument}`);
   }

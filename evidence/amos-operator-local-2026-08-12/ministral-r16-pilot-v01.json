@@ -1,0 +1,102 @@
+{
+  "schema": "amos.local-student-pilot-result",
+  "version": 1,
+  "created_at": "2026-08-12",
+  "status": "rejected_capability_regression",
+  "base_model": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+  "dataset": {
+    "identity_sha256": "e91df542b734f363dd1abbd02cd5d2e08eb1c3efae248d19fe9a0d7eefabfe95",
+    "artifact_sha256": "55521b665b6ebb1f9081dd9f3b8cbde5cd212c5f12b1a3ab9732bafee7889b3e",
+    "train_jsonl_sha256": "ee903821cc5ba43fe9f88701584f8dafcdf962956e2a506655a64fc26d8c2064",
+    "validation_jsonl_sha256": "ce2f1cf587d6c2e9c23653c99d7c4a8bb682a5e2e0d627c0b5a264f792b406ed",
+    "train_trajectories": 1000,
+    "validation_trajectories": 200,
+    "whole_family_split_isolation": true
+  },
+  "treatment": {
+    "framework": "mlx-vlm 0.6.12",
+    "mlx": "0.32.0",
+    "rank": 16,
+    "alpha": 32,
+    "learning_rate": 0.00005,
+    "batch_size": 1,
+    "iterations": 1000,
+    "max_sequence_length": 384,
+    "completion_only_loss": true,
+    "assistant_span_policy": "all assistant turns, including tool calls",
+    "trained_tokens": 200562,
+    "peak_memory_gb": 11.468,
+    "final_train_loss": 0.00498651,
+    "validation_loss": {
+      "base": 1.133,
+      "step_200": 0.027,
+      "step_400": 0.03,
+      "step_600": 0.023,
+      "step_800": 0.023,
+      "step_1000": 0.03
+    },
+    "adapter_bytes": 178317475,
+    "checkpoint_sha256": {
+      "step_200": "3a0ad0f1f962a19a1ed83515a2add20a5b3622276b566bf24fc184c35a6bea9e",
+      "step_600": "c4688e97bdcbf90bd1489cc6b50c8638906651e32db030803b13c8242bec4a2f",
+      "step_800": "63a2b53011a19fbc03fa462f810367bc3f80618de819f4cadec77f3a03a4dd3a",
+      "step_1000": "65ea59f9cf33a1e2f9508a63fa0d026bf66bbd6362c3507a81de897fcb4d4297"
+    }
+  },
+  "held_out_synthetic_generation": {
+    "selection": "four trajectories per workflow across nine workflows",
+    "base_exact": 0,
+    "base_total": 36,
+    "step_600_exact": 34,
+    "step_600_total": 36,
+    "step_600_failures": [
+      "budget final report contradicted the correct tool result",
+      "budget tool call truncated a multi-digit argument"
+    ],
+    "base_output_tokens": 4156,
+    "step_600_output_tokens": 1731,
+    "base_report_sha256": "18437dcbb90f878d92f4e6c3c0de771bcdbaea072f2fadd667bacd7a92bbc22f",
+    "step_600_report_sha256": "8722e41bc2d3a257580f1572422ec29fa5c89e4cef14f64fad0c9038f6abfbd4"
+  },
+  "frozen_suite": {
+    "path": "benchmarks/muse-sonnet-paired-v1.json",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+    "base_adjudicated_score": 20,
+    "maximum": 32,
+    "step_200": {
+      "raw_score": 6,
+      "conservative_adjudicated_score": 12,
+      "report_sha256": "ecbe5d04f21424923d55589d6e714d5e78e5d5d2177ea97c9e5cab9958ffc2c9",
+      "critical_failures": [
+        "idempotent-approval"
+      ],
+      "request_wall_seconds": 93.707706583,
+      "output_tokens": 633,
+      "local_decode_tokens_per_second": 23.890911494852308
+    },
+    "step_600": {
+      "raw_score": 0,
+      "conservative_adjudicated_score": 6,
+      "report_sha256": "2e70bae92d469b5b72d81ddffcc2dcd64568e142e16be7f38e36c42f76bdb4ab",
+      "tool_rerun_report_sha256": "469345dbd18efe5ac6e2097f22d93e4cc971bb6596f2fa619b1bb148f85bac03",
+      "critical_failures": [
+        "stale-reference-recovery",
+        "idempotent-approval"
+      ],
+      "confirmed_genuine_failures": [
+        "correlated-bayes",
+        "deadline-optimization",
+        "stale-reference-recovery-final-report",
+        "idempotent-approval-final-receipt",
+        "portfolio-code",
+        "event-reconciliation-code"
+      ]
+    }
+  },
+  "decision": {
+    "rank_16": "rejected",
+    "rank_32": "cancelled",
+    "reason": "The treatment learned the narrow synthetic distribution but regressed the pre-adaptation frozen capability baseline and retained critical failures.",
+    "next_treatment": "Lower-pressure adapter with broad verified capability replay, harder diverse algorithms and reasoning, receipt-complete reporting, and dual early stopping on held-out learning plus capability retention."
+  }
+}

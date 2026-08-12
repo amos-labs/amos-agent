@@ -1,7 +1,7 @@
 {
   "schema": "amos.local-student-training-plan",
   "version": 1,
-  "status": "compatibility_passed",
+  "status": "pilot_v01_rejected_capability_regression",
   "student": {
     "name": "AMOS Operator Local v0",
     "base_model": "mistralai/Ministral-3-8B-Instruct-2512",
@@ -42,6 +42,103 @@
     "reload_peak_memory_gb": 6.079,
     "reload_generation_tokens_per_second": 29.337,
     "quality_claim": false
+  },
+  "verified_pilot_corpus": {
+    "date": "2026-08-12",
+    "generator": "src/research/syntheticDistillationPilot.js",
+    "seed": "amos-operator-pilot-v1",
+    "trajectories": 1200,
+    "train": 1000,
+    "validation": 200,
+    "families": 600,
+    "variants_per_family": 2,
+    "whole_family_split_isolation": true,
+    "synthetic_customer_records": 0,
+    "tool_trajectories": 660,
+    "executable_trajectories": 180,
+    "code_repair_trajectories": 90,
+    "sha256": "e91df542b734f363dd1abbd02cd5d2e08eb1c3efae248d19fe9a0d7eefabfe95",
+    "target_mix": {
+      "authority_receipts_and_idempotency": 0.25,
+      "deterministic_math_and_constraint_checking": 0.25,
+      "tool_recovery_and_evidence_reconciliation": 0.2,
+      "executable_code_and_repair": 0.15,
+      "causal_abstention_and_escalation": 0.15
+    },
+    "reproduction_command": "npm run dataset:synthetic -- --profile pilot --output /private/tmp/amos-operator-pilot.json",
+    "quality_scope": "Deterministically or executably verified synthetic AMOS behaviors. Count and structure gates pass; adaptation quality remains unmeasured."
+  },
+  "tool_aware_compatibility_spike": {
+    "date": "2026-08-12",
+    "framework": "mlx-vlm 0.6.12",
+    "adapter": "scripts/trainMinistralStudent.py",
+    "verified_tool_trajectories": 4,
+    "tool_calls": 4,
+    "tool_results": 4,
+    "native_template_markers": [
+      "[AVAILABLE_TOOLS]",
+      "[TOOL_CALLS]",
+      "[TOOL_RESULTS]"
+    ],
+    "iterations": 2,
+    "rank": 8,
+    "alpha": 16,
+    "learning_rate": 0.0001,
+    "max_sequence_length": 512,
+    "completion_only_loss": true,
+    "assistant_span_policy": "all assistant turns, including tool calls",
+    "first_loss": 1.07893836,
+    "second_loss": 0.40179074,
+    "first_validation_loss": 1.064,
+    "second_validation_loss": 0.352,
+    "peak_memory_gb": 9.843,
+    "dataset_bytes": 4978,
+    "dataset_sha256": "cebf63cda8086c6848e9e3d33b74665cd16b12ab061d0ac61f57ecaa0b62d715",
+    "adapter_bytes": 89187578,
+    "adapter_sha256": "6c9093eb784e7f02b71f858e47444f348664f2f3f660514a144e0a4c16cc77b3",
+    "quality_claim": false
+  },
+  "rank16_pilot_v01": {
+    "status": "rejected",
+    "evidence": "evidence/amos-operator-local-2026-08-12/ministral-r16-pilot-v01.json",
+    "trained_tokens": 200562,
+    "peak_memory_gb": 11.468,
+    "best_synthetic_validation_loss": 0.023,
+    "held_out_synthetic_exact": "34/36",
+    "frozen_suite_step200_raw": "6/32",
+    "frozen_suite_step200_conservative_adjudicated": "12/32",
+    "frozen_suite_step600_raw": "0/32",
+    "frozen_suite_step600_conservative_adjudicated": "6/32",
+    "pre_adaptation_frozen_adjudicated": "20/32",
+    "rank32_decision": "cancelled",
+    "finding": "Synthetic validation alone selected a checkpoint that catastrophically narrowed broader capability."
+  },
+  "pilot_v02": {
+    "status": "planned",
+    "adaptation_pressure": {
+      "rank": 8,
+      "alpha": 16,
+      "learning_rate": 0.00001,
+      "checkpoint_interval": 50,
+      "maximum_initial_steps": 300
+    },
+    "data_mix": {
+      "broad_verified_capability_replay": 0.5,
+      "amos_tool_and_authority_trajectories": 0.25,
+      "hard_algorithmic_code_and_repair": 0.15,
+      "receipt_grounding_and_exact_value_copy": 0.1
+    },
+    "required_new_families": [
+      "correlated evidence and Bayesian inference",
+      "selection bias, causal graphs, and Simpson aggregation",
+      "deadline scheduling and bounded optimization",
+      "graph dependency and combinatorial optimization code",
+      "unordered event reconciliation and conflict handling",
+      "multi-step tool recovery with complete final receipts",
+      "multi-digit argument preservation and result-grounded arithmetic"
+    ],
+    "selection_rule": "A checkpoint must improve held-out target outcomes and retain the base on a separate capability-preservation suite. Loss alone cannot select a checkpoint.",
+    "new_sealed_evaluation_required": true
   },
   "pilot": {
     "name": "v0.1 shortest-correct SFT",

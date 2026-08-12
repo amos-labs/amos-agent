@@ -259,9 +259,27 @@ base.
 
 Ministral then passed a local QLoRA architecture spike with a 6.84 GB training
 peak and a reloadable 89.2 MB adapter. This is a toolchain proof, not a tuned
-candidate. The next gate is a minimum 1,000-record verified training corpus plus
-200 family-isolated validation records, followed by rank-16 and rank-32 SFT
-treatments. The exact frozen paired suite remains evaluation-only.
+candidate. The corpus gate now passes with 1,000 verified synthetic training
+records and 200 validation records across 600 split-isolated families. Its
+registered mix includes authority/idempotency, deterministic constraints,
+tool recovery/evidence, executable code/repair, and abstention/escalation.
+
+The training path also passed a tool-aware QLoRA smoke. The adapter explicitly
+injects row-level tool definitions into Ministral's native template and rejects
+any render missing available-tool, tool-call, or tool-result markers. Four tool
+trajectories trained for two steps at a 9.84 GB peak. Neither corpus size nor a
+falling two-step loss establishes product quality.
+
+The subsequent rank-16 pilot proved that distinction. It reached 34/36 exact
+on unseen synthetic families and reduced held-out loss from 1.133 to 0.023,
+but step 200 scored only 12/32 after conservative frozen-suite adjudication and
+step 600 fell to 6/32. Both trail the unadapted base at 20/32, and critical
+receipt/tool failures remain. Rank 32 is cancelled. The next treatment reduces
+rank, rate, and steps; mixes 50% broad verified capability replay with targeted
+AMOS trajectories; adds harder probability, causality, scheduling, algorithm,
+event-reconciliation, and receipt-grounding families; and selects checkpoints
+on behavioral retention as well as target lift. Since frozen v1 has now
+informed the redesign, v0.2 also requires a newly sealed evaluation suite.
 
 ## Combined experiments
 
@@ -308,10 +326,11 @@ result and redirects the next experiment.
    bounded-balanced AMOS lanes, including tool recovery and escalation.
 3. Measure base, deterministic-tool, elicited-note, and explicit-workspace arms
    only on repeatable local failure families.
-4. Scale the verified Ministral training corpus, compare rank-16 and rank-32
-   completion-only QLoRA treatments, then merge, export, and re-qualify the
-   exact GGUF artifact. Keep Muse-derived training as a challenger, not the
-   critical path.
+4. Build the v0.2 capability-preserving mix and a new sealed suite, then train
+   a lower-pressure rank-8 treatment with 50-step behavioral checkpoints.
+   Promote no checkpoint that regresses the separate preservation suite, even
+   if target loss improves. Keep Muse-derived training as a challenger, not
+   the critical path.
 5. Re-run the quantized adapted model against the frozen Sonnet and Haiku
    controls with quality, output-token, latency, and critical-safety gates.
 6. Continue the registered ExpertCache 120B speed experiments independently;

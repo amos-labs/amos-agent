@@ -68,9 +68,46 @@ The Ministral path also passed a complete local QLoRA compatibility spike with
 `mlx-vlm` 0.6.12: 22.28 million LoRA parameters trained for two steps at a 6.84
 GB peak, the 89.2 MB adapter saved, and the adapter reloaded for correct local
 inference at 29.34 tok/s. This proves the architecture and toolchain can train;
-three examples and two gradient steps make no quality claim. The next pilot
-starts only after at least 1,000 verified training and 200 family-isolated
-validation trajectories exist.
+three examples and two gradient steps make no quality claim.
+
+The first corpus gate is now met. A deterministic generator produces 1,000
+training and 200 validation trajectories across 600 whole-split scenario
+families, with the registered 25/25/20/15/15 skill mix. The corpus contains 660
+complete tool trajectories, 180 executably checked code trajectories, and 90
+bug-repair prompts. It is entirely synthetic and contains no customer records.
+Its frozen dataset identity is
+`e91df542b734f363dd1abbd02cd5d2e08eb1c3efae248d19fe9a0d7eefabfe95`.
+
+A second two-step QLoRA spike closed a trainer correctness gap: stock
+`mlx-vlm` preserved tool-call messages but did not pass each row's tool
+definitions into Ministral's chat template. The AMOS wrapper now fails closed
+unless the native available-tool, tool-call, and tool-result markers are all
+present. Four complete tool trajectories trained successfully with loss
+1.08→0.40, held-out loss 1.06→0.35, and 9.84 GB peak memory. This remains
+compatibility evidence, not a quality or physical-16-GB claim.
+
+### First rank-16 treatment: narrow learning, broad regression
+
+The first 1,000-step rank-16 treatment trained successfully at an 11.47 GB
+peak. Synthetic held-out loss fell from 1.133 to 0.023, and the step-600
+checkpoint completed 34/36 exact unseen synthetic trajectories versus 0/36
+for the unadapted base. It reproduced native tool calls, dependent recovery,
+concise final reports, and executable micro-code on that distribution.
+
+The frozen suite rejected the treatment. Step 200 scored raw 6/32 and a
+conservative adjudicated 12/32; step 600 fell to raw 0/32 and conservative
+adjudicated 6/32. The unadapted base remains adjudicated 20/32. Bayes,
+deadline optimization, and both hard code tasks still failed; step 600 also
+regressed the stale-reference final report, while idempotent approval still
+omitted proposal ID P12. Rank 32 is therefore cancelled.
+
+This result changes the training thesis in an important way: low validation
+loss on a narrow synthetic distribution measures imitation of that generator,
+not retained intelligence. The next treatment uses lower-rank/lower-rate
+adaptation, 50% broad verified capability replay, harder diverse reasoning and
+algorithmic families, exact receipt/value grounding, and dual early stopping
+on target lift plus capability retention. A newly sealed suite is required
+because frozen v1 has now informed the next design.
 
 ## 1. The physical inference system
 

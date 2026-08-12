@@ -12,6 +12,7 @@ import {
   evaluateChoice,
   evaluateJavaScript,
   evaluateToolFinal,
+  normalizeAssistantToolMessage,
   toolArguments,
   validatePairedSuite
 } from "../src/research/pairedModelQualification.js";
@@ -144,7 +145,7 @@ async function runToolFlow(target, testCase, calls) {
         evaluation: { passed: false, sequence, error: "tool sequence or exact arguments diverged" }
       };
     }
-    messages.push(response.message, {
+    messages.push(normalizeAssistantToolMessage(response.message), {
       role: "tool",
       tool_call_id: call.id,
       content: JSON.stringify(step.result)

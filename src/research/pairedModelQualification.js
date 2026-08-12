@@ -84,6 +84,12 @@ export function toolArguments(call) {
   }
 }
 
+export function normalizeAssistantToolMessage(message) {
+  if (!message || typeof message !== "object") return message;
+  if ((message.tool_calls || []).length === 0 || message.content != null) return message;
+  return { ...message, content: "" };
+}
+
 export function argumentsContain(expected, actual) {
   if (!actual || typeof actual !== "object") return false;
   return Object.entries(expected || {}).every(([key, value]) =>

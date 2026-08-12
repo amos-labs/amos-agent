@@ -5,6 +5,7 @@ import {
   evaluateChoice,
   evaluateJavaScript,
   evaluateToolFinal,
+  normalizeAssistantToolMessage,
   validatePairedSuite
 } from "../src/research/pairedModelQualification.js";
 
@@ -32,6 +33,17 @@ test("tool final evaluation applies required and forbidden contracts", () => {
   }, "The action is pending approval.");
   assert.equal(outcome.passed, true);
   assert.equal(argumentsContain({ id: "a" }, { id: "a", extra: 1 }), true);
+});
+
+test("OpenAI tool-call messages normalize null content for strict chat templates", () => {
+  const message = {
+    role: "assistant",
+    content: null,
+    tool_calls: [{ id: "call-1", function: { name: "read", arguments: "{}" } }]
+  };
+  assert.deepEqual(normalizeAssistantToolMessage(message), { ...message, content: "" });
+  const direct = { role: "assistant", content: null };
+  assert.equal(normalizeAssistantToolMessage(direct), direct);
 });
 
 test("portfolio validator enforces dependencies, tie breaks, and immutability", () => {
