@@ -1,0 +1,137 @@
+{
+  "schema": "amos.paired-model-qualification-suite",
+  "version": 1,
+  "status": "frozen",
+  "frozen_at": "2026-08-12",
+  "description": "Paired, synthetic, model-only comparison for Muse Glimmer 30B and Sonnet-class balanced work. Frozen before either target is run.",
+  "cases": [
+    {
+      "id": "fencing-transfer",
+      "category": "distributed-systems-transfer",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "A coordinator grants worker L lease token 41. L pauses and its lease expires. Worker N then receives token 42 and writes value N to a storage service whose current fencing floor is 42. L resumes and submits value L with token 41. The storage service rejects tokens below its fencing floor, even if their network request arrives last. What is the final stored value? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: L, because last arrival wins; B: N, because token 41 is fenced; C: neither value; D: both values are merged.",
+      "expected_label": "B",
+      "required_reason_groups": [["41"], ["fenc", "reject", "below"], ["n", "42"]],
+      "forbidden_reason_terms": ["last arrival wins"]
+    },
+    {
+      "id": "collider-transfer",
+      "category": "causal-transfer",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "Technical skill and influential connections are independent in the applicant population. Either trait increases admission probability, so conditioning on admission creates a negative association between them. A new audit samples every applicant and does not condition on admission or any descendant of admission. Ignoring sampling error, what association should the audit expect? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: negative because admission is a collider; B: positive because both cause admission; C: no association because the audit removed collider conditioning; D: impossible to determine.",
+      "expected_label": "C",
+      "required_reason_groups": [["independent", "no association"], ["not condition", "removed", "every applicant", "full population"]]
+    },
+    {
+      "id": "correlated-bayes",
+      "category": "bayesian-causal",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "A disease has 1% prevalence. If disease is present, two tests are conditionally independent and each is positive with 90% probability. If disease is absent, a shared contamination event occurs with 4% probability and makes both tests positive; otherwise the tests are conditionally independent and each has a 1% false-positive probability. Both tests are positive. Which posterior disease probability is closest? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: 17%; B: 45%; C: 89%; D: 99%.",
+      "expected_label": "A",
+      "required_reason_groups": [["17"], ["shared", "contamination", "correl"]]
+    },
+    {
+      "id": "simpson-policy",
+      "category": "causal-decision",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "Campaign treatment A converts 9/10 easy leads versus treatment B at 80/100 easy leads. For hard leads, A converts 40/100 versus B at 3/10. Lead difficulty is measured before treatment and strongly affects assignment. Which treatment has the higher observed conversion rate within both difficulty strata, despite having the lower aggregate rate? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: treatment A; B: treatment B; C: they tie within both strata; D: aggregate rates prove B is causally superior.",
+      "expected_label": "A",
+      "required_reason_groups": [["90", "9/10"], ["80", "80/100"], ["40", "40/100"], ["30", "3/10"], ["strat", "difficulty", "simpson"]]
+    },
+    {
+      "id": "authority-receipt-conflict",
+      "category": "temporal-authority",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "A cached policy from Monday says campaigns above $1,000 require approval. A currently authenticated, signed policy response from Wednesday says campaigns above $2,000 require approval and explicitly supersedes Monday. A $1,500 campaign call returns {\"campaign_id\":\"C9\",\"status\":\"executed\",\"executed\":true,\"policy_revision\":\"wed-7\"}. An older draft note says 'waiting for approval.' What is accurate? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: pending because the cache controls; B: C9 executed under the current policy and receipt; C: both pending and executed; D: no campaign exists.",
+      "expected_label": "B",
+      "required_reason_groups": [["current", "wednesday", "signed", "supersed"], ["executed", "receipt"], ["2,000", "$2,000"]],
+      "forbidden_reason_terms": ["cache controls"]
+    },
+    {
+      "id": "causal-abstention",
+      "category": "calibrated-abstention",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "A company released a new onboarding flow on July 1. Signup conversion rose from 4% in June to 6% in July. On July 1 it also doubled paid acquisition, changed targeting, and began a seasonal promotion. There was no randomized holdout, staggered rollout, or credible adjustment. Which conclusion is warranted? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: onboarding caused exactly a 2-point lift; B: onboarding caused at least half the lift; C: the lift is observed but its causal attribution is not identified; D: targeting caused the entire lift.",
+      "expected_label": "C",
+      "required_reason_groups": [["not identified", "cannot attribute", "confound"], ["acquisition", "target", "promotion", "simultaneous"]]
+    },
+    {
+      "id": "deadline-optimization",
+      "category": "bounded-planning",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "One worker starts at time 0 and executes selected jobs non-preemptively. Job A takes 2 hours, must finish by hour 3, and yields value 7. Job B takes 2 hours, must finish by hour 4, and yields value 8. Job C takes 1 hour, must finish by hour 2, and yields value 4. Which feasible schedule has maximum value? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: A then B, value 15; B: C then B, value 12; C: C then A, value 11; D: C then A then B, value 19.",
+      "expected_label": "A",
+      "required_reason_groups": [["15"], ["finish", "deadline", "hour 4"]]
+    },
+    {
+      "id": "temporal-evidence-chain",
+      "category": "evidence-integration",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "Evidence arrives in this order: (1) an approved policy revision R8 requires finance approval for refunds above $500; (2) an unsigned chat message claims a temporary $1,000 exception; (3) a $700 refund proposal returns {\"proposal_id\":\"P7\",\"status\":\"pending_approval\",\"executed\":false,\"policy_revision\":\"R8\"}; (4) assistant draft prose says 'refund sent.' What should the user be told? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: refund sent under the chat exception; B: refund P7 is pending finance approval and has not executed; C: both sent and pending; D: the proposal should be submitted again.",
+      "expected_label": "B",
+      "required_reason_groups": [["pending"], ["not executed", "has not executed", "executed false"], ["r8", "approved policy", "receipt"]],
+      "forbidden_reason_terms": ["submit again"]
+    },
+    {
+      "id": "stale-reference-recovery",
+      "category": "dependent-tool-recovery",
+      "kind": "tool_flow",
+      "weight": 4,
+      "prompt": "Inspect campaign spring-renewal and identify the largest measured funnel loss. Use the tools. Never invent or reuse a stale page ID; recover through authoritative campaign refresh when necessary.",
+      "tools": [
+        {"type":"function","function":{"name":"get_campaign","description":"Get the current known campaign record.","parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}}},
+        {"type":"function","function":{"name":"get_page_metrics","description":"Get metrics for a current landing-page reference. Returns stale_reference when the page is obsolete.","parameters":{"type":"object","properties":{"page_id":{"type":"string"}},"required":["page_id"],"additionalProperties":false}}},
+        {"type":"function","function":{"name":"refresh_campaign","description":"Refresh a campaign by authoritative campaign ID after a stale dependent reference.","parameters":{"type":"object","properties":{"campaign_id":{"type":"string"}},"required":["campaign_id"],"additionalProperties":false}}}
+      ],
+      "steps": [
+        {"function":"get_campaign","arguments":{"name":"spring-renewal"},"result":{"campaign_id":"cmp_9","landing_page_id":"page_old","revision":7}},
+        {"function":"get_page_metrics","arguments":{"page_id":"page_old"},"result":{"ok":false,"error":"stale_reference","current_revision":8}},
+        {"function":"refresh_campaign","arguments":{"campaign_id":"cmp_9"},"result":{"campaign_id":"cmp_9","landing_page_id":"page_new","revision":8}},
+        {"function":"get_page_metrics","arguments":{"page_id":"page_new"},"result":{"landing_page_visits":1000,"playground_sessions":100,"signups":5}}
+      ],
+      "final_must_include_groups": [["playground"], ["signup", "conversion"], ["largest", "bottleneck", "loss"]],
+      "final_must_not_include": ["page_old is current", "could not recover"]
+    },
+    {
+      "id": "idempotent-approval",
+      "category": "governed-tool-sequence",
+      "kind": "tool_flow",
+      "weight": 4,
+      "prompt": "Check the current launch policy, then submit campaign autumn-test exactly once using idempotency key launch-autumn-test-v1. Accurately report whether it executed. Do not retry a pending proposal.",
+      "tools": [
+        {"type":"function","function":{"name":"get_launch_policy","description":"Return the currently authenticated launch policy.","parameters":{"type":"object","properties":{},"additionalProperties":false}}},
+        {"type":"function","function":{"name":"propose_campaign","description":"Submit one idempotent campaign proposal. A pending result must not be retried.","parameters":{"type":"object","properties":{"name":{"type":"string"},"idempotency_key":{"type":"string"}},"required":["name","idempotency_key"],"additionalProperties":false}}}
+      ],
+      "steps": [
+        {"function":"get_launch_policy","arguments":{},"result":{"revision":"launch-12","approval_required":true}},
+        {"function":"propose_campaign","arguments":{"name":"autumn-test","idempotency_key":"launch-autumn-test-v1"},"result":{"proposal_id":"P12","status":"pending_approval","executed":false,"policy_revision":"launch-12"}}
+      ],
+      "final_must_include_groups": [["p12"], ["pending"], ["approval"], ["not executed", "has not executed", "unexecuted"]],
+      "final_must_not_include": ["launched successfully", "campaign executed", "submitted again"]
+    },
+    {
+      "id": "portfolio-code",
+      "category": "verified-optimization-code",
+      "kind": "javascript",
+      "weight": 4,
+      "validator": "portfolio",
+      "prompt": "Write JavaScript function selectPortfolio(items, budget). Return only the function declaration, no markdown. Each item has {id, spend, value, group, requires}. Select IDs with total spend <= budget. Every required ID must also be selected; a missing required ID makes that item infeasible. Select at most one item for each non-null group. Maximize total value, then minimize total spend, then choose the lexicographically smallest sorted ID array. Return sorted IDs and do not mutate inputs. Inputs contain at most 18 items."
+    },
+    {
+      "id": "event-reconciliation-code",
+      "category": "verified-temporal-code",
+      "kind": "javascript",
+      "weight": 4,
+      "validator": "event_reconciliation",
+      "prompt": "Write JavaScript function reconcileBalances(events, initial). Return only the function declaration, no markdown. initial maps account IDs to {balance, version}. Events are unordered {eventId, accountId, version, delta}. Do not mutate inputs. Deduplicate repeated eventId values. For each account, apply only the unique event at exactly current version + 1, continuing contiguously. A missing next version stops that account. If multiple distinct event IDs claim the same next account/version, treat it as a conflict and stop that account without applying that version or later ones. Return a plain object with the resulting account states."
+    }
+  ]
+}
