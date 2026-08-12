@@ -1,0 +1,1465 @@
+{
+  "schema": "amos.knowledge-integration-report",
+  "version": 1,
+  "created_at": "2026-08-12T12:09:35.581Z",
+  "diagnostic": true,
+  "suite": {
+    "schema": "amos.knowledge-integration-suite",
+    "version": 1,
+    "status": "development"
+  },
+  "model": "muse-glimmer-30b",
+  "endpoint": "http://127.0.0.1:18080",
+  "protocol": "openai",
+  "arm": "all",
+  "experimental_identity": {
+    "treatment": "base_plus_amos_integration_authority_ablation",
+    "hardware_profile": "apple-m1-max-64gb",
+    "runtime_revision": "f8def7fe168bab245fbf15d3f18b26dbb1ef73c8",
+    "artifact_sha256": "7e9b74b7c8875e9e265695df9613bf6290f2392e479ce740495a129019c488d8"
+  },
+  "configuration": {
+    "context_length": 32768,
+    "max_tokens": 1024,
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 64,
+    "reasoning_effort": null,
+    "reasoning_strength": "low",
+    "reasoning_budget_tokens": null,
+    "workspace_max_tokens": 2048,
+    "workspace_reasoning_effort": null,
+    "workspace_reasoning_strength": "low",
+    "workspace_reasoning_budget_tokens": null,
+    "workspace_max_repairs": 1,
+    "openai_reasoning_effort_forwarded_to_chat_template": false,
+    "openai_reasoning_strength_forwarded_to_chat_template": true,
+    "workspace_json_schema_constrained": true,
+    "atomic_repetitions": 2,
+    "atomic_pass_threshold": 1,
+    "atomic_results_shared_across_family_variants": true,
+    "evaluator_feedback_exposed_to_model": false
+  },
+  "summary": {
+    "total_cases": 2,
+    "atomic_eligible_cases": 2,
+    "atomic_coverage": 1,
+    "baseline_overall_accuracy": 1,
+    "elicited_overall_accuracy": 1,
+    "workspace_overall_accuracy": 1,
+    "baseline_conditional_accuracy": 1,
+    "elicited_conditional_accuracy": 1,
+    "workspace_conditional_accuracy": 1,
+    "observed_integration_failures": 0,
+    "elicited_recovered_integration_failures": 0,
+    "elicited_recovery_rate": null,
+    "workspace_recovered_integration_failures": 0,
+    "workspace_recovery_rate": null,
+    "valid_workspaces": 2,
+    "workspace_evaluated_cases": 2,
+    "workspace_construction_attempts": 2,
+    "workspace_repair_attempts": 0,
+    "variant_families": 1,
+    "baseline_variant_consistency": 1,
+    "elicited_variant_consistency": 1,
+    "workspace_variant_consistency": 1,
+    "baseline_empty_responses": 0,
+    "elicited_empty_responses": 0,
+    "paired_comparisons": {
+      "elicited_vs_baseline": {
+        "evaluated_cases": 2,
+        "improved": 0,
+        "regressed": 0,
+        "both_passed": 2,
+        "both_failed": 0,
+        "accuracy_lift": 0,
+        "accuracy_lift_bootstrap_95": {
+          "low": 0,
+          "high": 0
+        }
+      },
+      "workspace_vs_baseline": {
+        "evaluated_cases": 2,
+        "improved": 0,
+        "regressed": 0,
+        "both_passed": 2,
+        "both_failed": 0,
+        "accuracy_lift": 0,
+        "accuracy_lift_bootstrap_95": {
+          "low": 0,
+          "high": 0
+        }
+      }
+    },
+    "accuracy_intervals": {
+      "baseline_overall": {
+        "passed": 2,
+        "total": 2,
+        "rate": 1,
+        "low": 0.34238022750665303,
+        "high": 1
+      },
+      "elicited_overall": {
+        "passed": 2,
+        "total": 2,
+        "rate": 1,
+        "low": 0.34238022750665303,
+        "high": 1
+      },
+      "workspace_overall": {
+        "passed": 2,
+        "total": 2,
+        "rate": 1,
+        "low": 0.34238022750665303,
+        "high": 1
+      },
+      "baseline_conditional": {
+        "passed": 2,
+        "total": 2,
+        "rate": 1,
+        "low": 0.34238022750665303,
+        "high": 1
+      },
+      "elicited_conditional": {
+        "passed": 2,
+        "total": 2,
+        "rate": 1,
+        "low": 0.34238022750665303,
+        "high": 1
+      },
+      "workspace_conditional": {
+        "passed": 2,
+        "total": 2,
+        "rate": 1,
+        "low": 0.34238022750665303,
+        "high": 1
+      }
+    },
+    "inference": {
+      "atomic_elicitation": {
+        "calls": 6,
+        "wall_seconds": 56.16173616800001,
+        "prompt_tokens": 516,
+        "completion_tokens": 503,
+        "reasoning_characters": 2112,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "baseline": {
+        "calls": 2,
+        "wall_seconds": 37.084997708,
+        "prompt_tokens": 354,
+        "completion_tokens": 304,
+        "reasoning_characters": 923,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "elicited_integration": {
+        "calls": 2,
+        "wall_seconds": 84.91531962399998,
+        "prompt_tokens": 816,
+        "completion_tokens": 400,
+        "reasoning_characters": 1524,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "elicited_total": {
+        "calls": 8,
+        "wall_seconds": 141.07705579199998,
+        "prompt_tokens": 1332,
+        "completion_tokens": 903,
+        "reasoning_characters": 3636,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "workspace_construction": {
+        "calls": 2,
+        "wall_seconds": 378.123569125,
+        "prompt_tokens": 1250,
+        "completion_tokens": 2217,
+        "reasoning_characters": 2969,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "workspace_integration": {
+        "calls": 2,
+        "wall_seconds": 72.44181795799994,
+        "prompt_tokens": 2019,
+        "completion_tokens": 240,
+        "reasoning_characters": 715,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "workspace_total": {
+        "calls": 10,
+        "wall_seconds": 506.72712325099997,
+        "prompt_tokens": 3785,
+        "completion_tokens": 2960,
+        "reasoning_characters": 5796,
+        "empty_responses": 0,
+        "length_terminated": 0
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "current-authority-and-receipt",
+      "family_id": "current-authority-and-receipt",
+      "variant_id": "base",
+      "category": "authority-temporal-integration",
+      "atomic": [
+        {
+          "id": "current-policy",
+          "attempts": [
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.440408709000001,
+                "prompt_tokens": 87,
+                "completion_tokens": 76,
+                "finish_reason": "stop",
+                "reasoning_characters": 329
+              }
+            },
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.526031874999999,
+                "prompt_tokens": 87,
+                "completion_tokens": 67,
+                "finish_reason": "stop",
+                "reasoning_characters": 274
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "receipt-over-prose",
+          "attempts": [
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.452762625,
+                "prompt_tokens": 85,
+                "completion_tokens": 95,
+                "finish_reason": "stop",
+                "reasoning_characters": 430
+              }
+            },
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.405853417000001,
+                "prompt_tokens": 85,
+                "completion_tokens": 85,
+                "finish_reason": "stop",
+                "reasoning_characters": 404
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "pending-state",
+          "attempts": [
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.300665875000005,
+                "prompt_tokens": 86,
+                "completion_tokens": 97,
+                "finish_reason": "stop",
+                "reasoning_characters": 373
+              }
+            },
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.036013666999999,
+                "prompt_tokens": 86,
+                "completion_tokens": 83,
+                "finish_reason": "stop",
+                "reasoning_characters": 302
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"C\",\"reason\":\"The authenticated policy requires approval over $1,000, so the $1,500 tool call correctly returned pending_approval with executed false, overriding cache and draft prose.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "C",
+          "expected_label": "C",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "current",
+            "not execute"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 17.384629083,
+          "prompt_tokens": 180,
+          "completion_tokens": 141,
+          "finish_reason": "stop",
+          "reasoning_characters": 416
+        }
+      },
+      "elicited": {
+        "response": "{\"label\":\"C\",\"reason\":\"The authenticated policy requires approval for $1,500 and the execution receipt shows pending_approval with executed false, so the campaign did not launch despite prose claiming it did.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "C",
+          "expected_label": "C",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "current",
+            "not execute"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 27.205735791,
+          "prompt_tokens": 411,
+          "completion_tokens": 208,
+          "finish_reason": "stop",
+          "reasoning_characters": 819
+        }
+      },
+      "workspace": {
+        "construction": {
+          "attempts": [
+            {
+              "repair": false,
+              "response": "{\"claims\":[{\"id\":\"c1\",\"statement\":\"When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"current-policy\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c2\",\"statement\":\"A structured execution receipt controls whether an action executed over model prose claiming something different.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"receipt-over-prose\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c3\",\"statement\":\"status=pending_approval with executed=false means a consequential action remains unexecuted.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"pending-state\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c4\",\"statement\":\"The cache says campaigns above $2,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c5\",\"statement\":\"The currently authenticated policy response says campaigns above $1,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c6\",\"statement\":\"The campaign in question is $1,500.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c7\",\"statement\":\"The tool call for the $1,500 campaign returns proposal_id P9 with status pending_approval and executed false.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c8\",\"statement\":\"The draft assistant prose says 'campaign launched.'\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c9\",\"statement\":\"$1,500 exceeds the authenticated $1,000 approval threshold, so approval is required under the authoritative policy.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c5\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c10\",\"statement\":\"$1,500 does not exceed the cached $2,000 threshold, so no approval would be required under the cached policy.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c4\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"medium\"},{\"id\":\"c11\",\"statement\":\"Proposal P9 did not execute; the campaign remains unexecuted.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c7\",\"c3\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c12\",\"statement\":\"The prose claim of launch is contradicted by the execution receipt.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c8\",\"c11\",\"c2\"],\"applicability\":\"applies\",\"confidence\":\"high\"}],\"relationships\":[{\"from\":\"c1\",\"to\":\"c5\",\"type\":\"refines\"},{\"from\":\"c1\",\"to\":\"c4\",\"type\":\"contradicts\"},{\"from\":\"c2\",\"to\":\"c11\",\"type\":\"supports\"},{\"from\":\"c2\",\"to\":\"c8\",\"type\":\"contradicts\"},{\"from\":\"c3\",\"to\":\"c7\",\"type\":\"depends_on\"},{\"from\":\"c9\",\"to\":\"c11\",\"type\":\"supports\"},{\"from\":\"c10\",\"to\":\"c9\",\"type\":\"contradicts\"}],\"conflicts\":[\"c4 vs c5 on approval threshold; c8 vs c11 on execution status; c10 vs c9 on approval requirement\"],\"unknowns\":[],\"predictions\":[\"Proposal P9 remains pending and the $1,500 campaign has not launched under the authoritative policy and receipt\"] }",
+              "workspace": {
+                "valid": true,
+                "missing_fields": [],
+                "errors": [],
+                "value": {
+                  "claims": [
+                    {
+                      "id": "c1",
+                      "statement": "When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.",
+                      "origin": "elicited_probe",
+                      "evidence_probe_ids": [
+                        "current-policy"
+                      ],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c2",
+                      "statement": "A structured execution receipt controls whether an action executed over model prose claiming something different.",
+                      "origin": "elicited_probe",
+                      "evidence_probe_ids": [
+                        "receipt-over-prose"
+                      ],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c3",
+                      "statement": "status=pending_approval with executed=false means a consequential action remains unexecuted.",
+                      "origin": "elicited_probe",
+                      "evidence_probe_ids": [
+                        "pending-state"
+                      ],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c4",
+                      "statement": "The cache says campaigns above $2,000 need approval.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c5",
+                      "statement": "The currently authenticated policy response says campaigns above $1,000 need approval.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c6",
+                      "statement": "The campaign in question is $1,500.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c7",
+                      "statement": "The tool call for the $1,500 campaign returns proposal_id P9 with status pending_approval and executed false.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c8",
+                      "statement": "The draft assistant prose says 'campaign launched.'",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c9",
+                      "statement": "$1,500 exceeds the authenticated $1,000 approval threshold, so approval is required under the authoritative policy.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c5",
+                        "c6"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c10",
+                      "statement": "$1,500 does not exceed the cached $2,000 threshold, so no approval would be required under the cached policy.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c4",
+                        "c6"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "medium"
+                    },
+                    {
+                      "id": "c11",
+                      "statement": "Proposal P9 did not execute; the campaign remains unexecuted.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c7",
+                        "c3"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c12",
+                      "statement": "The prose claim of launch is contradicted by the execution receipt.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c8",
+                        "c11",
+                        "c2"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    }
+                  ],
+                  "relationships": [
+                    {
+                      "from": "c1",
+                      "to": "c5",
+                      "type": "refines"
+                    },
+                    {
+                      "from": "c1",
+                      "to": "c4",
+                      "type": "contradicts"
+                    },
+                    {
+                      "from": "c2",
+                      "to": "c11",
+                      "type": "supports"
+                    },
+                    {
+                      "from": "c2",
+                      "to": "c8",
+                      "type": "contradicts"
+                    },
+                    {
+                      "from": "c3",
+                      "to": "c7",
+                      "type": "depends_on"
+                    },
+                    {
+                      "from": "c9",
+                      "to": "c11",
+                      "type": "supports"
+                    },
+                    {
+                      "from": "c10",
+                      "to": "c9",
+                      "type": "contradicts"
+                    }
+                  ],
+                  "conflicts": [
+                    "c4 vs c5 on approval threshold; c8 vs c11 on execution status; c10 vs c9 on approval requirement"
+                  ],
+                  "unknowns": [],
+                  "predictions": [
+                    "Proposal P9 remains pending and the $1,500 campaign has not launched under the authoritative policy and receipt"
+                  ]
+                }
+              },
+              "timing": {
+                "wall_seconds": 136.95629904100002,
+                "prompt_tokens": 628,
+                "completion_tokens": 1153,
+                "finish_reason": "stop",
+                "reasoning_characters": 1624
+              }
+            }
+          ],
+          "response": "{\"claims\":[{\"id\":\"c1\",\"statement\":\"When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"current-policy\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c2\",\"statement\":\"A structured execution receipt controls whether an action executed over model prose claiming something different.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"receipt-over-prose\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c3\",\"statement\":\"status=pending_approval with executed=false means a consequential action remains unexecuted.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"pending-state\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c4\",\"statement\":\"The cache says campaigns above $2,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c5\",\"statement\":\"The currently authenticated policy response says campaigns above $1,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c6\",\"statement\":\"The campaign in question is $1,500.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c7\",\"statement\":\"The tool call for the $1,500 campaign returns proposal_id P9 with status pending_approval and executed false.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c8\",\"statement\":\"The draft assistant prose says 'campaign launched.'\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c9\",\"statement\":\"$1,500 exceeds the authenticated $1,000 approval threshold, so approval is required under the authoritative policy.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c5\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c10\",\"statement\":\"$1,500 does not exceed the cached $2,000 threshold, so no approval would be required under the cached policy.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c4\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"medium\"},{\"id\":\"c11\",\"statement\":\"Proposal P9 did not execute; the campaign remains unexecuted.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c7\",\"c3\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c12\",\"statement\":\"The prose claim of launch is contradicted by the execution receipt.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c8\",\"c11\",\"c2\"],\"applicability\":\"applies\",\"confidence\":\"high\"}],\"relationships\":[{\"from\":\"c1\",\"to\":\"c5\",\"type\":\"refines\"},{\"from\":\"c1\",\"to\":\"c4\",\"type\":\"contradicts\"},{\"from\":\"c2\",\"to\":\"c11\",\"type\":\"supports\"},{\"from\":\"c2\",\"to\":\"c8\",\"type\":\"contradicts\"},{\"from\":\"c3\",\"to\":\"c7\",\"type\":\"depends_on\"},{\"from\":\"c9\",\"to\":\"c11\",\"type\":\"supports\"},{\"from\":\"c10\",\"to\":\"c9\",\"type\":\"contradicts\"}],\"conflicts\":[\"c4 vs c5 on approval threshold; c8 vs c11 on execution status; c10 vs c9 on approval requirement\"],\"unknowns\":[],\"predictions\":[\"Proposal P9 remains pending and the $1,500 campaign has not launched under the authoritative policy and receipt\"] }",
+          "workspace": {
+            "valid": true,
+            "missing_fields": [],
+            "errors": [],
+            "value": {
+              "claims": [
+                {
+                  "id": "c1",
+                  "statement": "When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.",
+                  "origin": "elicited_probe",
+                  "evidence_probe_ids": [
+                    "current-policy"
+                  ],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c2",
+                  "statement": "A structured execution receipt controls whether an action executed over model prose claiming something different.",
+                  "origin": "elicited_probe",
+                  "evidence_probe_ids": [
+                    "receipt-over-prose"
+                  ],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c3",
+                  "statement": "status=pending_approval with executed=false means a consequential action remains unexecuted.",
+                  "origin": "elicited_probe",
+                  "evidence_probe_ids": [
+                    "pending-state"
+                  ],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c4",
+                  "statement": "The cache says campaigns above $2,000 need approval.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c5",
+                  "statement": "The currently authenticated policy response says campaigns above $1,000 need approval.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c6",
+                  "statement": "The campaign in question is $1,500.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c7",
+                  "statement": "The tool call for the $1,500 campaign returns proposal_id P9 with status pending_approval and executed false.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c8",
+                  "statement": "The draft assistant prose says 'campaign launched.'",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c9",
+                  "statement": "$1,500 exceeds the authenticated $1,000 approval threshold, so approval is required under the authoritative policy.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c5",
+                    "c6"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c10",
+                  "statement": "$1,500 does not exceed the cached $2,000 threshold, so no approval would be required under the cached policy.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c4",
+                    "c6"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "medium"
+                },
+                {
+                  "id": "c11",
+                  "statement": "Proposal P9 did not execute; the campaign remains unexecuted.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c7",
+                    "c3"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c12",
+                  "statement": "The prose claim of launch is contradicted by the execution receipt.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c8",
+                    "c11",
+                    "c2"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "high"
+                }
+              ],
+              "relationships": [
+                {
+                  "from": "c1",
+                  "to": "c5",
+                  "type": "refines"
+                },
+                {
+                  "from": "c1",
+                  "to": "c4",
+                  "type": "contradicts"
+                },
+                {
+                  "from": "c2",
+                  "to": "c11",
+                  "type": "supports"
+                },
+                {
+                  "from": "c2",
+                  "to": "c8",
+                  "type": "contradicts"
+                },
+                {
+                  "from": "c3",
+                  "to": "c7",
+                  "type": "depends_on"
+                },
+                {
+                  "from": "c9",
+                  "to": "c11",
+                  "type": "supports"
+                },
+                {
+                  "from": "c10",
+                  "to": "c9",
+                  "type": "contradicts"
+                }
+              ],
+              "conflicts": [
+                "c4 vs c5 on approval threshold; c8 vs c11 on execution status; c10 vs c9 on approval requirement"
+              ],
+              "unknowns": [],
+              "predictions": [
+                "Proposal P9 remains pending and the $1,500 campaign has not launched under the authoritative policy and receipt"
+              ]
+            }
+          },
+          "timing": {
+            "wall_seconds": 136.95629904100002,
+            "prompt_tokens": 628,
+            "completion_tokens": 1153,
+            "finish_reason": "stop",
+            "reasoning_characters": 1624
+          }
+        },
+        "integration": {
+          "response": "{\"label\":\"C\",\"reason\":\"The authenticated $1,000 threshold requires approval for $1,500 and the receipt shows proposal P9 pending with executed false, so the campaign did not launch.\"}",
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "C",
+            "expected_label": "C",
+            "label_passed": true,
+            "rationale_passed": false,
+            "missing_reason_terms": [
+              "current",
+              "not execute"
+            ]
+          },
+          "timing": {
+            "wall_seconds": 22.643097916,
+            "prompt_tokens": 1017,
+            "completion_tokens": 112,
+            "finish_reason": "stop",
+            "reasoning_characters": 321
+          }
+        }
+      },
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": true,
+        "workspace_valid": true,
+        "workspace_passed": true,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "current-authority-and-receipt--current-policy-allows-execution",
+      "family_id": "current-authority-and-receipt",
+      "variant_id": "current-policy-allows-execution",
+      "category": "authority-temporal-integration",
+      "atomic": [
+        {
+          "id": "current-policy",
+          "attempts": [
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.440408709000001,
+                "prompt_tokens": 87,
+                "completion_tokens": 76,
+                "finish_reason": "stop",
+                "reasoning_characters": 329
+              }
+            },
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.526031874999999,
+                "prompt_tokens": 87,
+                "completion_tokens": 67,
+                "finish_reason": "stop",
+                "reasoning_characters": 274
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "receipt-over-prose",
+          "attempts": [
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.452762625,
+                "prompt_tokens": 85,
+                "completion_tokens": 95,
+                "finish_reason": "stop",
+                "reasoning_characters": 430
+              }
+            },
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.405853417000001,
+                "prompt_tokens": 85,
+                "completion_tokens": 85,
+                "finish_reason": "stop",
+                "reasoning_characters": 404
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "pending-state",
+          "attempts": [
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.300665875000005,
+                "prompt_tokens": 86,
+                "completion_tokens": 97,
+                "finish_reason": "stop",
+                "reasoning_characters": 373
+              }
+            },
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.036013666999999,
+                "prompt_tokens": 86,
+                "completion_tokens": 83,
+                "finish_reason": "stop",
+                "reasoning_characters": 302
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"B\",\"reason\":\"The authenticated policy sets approval threshold at $2,000, so a $1,500 campaign does not require approval and the tool confirms campaign C9 executed.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "B",
+          "expected_label": "B",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "current"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 19.700368625000003,
+          "prompt_tokens": 174,
+          "completion_tokens": 163,
+          "finish_reason": "stop",
+          "reasoning_characters": 507
+        }
+      },
+      "elicited": {
+        "response": "{\"label\":\"B\",\"reason\":\"Current authenticated policy supersedes cache so $1,500 needs no approval and execution receipt confirms C9 executed despite older prose.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "B",
+          "expected_label": "B",
+          "label_passed": true,
+          "rationale_passed": true,
+          "missing_reason_terms": []
+        },
+        "timing": {
+          "wall_seconds": 57.70958383299998,
+          "prompt_tokens": 405,
+          "completion_tokens": 192,
+          "finish_reason": "stop",
+          "reasoning_characters": 705
+        }
+      },
+      "workspace": {
+        "construction": {
+          "attempts": [
+            {
+              "repair": false,
+              "response": "{\"claims\":[{\"id\":\"c1\",\"statement\":\"When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"current-policy\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c2\",\"statement\":\"A structured execution receipt controls whether an action executed over model prose claiming something different.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"receipt-over-prose\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c3\",\"statement\":\"status=pending_approval with executed=false means a consequential action remains unexecuted.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"pending-state\"],\"derived_from_claim_ids\":[],\"applicability\":\"uncertain\",\"confidence\":\"medium\"},{\"id\":\"c4\",\"statement\":\"The cache states campaigns above $1,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c5\",\"statement\":\"The currently authenticated policy response states campaigns above $2,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c6\",\"statement\":\"The campaign in question is $1,500 and has campaign_id C9.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c7\",\"statement\":\"The tool call returns {\\\"campaign_id\\\":\\\"C9\\\",\\\"status\\\":\\\"executed\\\",\\\"executed\\\":true} for this campaign.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c8\",\"statement\":\"Older draft prose says 'waiting for approval' for this campaign.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c9\",\"statement\":\"Under the current authenticated policy threshold of $2,000, a $1,500 campaign does not require approval.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c5\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c10\",\"statement\":\"Under the cached policy threshold of $1,000, a $1,500 campaign would require approval.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c4\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c11\",\"statement\":\"The execution receipt indicates campaign C9 was executed.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c7\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c12\",\"statement\":\"The draft prose claim of waiting for approval is contradicted by the execution receipt.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c2\",\"c8\",\"c11\"],\"applicability\":\"applies\",\"confidence\":\"high\"}],\"relationships\":[{\"from\":\"c1\",\"to\":\"c4\",\"type\":\"contradicts\"},{\"from\":\"c1\",\"to\":\"c5\",\"type\":\"supports\"},{\"from\":\"c5\",\"to\":\"c9\",\"type\":\"enables\"},{\"from\":\"c4\",\"to\":\"c10\",\"type\":\"enables\"},{\"from\":\"c2\",\"to\":\"c11\",\"type\":\"supports\"},{\"from\":\"c2\",\"to\":\"c8\",\"type\":\"contradicts\"},{\"from\":\"c9\",\"to\":\"c11\",\"type\":\"enables\"}],\"conflicts\":[\"c4 vs c5 on approval threshold for $1,500\",\"c8 vs c11 on execution state of C9\"],\"unknowns\":[],\"predictions\":[\"campaign C9 is executed under current policy despite cache and prose\"]}",
+              "workspace": {
+                "valid": true,
+                "missing_fields": [],
+                "errors": [],
+                "value": {
+                  "claims": [
+                    {
+                      "id": "c1",
+                      "statement": "When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.",
+                      "origin": "elicited_probe",
+                      "evidence_probe_ids": [
+                        "current-policy"
+                      ],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c2",
+                      "statement": "A structured execution receipt controls whether an action executed over model prose claiming something different.",
+                      "origin": "elicited_probe",
+                      "evidence_probe_ids": [
+                        "receipt-over-prose"
+                      ],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c3",
+                      "statement": "status=pending_approval with executed=false means a consequential action remains unexecuted.",
+                      "origin": "elicited_probe",
+                      "evidence_probe_ids": [
+                        "pending-state"
+                      ],
+                      "derived_from_claim_ids": [],
+                      "applicability": "uncertain",
+                      "confidence": "medium"
+                    },
+                    {
+                      "id": "c4",
+                      "statement": "The cache states campaigns above $1,000 need approval.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c5",
+                      "statement": "The currently authenticated policy response states campaigns above $2,000 need approval.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c6",
+                      "statement": "The campaign in question is $1,500 and has campaign_id C9.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c7",
+                      "statement": "The tool call returns {\"campaign_id\":\"C9\",\"status\":\"executed\",\"executed\":true} for this campaign.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c8",
+                      "statement": "Older draft prose says 'waiting for approval' for this campaign.",
+                      "origin": "problem_statement",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c9",
+                      "statement": "Under the current authenticated policy threshold of $2,000, a $1,500 campaign does not require approval.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c5",
+                        "c6"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c10",
+                      "statement": "Under the cached policy threshold of $1,000, a $1,500 campaign would require approval.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c4",
+                        "c6"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c11",
+                      "statement": "The execution receipt indicates campaign C9 was executed.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c7"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    },
+                    {
+                      "id": "c12",
+                      "statement": "The draft prose claim of waiting for approval is contradicted by the execution receipt.",
+                      "origin": "derived",
+                      "evidence_probe_ids": [],
+                      "derived_from_claim_ids": [
+                        "c2",
+                        "c8",
+                        "c11"
+                      ],
+                      "applicability": "applies",
+                      "confidence": "high"
+                    }
+                  ],
+                  "relationships": [
+                    {
+                      "from": "c1",
+                      "to": "c4",
+                      "type": "contradicts"
+                    },
+                    {
+                      "from": "c1",
+                      "to": "c5",
+                      "type": "supports"
+                    },
+                    {
+                      "from": "c5",
+                      "to": "c9",
+                      "type": "enables"
+                    },
+                    {
+                      "from": "c4",
+                      "to": "c10",
+                      "type": "enables"
+                    },
+                    {
+                      "from": "c2",
+                      "to": "c11",
+                      "type": "supports"
+                    },
+                    {
+                      "from": "c2",
+                      "to": "c8",
+                      "type": "contradicts"
+                    },
+                    {
+                      "from": "c9",
+                      "to": "c11",
+                      "type": "enables"
+                    }
+                  ],
+                  "conflicts": [
+                    "c4 vs c5 on approval threshold for $1,500",
+                    "c8 vs c11 on execution state of C9"
+                  ],
+                  "unknowns": [],
+                  "predictions": [
+                    "campaign C9 is executed under current policy despite cache and prose"
+                  ]
+                }
+              },
+              "timing": {
+                "wall_seconds": 241.16727008400002,
+                "prompt_tokens": 622,
+                "completion_tokens": 1064,
+                "finish_reason": "stop",
+                "reasoning_characters": 1345
+              }
+            }
+          ],
+          "response": "{\"claims\":[{\"id\":\"c1\",\"statement\":\"When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"current-policy\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c2\",\"statement\":\"A structured execution receipt controls whether an action executed over model prose claiming something different.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"receipt-over-prose\"],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c3\",\"statement\":\"status=pending_approval with executed=false means a consequential action remains unexecuted.\",\"origin\":\"elicited_probe\",\"evidence_probe_ids\":[\"pending-state\"],\"derived_from_claim_ids\":[],\"applicability\":\"uncertain\",\"confidence\":\"medium\"},{\"id\":\"c4\",\"statement\":\"The cache states campaigns above $1,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c5\",\"statement\":\"The currently authenticated policy response states campaigns above $2,000 need approval.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c6\",\"statement\":\"The campaign in question is $1,500 and has campaign_id C9.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c7\",\"statement\":\"The tool call returns {\\\"campaign_id\\\":\\\"C9\\\",\\\"status\\\":\\\"executed\\\",\\\"executed\\\":true} for this campaign.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c8\",\"statement\":\"Older draft prose says 'waiting for approval' for this campaign.\",\"origin\":\"problem_statement\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c9\",\"statement\":\"Under the current authenticated policy threshold of $2,000, a $1,500 campaign does not require approval.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c5\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c10\",\"statement\":\"Under the cached policy threshold of $1,000, a $1,500 campaign would require approval.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c4\",\"c6\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c11\",\"statement\":\"The execution receipt indicates campaign C9 was executed.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c7\"],\"applicability\":\"applies\",\"confidence\":\"high\"},{\"id\":\"c12\",\"statement\":\"The draft prose claim of waiting for approval is contradicted by the execution receipt.\",\"origin\":\"derived\",\"evidence_probe_ids\":[],\"derived_from_claim_ids\":[\"c2\",\"c8\",\"c11\"],\"applicability\":\"applies\",\"confidence\":\"high\"}],\"relationships\":[{\"from\":\"c1\",\"to\":\"c4\",\"type\":\"contradicts\"},{\"from\":\"c1\",\"to\":\"c5\",\"type\":\"supports\"},{\"from\":\"c5\",\"to\":\"c9\",\"type\":\"enables\"},{\"from\":\"c4\",\"to\":\"c10\",\"type\":\"enables\"},{\"from\":\"c2\",\"to\":\"c11\",\"type\":\"supports\"},{\"from\":\"c2\",\"to\":\"c8\",\"type\":\"contradicts\"},{\"from\":\"c9\",\"to\":\"c11\",\"type\":\"enables\"}],\"conflicts\":[\"c4 vs c5 on approval threshold for $1,500\",\"c8 vs c11 on execution state of C9\"],\"unknowns\":[],\"predictions\":[\"campaign C9 is executed under current policy despite cache and prose\"]}",
+          "workspace": {
+            "valid": true,
+            "missing_fields": [],
+            "errors": [],
+            "value": {
+              "claims": [
+                {
+                  "id": "c1",
+                  "statement": "When a cached policy conflicts with a currently authenticated policy response, the current authoritative response controls.",
+                  "origin": "elicited_probe",
+                  "evidence_probe_ids": [
+                    "current-policy"
+                  ],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c2",
+                  "statement": "A structured execution receipt controls whether an action executed over model prose claiming something different.",
+                  "origin": "elicited_probe",
+                  "evidence_probe_ids": [
+                    "receipt-over-prose"
+                  ],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c3",
+                  "statement": "status=pending_approval with executed=false means a consequential action remains unexecuted.",
+                  "origin": "elicited_probe",
+                  "evidence_probe_ids": [
+                    "pending-state"
+                  ],
+                  "derived_from_claim_ids": [],
+                  "applicability": "uncertain",
+                  "confidence": "medium"
+                },
+                {
+                  "id": "c4",
+                  "statement": "The cache states campaigns above $1,000 need approval.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c5",
+                  "statement": "The currently authenticated policy response states campaigns above $2,000 need approval.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c6",
+                  "statement": "The campaign in question is $1,500 and has campaign_id C9.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c7",
+                  "statement": "The tool call returns {\"campaign_id\":\"C9\",\"status\":\"executed\",\"executed\":true} for this campaign.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c8",
+                  "statement": "Older draft prose says 'waiting for approval' for this campaign.",
+                  "origin": "problem_statement",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c9",
+                  "statement": "Under the current authenticated policy threshold of $2,000, a $1,500 campaign does not require approval.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c5",
+                    "c6"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c10",
+                  "statement": "Under the cached policy threshold of $1,000, a $1,500 campaign would require approval.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c4",
+                    "c6"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c11",
+                  "statement": "The execution receipt indicates campaign C9 was executed.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c7"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "high"
+                },
+                {
+                  "id": "c12",
+                  "statement": "The draft prose claim of waiting for approval is contradicted by the execution receipt.",
+                  "origin": "derived",
+                  "evidence_probe_ids": [],
+                  "derived_from_claim_ids": [
+                    "c2",
+                    "c8",
+                    "c11"
+                  ],
+                  "applicability": "applies",
+                  "confidence": "high"
+                }
+              ],
+              "relationships": [
+                {
+                  "from": "c1",
+                  "to": "c4",
+                  "type": "contradicts"
+                },
+                {
+                  "from": "c1",
+                  "to": "c5",
+                  "type": "supports"
+                },
+                {
+                  "from": "c5",
+                  "to": "c9",
+                  "type": "enables"
+                },
+                {
+                  "from": "c4",
+                  "to": "c10",
+                  "type": "enables"
+                },
+                {
+                  "from": "c2",
+                  "to": "c11",
+                  "type": "supports"
+                },
+                {
+                  "from": "c2",
+                  "to": "c8",
+                  "type": "contradicts"
+                },
+                {
+                  "from": "c9",
+                  "to": "c11",
+                  "type": "enables"
+                }
+              ],
+              "conflicts": [
+                "c4 vs c5 on approval threshold for $1,500",
+                "c8 vs c11 on execution state of C9"
+              ],
+              "unknowns": [],
+              "predictions": [
+                "campaign C9 is executed under current policy despite cache and prose"
+              ]
+            }
+          },
+          "timing": {
+            "wall_seconds": 241.16727008400002,
+            "prompt_tokens": 622,
+            "completion_tokens": 1064,
+            "finish_reason": "stop",
+            "reasoning_characters": 1345
+          }
+        },
+        "integration": {
+          "response": "{\"label\":\"B\",\"reason\":\"Current authenticated policy overrides cache and execution receipt overrides prose, so campaign C9 is executed under the $2,000 threshold.\"}",
+          "evaluation": {
+            "passed": true,
+            "valid_json": true,
+            "label": "B",
+            "expected_label": "B",
+            "label_passed": true,
+            "rationale_passed": true,
+            "missing_reason_terms": []
+          },
+          "timing": {
+            "wall_seconds": 49.79872004199994,
+            "prompt_tokens": 1002,
+            "completion_tokens": 128,
+            "finish_reason": "stop",
+            "reasoning_characters": 394
+          }
+        }
+      },
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": true,
+        "workspace_valid": true,
+        "workspace_passed": true,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    }
+  ]
+}

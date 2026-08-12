@@ -1,0 +1,106 @@
+{
+  "schema": "amos.model-candidate-plan",
+  "version": 1,
+  "status": "experimental",
+  "candidate": {
+    "id": "meta-muse-glimmer-30b",
+    "family": "Muse Glimmer",
+    "parameter_count": 29776626688,
+    "architecture": "MuseGlimmerForConditionalGeneration",
+    "license": "Apache-2.0",
+    "upstream_revision": "a4e59da52a7bc87ae7251dd5545c0dd437c44b68",
+    "knowledge_cutoff": "2026-01-04"
+  },
+  "sources": {
+    "model_card": "https://huggingface.co/meta-models/Muse-Glimmer-30B",
+    "gguf_runtime": "https://huggingface.co/meta-models/Muse-Glimmer-30B-GGUF",
+    "executorch_runtime": "https://huggingface.co/meta-models/Muse-Glimmer-30B-ExecuTorch-PTE",
+    "usage_policy": "https://huggingface.co/meta-models/Muse-Glimmer-30B/blob/main/USAGE_POLICY.md"
+  },
+  "first_runtime": {
+    "engine": "llama.cpp",
+    "minimum_upstream_build": "b10353",
+    "qualified_runtime_revision": "f8def7fe168bab245fbf15d3f18b26dbb1ef73c8",
+    "artifact": "muse-glimmer-30B-kquant-17gb.gguf",
+    "artifact_repository_revision": "a0532f7263ee67f1e0a5f5c5fdcd50dd62fc9aa4",
+    "artifact_size_bytes": 16756681056,
+    "artifact_sha256": "7e9b74b7c8875e9e265695df9613bf6290f2392e479ce740495a129019c488d8",
+    "vision_projector_included": false,
+    "speculative_drafter_included": false,
+    "context_tokens": 32768,
+    "parallel_slots": 1,
+    "tool_protocol": "ATEM through the runtime's OpenAI-compatible parser",
+    "reasoning_parameter": "chat_template_kwargs.reasoning_strength"
+  },
+  "hardware_order": [
+    {
+      "profile": "apple-silicon-64gb",
+      "role": "first qualification target"
+    },
+    {
+      "profile": "apple-silicon-32gb",
+      "role": "second product target"
+    },
+    {
+      "profile": "apple-silicon-16gb",
+      "role": "ExpertCache-style experimental target, not an initial product promise"
+    }
+  ],
+  "route_hypotheses": [
+    {
+      "lane": "routine",
+      "current_control": "Haiku 4.5",
+      "reasoning_strength": "low",
+      "graduation_order": ["observe", "draft", "propose"]
+    },
+    {
+      "lane": "balanced_non_deep",
+      "current_control": "Sonnet 5",
+      "reasoning_strength": "low",
+      "comparison_reasoning_strengths": [
+        "high"
+      ],
+      "graduation_order": ["observe", "draft", "propose"],
+      "excluded_until_separately_qualified": [
+        "deep or frontier reasoning",
+        "irreversible high-impact decisions",
+        "unresolved authority or evidence conflicts",
+        "unverified complex code",
+        "repeated tool or validator failures"
+      ]
+    }
+  ],
+  "initial_evidence": {
+    "date": "2026-08-12",
+    "directory": "evidence/muse-glimmer-30b-2026-08-12",
+    "preferred_configuration": {
+      "reasoning_strength": "low",
+      "temperature": 1,
+      "top_p": 0.95,
+      "top_k": 64
+    },
+    "clean_ac_qualification": {
+      "score": 16,
+      "maximum": 16,
+      "wall_seconds": 377.466302833,
+      "tokens_per_second": 8.554095734272563
+    },
+    "routing_status": "not_promoted"
+  },
+  "treatments": [
+    "base_model_only",
+    "base_plus_amos_integration",
+    "adapted_model_only",
+    "adapted_plus_amos_integration",
+    "adapted_plus_integration_verification_repair",
+    "complete_stack_with_calibrated_escalation"
+  ],
+  "critical_gates": [
+    "OpenAI-compatible ATEM tool calls survive dependent multi-turn use",
+    "no false executed or approved claims",
+    "no tenant-boundary or prompt-injection regression",
+    "quantized runtime passes the same workflow contract as the evaluated candidate",
+    "system-level functional parity passes the pre-registered control margin",
+    "weak results abstain or escalate before authoritative use"
+  ]
+}

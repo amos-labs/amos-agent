@@ -1,0 +1,2191 @@
+{
+  "schema": "amos.knowledge-integration-report",
+  "version": 1,
+  "created_at": "2026-08-12T12:35:32.215Z",
+  "diagnostic": true,
+  "suite": {
+    "schema": "amos.knowledge-integration-suite",
+    "version": 1,
+    "status": "development"
+  },
+  "model": "muse-glimmer-30b",
+  "endpoint": "http://127.0.0.1:18080",
+  "protocol": "openai",
+  "arm": "baseline",
+  "experimental_identity": {
+    "treatment": "base_model_only_integration_failure_discovery",
+    "hardware_profile": "apple-m1-max-64gb",
+    "runtime_revision": "f8def7fe168bab245fbf15d3f18b26dbb1ef73c8",
+    "artifact_sha256": "7e9b74b7c8875e9e265695df9613bf6290f2392e479ce740495a129019c488d8",
+    "power_source": "ac",
+    "run_state": "sustained_after_clean_qualification"
+  },
+  "configuration": {
+    "context_length": 32768,
+    "max_tokens": 1024,
+    "temperature": 1,
+    "top_p": 0.95,
+    "top_k": 64,
+    "reasoning_effort": null,
+    "reasoning_strength": "low",
+    "reasoning_budget_tokens": null,
+    "workspace_max_tokens": 1024,
+    "workspace_reasoning_effort": null,
+    "workspace_reasoning_strength": "low",
+    "workspace_reasoning_budget_tokens": null,
+    "workspace_max_repairs": 1,
+    "openai_reasoning_effort_forwarded_to_chat_template": false,
+    "openai_reasoning_strength_forwarded_to_chat_template": true,
+    "workspace_json_schema_constrained": true,
+    "atomic_repetitions": 2,
+    "atomic_pass_threshold": 1,
+    "atomic_results_shared_across_family_variants": true,
+    "evaluator_feedback_exposed_to_model": false
+  },
+  "summary": {
+    "total_cases": 10,
+    "atomic_eligible_cases": 6,
+    "atomic_coverage": 0.6,
+    "baseline_overall_accuracy": 1,
+    "elicited_overall_accuracy": null,
+    "workspace_overall_accuracy": null,
+    "baseline_conditional_accuracy": 1,
+    "elicited_conditional_accuracy": null,
+    "workspace_conditional_accuracy": null,
+    "observed_integration_failures": 0,
+    "elicited_recovered_integration_failures": 0,
+    "elicited_recovery_rate": null,
+    "workspace_recovered_integration_failures": 0,
+    "workspace_recovery_rate": null,
+    "valid_workspaces": 0,
+    "workspace_evaluated_cases": 0,
+    "workspace_construction_attempts": 0,
+    "workspace_repair_attempts": 0,
+    "variant_families": 5,
+    "baseline_variant_consistency": 1,
+    "elicited_variant_consistency": null,
+    "workspace_variant_consistency": null,
+    "baseline_empty_responses": 0,
+    "elicited_empty_responses": 0,
+    "paired_comparisons": {
+      "elicited_vs_baseline": null,
+      "workspace_vs_baseline": null
+    },
+    "accuracy_intervals": {
+      "baseline_overall": {
+        "passed": 10,
+        "total": 10,
+        "rate": 1,
+        "low": 0.7224672001371107,
+        "high": 0.9999999999999999
+      },
+      "elicited_overall": null,
+      "workspace_overall": null,
+      "baseline_conditional": {
+        "passed": 6,
+        "total": 6,
+        "rate": 1,
+        "low": 0.6096657120978346,
+        "high": 1
+      },
+      "elicited_conditional": null,
+      "workspace_conditional": null
+    },
+    "inference": {
+      "atomic_elicitation": {
+        "calls": 30,
+        "wall_seconds": 346.3674203749999,
+        "prompt_tokens": 2676,
+        "completion_tokens": 2616,
+        "reasoning_characters": 10839,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "baseline": {
+        "calls": 10,
+        "wall_seconds": 219.66293679300006,
+        "prompt_tokens": 1682,
+        "completion_tokens": 1551,
+        "reasoning_characters": 4911,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "elicited_integration": {
+        "calls": 0,
+        "wall_seconds": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_characters": 0,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "elicited_total": null,
+      "workspace_construction": {
+        "calls": 0,
+        "wall_seconds": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_characters": 0,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "workspace_integration": {
+        "calls": 0,
+        "wall_seconds": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_characters": 0,
+        "empty_responses": 0,
+        "length_terminated": 0
+      },
+      "workspace_total": null
+    }
+  },
+  "cases": [
+    {
+      "id": "stale-writer-fencing",
+      "family_id": "stale-writer-fencing",
+      "variant_id": "base",
+      "category": "temporal-distributed-systems",
+      "atomic": [
+        {
+          "id": "lease-expiry",
+          "attempts": [
+            {
+              "prompt": "Ignoring what the process is authorized to do, is it physically possible for an OS-paused process to resume and issue a write after its distributed lease expired? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES_OR_NO\"}",
+              "evaluation": {
+                "passed": false,
+                "valid_json": true,
+                "label": "YES_OR_NO",
+                "expected_label": "YES",
+                "label_passed": false,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 18.412857208000002,
+                "prompt_tokens": 99,
+                "completion_tokens": 151,
+                "finish_reason": "stop",
+                "reasoning_characters": 647
+              }
+            },
+            {
+              "prompt": "Ignoring what the process is authorized to do, is it physically possible for an OS-paused process to resume and issue a write after its distributed lease expired? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.114792167,
+                "prompt_tokens": 99,
+                "completion_tokens": 102,
+                "finish_reason": "stop",
+                "reasoning_characters": 428
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": false,
+            "pass_rate": 0.5,
+            "passed_attempts": 1,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "monotonic-fencing",
+          "attempts": [
+            {
+              "prompt": "Can a storage service reject stale writers by requiring every accepted write to carry a fencing token greater than the last accepted token? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES_OR_NO\"}",
+              "evaluation": {
+                "passed": false,
+                "valid_json": true,
+                "label": "YES_OR_NO",
+                "expected_label": "YES",
+                "label_passed": false,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 8.902725375000001,
+                "prompt_tokens": 92,
+                "completion_tokens": 70,
+                "finish_reason": "stop",
+                "reasoning_characters": 254
+              }
+            },
+            {
+              "prompt": "Can a storage service reject stale writers by requiring every accepted write to carry a fencing token greater than the last accepted token? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.044811292000006,
+                "prompt_tokens": 92,
+                "completion_tokens": 92,
+                "finish_reason": "stop",
+                "reasoning_characters": 361
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": false,
+            "pass_rate": 0.5,
+            "passed_attempts": 1,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "lease-is-not-revocation",
+          "attempts": [
+            {
+              "prompt": "Does expiry of a coordination-service lease physically revoke credentials or stop code already running in a paused client? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.155553541000002,
+                "prompt_tokens": 88,
+                "completion_tokens": 99,
+                "finish_reason": "stop",
+                "reasoning_characters": 443
+              }
+            },
+            {
+              "prompt": "Does expiry of a coordination-service lease physically revoke credentials or stop code already running in a paused client? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.78978145799999,
+                "prompt_tokens": 88,
+                "completion_tokens": 87,
+                "finish_reason": "stop",
+                "reasoning_characters": 338
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"B\",\"reason\":\"Token 41 is not greater than the last accepted token 42 so L's write is rejected and N remains.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "B",
+          "expected_label": "B",
+          "label_passed": true,
+          "rationale_passed": true,
+          "missing_reason_terms": []
+        },
+        "timing": {
+          "wall_seconds": 17.20479525000001,
+          "prompt_tokens": 183,
+          "completion_tokens": 135,
+          "finish_reason": "stop",
+          "reasoning_characters": 406
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 1,
+        "atomic_maximum": 3,
+        "all_atomic_passed": false,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "stale-writer-fencing--no-storage-fencing",
+      "family_id": "stale-writer-fencing",
+      "variant_id": "no-storage-fencing",
+      "category": "temporal-distributed-systems",
+      "atomic": [
+        {
+          "id": "lease-expiry",
+          "attempts": [
+            {
+              "prompt": "Ignoring what the process is authorized to do, is it physically possible for an OS-paused process to resume and issue a write after its distributed lease expired? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES_OR_NO\"}",
+              "evaluation": {
+                "passed": false,
+                "valid_json": true,
+                "label": "YES_OR_NO",
+                "expected_label": "YES",
+                "label_passed": false,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 18.412857208000002,
+                "prompt_tokens": 99,
+                "completion_tokens": 151,
+                "finish_reason": "stop",
+                "reasoning_characters": 647
+              }
+            },
+            {
+              "prompt": "Ignoring what the process is authorized to do, is it physically possible for an OS-paused process to resume and issue a write after its distributed lease expired? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.114792167,
+                "prompt_tokens": 99,
+                "completion_tokens": 102,
+                "finish_reason": "stop",
+                "reasoning_characters": 428
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": false,
+            "pass_rate": 0.5,
+            "passed_attempts": 1,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "monotonic-fencing",
+          "attempts": [
+            {
+              "prompt": "Can a storage service reject stale writers by requiring every accepted write to carry a fencing token greater than the last accepted token? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES_OR_NO\"}",
+              "evaluation": {
+                "passed": false,
+                "valid_json": true,
+                "label": "YES_OR_NO",
+                "expected_label": "YES",
+                "label_passed": false,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 8.902725375000001,
+                "prompt_tokens": 92,
+                "completion_tokens": 70,
+                "finish_reason": "stop",
+                "reasoning_characters": 254
+              }
+            },
+            {
+              "prompt": "Can a storage service reject stale writers by requiring every accepted write to carry a fencing token greater than the last accepted token? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.044811292000006,
+                "prompt_tokens": 92,
+                "completion_tokens": 92,
+                "finish_reason": "stop",
+                "reasoning_characters": 361
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": false,
+            "pass_rate": 0.5,
+            "passed_attempts": 1,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "lease-is-not-revocation",
+          "attempts": [
+            {
+              "prompt": "Does expiry of a coordination-service lease physically revoke credentials or stop code already running in a paused client? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.155553541000002,
+                "prompt_tokens": 88,
+                "completion_tokens": 99,
+                "finish_reason": "stop",
+                "reasoning_characters": 443
+              }
+            },
+            {
+              "prompt": "Does expiry of a coordination-service lease physically revoke credentials or stop code already running in a paused client? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.78978145799999,
+                "prompt_tokens": 88,
+                "completion_tokens": 87,
+                "finish_reason": "stop",
+                "reasoning_characters": 338
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"A\",\"reason\":\"Storage does not check fencing tokens so last-write-wins lets the later write from L overwrite N.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "A",
+          "expected_label": "A",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "no fencing"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 17.755580000000002,
+          "prompt_tokens": 173,
+          "completion_tokens": 147,
+          "finish_reason": "stop",
+          "reasoning_characters": 496
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 1,
+        "atomic_maximum": 3,
+        "all_atomic_passed": false,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "correlated-diagnostic-evidence",
+      "family_id": "correlated-diagnostic-evidence",
+      "variant_id": "base",
+      "category": "bayesian-causal",
+      "atomic": [
+        {
+          "id": "likelihood-independence",
+          "attempts": [
+            {
+              "prompt": "When combining two diagnostic test results, is multiplying their likelihood ratios justified without adjustment only when the results are conditionally independent given disease state? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 8.780831791000004,
+                "prompt_tokens": 94,
+                "completion_tokens": 72,
+                "finish_reason": "stop",
+                "reasoning_characters": 361
+              }
+            },
+            {
+              "prompt": "When combining two diagnostic test results, is multiplying their likelihood ratios justified without adjustment only when the results are conditionally independent given disease state? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.021279167000001,
+                "prompt_tokens": 94,
+                "completion_tokens": 87,
+                "finish_reason": "stop",
+                "reasoning_characters": 406
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "shared-error",
+          "attempts": [
+            {
+              "prompt": "If two tests use the same biomarker and calibration pipeline, can their errors be strongly correlated? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.427616666999981,
+                "prompt_tokens": 86,
+                "completion_tokens": 80,
+                "finish_reason": "stop",
+                "reasoning_characters": 310
+              }
+            },
+            {
+              "prompt": "If two tests use the same biomarker and calibration pipeline, can their errors be strongly correlated? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.140584917,
+                "prompt_tokens": 86,
+                "completion_tokens": 72,
+                "finish_reason": "stop",
+                "reasoning_characters": 285
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "base-rate",
+          "attempts": [
+            {
+              "prompt": "Can a low prior prevalence keep the probability of disease after a positive test far below the test's sensitivity? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.782942457999976,
+                "prompt_tokens": 89,
+                "completion_tokens": 95,
+                "finish_reason": "stop",
+                "reasoning_characters": 383
+              }
+            },
+            {
+              "prompt": "Can a low prior prevalence keep the probability of disease after a positive test far below the test's sensitivity? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.631198124999996,
+                "prompt_tokens": 89,
+                "completion_tokens": 107,
+                "finish_reason": "stop",
+                "reasoning_characters": 450
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"D\",\"reason\":\"The tests share a sensor and calibration model so their false positives are correlated, and without the joint dependence structure the combined posterior cannot be calculated by assuming independence.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "D",
+          "expected_label": "D",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "independent"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 20.158643458000007,
+          "prompt_tokens": 181,
+          "completion_tokens": 142,
+          "finish_reason": "stop",
+          "reasoning_characters": 493
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "correlated-diagnostic-evidence--independent-labs",
+      "family_id": "correlated-diagnostic-evidence",
+      "variant_id": "independent-labs",
+      "category": "bayesian-causal",
+      "atomic": [
+        {
+          "id": "likelihood-independence",
+          "attempts": [
+            {
+              "prompt": "When combining two diagnostic test results, is multiplying their likelihood ratios justified without adjustment only when the results are conditionally independent given disease state? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 8.780831791000004,
+                "prompt_tokens": 94,
+                "completion_tokens": 72,
+                "finish_reason": "stop",
+                "reasoning_characters": 361
+              }
+            },
+            {
+              "prompt": "When combining two diagnostic test results, is multiplying their likelihood ratios justified without adjustment only when the results are conditionally independent given disease state? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.021279167000001,
+                "prompt_tokens": 94,
+                "completion_tokens": 87,
+                "finish_reason": "stop",
+                "reasoning_characters": 406
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "shared-error",
+          "attempts": [
+            {
+              "prompt": "If two tests use the same biomarker and calibration pipeline, can their errors be strongly correlated? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.427616666999981,
+                "prompt_tokens": 86,
+                "completion_tokens": 80,
+                "finish_reason": "stop",
+                "reasoning_characters": 310
+              }
+            },
+            {
+              "prompt": "If two tests use the same biomarker and calibration pipeline, can their errors be strongly correlated? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 9.140584917,
+                "prompt_tokens": 86,
+                "completion_tokens": 72,
+                "finish_reason": "stop",
+                "reasoning_characters": 285
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "base-rate",
+          "attempts": [
+            {
+              "prompt": "Can a low prior prevalence keep the probability of disease after a positive test far below the test's sensitivity? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.782942457999976,
+                "prompt_tokens": 89,
+                "completion_tokens": 95,
+                "finish_reason": "stop",
+                "reasoning_characters": 383
+              }
+            },
+            {
+              "prompt": "Can a low prior prevalence keep the probability of disease after a positive test far below the test's sensitivity? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.631198124999996,
+                "prompt_tokens": 89,
+                "completion_tokens": 107,
+                "finish_reason": "stop",
+                "reasoning_characters": 450
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"C\",\"reason\":\"Posterior = 0.01*0.9^2 / (0.01*0.9^2 + 0.99*0.05^2) ≈ 0.77, closest to 77%.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "C",
+          "expected_label": "C",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "independent"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 31.90803029199998,
+          "prompt_tokens": 146,
+          "completion_tokens": 252,
+          "finish_reason": "stop",
+          "reasoning_characters": 465
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "collider-selection",
+      "family_id": "collider-selection",
+      "variant_id": "base",
+      "category": "causal-transfer",
+      "atomic": [
+        {
+          "id": "collider-conditioning",
+          "attempts": [
+            {
+              "prompt": "Can conditioning on a common effect of two otherwise independent causes induce an association between those causes? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 8.411641249999986,
+                "prompt_tokens": 86,
+                "completion_tokens": 59,
+                "finish_reason": "stop",
+                "reasoning_characters": 221
+              }
+            },
+            {
+              "prompt": "Can conditioning on a common effect of two otherwise independent causes induce an association between those causes? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES_OR_NO\"}",
+              "evaluation": {
+                "passed": false,
+                "valid_json": true,
+                "label": "YES_OR_NO",
+                "expected_label": "YES",
+                "label_passed": false,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.575414332999993,
+                "prompt_tokens": 86,
+                "completion_tokens": 61,
+                "finish_reason": "stop",
+                "reasoning_characters": 219
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": false,
+            "pass_rate": 0.5,
+            "passed_attempts": 1,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "association-causality",
+          "attempts": [
+            {
+              "prompt": "Does an observed negative association by itself prove that increasing one variable causally decreases the other? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.760249249999993,
+                "prompt_tokens": 86,
+                "completion_tokens": 54,
+                "finish_reason": "stop",
+                "reasoning_characters": 193
+              }
+            },
+            {
+              "prompt": "Does an observed negative association by itself prove that increasing one variable causally decreases the other? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 6.731633457999997,
+                "prompt_tokens": 86,
+                "completion_tokens": 54,
+                "finish_reason": "stop",
+                "reasoning_characters": 193
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "selection-common-effect",
+          "attempts": [
+            {
+              "prompt": "If admission occurs when either technical skill or influential connections are high, is admission a common effect of skill and connections? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 17.130847583999973,
+                "prompt_tokens": 91,
+                "completion_tokens": 125,
+                "finish_reason": "stop",
+                "reasoning_characters": 578
+              }
+            },
+            {
+              "prompt": "If admission occurs when either technical skill or influential connections are high, is admission a common effect of skill and connections? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.691196916999994,
+                "prompt_tokens": 91,
+                "completion_tokens": 115,
+                "finish_reason": "stop",
+                "reasoning_characters": 543
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"C\",\"reason\":\"Admission is a collider of skill and connections, so conditioning on being admitted induces a spurious negative association between them.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "C",
+          "expected_label": "C",
+          "label_passed": true,
+          "rationale_passed": true,
+          "missing_reason_terms": []
+        },
+        "timing": {
+          "wall_seconds": 17.507864334000043,
+          "prompt_tokens": 163,
+          "completion_tokens": 131,
+          "finish_reason": "stop",
+          "reasoning_characters": 537
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 2,
+        "atomic_maximum": 3,
+        "all_atomic_passed": false,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "collider-selection--unselected-population",
+      "family_id": "collider-selection",
+      "variant_id": "unselected-population",
+      "category": "causal-transfer",
+      "atomic": [
+        {
+          "id": "collider-conditioning",
+          "attempts": [
+            {
+              "prompt": "Can conditioning on a common effect of two otherwise independent causes induce an association between those causes? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 8.411641249999986,
+                "prompt_tokens": 86,
+                "completion_tokens": 59,
+                "finish_reason": "stop",
+                "reasoning_characters": 221
+              }
+            },
+            {
+              "prompt": "Can conditioning on a common effect of two otherwise independent causes induce an association between those causes? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES_OR_NO\"}",
+              "evaluation": {
+                "passed": false,
+                "valid_json": true,
+                "label": "YES_OR_NO",
+                "expected_label": "YES",
+                "label_passed": false,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.575414332999993,
+                "prompt_tokens": 86,
+                "completion_tokens": 61,
+                "finish_reason": "stop",
+                "reasoning_characters": 219
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": false,
+            "pass_rate": 0.5,
+            "passed_attempts": 1,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "association-causality",
+          "attempts": [
+            {
+              "prompt": "Does an observed negative association by itself prove that increasing one variable causally decreases the other? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 7.760249249999993,
+                "prompt_tokens": 86,
+                "completion_tokens": 54,
+                "finish_reason": "stop",
+                "reasoning_characters": 193
+              }
+            },
+            {
+              "prompt": "Does an observed negative association by itself prove that increasing one variable causally decreases the other? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"NO\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "NO",
+                "expected_label": "NO",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 6.731633457999997,
+                "prompt_tokens": 86,
+                "completion_tokens": 54,
+                "finish_reason": "stop",
+                "reasoning_characters": 193
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "selection-common-effect",
+          "attempts": [
+            {
+              "prompt": "If admission occurs when either technical skill or influential connections are high, is admission a common effect of skill and connections? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 17.130847583999973,
+                "prompt_tokens": 91,
+                "completion_tokens": 125,
+                "finish_reason": "stop",
+                "reasoning_characters": 578
+              }
+            },
+            {
+              "prompt": "If admission occurs when either technical skill or influential connections are high, is admission a common effect of skill and connections? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.691196916999994,
+                "prompt_tokens": 91,
+                "completion_tokens": 115,
+                "finish_reason": "stop",
+                "reasoning_characters": 543
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"D\",\"reason\":\"Technical skill and influential connections are independently distributed in the full applicant population, so their unconditional association is zero before sampling error.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "D",
+          "expected_label": "D",
+          "label_passed": true,
+          "rationale_passed": true,
+          "missing_reason_terms": []
+        },
+        "timing": {
+          "wall_seconds": 16.66038233299996,
+          "prompt_tokens": 142,
+          "completion_tokens": 131,
+          "finish_reason": "stop",
+          "reasoning_characters": 523
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 2,
+        "atomic_maximum": 3,
+        "all_atomic_passed": false,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "transactional-outbox-replay",
+      "family_id": "transactional-outbox-replay",
+      "variant_id": "base",
+      "category": "temporal-tool-work",
+      "atomic": [
+        {
+          "id": "atomic-outbox",
+          "attempts": [
+            {
+              "prompt": "Can writing a business record and an outbox event in one database transaction prevent the record from committing without its event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.446772791999974,
+                "prompt_tokens": 91,
+                "completion_tokens": 90,
+                "finish_reason": "stop",
+                "reasoning_characters": 378
+              }
+            },
+            {
+              "prompt": "Can writing a business record and an outbox event in one database transaction prevent the record from committing without its event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.250564832999952,
+                "prompt_tokens": 91,
+                "completion_tokens": 98,
+                "finish_reason": "stop",
+                "reasoning_characters": 404
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "publisher-crash",
+          "attempts": [
+            {
+              "prompt": "Can an outbox publisher that crashes after sending but before marking an event sent publish that event again after restart? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.885387875000015,
+                "prompt_tokens": 90,
+                "completion_tokens": 93,
+                "finish_reason": "stop",
+                "reasoning_characters": 354
+              }
+            },
+            {
+              "prompt": "Can an outbox publisher that crashes after sending but before marking an event sent publish that event again after restart? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.18989875000005,
+                "prompt_tokens": 90,
+                "completion_tokens": 77,
+                "finish_reason": "stop",
+                "reasoning_characters": 281
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "consumer-idempotency",
+          "attempts": [
+            {
+              "prompt": "Can a consumer keyed by event ID suppress repeated side effects from duplicate deliveries of the same event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.182868667000031,
+                "prompt_tokens": 88,
+                "completion_tokens": 69,
+                "finish_reason": "stop",
+                "reasoning_characters": 258
+              }
+            },
+            {
+              "prompt": "Can a consumer keyed by event ID suppress repeated side effects from duplicate deliveries of the same event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.543953042000009,
+                "prompt_tokens": 88,
+                "completion_tokens": 91,
+                "finish_reason": "stop",
+                "reasoning_characters": 355
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"C\",\"reason\":\"Duplicate delivery of E can happen due to publisher crash, but the consumer’s atomic deduplication ensures the downstream effect is applied only once.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "C",
+          "expected_label": "C",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "twice"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 24.06949091699999,
+          "prompt_tokens": 172,
+          "completion_tokens": 169,
+          "finish_reason": "stop",
+          "reasoning_characters": 637
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "transactional-outbox-replay--non-idempotent-consumer",
+      "family_id": "transactional-outbox-replay",
+      "variant_id": "non-idempotent-consumer",
+      "category": "temporal-tool-work",
+      "atomic": [
+        {
+          "id": "atomic-outbox",
+          "attempts": [
+            {
+              "prompt": "Can writing a business record and an outbox event in one database transaction prevent the record from committing without its event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.446772791999974,
+                "prompt_tokens": 91,
+                "completion_tokens": 90,
+                "finish_reason": "stop",
+                "reasoning_characters": 378
+              }
+            },
+            {
+              "prompt": "Can writing a business record and an outbox event in one database transaction prevent the record from committing without its event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.250564832999952,
+                "prompt_tokens": 91,
+                "completion_tokens": 98,
+                "finish_reason": "stop",
+                "reasoning_characters": 404
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "publisher-crash",
+          "attempts": [
+            {
+              "prompt": "Can an outbox publisher that crashes after sending but before marking an event sent publish that event again after restart? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.885387875000015,
+                "prompt_tokens": 90,
+                "completion_tokens": 93,
+                "finish_reason": "stop",
+                "reasoning_characters": 354
+              }
+            },
+            {
+              "prompt": "Can an outbox publisher that crashes after sending but before marking an event sent publish that event again after restart? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.18989875000005,
+                "prompt_tokens": 90,
+                "completion_tokens": 77,
+                "finish_reason": "stop",
+                "reasoning_characters": 281
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "consumer-idempotency",
+          "attempts": [
+            {
+              "prompt": "Can a consumer keyed by event ID suppress repeated side effects from duplicate deliveries of the same event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.182868667000031,
+                "prompt_tokens": 88,
+                "completion_tokens": 69,
+                "finish_reason": "stop",
+                "reasoning_characters": 258
+              }
+            },
+            {
+              "prompt": "Can a consumer keyed by event ID suppress repeated side effects from duplicate deliveries of the same event? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 11.543953042000009,
+                "prompt_tokens": 88,
+                "completion_tokens": 91,
+                "finish_reason": "stop",
+                "reasoning_characters": 355
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"B\",\"reason\":\"At-least-once delivery with a non-idempotent consumer and no deduplication causes the side effect to be applied twice after the crash-retry.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "B",
+          "expected_label": "B",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "duplicate"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 23.56418079199997,
+          "prompt_tokens": 168,
+          "completion_tokens": 154,
+          "finish_reason": "stop",
+          "reasoning_characters": 480
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "current-authority-and-receipt",
+      "family_id": "current-authority-and-receipt",
+      "variant_id": "base",
+      "category": "authority-temporal-integration",
+      "atomic": [
+        {
+          "id": "current-policy",
+          "attempts": [
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 14.129447667,
+                "prompt_tokens": 87,
+                "completion_tokens": 89,
+                "finish_reason": "stop",
+                "reasoning_characters": 391
+              }
+            },
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.15449779200001,
+                "prompt_tokens": 87,
+                "completion_tokens": 93,
+                "finish_reason": "stop",
+                "reasoning_characters": 440
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "receipt-over-prose",
+          "attempts": [
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.419907166999998,
+                "prompt_tokens": 85,
+                "completion_tokens": 71,
+                "finish_reason": "stop",
+                "reasoning_characters": 294
+              }
+            },
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.828118415999983,
+                "prompt_tokens": 85,
+                "completion_tokens": 101,
+                "finish_reason": "stop",
+                "reasoning_characters": 456
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "pending-state",
+          "attempts": [
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.030684665999958,
+                "prompt_tokens": 86,
+                "completion_tokens": 82,
+                "finish_reason": "stop",
+                "reasoning_characters": 312
+              }
+            },
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.799361749999981,
+                "prompt_tokens": 86,
+                "completion_tokens": 80,
+                "finish_reason": "stop",
+                "reasoning_characters": 303
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"C\",\"reason\":\"The authenticated policy requires approval above $1,000 and the tool shows proposal P9 is pending_approval with executed false, so the $1,500 campaign did not launch.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "C",
+          "expected_label": "C",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "current",
+            "not execute"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 23.06468979199999,
+          "prompt_tokens": 180,
+          "completion_tokens": 128,
+          "finish_reason": "stop",
+          "reasoning_characters": 365
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    },
+    {
+      "id": "current-authority-and-receipt--current-policy-allows-execution",
+      "family_id": "current-authority-and-receipt",
+      "variant_id": "current-policy-allows-execution",
+      "category": "authority-temporal-integration",
+      "atomic": [
+        {
+          "id": "current-policy",
+          "attempts": [
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 14.129447667,
+                "prompt_tokens": 87,
+                "completion_tokens": 89,
+                "finish_reason": "stop",
+                "reasoning_characters": 391
+              }
+            },
+            {
+              "prompt": "When a cached policy conflicts with a currently authenticated policy response, should the current authoritative response control? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.15449779200001,
+                "prompt_tokens": 87,
+                "completion_tokens": 93,
+                "finish_reason": "stop",
+                "reasoning_characters": 440
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "receipt-over-prose",
+          "attempts": [
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 10.419907166999998,
+                "prompt_tokens": 85,
+                "completion_tokens": 71,
+                "finish_reason": "stop",
+                "reasoning_characters": 294
+              }
+            },
+            {
+              "prompt": "Should a structured execution receipt control whether an action executed when model prose claims something different? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 13.828118415999983,
+                "prompt_tokens": 85,
+                "completion_tokens": 101,
+                "finish_reason": "stop",
+                "reasoning_characters": 456
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        },
+        {
+          "id": "pending-state",
+          "attempts": [
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 0,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.030684665999958,
+                "prompt_tokens": 86,
+                "completion_tokens": 82,
+                "finish_reason": "stop",
+                "reasoning_characters": 312
+              }
+            },
+            {
+              "prompt": "Does status=pending_approval with executed=false mean a consequential action remains unexecuted? Return only JSON: {\"label\":\"YES_OR_NO\"}.",
+              "repetition": 1,
+              "response": "{\"label\":\"YES\"}",
+              "evaluation": {
+                "passed": true,
+                "valid_json": true,
+                "label": "YES",
+                "expected_label": "YES",
+                "label_passed": true,
+                "rationale_passed": true,
+                "missing_reason_terms": []
+              },
+              "timing": {
+                "wall_seconds": 12.799361749999981,
+                "prompt_tokens": 86,
+                "completion_tokens": 80,
+                "finish_reason": "stop",
+                "reasoning_characters": 303
+              }
+            }
+          ],
+          "evaluation": {
+            "passed": true,
+            "pass_rate": 1,
+            "passed_attempts": 2,
+            "total_attempts": 2,
+            "threshold": 1
+          }
+        }
+      ],
+      "baseline": {
+        "response": "{\"label\":\"B\",\"reason\":\"The authenticated policy requires approval only above $2,000, so a $1,500 campaign can execute, and the tool confirms campaign C9 was executed.\"}",
+        "evaluation": {
+          "passed": true,
+          "valid_json": true,
+          "label": "B",
+          "expected_label": "B",
+          "label_passed": true,
+          "rationale_passed": false,
+          "missing_reason_terms": [
+            "current"
+          ]
+        },
+        "timing": {
+          "wall_seconds": 27.769279625000085,
+          "prompt_tokens": 174,
+          "completion_tokens": 162,
+          "finish_reason": "stop",
+          "reasoning_characters": 509
+        }
+      },
+      "elicited": null,
+      "workspace": null,
+      "summary": {
+        "atomic_passed": 3,
+        "atomic_maximum": 3,
+        "all_atomic_passed": true,
+        "baseline_passed": true,
+        "elicited_passed": null,
+        "workspace_valid": null,
+        "workspace_passed": null,
+        "integration_failure": false,
+        "elicited_recovered": false,
+        "workspace_recovered": false
+      }
+    }
+  ]
+}
