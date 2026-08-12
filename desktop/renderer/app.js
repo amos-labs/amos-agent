@@ -130,6 +130,8 @@ const elements = Object.fromEntries(
     "connectionModalError", "connectionCancelButton", "connectionSubmitButton",
     "automationSummary", "automationUnavailable", "automationEmpty", "automationList",
     "refreshAutomationsButton", "buildAutomationButton", "automationEmptyBuildButton",
+    "automationOperationsCenter", "automationOperationsContract", "automationSimulation",
+    "automationFailureList", "automationRunHistory", "automationRunCount", "automationRunList",
     "automationSetupSurface", "automationSetupTitle", "automationSetupSubtitle",
     "automationSetupPhases", "automationSetupBody", "automationSetupError",
     "automationSetupBack", "automationSetupNext", "automationSetupClose", "canvasSurface",
@@ -958,16 +960,16 @@ function renderAutomations() {
   const library = state.automations || {};
   const automations = Array.isArray(library.automations) ? library.automations : [];
   const grants = Array.isArray(library.grants) ? library.grants : [];
+  const failures = Array.isArray(library.failures) ? library.failures : [];
+  const runs = Array.isArray(library.runs) ? library.runs : [];
   const activeGrants = grants.filter((grant) => grant.status === "active").length;
   const recipeLibrary = state.browserRecipes || {};
   const recipes = Array.isArray(recipeLibrary.recipes) ? recipeLibrary.recipes : [];
   const supported = library.supported === true || recipeLibrary.supported === true;
   const active = automations.filter((automation) => automation.status === "active").length +
     recipes.filter((recipe) => recipe.status === "ready").length;
-  const needsAttention = automations.filter((automation) =>
+  const needsAttention = failures.length + automations.filter((automation) =>
     automation.status !== "active" ||
-    Number(automation.stats?.failed || 0) > 0 ||
-    Number(automation.stats?.toolRunsFailed || 0) > 0 ||
     Number(automation.stats?.toolRunsParked || 0) > 0
   ).length + recipes.filter((recipe) =>
     recipe.status !== "ready" || Number(recipe.runStats?.failed || 0) > 0
@@ -988,11 +990,12 @@ function renderAutomations() {
   elements.buildAutomationButton.disabled = !canBuild;
   elements.automationEmptyBuildButton.disabled = !canBuild;
   elements.refreshAutomationsButton.disabled = state.connectionMode !== "user";
+  renderAutomationOperations(library, failures, runs);
 
   elements.automationSummary.replaceChildren();
   for (const [label, value, detail] of [
     ["Ready", active, `${activeGrants} exact bounded write grant${activeGrants === 1 ? "" : "s"} currently active`],
-    ["Needs attention", needsAttention, "paused, drifted, draft, or reporting failures"],
+    ["Needs attention", needsAttention, `${failures.length} open production failure${failures.length === 1 ? "" : "s"}`],
     ["Completed runs", totalRuns, "bounded deterministic outcomes reported by AMOS"]
   ]) {
     const item = document.createElement("article");
@@ -1072,10 +1075,13 @@ function renderAutomations() {
     actions.className = "automation-actions";
     const edit = actionButton("Work on this with AMOS", "secondary");
     edit.addEventListener("click", () => openAutomationTask(automation, edit));
+    const simulate = actionButton("Simulate", "secondary");
+    simulate.disabled = library.operationsSupported !== true;
+    simulate.addEventListener("click", () => simulateAutomation(automation, simulate));
     const nextActive = automation.status !== "active";
     const statusButton = actionButton(nextActive ? "Resume" : "Pause", nextActive ? "primary" : "secondary");
     statusButton.addEventListener("click", () => changeAutomationStatus(automation, nextActive, statusButton));
-    actions.append(edit, statusButton);
+    actions.append(edit, simulate, statusButton);
 
     card.append(heading, description, stats, meta);
     if (library.grantsSupported === true) {
@@ -1095,6 +1101,183 @@ function renderAutomations() {
     }
     card.append(actions);
     elements.automationList.append(card);
+  }
+}
+
+function renderAutomationOperations(library, failures, runs) {
+  const supported = library.operationsSupported === true;
+  elements.automationOperationsCenter.classList.toggle("hidden", !supported);
+  elements.automationFailureList.replaceChildren();
+  elements.automationRunList.replaceChildren();
+  elements.automationRunCount.textContent = new Intl.NumberFormat().format(runs.length);
+  if (!supported) return;
+
+  const contract = library.operationsContract || {};
+  elements.automationOperationsContract.textContent = contract.external_dispatch === "at_most_once"
+    ? "AT-MOST-ONCE DISPATCH"
+    : "GOVERNED DISPATCH";
+
+  if (failures.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "automation-operations-empty";
+    empty.innerHTML = "<strong>No open Automation failures</strong><span>Every current run is settled or still moving.</span>";
+    elements.automationFailureList.append(empty);
+  }
+  for (const failure of failures) {
+    const card = document.createElement("article");
+    card.className = `automation-failure-card ${failure.failureKind}`;
+    const heading = document.createElement("div");
+    heading.className = "automation-failure-heading";
+    const identity = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = failure.automationName;
+    const step = document.createElement("span");
+    step.textContent = `${failure.stepKey || `Step ${failure.stepPosition + 1}`} · ${humanizeTool(failure.failureKind)}`;
+    identity.append(title, step);
+    const safety = document.createElement("span");
+    safety.className = `automation-replay-safety ${failure.replaySafe ? "safe" : "ambiguous"}`;
+    safety.textContent = failure.replaySafe ? "SAFE TO RETRY" : "EFFECT UNKNOWN";
+    heading.append(identity, safety);
+
+    const error = document.createElement("p");
+    error.className = "automation-failure-error";
+    error.textContent = failure.error;
+    const meta = document.createElement("small");
+    meta.className = "automation-failure-meta";
+    meta.textContent = [
+      `Run ${shortId(failure.enrollmentId)}`,
+      `definition v${failure.definitionVersion}`,
+      failure.lastFailedAt ? `failed ${relativeTime(failure.lastFailedAt)}` : "",
+      failure.occurrenceCount > 1 ? `${failure.occurrenceCount} observations` : "",
+      `notification ${humanizeTool(failure.notificationState)}`
+    ].filter(Boolean).join(" · ");
+    const note = document.createElement("textarea");
+    note.className = "automation-repair-note";
+    note.rows = 2;
+    note.maxLength = 1000;
+    note.placeholder = failure.replaySafe
+      ? "Required: what changed or why this retry is appropriate"
+      : "Required: how you verified whether the provider applied the effect";
+    const actions = document.createElement("div");
+    actions.className = "automation-repair-actions";
+    if (failure.replaySafe) {
+      const retry = actionButton("Retry exact step", "primary");
+      retry.addEventListener("click", () => repairAutomationIncident(
+        failure, { action: "retry", externalEffectState: "not_applied" }, note, retry
+      ));
+      actions.append(retry);
+    } else {
+      const retry = actionButton("Not applied — retry", "primary");
+      retry.addEventListener("click", () => repairAutomationIncident(
+        failure, { action: "retry", externalEffectState: "not_applied" }, note, retry
+      ));
+      const settle = actionButton("Applied — settle", "secondary");
+      settle.addEventListener("click", () => repairAutomationIncident(
+        failure,
+        {
+          action: "settle_applied",
+          externalEffectState: "applied",
+          result: { evidence: "human_attestation_from_automation_operations_center" }
+        },
+        note,
+        settle
+      ));
+      actions.append(retry, settle);
+    }
+    const dismiss = actionButton("Dismiss run", "secondary");
+    dismiss.addEventListener("click", () => repairAutomationIncident(
+      failure, { action: "dismiss", externalEffectState: "unknown" }, note, dismiss
+    ));
+    actions.append(dismiss);
+    card.append(heading, error, meta, note, actions);
+    elements.automationFailureList.append(card);
+  }
+
+  if (runs.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "automation-run-empty";
+    empty.textContent = "No deterministic run history yet.";
+    elements.automationRunList.append(empty);
+  }
+  for (const run of runs.slice(0, 30)) {
+    const row = document.createElement("article");
+    row.className = `automation-run-row ${run.status}`;
+    const status = document.createElement("span");
+    status.className = "automation-run-state";
+    status.textContent = humanizeTool(run.status);
+    const copy = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = run.automationName;
+    const detail = document.createElement("small");
+    detail.textContent = [
+      run.step.key ? `step ${run.step.key}` : `position ${run.currentPosition + 1}`,
+      run.subjectKey ? `subject ${run.subjectKey}` : "",
+      run.updatedAt ? relativeTime(run.updatedAt) : "",
+      run.exitReason
+    ].filter(Boolean).join(" · ");
+    copy.append(title, detail);
+    row.append(status, copy);
+    elements.automationRunList.append(row);
+  }
+}
+
+async function simulateAutomation(automation, button) {
+  setButtonBusy(button, true, "Simulating…");
+  try {
+    const response = await api.simulateAutomation(automation.id, null);
+    renderAutomationSimulation(response.simulation, automation.name);
+    elements.automationOperationsCenter.scrollIntoView({ behavior: "smooth", block: "start" });
+    toast("Simulation completed with zero provider calls and zero mutations.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(button, false, "Simulate");
+  }
+}
+
+function renderAutomationSimulation(simulation, fallbackName) {
+  elements.automationSimulation.replaceChildren();
+  elements.automationSimulation.classList.remove("hidden");
+  const cases = Array.isArray(simulation?.simulations) ? simulation.simulations : [];
+  const valid = cases.length > 0 && cases.every((item) => item?.valid === true);
+  const heading = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = `${simulation?.automation?.name || fallbackName} · ${valid ? "simulation passed" : "needs attention"}`;
+  const proof = document.createElement("span");
+  proof.textContent = `${Number(simulation?.provider_calls || 0)} provider calls · ${Number(simulation?.mutations_performed || 0)} mutations`;
+  heading.append(title, proof);
+  const detail = document.createElement("pre");
+  detail.textContent = JSON.stringify(cases, null, 2);
+  elements.automationSimulation.append(heading, detail);
+}
+
+async function repairAutomationIncident(failure, resolution, noteField, button) {
+  const note = noteField.value.trim();
+  if (!note) {
+    noteField.focus();
+    toast("Add the required verification or repair note first.", true);
+    return;
+  }
+  const consequence = resolution.action === "retry"
+    ? "The exact failed step will become eligible for the next runner pass."
+    : resolution.action === "settle_applied"
+      ? "AMOS will advance this step without contacting the provider again."
+      : "AMOS will stop this failed run without replaying it.";
+  if (!window.confirm(`${consequence}\n\nAutomation: ${failure.automationName}\nStep: ${failure.stepKey}\nYour note: ${note}`)) return;
+  setButtonBusy(button, true, "Submitting…");
+  try {
+    const response = await api.repairAutomationFailure(failure.id, { ...resolution, note });
+    state.automations = response.automations || state.automations;
+    if (Array.isArray(response.approvals)) state.companyApprovals = response.approvals;
+    renderAutomations();
+    renderWork();
+    const parked = Boolean(response.result?.pending_id || response.result?.status === "pending");
+    toast(parked
+      ? "Resolution is waiting in Work for final human approval."
+      : response.result?.message || "Automation failure resolved without an implicit replay.");
+  } catch (error) {
+    toast(error.message, true);
+    renderAutomations();
   }
 }
 

@@ -2328,6 +2328,47 @@ export class DesktopController {
     return { result, automations: this.automations };
   }
 
+  async simulateAutomation(automationId, sampleTrigger = null) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "simulating this Automation");
+    const simulation = await remote.simulateAutomation(automationId, sampleTrigger);
+    this.record("automation", "Simulated an Automation without external effects", {
+      automation_id: String(automationId || ""),
+      valid: simulation.simulations?.every((item) => item?.valid === true) === true,
+      provider_calls: Number(simulation.provider_calls || 0),
+      mutations_performed: Number(simulation.mutations_performed || 0)
+    });
+    return { simulation };
+  }
+
+  async repairAutomationFailure(incidentId, input = {}) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "repairing this Automation failure");
+    const result = await remote.repairAutomationFailure(incidentId, input);
+    const [automationsResult, approvalsResult] = await Promise.allSettled([
+      remote.automationsLibrary(),
+      remote.approvals()
+    ]);
+    if (automationsResult.status === "fulfilled") this.automations = automationsResult.value;
+    if (approvalsResult.status === "fulfilled") {
+      this.approvalsAvailable = approvalsResult.value.available;
+      this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
+      this.companyApprovals = approvalsResult.value.pending_operations;
+    }
+    this.record("automation", "Submitted an exact Automation failure resolution", {
+      incident_id: String(incidentId || ""),
+      action: String(input.action || ""),
+      external_effect_state: String(input.externalEffectState || "unknown"),
+      pending_approval: Boolean(result.pending_id || result.status === "pending")
+    });
+    await this.sendRemoteState();
+    return {
+      result,
+      automations: this.automations,
+      approvals: this.companyApprovals
+    };
+  }
+
   async beginAutomationSetup(input = {}) {
     const intent = String(input.intent || "").trim().slice(0, 2_000);
     if (!intent) throw new Error("Describe the business outcome this Automation should produce");

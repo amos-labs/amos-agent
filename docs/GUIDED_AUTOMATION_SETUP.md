@@ -78,7 +78,17 @@ state, and Automation status. Drift or missing authority falls back to per-run
 approval; a model outage does not stop a valid deterministic run.
 
 Automations shows live grant status, rate/lifetime/failure counters, expiry,
-and revocation. Pause stops future claims. Revoke immediately removes future
+revocation, recent deterministic runs, and a durable production-failure inbox.
+The Platform-authoritative simulation resolves the exact mapping against recent
+or representative trigger contexts while reporting zero provider calls, grant
+claims, and mutations.
+
+An ambiguous provider or email response is never retried silently. The
+Operations Center requires an owner/admin to record what was verified: retry
+only after attesting that the effect was not applied, settle and advance without
+redispatch after attesting that it was applied, or dismiss the run. Consequential
+retry and settlement still enter the normal human decision gate and every
+resolution is receipted. Pause stops future claims. Revoke immediately removes future
 authority and requires a newly approved activation to restore it. An external
 call already atomically claimed at the same instant may settle and remains
 visible in Platform receipts.
@@ -89,9 +99,10 @@ Platform capability.
 
 ## Next production follow-through
 
-The bounded standing-authority slice is implemented across guided authoring,
-human approval, deterministic execution, proof, monitoring, and revocation.
-The next connector slice is provider-side webhook provisioning plus a clean
+The bounded standing-authority and production-operations slices are implemented
+across guided authoring, human approval, deterministic execution, proof,
+monitoring, dead-letter repair, and revocation. The next connector slice is
+provider-side webhook provisioning plus a clean
 API/MCP onboarding path. That lets a software vendor publish typed operations
 once while each downstream customer connects and governs its own account. The
 vendor application's AWS hosting remains independent of the AMOS execution and

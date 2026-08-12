@@ -1460,6 +1460,128 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .automation-summary strong { font-size: 25px; letter-spacing: -.03em; }
 .automation-summary span { color: var(--ink); font-size: 10px; font-weight: 800; }
 .automation-summary small { color: var(--muted-2); font-size: 8px; line-height: 1.4; }
+.automation-operations-center {
+  display: grid;
+  max-width: 1240px;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 18px;
+  border: 1px solid rgba(255,202,105,.24);
+  border-radius: 15px;
+  background: linear-gradient(145deg, rgba(255,202,105,.055), var(--panel) 42%);
+}
+.automation-operations-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+.automation-operations-heading h2 { margin: 7px 0 5px; font-size: 15px; }
+.automation-operations-heading p { max-width: 760px; margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.automation-contract-chip {
+  flex: 0 0 auto;
+  padding: 7px 9px;
+  border: 1px solid rgba(109,147,255,.24);
+  border-radius: 999px;
+  background: rgba(109,147,255,.08);
+  color: var(--blue-2);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+.automation-failure-list { display: grid; gap: 9px; }
+.automation-operations-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 13px;
+  border: 1px solid rgba(59,213,143,.18);
+  border-radius: 11px;
+  background: rgba(59,213,143,.045);
+}
+.automation-operations-empty strong { color: var(--green); font-size: 9px; }
+.automation-operations-empty span { color: var(--muted-2); font-size: 8px; }
+.automation-failure-card {
+  display: grid;
+  gap: 9px;
+  padding: 13px;
+  border: 1px solid rgba(255,105,105,.27);
+  border-radius: 12px;
+  background: rgba(255,105,105,.045);
+}
+.automation-failure-card.configuration, .automation-failure-card.retryable {
+  border-color: rgba(255,202,105,.25);
+  background: rgba(255,202,105,.04);
+}
+.automation-failure-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.automation-failure-heading > div { display: grid; gap: 3px; }
+.automation-failure-heading strong { font-size: 10px; }
+.automation-failure-heading span { color: var(--muted-2); font-size: 8px; }
+.automation-replay-safety {
+  flex: 0 0 auto;
+  padding: 5px 7px;
+  border-radius: 999px;
+  color: var(--warning);
+  background: rgba(255,202,105,.1);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .06em;
+}
+.automation-replay-safety.ambiguous { color: #ff8f8f; background: rgba(255,105,105,.1); }
+.automation-replay-safety.safe { color: var(--green); background: rgba(59,213,143,.1); }
+.automation-failure-error { margin: 0; color: var(--ink); font-size: 9px; line-height: 1.5; }
+.automation-failure-meta { color: var(--muted-2); font-size: 8px; }
+.automation-repair-note {
+  width: 100%;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-softer);
+  color: var(--ink);
+  font: inherit;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.automation-repair-note:focus { outline: 2px solid rgba(109,147,255,.2); border-color: var(--blue-2); }
+.automation-repair-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.automation-repair-actions .button { min-height: 31px; padding: 7px 9px; font-size: 8px; }
+.automation-simulation {
+  display: grid;
+  gap: 9px;
+  padding: 12px 13px;
+  border: 1px solid rgba(109,147,255,.24);
+  border-radius: 11px;
+  background: rgba(109,147,255,.045);
+}
+.automation-simulation > div { display: flex; justify-content: space-between; gap: 16px; }
+.automation-simulation strong { font-size: 9px; }
+.automation-simulation span { color: var(--green); font-size: 8px; }
+.automation-simulation pre {
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-softer);
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.automation-run-history { border-top: 1px solid var(--line); padding-top: 11px; }
+.automation-run-history summary { cursor: pointer; color: var(--ink); font-size: 9px; font-weight: 800; }
+.automation-run-history summary span { margin-left: 6px; color: var(--muted-2); }
+.automation-run-list { display: grid; gap: 6px; padding-top: 10px; }
+.automation-run-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 11px; padding: 8px 9px; border-radius: 8px; background: var(--surface-softer); }
+.automation-run-state { color: var(--muted-2); font-size: 7px; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+.automation-run-row.completed .automation-run-state { color: var(--green); }
+.automation-run-row.failed .automation-run-state { color: #ff8f8f; }
+.automation-run-row > div { display: grid; gap: 3px; min-width: 0; }
+.automation-run-row strong { font-size: 9px; }
+.automation-run-row small { overflow: hidden; color: var(--muted-2); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.automation-run-empty { margin: 0; color: var(--muted-2); font-size: 8px; }
 .automation-list { display: grid; max-width: 1240px; gap: 11px; padding-bottom: 42px; }
 .automation-card {
   display: grid;
@@ -2966,6 +3088,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .automations-heading { grid-template-columns: 1fr; align-items: start; }
   .tasks-heading { grid-template-columns: 1fr; align-items: start; }
   .automation-heading-actions { padding-bottom: 0; }
+  .automation-operations-heading { flex-direction: column; gap: 12px; }
   .automation-card { grid-template-columns: 1fr; }
   .automation-stats { grid-column: 1; grid-row: auto; justify-content: flex-start; }
   .automation-stats span { text-align: left; }
@@ -3018,6 +3141,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .project-budget-grid .connection-field:last-child { grid-column: auto; }
   .task-filter-label { justify-content: space-between; }
   .automation-heading-actions, .automation-actions { flex-wrap: wrap; }
+  .automation-failure-heading, .automation-simulation > div { flex-direction: column; }
+  .automation-run-row { grid-template-columns: 1fr; }
   .automation-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
   .canvas-source-bar { align-items: flex-start; flex-wrap: wrap; }
   .canvas-blocks { grid-template-columns: 1fr; }
