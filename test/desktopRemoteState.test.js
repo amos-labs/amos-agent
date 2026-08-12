@@ -671,6 +671,146 @@ test("Desktop projects credential-free connection and provider metadata from AMO
   });
 });
 
+test("Desktop projects user-private Projects and supervised task runs without authority", async () => {
+  const calls = [];
+  const ids = {
+    project: "11111111-1111-4111-8111-111111111111",
+    task: "22222222-2222-4222-8222-222222222222",
+    run: "33333333-3333-4333-8333-333333333333"
+  };
+  const project = {
+    id: ids.project,
+    name: "Neighborly rollout",
+    instructions: "Keep corporate and franchise work visibly separated.",
+    status: "active",
+    pinned: true,
+    archived: false,
+    resource_refs: ["company:neighborly"],
+    max_parallel_runs: 4,
+    default_budget: {
+      token_limit: 200000,
+      cost_limit_microusd: 50000000,
+      tool_call_limit: 200,
+      wall_time_limit_seconds: 14400
+    },
+    task_count: 3,
+    running_count: 1,
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:05:00.000Z",
+    credential: "must-not-project"
+  };
+  const run = {
+    id: ids.run,
+    project_id: ids.project,
+    project_name: project.name,
+    task_id: ids.task,
+    task_title: "Build KPI scorecard",
+    source_client: "amos_desktop",
+    client_run_id: "desktop-run-1",
+    execution_mode: "local",
+    status: "running",
+    sequence: 2,
+    phase: "analysis",
+    progress_summary: "Computing the deterministic scorecard",
+    result_summary: "",
+    stop_reason: "",
+    budget: {
+      token_limit: 200000,
+      cost_limit_microusd: 50000000,
+      tool_call_limit: 200,
+      wall_time_limit_seconds: 14400
+    },
+    usage: { tokens_used: 1200, cost_used_microusd: 3000, tool_calls_used: 4 },
+    continue: true,
+    stalled: false,
+    heartbeat_at: "2026-08-12T00:05:00.000Z",
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:05:00.000Z",
+    tool_arguments: { secret: "must-not-project" }
+  };
+  const task = {
+    id: ids.task,
+    context_key: `task:${ids.task}`,
+    title: "Build KPI scorecard",
+    objective: "Build the deterministic KPI scorecard",
+    kind: "general",
+    status: "active",
+    project_id: ids.project,
+    workspace_mode: "context_only",
+    workspace: {},
+    resource_refs: [],
+    created_at: "2026-08-12T00:00:00.000Z",
+    updated_at: "2026-08-12T00:05:00.000Z"
+  };
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "projects-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      calls.push(request.params);
+      const name = request.params.name;
+      const payload = name === "list_projects"
+        ? { projects: [project], contract: { execution_authority: false } }
+        : name === "list_task_inbox"
+          ? { items: [run], stalled_count: 0, contract: { execution_proof: false } }
+          : name === "create_project" || name === "update_project"
+            ? { project, changed: ["pinned"], contract: { execution_authority: false } }
+            : name === "assign_task_to_project"
+              ? { task, contract: { approval_or_replay_permission: false } }
+              : name === "start_task_run"
+                ? { run, accepted: true, idempotent: false, continue: true }
+                : name === "report_task_run"
+                  ? { run: { ...run, status: "completed", continue: false }, accepted: true, continue: false }
+                  : { run: { ...run, status: "cancel_requested", continue: false }, continue: false };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const library = await client.projectsLibrary();
+  const created = await client.createProject({ name: project.name, maxParallelRuns: 4 });
+  await client.updateProject(ids.project, { pinned: false });
+  const assigned = await client.assignTaskToProject(ids.task, ids.project);
+  await client.startTaskRun({
+    projectId: ids.project,
+    taskId: ids.task,
+    clientRunId: "desktop-run-1"
+  });
+  await client.reportTaskRun({
+    runId: ids.run,
+    sequence: 3,
+    status: "completed",
+    tokensUsed: 1200,
+    costUsedMicrousd: 3000,
+    toolCallsUsed: 4
+  });
+  await client.cancelTaskRun(ids.run, "Stopped by the operator");
+
+  assert.equal(library.supported, true);
+  assert.equal(library.projects[0].maxParallelRuns, 4);
+  assert.equal(library.projects[0].credential, undefined);
+  assert.equal(library.inbox[0].taskTitle, "Build KPI scorecard");
+  assert.equal(library.inbox[0].tool_arguments, undefined);
+  assert.equal(created.project.defaultBudget.tokenLimit, 200000);
+  assert.equal(assigned.task.projectId, ids.project);
+  assert.deepEqual(calls.map((call) => call.name), [
+    "list_projects", "list_task_inbox", "create_project", "update_project",
+    "assign_task_to_project", "start_task_run", "report_task_run",
+    "request_task_run_cancel"
+  ]);
+  assert.deepEqual(calls[2].arguments, { name: project.name, max_parallel_runs: 4 });
+  assert.deepEqual(calls[3].arguments, { project_id: ids.project, pinned: false });
+  assert.deepEqual(calls[4].arguments, { task_id: ids.task, project_id: ids.project });
+  assert.equal(calls[5].arguments.source_client, "amos_desktop");
+  assert.equal(calls[6].arguments.status, "completed");
+  assert.equal(calls[7].arguments.reason, "Stopped by the operator");
+});
+
 test("Desktop falls back only to the older platform catalog, never a bundled provider list", async () => {
   const tools = [];
   const client = new DesktopRemoteStateClient(

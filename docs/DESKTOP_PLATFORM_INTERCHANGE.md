@@ -38,6 +38,15 @@ shell, inline governed progress, dynamic canvas, encrypted restart continuity,
 mid-task steering, native OpenAI Responses and Anthropic Messages adapters,
 managed local intelligence, and local-primary AMOS Router integration.
 
+The Projects supervisory foundation is also implemented against the public
+Platform contract: user-private Projects can be created and managed, tasks can
+be assigned, and the Activity Center presents bounded task-run progress,
+budgets, stalls, and cooperative cancellation. The current local agent loop is
+still single-run. The isolated multi-run runtime described in
+[`TASK_LIFECYCLE.md`](TASK_LIFECYCLE.md#projects-and-supervised-work) is the next
+execution slice; Project capacity in the UI is not represented as already-live
+local concurrency.
+
 The routing hardening slice makes ownership explicit. Only the official
 Desktop `amos-hosted` profile can receive the local classifier; selected-provider
 and external-client paths are structurally excluded and covered by negative

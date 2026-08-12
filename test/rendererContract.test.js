@@ -179,7 +179,7 @@ test("Automations replace Memory in primary navigation and launch isolated gover
 
   assert.doesNotMatch(nav, /data-view="memory"/);
   assert.doesNotMatch(nav, /data-view="settings"/);
-  assert.match(nav, /data-view="operator"[\s\S]*?data-view="tasks"[\s\S]*?data-view="canvas"[\s\S]*?data-view="connections"[\s\S]*?data-view="automations"[\s\S]*?data-view="work"/);
+  assert.match(nav, /data-view="operator"[\s\S]*?data-view="projects"[\s\S]*?data-view="tasks"[\s\S]*?data-view="canvas"[\s\S]*?data-view="connections"[\s\S]*?data-view="automations"[\s\S]*?data-view="work"/);
   assert.match(accountMenu, /id="accountMemoryButton"[\s\S]*?Memory &amp; context/);
   assert.match(accountMenu, /id="accountIntelligenceButton"[\s\S]*?Intelligence &amp; infrastructure/);
   assert.match(html, /id="memoryView"/);
@@ -269,6 +269,41 @@ test("Tasks expose durable resume, governed forking, lineage, and task-bound can
   assert.match(taskStore, /credentialsIncluded: false/);
   assert.match(workspace, /"worktree",[\s\S]*?"add"[\s\S]*?"-b"/);
   assert.doesNotMatch(workspace, /"reset"|"checkout"|"clean"|"stash"/);
+});
+
+test("Projects expose bounded parallel coordination and one supervised activity center", async () => {
+  const [javascript, html, css, preload, main, controller, remoteState] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /data-view="projects"/);
+  assert.match(html, /id="projectsView"/);
+  assert.match(html, /PARALLEL WORK &amp; SUPERVISION/);
+  assert.match(html, /id="activityCenterList"/);
+  assert.match(html, /never grants execution authority or replaces proof receipts/);
+  assert.match(html, /id="projectParallelInput"[^>]*max="32"/);
+  assert.match(javascript, /function renderProjects\(\)/);
+  assert.match(javascript, /api\.assignTaskProject\(/);
+  assert.match(javascript, /api\.cancelSupervisedRun\(/);
+  assert.match(javascript, /The worker must acknowledge it at the next heartbeat/);
+  assert.match(preload, /desktop:create-project/);
+  assert.match(preload, /desktop:cancel-supervised-run/);
+  assert.match(main, /controller\.createProject\(input\)/);
+  assert.match(main, /controller\.cancelSupervisedTaskRun/);
+  assert.match(controller, /remote\.projectsLibrary\(\)/);
+  assert.match(controller, /execution_authority: false/);
+  assert.match(remoteState, /this\.mcp\.callTool\("list_projects"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("list_task_inbox"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("start_task_run"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("report_task_run"/);
+  assert.match(css, /\.project-workspace\s*\{[\s\S]*?grid-template-columns/);
+  assert.doesNotMatch(html, /Neighborly rollout|Build KPI scorecard/);
 });
 
 test("Briefings use the platform catalog and typed actions instead of Desktop prompt injection", async () => {

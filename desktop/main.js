@@ -401,6 +401,17 @@ function registerIpc() {
     controller.updateTaskResource(input?.id, input?.changes)
   );
   ipcMain.handle("desktop:fork-task", (_event, input) => controller.forkTaskResource(input));
+  ipcMain.handle("desktop:create-project", (_event, input) => controller.createProject(input));
+  ipcMain.handle("desktop:update-project", (_event, input) =>
+    controller.updateProjectResource(input?.id, input?.changes)
+  );
+  ipcMain.handle("desktop:assign-task-project", (_event, input) =>
+    controller.assignTaskToProject(input?.taskId, input?.projectId || null)
+  );
+  ipcMain.handle("desktop:cancel-supervised-run", (_event, input) =>
+    controller.cancelSupervisedTaskRun(input?.runId, input?.reason)
+  );
+  ipcMain.handle("desktop:refresh-projects", () => controller.refreshProjects());
   ipcMain.handle("desktop:remove-saved-view", (_event, id) => controller.removeSavedView(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({

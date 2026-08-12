@@ -82,6 +82,7 @@ test("DesktopTaskStore manages pin, archive, lineage, and task-bound canvas", as
   const updated = await store.update(owner, "child", {
     pinned: true,
     archived: true,
+    projectId: "11111111-1111-4111-8111-111111111111",
     canvasState: {
       activeCanvasId: "canvas-1",
       canvases: [{ id: "canvas-1", title: "Scorecard", spec: { type: "table" } }]
@@ -90,6 +91,7 @@ test("DesktopTaskStore manages pin, archive, lineage, and task-bound canvas", as
 
   assert.equal(updated.pinned, true);
   assert.equal(updated.archivedAt, "2026-08-10T10:02:00.000Z");
+  assert.equal(updated.projectId, "11111111-1111-4111-8111-111111111111");
   assert.equal(updated.workspace.localPath, undefined);
   assert.equal(updated.canvasState.canvases[0].title, "Scorecard");
   assert.equal(updated.forkManifest.safeguards.replayAllowed, false);

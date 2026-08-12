@@ -1260,7 +1260,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .automation-setup-actions .button { min-width: 100px; }
 .canvas-empty.compact { min-height: 320px; padding: 28px; }
 
-.work-view, .settings-view, .memory-view, .tasks-view, .canvas-view, .connections-view, .automations-view { padding: 42px 46px; }
+.work-view, .settings-view, .memory-view, .projects-view, .tasks-view, .canvas-view, .connections-view, .automations-view { padding: 42px 46px; }
 .section-heading { max-width: 850px; margin-bottom: 34px; }
 .section-heading h1 { margin-bottom: 15px; font-size: 48px; }
 .section-heading p { color: var(--muted); line-height: 1.6; }
@@ -1640,6 +1640,113 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .task-card-details span { padding: 5px 7px; border-radius: 999px; background: var(--surface-pill); color: var(--muted-2); font-size: 8px; }
 .task-card-actions { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 11px; border-top: 1px solid var(--line); }
 .task-card-actions .button { min-height: 32px; padding: 7px 10px; font-size: 8px; }
+.task-project-assignment {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--field);
+  color: var(--muted-2);
+  font-size: 8px;
+}
+.task-project-assignment select {
+  max-width: 180px;
+  padding: 7px 2px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 8px;
+}
+.projects-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  max-width: 1240px;
+  gap: 30px;
+  margin-bottom: 22px;
+}
+.project-heading-actions { display: flex; gap: 8px; padding-bottom: 3px; }
+.project-workspace {
+  display: grid;
+  grid-template-columns: minmax(360px, .82fr) minmax(440px, 1.18fr);
+  max-width: 1240px;
+  min-height: 480px;
+  gap: 14px;
+  padding-bottom: 42px;
+}
+.project-library,
+.activity-center {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-softer);
+}
+.project-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+.project-panel-heading h2 { margin: 7px 0 0; font-size: 18px; }
+.project-panel-heading p { margin: 5px 0 0; color: var(--muted-2); font-size: 9px; }
+.project-search { max-width: 210px; min-width: 150px; flex: 0 1 210px; }
+.project-search input { min-width: 0; }
+.project-run-filter { align-items: flex-end; flex-direction: column; gap: 4px; }
+.project-list,
+.activity-center-list { display: grid; gap: 10px; }
+.project-library .automation-empty,
+.activity-center .automation-empty { min-height: 250px; padding: 24px; }
+.project-card {
+  display: grid;
+  gap: 11px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel);
+  transition: border-color .16s ease, transform .16s ease;
+}
+.project-card.selected { border-color: rgba(109,147,255,.55); box-shadow: inset 3px 0 0 var(--blue); }
+.project-card.archived { opacity: .68; }
+.project-card-heading,
+.activity-run-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.project-card-heading h2 { margin: 7px 0 0; font-size: 15px; }
+.project-card-heading time,
+.activity-run-heading time { color: var(--muted-2); font-size: 8px; white-space: nowrap; }
+.project-card-instructions { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.activity-run-card {
+  display: grid;
+  gap: 11px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel);
+}
+.activity-run-card.stalled,
+.activity-run-card.blocked,
+.activity-run-card.failed { border-color: rgba(255,117,87,.3); }
+.activity-run-heading > div { display: grid; gap: 5px; }
+.activity-run-heading h3 { margin: 0; font-size: 14px; }
+.activity-run-heading small { color: var(--muted-2); font-size: 8px; }
+.activity-run-card > p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.task-status.running { background: rgba(59,213,143,.11); color: var(--green); }
+.task-status.scheduled { background: rgba(109,147,255,.11); color: var(--blue-2); }
+.task-status.blocked,
+.task-status.cancel_requested,
+.task-status.stalled { background: rgba(255,117,87,.1); color: #ff9c86; }
+.task-status.completed { background: rgba(59,213,143,.11); color: var(--green); }
+.task-status.paused { background: rgba(255,202,105,.11); color: var(--warning); }
+.project-modal { width: min(720px, 100%); }
+.project-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+.project-budget-grid .connection-field:last-child { grid-column: 1 / -1; }
 .task-fork-modal { width: min(720px, 100%); }
 .connection-field textarea {
   width: 100%;
@@ -2897,10 +3004,18 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .identity-badge, .runtime-badge { display: none !important; }
   .canvas-view { padding: 28px 24px; }
   .automations-view { padding: 28px 24px; }
+  .projects-view { padding: 28px 24px; }
   .tasks-view { padding: 28px 24px; }
   .automation-summary { grid-template-columns: 1fr; }
   .task-summary { grid-template-columns: 1fr; }
   .task-toolbar { align-items: stretch; flex-direction: column; }
+  .projects-heading { grid-template-columns: 1fr; align-items: start; }
+  .project-workspace { grid-template-columns: 1fr; }
+  .project-panel-heading { align-items: stretch; flex-direction: column; }
+  .project-search { max-width: none; }
+  .project-run-filter { align-items: stretch; }
+  .project-budget-grid { grid-template-columns: 1fr; }
+  .project-budget-grid .connection-field:last-child { grid-column: auto; }
   .task-filter-label { justify-content: space-between; }
   .automation-heading-actions, .automation-actions { flex-wrap: wrap; }
   .automation-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }

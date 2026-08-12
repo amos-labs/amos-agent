@@ -28,6 +28,9 @@
           <button class="nav-item active" data-view="operator">
             <span class="nav-icon">⌁</span><span>Operator</span>
           </button>
+          <button class="nav-item" data-view="projects">
+            <span class="nav-icon">▱</span><span>Projects</span><span id="projectBadge" class="nav-badge project-badge hidden">0</span>
+          </button>
           <button class="nav-item" data-view="tasks">
             <span class="nav-icon">☷</span><span>Tasks</span><span id="taskBadge" class="nav-badge task-badge hidden">0</span>
           </button>
@@ -329,6 +332,72 @@
                 <div id="canvasBlocks" class="canvas-blocks hidden"></div>
               </div>
             </aside>
+          </div>
+        </section>
+
+        <section id="projectsView" class="view projects-view hidden">
+          <div class="section-heading projects-heading">
+            <div>
+              <span class="eyebrow">PARALLEL WORK &amp; SUPERVISION</span>
+              <h1>Projects keep the whole outcome moving.</h1>
+              <p>
+                Group durable tasks, bound parallel capacity and budgets, and see every lane
+                that is running, waiting, blocked, stalled, or complete. Project coordination
+                never grants execution authority or replaces proof receipts.
+              </p>
+            </div>
+            <div class="project-heading-actions">
+              <button id="refreshProjectsButton" class="button secondary" type="button">Refresh</button>
+              <button id="newProjectButton" class="button primary" type="button">New Project <span>→</span></button>
+            </div>
+          </div>
+          <div id="projectUnavailable" class="task-platform-notice hidden">
+            Projects require a current AMOS Platform with the private Project and supervised-run contract.
+          </div>
+          <div id="projectSummary" class="task-summary project-summary"></div>
+          <div class="project-workspace">
+            <section class="project-library" aria-labelledby="projectLibraryTitle">
+              <div class="project-panel-heading">
+                <div>
+                  <span class="eyebrow">PROJECTS</span>
+                  <h2 id="projectLibraryTitle">Durable operating areas</h2>
+                </div>
+                <label class="task-search project-search">
+                  <span aria-hidden="true">⌕</span>
+                  <input id="projectSearchInput" type="search" maxlength="160" placeholder="Search Projects" autocomplete="off" />
+                </label>
+              </div>
+              <div id="projectEmpty" class="automation-empty hidden">
+                <span>▱</span>
+                <strong>No Projects yet</strong>
+                <p>Create one to group tasks, set bounded parallel capacity, and supervise work.</p>
+              </div>
+              <div id="projectList" class="project-list"></div>
+            </section>
+            <section class="activity-center" aria-labelledby="activityCenterTitle">
+              <div class="project-panel-heading">
+                <div>
+                  <span class="eyebrow accent">ACTIVITY CENTER</span>
+                  <h2 id="activityCenterTitle">Work that needs attention</h2>
+                  <p id="activityCenterScope">All Projects</p>
+                </div>
+                <label class="task-filter-label project-run-filter">
+                  <span>Show</span>
+                  <select id="projectRunFilter">
+                    <option value="attention">Needs attention</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="all">All runs</option>
+                  </select>
+                </label>
+              </div>
+              <div id="activityCenterEmpty" class="automation-empty hidden">
+                <span>✓</span>
+                <strong>No matching task runs</strong>
+                <p>Supervised runs will appear here with progress, budgets, and stop controls.</p>
+              </div>
+              <div id="activityCenterList" class="activity-center-list"></div>
+            </section>
           </div>
         </section>
 
@@ -880,6 +949,55 @@
           </div>
         </form>
       </div>
+    </div>
+
+    <div id="projectModal" class="modal-backdrop hidden" role="presentation">
+      <form id="projectForm" class="connection-modal project-modal" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
+        <div class="connection-modal-heading">
+          <div>
+            <span class="eyebrow">PRIVATE PROJECT</span>
+            <h2 id="projectModalTitle">Create a Project</h2>
+            <p>Instructions and ceilings coordinate work; they do not approve actions or carry credentials.</p>
+          </div>
+          <button id="projectModalClose" class="icon-button" type="button" aria-label="Close Project setup">×</button>
+        </div>
+        <input id="projectIdInput" type="hidden" />
+        <label class="connection-field">
+          <span>Project name</span>
+          <input id="projectNameInput" type="text" maxlength="160" required placeholder="Enterprise rollout" />
+        </label>
+        <label class="connection-field">
+          <span>Instructions</span>
+          <textarea id="projectInstructionsInput" maxlength="12000" rows="5" placeholder="What should every task in this Project understand?"></textarea>
+        </label>
+        <div class="project-budget-grid">
+          <label class="connection-field">
+            <span>Parallel runs</span>
+            <input id="projectParallelInput" type="number" min="1" max="32" value="4" required />
+          </label>
+          <label class="connection-field">
+            <span>Token ceiling / run</span>
+            <input id="projectTokenInput" type="number" min="1" max="1000000000" value="200000" required />
+          </label>
+          <label class="connection-field">
+            <span>Tool calls / run</span>
+            <input id="projectToolInput" type="number" min="1" max="100000" value="200" required />
+          </label>
+          <label class="connection-field">
+            <span>Wall time (minutes)</span>
+            <input id="projectWallTimeInput" type="number" min="1" max="10080" value="240" required />
+          </label>
+          <label class="connection-field">
+            <span>Cost ceiling / run (USD)</span>
+            <input id="projectCostInput" type="number" min="0.000001" max="100000" step="0.01" value="50" required />
+          </label>
+        </div>
+        <div id="projectModalError" class="connection-modal-error hidden" role="alert"></div>
+        <div class="connection-modal-actions">
+          <button id="projectCancelButton" class="button secondary" type="button">Cancel</button>
+          <button id="projectSubmitButton" class="button primary" type="submit">Save Project <span>→</span></button>
+        </div>
+      </form>
     </div>
 
     <div id="capsuleModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="capsuleModalTitle">

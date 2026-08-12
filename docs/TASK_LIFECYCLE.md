@@ -32,6 +32,46 @@ only detect repeated identical tool/result cycles and consecutive cycles where
 every tool fails. If one fires, AMOS performs a tool-free final synthesis that
 states what is established, what remains unresolved, and the best next step.
 
+## Projects and supervised work
+
+Projects are durable, user-private operating areas supplied by AMOS Platform.
+They group tasks, bounded orientation instructions, portable resource
+references, and default token, cost, tool-call, wall-time, and parallel-run
+ceilings. They do not copy task transcripts and do not grant approval or
+execution authority.
+
+The Desktop **Activity Center** projects the Platform task-run inbox across all
+Projects. It shows bounded progress, cumulative usage, stalled work, budget
+ceilings, and cooperative stop controls. A task-run record is coordination
+metadata, not evidence that an external effect occurred; governed receipts
+remain the proof source for every business action.
+
+This initial Desktop slice is deliberately honest about execution. It provides
+Project management, task assignment, and the shared supervisory surface, but
+the local agent loop still has one foreground runtime. True concurrent local
+work requires a separate runtime manager rather than duplicating the existing
+singleton fields ad hoc.
+
+That runtime manager will isolate, per run:
+
+- cancellation and steering queues;
+- model/runtime selection and streamed output;
+- attachments, canvas state, and browser sessions;
+- approval prompts and pending local operations;
+- checkpoints, continuity manifests, usage, and receipts; and
+- the monotonic Platform heartbeat/report sequence.
+
+The foreground Operator task is then one selected run, not the only run. A
+background worker must continue when the user opens another task, while a stop,
+failure, approval wait, or budget limit in one worker must not mutate or abort
+another. Platform performs atomic admission under each Project's parallel
+ceiling; Desktop reports cumulative usage and must honor `continue: false`.
+
+The concurrency acceptance test is four simultaneous tasks across two Projects,
+with independent streaming, steering, cancellation, checkpointing, approval
+waits, and completion. Relaunch must recover non-terminal workers as interrupted
+work that requires revalidation—never silently replay them.
+
 ## Safe cancellation
 
 **Stop safely** aborts the active task signal. That signal reaches:

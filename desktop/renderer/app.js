@@ -77,19 +77,20 @@ let forkTaskSource = null;
 let automationSetupDraft = null;
 let automationSetupOperations = null;
 let automationSetupBusy = false;
+let selectedProjectId = "";
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
-    "memoryView", "tasksView", "canvasView", "connectionsView", "automationsView",
+    "memoryView", "projectsView", "tasksView", "canvasView", "connectionsView", "automationsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
     "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
     "accountMemoryButton", "accountIntelligenceButton",
     "companySwitcherControl", "companySwitcher",
-    "decisionBadge", "privateMemoryBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
+    "decisionBadge", "privateMemoryBadge", "projectBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
@@ -134,6 +135,13 @@ const elements = Object.fromEntries(
     "automationSetupBack", "automationSetupNext", "automationSetupClose", "canvasSurface",
     "taskSummary", "taskSearchInput", "taskFilterInput", "taskPlatformNotice", "taskEmpty",
     "taskList", "newTaskButton",
+    "projectSummary", "projectUnavailable", "projectSearchInput", "projectEmpty", "projectList",
+    "refreshProjectsButton", "newProjectButton", "activityCenterScope", "projectRunFilter",
+    "activityCenterEmpty", "activityCenterList", "projectModal", "projectForm",
+    "projectModalTitle", "projectModalClose", "projectIdInput", "projectNameInput",
+    "projectInstructionsInput", "projectParallelInput", "projectTokenInput", "projectToolInput",
+    "projectWallTimeInput", "projectCostInput", "projectModalError", "projectCancelButton",
+    "projectSubmitButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -269,6 +277,16 @@ function bindActions() {
   elements.forkConversationButton.addEventListener("click", forkCurrentConversation);
   elements.taskSearchInput.addEventListener("input", renderTasks);
   elements.taskFilterInput.addEventListener("change", renderTasks);
+  elements.projectSearchInput.addEventListener("input", renderProjects);
+  elements.projectRunFilter.addEventListener("change", renderProjects);
+  elements.refreshProjectsButton.addEventListener("click", refreshProjects);
+  elements.newProjectButton.addEventListener("click", () => openProjectModal());
+  elements.projectForm.addEventListener("submit", submitProject);
+  elements.projectModalClose.addEventListener("click", closeProjectModal);
+  elements.projectCancelButton.addEventListener("click", closeProjectModal);
+  elements.projectModal.addEventListener("click", (event) => {
+    if (event.target === elements.projectModal) closeProjectModal();
+  });
   elements.forkTaskForm.addEventListener("submit", submitTaskFork);
   elements.forkTaskCancel.addEventListener("click", closeTaskForkModal);
   elements.forkTaskModal.addEventListener("click", (event) => {
@@ -338,6 +356,9 @@ function bindActions() {
     if (event.key === "Escape" && !elements.forkTaskModal.classList.contains("hidden")) {
       closeTaskForkModal();
     }
+    if (event.key === "Escape" && !elements.projectModal.classList.contains("hidden")) {
+      closeProjectModal();
+    }
   });
   document.addEventListener("pointerdown", (event) => {
     if (elements.accountMenu.classList.contains("hidden")) return;
@@ -400,6 +421,7 @@ function bindEvents() {
     renderCompanyCache();
     renderConnections();
     renderAutomations();
+    renderProjects();
     renderTasks();
     renderHistory();
     renderCanvas();
@@ -469,6 +491,7 @@ function render() {
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
+    elements.projectsView.classList.add("hidden");
     elements.tasksView.classList.add("hidden");
     elements.canvasView.classList.add("hidden");
     elements.memoryView.classList.add("hidden");
@@ -659,6 +682,7 @@ function render() {
   renderCompanyCache();
   renderConnections();
   renderAutomations();
+  renderProjects();
   renderTasks();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
@@ -746,6 +770,7 @@ function showView(view) {
   currentView = view;
   const map = {
     operator: elements.operatorView,
+    projects: elements.projectsView,
     canvas: elements.canvasView,
     memory: elements.memoryView,
     tasks: elements.tasksView,
@@ -2193,6 +2218,324 @@ function automationStepSummary(steps) {
     .join(" → ");
 }
 
+function renderProjects() {
+  if (!state) return;
+  const library = state.projects || { supported: false, projects: [], inbox: [] };
+  const projects = Array.isArray(library.projects) ? library.projects : [];
+  const inbox = Array.isArray(library.inbox) ? library.inbox : [];
+  const query = elements.projectSearchInput.value.trim().toLowerCase();
+  const visibleProjects = projects.filter((project) =>
+    !query || `${project.name}\n${project.instructions}`.toLowerCase().includes(query)
+  );
+  if (selectedProjectId && !projects.some((project) => project.id === selectedProjectId)) {
+    selectedProjectId = "";
+  }
+  const attentionStatuses = new Set(["waiting", "blocked", "cancel_requested", "failed"]);
+  const activeStatuses = new Set(["scheduled", "running", "waiting", "blocked", "cancel_requested"]);
+  const activeRuns = inbox.filter((run) => activeStatuses.has(run.status));
+  const attentionRuns = inbox.filter((run) => run.stalled || attentionStatuses.has(run.status));
+  const capacity = projects
+    .filter((project) => !project.archived)
+    .reduce((total, project) => total + Number(project.maxParallelRuns || 0), 0);
+
+  elements.projectUnavailable.classList.toggle("hidden", library.supported === true);
+  elements.newProjectButton.disabled = library.supported !== true || state.connectionMode !== "user";
+  elements.refreshProjectsButton.disabled = state.connectionMode !== "user";
+  elements.projectBadge.textContent = String(attentionRuns.length || activeRuns.length);
+  elements.projectBadge.classList.toggle("hidden", attentionRuns.length + activeRuns.length === 0);
+  elements.projectEmpty.classList.toggle("hidden", visibleProjects.length > 0);
+  elements.projectSummary.replaceChildren();
+  for (const [label, value, detail] of [
+    ["Projects", projects.filter((project) => !project.archived).length, "durable operating areas"],
+    ["Active", activeRuns.length, `${capacity} bounded parallel lanes configured`],
+    ["Attention", attentionRuns.length, "waiting, blocked, stalled, or failed"]
+  ]) {
+    const item = document.createElement("article");
+    const number = document.createElement("strong");
+    number.textContent = String(value);
+    const title = document.createElement("span");
+    title.textContent = label;
+    const copy = document.createElement("small");
+    copy.textContent = detail;
+    item.append(number, title, copy);
+    elements.projectSummary.append(item);
+  }
+
+  elements.projectList.replaceChildren();
+  for (const project of visibleProjects) elements.projectList.append(projectCard(project));
+  renderActivityCenter(projects, inbox);
+}
+
+function projectCard(project) {
+  const card = document.createElement("article");
+  const selected = project.id === selectedProjectId;
+  card.className = `project-card${selected ? " selected" : ""}${project.archived ? " archived" : ""}`;
+  const heading = document.createElement("div");
+  heading.className = "project-card-heading";
+  const copy = document.createElement("div");
+  const kicker = document.createElement("div");
+  kicker.className = "task-card-kicker";
+  const status = document.createElement("span");
+  status.className = `task-status ${project.status}`;
+  status.textContent = project.archived ? "ARCHIVED" : project.status.toUpperCase();
+  kicker.append(status);
+  if (project.pinned) {
+    const pinned = document.createElement("span");
+    pinned.className = "task-lineage-chip";
+    pinned.textContent = "PINNED";
+    kicker.append(pinned);
+  }
+  const title = document.createElement("h2");
+  title.textContent = project.name;
+  copy.append(kicker, title);
+  const updated = document.createElement("time");
+  updated.textContent = project.updatedAt ? relativeTime(project.updatedAt) : "Project";
+  heading.append(copy, updated);
+
+  const instructions = document.createElement("p");
+  instructions.className = "project-card-instructions";
+  instructions.textContent = project.instructions || "No shared Project instructions yet.";
+  const details = document.createElement("div");
+  details.className = "task-card-details";
+  for (const value of [
+    `${project.taskCount} task${project.taskCount === 1 ? "" : "s"}`,
+    `${project.runningCount}/${project.maxParallelRuns} running`,
+    `${compactNumber(project.defaultBudget?.tokenLimit)} tokens / run`,
+    `${formatUsdMicros(project.defaultBudget?.costLimitMicrousd)} / run`
+  ]) {
+    const chip = document.createElement("span");
+    chip.textContent = value;
+    details.append(chip);
+  }
+  const actions = document.createElement("div");
+  actions.className = "task-card-actions";
+  const view = actionButton(selected ? "Show all activity" : "View activity", "primary");
+  view.addEventListener("click", () => {
+    selectedProjectId = selected ? "" : project.id;
+    renderProjects();
+  });
+  const newTask = actionButton("New task", "secondary");
+  newTask.disabled = project.archived || project.status !== "active";
+  newTask.addEventListener("click", () => createTaskInProject(project, newTask));
+  const edit = actionButton("Edit", "ghost");
+  edit.disabled = project.archived;
+  edit.addEventListener("click", () => openProjectModal(project));
+  const pin = actionButton(project.pinned ? "Unpin" : "Pin", "ghost");
+  pin.addEventListener("click", () => updateProject(project, { pinned: !project.pinned }, pin));
+  const pause = actionButton(project.status === "paused" ? "Resume" : "Pause", "ghost");
+  pause.disabled = project.archived || project.status === "completed";
+  pause.addEventListener("click", () => updateProject(
+    project,
+    { status: project.status === "paused" ? "active" : "paused" },
+    pause
+  ));
+  const archive = actionButton(project.archived ? "Restore" : "Archive", "ghost");
+  archive.addEventListener("click", () => updateProject(project, { archived: !project.archived }, archive));
+  actions.append(view, newTask, edit, pin, pause, archive);
+  card.append(heading, instructions, details, actions);
+  return card;
+}
+
+function renderActivityCenter(projects, inbox) {
+  const filter = elements.projectRunFilter.value || "attention";
+  const terminal = new Set(["completed", "failed", "cancelled", "interrupted"]);
+  const attention = new Set(["waiting", "blocked", "cancel_requested", "failed"]);
+  const selectedProject = projects.find((project) => project.id === selectedProjectId);
+  const visible = inbox.filter((run) => {
+    if (selectedProjectId && run.projectId !== selectedProjectId) return false;
+    if (filter === "attention") return run.stalled || attention.has(run.status);
+    if (filter === "active") return !terminal.has(run.status);
+    if (filter === "completed") return terminal.has(run.status);
+    return true;
+  });
+  elements.activityCenterScope.textContent = selectedProject?.name || "All Projects";
+  elements.activityCenterEmpty.classList.toggle("hidden", visible.length > 0);
+  elements.activityCenterList.replaceChildren();
+  for (const run of visible) elements.activityCenterList.append(activityRunCard(run));
+}
+
+function activityRunCard(run) {
+  const card = document.createElement("article");
+  card.className = `activity-run-card ${run.status}${run.stalled ? " stalled" : ""}`;
+  const heading = document.createElement("div");
+  heading.className = "activity-run-heading";
+  const copy = document.createElement("div");
+  const status = document.createElement("span");
+  status.className = `task-status ${run.stalled ? "stalled" : run.status}`;
+  status.textContent = run.stalled ? "STALLED" : run.status.replaceAll("_", " ").toUpperCase();
+  const title = document.createElement("h3");
+  title.textContent = run.taskTitle || `Task ${shortTaskId(run.taskId)}`;
+  const project = document.createElement("small");
+  project.textContent = `${run.projectName || "Project"} · ${run.executionMode} · ${run.sourceClient}`;
+  copy.append(status, title, project);
+  const when = document.createElement("time");
+  when.textContent = relativeTime(run.updatedAt || run.heartbeatAt || run.createdAt);
+  heading.append(copy, when);
+  const progress = document.createElement("p");
+  progress.textContent = run.progressSummary || run.resultSummary || run.stopReason ||
+    (run.phase ? `Phase: ${run.phase}` : "Waiting for the first progress report.");
+  const usage = document.createElement("div");
+  usage.className = "task-card-details activity-run-usage";
+  for (const value of [
+    `${compactNumber(run.usage?.tokensUsed)}/${compactNumber(run.budget?.tokenLimit)} tokens`,
+    `${run.usage?.toolCallsUsed || 0}/${run.budget?.toolCallLimit || 0} tools`,
+    `${formatUsdMicros(run.usage?.costUsedMicrousd)}/${formatUsdMicros(run.budget?.costLimitMicrousd)}`,
+    run.phase || "No phase reported"
+  ]) {
+    const chip = document.createElement("span");
+    chip.textContent = value;
+    usage.append(chip);
+  }
+  const actions = document.createElement("div");
+  actions.className = "task-card-actions";
+  const task = (state.tasks?.tasks || []).find((item) =>
+    item.id === run.taskId || item.remoteId === run.taskId
+  );
+  if (task) {
+    const open = actionButton("Open task", "secondary");
+    open.addEventListener("click", () => openManagedTask(task, open));
+    actions.append(open);
+  }
+  if (!["completed", "failed", "cancelled", "interrupted", "cancel_requested"].includes(run.status)) {
+    const stop = actionButton("Request stop", "ghost");
+    stop.addEventListener("click", () => cancelSupervisedRun(run, stop));
+    actions.append(stop);
+  }
+  card.append(heading, progress, usage, actions);
+  return card;
+}
+
+async function refreshProjects() {
+  setButtonBusy(elements.refreshProjectsButton, true, "Refreshing…");
+  try {
+    state.projects = await api.refreshProjects();
+    renderProjects();
+    renderTasks();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.refreshProjectsButton, false, "Refresh");
+  }
+}
+
+function openProjectModal(project = null) {
+  const budget = project?.defaultBudget || {};
+  elements.projectIdInput.value = project?.id || "";
+  elements.projectModalTitle.textContent = project ? "Edit Project" : "Create a Project";
+  elements.projectNameInput.value = project?.name || "";
+  elements.projectInstructionsInput.value = project?.instructions || "";
+  elements.projectParallelInput.value = String(project?.maxParallelRuns || 4);
+  elements.projectTokenInput.value = String(budget.tokenLimit || 200_000);
+  elements.projectToolInput.value = String(budget.toolCallLimit || 200);
+  elements.projectWallTimeInput.value = String(Math.max(1, Math.round((budget.wallTimeLimitSeconds || 14_400) / 60)));
+  elements.projectCostInput.value = String((budget.costLimitMicrousd || 50_000_000) / 1_000_000);
+  elements.projectModalError.textContent = "";
+  elements.projectModalError.classList.add("hidden");
+  elements.projectModal.classList.remove("hidden");
+  elements.projectNameInput.focus();
+}
+
+function closeProjectModal() {
+  elements.projectModal.classList.add("hidden");
+  elements.projectForm.reset();
+  elements.projectIdInput.value = "";
+  elements.projectModalError.textContent = "";
+  elements.projectModalError.classList.add("hidden");
+}
+
+async function submitProject(event) {
+  event.preventDefault();
+  const projectId = elements.projectIdInput.value;
+  const input = {
+    name: elements.projectNameInput.value.trim(),
+    instructions: elements.projectInstructionsInput.value.trim(),
+    maxParallelRuns: Number(elements.projectParallelInput.value),
+    tokenLimit: Number(elements.projectTokenInput.value),
+    toolCallLimit: Number(elements.projectToolInput.value),
+    wallTimeLimitSeconds: Number(elements.projectWallTimeInput.value) * 60,
+    costLimitMicrousd: Math.round(Number(elements.projectCostInput.value) * 1_000_000)
+  };
+  setButtonBusy(elements.projectSubmitButton, true, "Saving…");
+  try {
+    const response = projectId
+      ? await api.updateProject(projectId, input)
+      : await api.createProject(input);
+    state.projects = response.projects;
+    selectedProjectId = response.project.id;
+    closeProjectModal();
+    renderProjects();
+    toast(projectId ? "Project updated." : "Project created.");
+  } catch (error) {
+    elements.projectModalError.textContent = error.message;
+    elements.projectModalError.classList.remove("hidden");
+  } finally {
+    setButtonBusy(elements.projectSubmitButton, false, "Save Project →");
+  }
+}
+
+async function updateProject(project, changes, button) {
+  const label = button.textContent;
+  setButtonBusy(button, true, "Saving…");
+  try {
+    const response = await api.updateProject(project.id, changes);
+    state.projects = response.projects;
+    if (changes.archived === true && selectedProjectId === project.id) selectedProjectId = "";
+    renderProjects();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, label);
+  }
+}
+
+async function createTaskInProject(project, button) {
+  setButtonBusy(button, true, "Opening…");
+  try {
+    const response = await api.startNewConversation({ kind: "general" });
+    const taskId = response.launch?.task?.remoteId || response.launch?.task?.id || response.launch?.taskId;
+    if (!taskId) throw new Error("AMOS did not return the new task identifier");
+    await api.assignTaskProject(taskId, project.id);
+    response.state = await api.state();
+    adoptOpenedTask(response);
+    toast(`Started a new task in ${project.name}.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, "New task");
+  }
+}
+
+async function cancelSupervisedRun(run, button) {
+  if (!window.confirm(`Request a cooperative stop for “${run.taskTitle || "this task"}”?`)) return;
+  setButtonBusy(button, true, "Stopping…");
+  try {
+    const response = await api.cancelSupervisedRun(run.id, "Stopped by the AMOS Desktop operator");
+    state.projects = response.projects;
+    renderProjects();
+    toast("Stop requested. The worker must acknowledge it at the next heartbeat.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, "Request stop");
+  }
+}
+
+function compactNumber(value) {
+  const number = Number(value || 0);
+  if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(number >= 10_000_000 ? 0 : 1)}m`;
+  if (number >= 1_000) return `${(number / 1_000).toFixed(number >= 10_000 ? 0 : 1)}k`;
+  return String(number);
+}
+
+function formatUsdMicros(value) {
+  const amount = Number(value || 0) / 1_000_000;
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: amount < 1 ? 2 : 0
+  }).format(amount);
+}
+
 function renderTasks() {
   if (!state) return;
   const library = state.tasks || { supported: false, tasks: [] };
@@ -2322,7 +2665,27 @@ function taskCard(task) {
   ));
   const archive = actionButton(archived ? "Restore" : "Archive", "ghost");
   archive.addEventListener("click", () => updateManagedTask(task, { archived: !archived }, archive));
-  actions.append(open, fork, pin, rename, wait, archive);
+  const assignment = document.createElement("label");
+  assignment.className = "task-project-assignment";
+  const assignmentLabel = document.createElement("span");
+  assignmentLabel.textContent = "Project";
+  const projectSelect = document.createElement("select");
+  projectSelect.disabled = archived || state.projects?.supported !== true;
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No Project";
+  projectSelect.append(none);
+  for (const project of state.projects?.projects || []) {
+    if (project.archived) continue;
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = project.name;
+    projectSelect.append(option);
+  }
+  projectSelect.value = task.projectId || "";
+  projectSelect.addEventListener("change", () => assignTaskProject(task, projectSelect));
+  assignment.append(assignmentLabel, projectSelect);
+  actions.append(open, fork, assignment, pin, rename, wait, archive);
   card.append(heading, objective, details, actions);
   return card;
 }
@@ -2381,6 +2744,27 @@ async function updateManagedTask(task, changes, button) {
     toast(error.message, true);
   } finally {
     if (button.isConnected) setButtonBusy(button, false, label);
+  }
+}
+
+async function assignTaskProject(task, select) {
+  const previous = task.projectId || "";
+  select.disabled = true;
+  try {
+    const response = await api.assignTaskProject(
+      task.remoteId || task.id,
+      select.value || null
+    );
+    state.tasks = response.tasks || state.tasks;
+    state.projects = response.projects || state.projects;
+    renderProjects();
+    renderTasks();
+    const project = (state.projects?.projects || []).find((item) => item.id === select.value);
+    toast(project ? `Task assigned to ${project.name}.` : "Task removed from its Project.");
+  } catch (error) {
+    select.value = previous;
+    select.disabled = false;
+    toast(error.message, true);
   }
 }
 

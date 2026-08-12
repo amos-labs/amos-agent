@@ -135,6 +135,7 @@ export class DesktopController {
     this.automationSetup = null;
     this.pendingAutomationActivations = new Map();
     this.tasks = { supported: false, tasks: [], contract: null };
+    this.projects = emptyProjectsState();
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.activeContextKey = "active";
@@ -229,6 +230,7 @@ export class DesktopController {
       automationSetup: publicAutomationSetup(this.automationSetup),
       browserRecipes: await this.browserRecipeState(settings),
       tasks: await this.tasksState(settings),
+      projects: structuredClone(this.projects),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -1059,6 +1061,7 @@ export class DesktopController {
       this.automationSetup = null;
       this.pendingAutomationActivations.clear();
       this.tasks = { supported: false, tasks: [], contract: null };
+      this.projects = emptyProjectsState();
       this.remoteStatus = {
         syncing: false,
         lastSyncedAt: this.remoteStatus.lastSyncedAt,
@@ -1085,6 +1088,7 @@ export class DesktopController {
       this.automationSetup = null;
       this.pendingAutomationActivations.clear();
       this.tasks = { supported: false, tasks: [], contract: null };
+      this.projects = emptyProjectsState();
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -1110,7 +1114,8 @@ export class DesktopController {
       briefingsResult,
       automationsResult,
       automationTemplatesResult,
-      tasksResult
+      tasksResult,
+      projectsResult
     ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
@@ -1122,7 +1127,8 @@ export class DesktopController {
       remote.briefingsLibrary(),
       remote.automationsLibrary(),
       remote.automationTemplateCatalog(),
-      remote.tasksLibrary()
+      remote.tasksLibrary(),
+      remote.projectsLibrary()
     ]);
 
     const errors = [];
@@ -1211,6 +1217,15 @@ export class DesktopController {
       this.tasks = { supported: false, tasks: [], contract: null };
       if (tasksResult.status === "rejected") {
         errors.push(tasksResult.reason?.message || "Could not load AMOS Tasks");
+      }
+    }
+
+    if (projectsResult.status === "fulfilled" && projectsResult.value) {
+      this.projects = projectsResult.value;
+    } else {
+      this.projects = emptyProjectsState();
+      if (projectsResult.status === "rejected") {
+        errors.push(projectsResult.reason?.message || "Could not load AMOS Projects");
       }
     }
 
@@ -2444,6 +2459,93 @@ export class DesktopController {
     return { task, tasks: await this.tasksState(settings) };
   }
 
+  async createProject(input = {}) {
+    if (this.activeTask) throw new Error("Finish or stop the current run before creating a Project");
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "creating a Project");
+    const created = await remote.createProject(input);
+    this.upsertProject(created.project);
+    this.record("project", `Created Project: ${created.project.name}`, {
+      project_id: created.project.id,
+      max_parallel_runs: created.project.maxParallelRuns,
+      execution_authority: false
+    });
+    await this.refreshProjects(remote);
+    return { project: created.project, projects: structuredClone(this.projects) };
+  }
+
+  async updateProjectResource(id, changes = {}) {
+    if (this.activeTask) throw new Error("Finish or stop the current run before changing a Project");
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "updating a Project");
+    const updated = await remote.updateProject(id, changes);
+    this.upsertProject(updated.project);
+    this.record("project", `Updated Project: ${updated.project.name}`, {
+      project_id: updated.project.id,
+      changed: updated.changed,
+      execution_authority: false
+    });
+    await this.refreshProjects(remote);
+    return { project: updated.project, projects: structuredClone(this.projects) };
+  }
+
+  async assignTaskToProject(taskId, projectId = null) {
+    if (this.activeTask) throw new Error("Finish or stop the current run before moving its task");
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "assigning a task to a Project");
+    const assigned = await remote.assignTaskToProject(taskId, projectId);
+    this.upsertRemoteTask(assigned.task);
+    const scope = this.taskScope(settings);
+    if (this.taskStore && scope) {
+      const local = await this.taskStore.get(scope, taskId) ||
+        await this.taskStore.findByContext(scope, assigned.task.contextKey);
+      if (local) {
+        await this.taskStore.update(scope, local.id, { projectId: assigned.task.projectId });
+      }
+    }
+    this.record("project", projectId ? "Assigned task to Project" : "Removed task from Project", {
+      project_id: assigned.task.projectId || null,
+      task_id: assigned.task.id,
+      execution_authority: false
+    });
+    await Promise.all([
+      this.refreshProjects(remote, { send: false }),
+      remote.tasksLibrary({ includeArchived: true }).then((library) => {
+        this.tasks = library;
+        return this.syncRemoteTasksLocally(settings, library.tasks);
+      })
+    ]);
+    await this.sendRemoteState();
+    return {
+      task: assigned.task,
+      tasks: await this.tasksState(settings),
+      projects: structuredClone(this.projects)
+    };
+  }
+
+  async cancelSupervisedTaskRun(runId, reason = "") {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "stopping this supervised task run");
+    const canceled = await remote.cancelTaskRun(runId, reason);
+    this.record("project", "Requested a supervised task stop", {
+      run_id: canceled.run.id,
+      task_id: canceled.run.taskId,
+      project_id: canceled.run.projectId,
+      stop_reason: canceled.run.stopReason || reason,
+      cooperative: true
+    });
+    await this.refreshProjects(remote);
+    return { run: canceled.run, projects: structuredClone(this.projects) };
+  }
+
+  async refreshProjects(remote = null, { send = true } = {}) {
+    const settings = await this.settingsStore.read();
+    const client = remote || await this.personalRemote(settings, "refreshing Projects");
+    this.projects = await client.projectsLibrary();
+    if (send) await this.sendRemoteState();
+    return structuredClone(this.projects);
+  }
+
   async adoptConversationObjective(prompt, settings = null) {
     if (!this.taskStore || !this.activeTaskRecordId) return null;
     const currentSettings = settings || await this.settingsStore.read();
@@ -3565,6 +3667,7 @@ export class DesktopController {
       pinned: remoteTask.pinned,
       archivedAt: remoteTask.archivedAt,
       parentTaskId: current?.parentTaskId || remoteTask.parentTaskId,
+      projectId: remoteTask.projectId,
       sourceEventId: current?.sourceEventId || remoteTask.sourceEventId,
       workspaceMode: remoteTask.workspaceMode,
       workspace: {
@@ -3585,6 +3688,16 @@ export class DesktopController {
       supported: true,
       contract: this.tasks?.contract || null,
       tasks: [task, ...tasks.filter((item) => item.id !== task.id)]
+    };
+  }
+
+  upsertProject(project) {
+    const projects = Array.isArray(this.projects?.projects) ? this.projects.projects : [];
+    this.projects = {
+      ...emptyProjectsState(),
+      ...this.projects,
+      supported: true,
+      projects: [project, ...projects.filter((item) => item.id !== project.id)]
     };
   }
 
@@ -3803,6 +3916,7 @@ export class DesktopController {
     this.automationSetup = null;
     this.pendingAutomationActivations.clear();
     this.tasks = { supported: false, tasks: [], contract: null };
+    this.projects = emptyProjectsState();
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.activeContextKey = "active";
@@ -3856,6 +3970,7 @@ export class DesktopController {
         ? await this.browserRecipeState(taskSettings)
         : { supported: false, recipes: [] },
       tasks,
+      projects: structuredClone(this.projects),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -4549,4 +4664,15 @@ function localRouterFailureCode(error) {
   if (message.includes("missing") || message.includes("include")) return "artifact_missing";
   if (message.includes("timed out")) return "installation_timeout";
   return "router_unavailable";
+}
+
+function emptyProjectsState() {
+  return {
+    supported: false,
+    projects: [],
+    inbox: [],
+    stalledCount: 0,
+    projectContract: null,
+    runContract: null
+  };
 }

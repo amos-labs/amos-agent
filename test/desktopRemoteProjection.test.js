@@ -28,6 +28,12 @@ test("remote state events project every refreshed platform surface into Desktop"
       briefings: [{ id: "briefing-1", title: "Daily company brief" }]
     },
     tasks: { supported: true, tasks: [{ id: "task-1", title: "Plan" }] },
+    projects: {
+      supported: true,
+      projects: [{ id: "project-1", name: "Launch" }],
+      inbox: [{ id: "run-1", status: "running" }],
+      stalledCount: 0
+    },
     activeTaskRecordId: "task-1",
     companies: {
       currentTenantId: "tenant-1",
@@ -80,6 +86,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     automationSetup: null,
     browserRecipes: { supported: false, recipes: [] },
     tasks: controller.tasks,
+    projects: controller.projects,
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,
