@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const eventChannels = new Set([
   "agent:event",
   "agent:status",
+  "desktop-runs:changed",
   "approval:requested",
   "approval:completed",
   "activity:changed",

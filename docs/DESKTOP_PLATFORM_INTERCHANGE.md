@@ -31,21 +31,22 @@ This is not a second implementation of AMOS in Electron:
 - No company capability is implemented only inside Desktop. Desktop-specific
   conveniences compose public, governed platform capabilities.
 
-## Implementation status — August 10, 2026
+## Implementation status — August 12, 2026
 
 The first major Desktop-harness foundations are shipped: the conversation-first
 shell, inline governed progress, dynamic canvas, encrypted restart continuity,
 mid-task steering, native OpenAI Responses and Anthropic Messages adapters,
 managed local intelligence, and local-primary AMOS Router integration.
 
-The Projects supervisory foundation is also implemented against the public
-Platform contract: user-private Projects can be created and managed, tasks can
-be assigned, and the Activity Center presents bounded task-run progress,
-budgets, stalls, and cooperative cancellation. The current local agent loop is
-still single-run. The isolated multi-run runtime described in
-[`TASK_LIFECYCLE.md`](TASK_LIFECYCLE.md#projects-and-supervised-work) is the next
-execution slice; Project capacity in the UI is not represented as already-live
-local concurrency.
+The Projects execution and supervisory loop is implemented against the public
+Platform contract. User-private Projects can be created and managed, tasks can
+be assigned, and the Activity Center presents bounded progress, cumulative
+usage, stalls, and cooperative cancellation. Desktop runs isolated local
+workers concurrently, uses Platform for atomic Project admission and budgets,
+reports monotonic 30-second heartbeats, and keeps every streamed event, canvas,
+approval, checkpoint, and completion bound to its originating conversation.
+The executable acceptance proof runs four workers across two Projects at two
+lanes each.
 
 The routing hardening slice makes ownership explicit. Only the official
 Desktop `amos-hosted` profile can receive the local classifier; selected-provider
@@ -71,17 +72,10 @@ changes and inline comments, then deterministically accepts, rejects, preserves,
 or removes them into a new verified file. This remains a Desktop-local engine,
 not a company capability or an inference-routing concern.
 
-The next product slices, in order, are:
-
-1. add spreadsheet and presentation artifact contracts on the same local
-   approval, provenance, preview, and verification foundation;
-2. add the governed browser runtime for JavaScript pages, authenticated web
-   workflows, deterministic browser recipes, and bounded computer-use fallback;
-3. add consent-aware Router corrections/export and a sealed qualification gate;
-4. complete the acceptance audit for the shipped Automations, Tasks, and
-   governed forking surfaces and close issue 47; and
-5. add enterprise device inventory, revocation, and environment grants tracked
-   in issue 17.
+The next product slices are production Automation operations and live-customer
+proof, persistent artifact workspaces and review, signed tenant-authored skills
+and operating packages, broader cross-application computer use and remote
+supervision, and enterprise device/fleet administration.
 
 ## Client parity
 

@@ -46,13 +46,9 @@ ceilings, and cooperative stop controls. A task-run record is coordination
 metadata, not evidence that an external effect occurred; governed receipts
 remain the proof source for every business action.
 
-This initial Desktop slice is deliberately honest about execution. It provides
-Project management, task assignment, and the shared supervisory surface, but
-the local agent loop still has one foreground runtime. True concurrent local
-work requires a separate runtime manager rather than duplicating the existing
-singleton fields ad hoc.
-
-That runtime manager will isolate, per run:
+Desktop now uses a bounded multi-run manager. The Operator is the selected run,
+not the only run: opening or creating another conversation leaves the previous
+worker active in the background. Each run isolates:
 
 - cancellation and steering queues;
 - model/runtime selection and streamed output;
@@ -61,16 +57,21 @@ That runtime manager will isolate, per run:
 - checkpoints, continuity manifests, usage, and receipts; and
 - the monotonic Platform heartbeat/report sequence.
 
-The foreground Operator task is then one selected run, not the only run. A
-background worker must continue when the user opens another task, while a stop,
-failure, approval wait, or budget limit in one worker must not mutate or abort
-another. Platform performs atomic admission under each Project's parallel
-ceiling; Desktop reports cumulative usage and must honor `continue: false`.
+Platform atomically admits Project-backed work under that Project's parallel
+ceiling. Desktop sends monotonic progress and 30-second heartbeats with
+cumulative token, cost, and tool-call usage. Explicit cancellation or an
+exhausted Platform budget returns `continue: false`; Desktop cooperatively
+aborts only that worker and then acknowledges its terminal state so capacity is
+released. Personal tasks use the same isolated local manager without creating
+Platform coordination records.
 
-The concurrency acceptance test is four simultaneous tasks across two Projects,
-with independent streaming, steering, cancellation, checkpointing, approval
-waits, and completion. Relaunch must recover non-terminal workers as interrupted
-work that requires revalidation—never silently replay them.
+The concurrency contract is covered by four simultaneous tasks across two
+Projects, independently admitted at two lanes per Project. Streaming events,
+steering, cancellation, canvases, approvals, continuity, and completion are
+bound to their originating task; a background completion cannot write into the
+conversation currently visible in Operator. Relaunch still recovers
+non-terminal workers as interrupted work that requires revalidation—never
+silently replaying them.
 
 ## Safe cancellation
 

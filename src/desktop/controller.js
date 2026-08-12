@@ -51,6 +51,7 @@ import {
   continuityScope
 } from "./sessionContinuity.js";
 import { taskOwnerScope } from "./taskStore.js";
+import { DesktopRunManager, DesktopRunSupervisor } from "./runManager.js";
 import {
   createTaskWorktree,
   inspectTaskWorkspace,
@@ -116,6 +117,7 @@ export class DesktopController {
     emit,
     notify = () => {}
   }) {
+    this.runManager = new DesktopRunManager();
     this.userDataPath = userDataPath;
     this.settingsStore = settingsStore;
     this.openBrowser = openBrowser;
@@ -176,8 +178,60 @@ export class DesktopController {
     this.companyApprovals = [];
   }
 
+  taskLocalLane() {
+    return this.runManager?.current() || this.runManager?.selected() || null;
+  }
+
+  taskLocalValue(name, fallback) {
+    const lane = this.taskLocalLane();
+    return lane && Object.hasOwn(lane, name) ? lane[name] : this[fallback];
+  }
+
+  setTaskLocalValue(name, fallback, value) {
+    const lane = this.taskLocalLane();
+    if (lane) lane[name] = value;
+    else this[fallback] = value;
+  }
+
+  get runtime() { return this.taskLocalValue("runtime", "_runtime"); }
+  set runtime(value) { this.setTaskLocalValue("runtime", "_runtime", value); }
+  get activity() { return this.taskLocalValue("activity", "_activity"); }
+  set activity(value) { this.setTaskLocalValue("activity", "_activity", value); }
+  get workingContinuity() { return this.taskLocalValue("workingContinuity", "_workingContinuity"); }
+  set workingContinuity(value) { this.setTaskLocalValue("workingContinuity", "_workingContinuity", value); }
+  get activeContextKey() { return this.taskLocalValue("activeContextKey", "_activeContextKey"); }
+  set activeContextKey(value) { this.setTaskLocalValue("activeContextKey", "_activeContextKey", value); }
+  get activeTaskRecordId() { return this.taskLocalValue("activeTaskRecordId", "_activeTaskRecordId"); }
+  set activeTaskRecordId(value) { this.setTaskLocalValue("activeTaskRecordId", "_activeTaskRecordId", value); }
+  get attachments() { return this.taskLocalValue("attachments", "_attachments"); }
+  set attachments(value) { this.setTaskLocalValue("attachments", "_attachments", value); }
+  get canvases() { return this.taskLocalValue("canvases", "_canvases"); }
+  set canvases(value) { this.setTaskLocalValue("canvases", "_canvases", value); }
+  get canvasResults() { return this.taskLocalValue("canvasResults", "_canvasResults"); }
+  set canvasResults(value) { this.setTaskLocalValue("canvasResults", "_canvasResults", value); }
+  get activeTask() { return this.taskLocalValue("activeTask", "_activeTask"); }
+  set activeTask(value) { this.setTaskLocalValue("activeTask", "_activeTask", value); }
+  get checkpointWrites() { return this.taskLocalValue("checkpointWrites", "_checkpointWrites"); }
+  set checkpointWrites(value) { this.setTaskLocalValue("checkpointWrites", "_checkpointWrites", value); }
+  get automationSetup() { return this.taskLocalValue("automationSetup", "_automationSetup"); }
+  set automationSetup(value) { this.setTaskLocalValue("automationSetup", "_automationSetup", value); }
+  get pendingAutomationActivations() {
+    return this.taskLocalValue("pendingAutomationActivations", "_pendingAutomationActivations");
+  }
+  set pendingAutomationActivations(value) {
+    this.setTaskLocalValue("pendingAutomationActivations", "_pendingAutomationActivations", value);
+  }
+  get approvals() { return this.taskLocalValue("approvals", "_approvals"); }
+  set approvals(value) { this.setTaskLocalValue("approvals", "_approvals", value); }
+  get browserRecipeRecorder() {
+    return this.taskLocalValue("browserRecipeRecorder", "_browserRecipeRecorder");
+  }
+  set browserRecipeRecorder(value) {
+    this.setTaskLocalValue("browserRecipeRecorder", "_browserRecipeRecorder", value);
+  }
+
   async state() {
-    const settings = await this.settingsStore.read();
+    const settings = this.runManager.current()?.settings || await this.settingsStore.read();
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
@@ -269,7 +323,8 @@ export class DesktopController {
             summary: this.activeTask.summary,
             objective: this.activeTask.objective
           }
-        : null
+        : null,
+      activeRuns: this.runManager.active()
     };
   }
 
@@ -291,6 +346,12 @@ export class DesktopController {
         model: config.model.model,
         baseUrl: config.model.baseUrl
       });
+    }
+    if (
+      this.runManager.nonTerminal().length > 0 &&
+      (runtimeSettingsChanged(current, candidate) || localApprovalSettingsChanged(current, candidate))
+    ) {
+      throw new Error("Finish or stop running tasks before changing shared Desktop runtime settings");
     }
     const saved = await this.settingsStore.write(candidate);
     if (runtimeSettingsChanged(current, saved)) {
@@ -650,6 +711,7 @@ export class DesktopController {
   }
 
   async startPersonal() {
+    this.requireNoActiveRuns("switching workspaces");
     const settings = await this.settingsStore.read();
     const credentials = await this.oauthFor(settings).status();
     if (credentials?.demo) await this.oauthFor(settings).logout();
@@ -666,6 +728,7 @@ export class DesktopController {
   }
 
   async startDemo() {
+    this.requireNoActiveRuns("starting the demo workspace");
     const settings = await this.settingsStore.read();
     const oauth = this.oauthFor(settings);
     const existing = await oauth.status();
@@ -878,9 +941,7 @@ export class DesktopController {
   }
 
   async addAccount({ replaceDisconnected = false } = {}) {
-    if (this.activeTask) {
-      throw new Error("Finish or stop the current task before adding an account");
-    }
+    this.requireNoActiveRuns("adding an account");
     const settings = await this.settingsStore.read();
     const activeOauth = this.oauthFor(settings);
     const previous = await activeOauth.status();
@@ -935,6 +996,7 @@ export class DesktopController {
   }
 
   async logout() {
+    this.requireNoActiveRuns("signing out");
     const settings = await this.settingsStore.read();
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
@@ -971,9 +1033,7 @@ export class DesktopController {
 
   async switchAccount(accountId) {
     if (!this.accountStore) throw new Error("Account switching is unavailable in this build");
-    if (this.activeTask) {
-      throw new Error("Finish or stop the current task before switching accounts");
-    }
+    this.requireNoActiveRuns("switching accounts");
     if (this.remoteRefreshPromise) await this.remoteRefreshPromise;
     const accounts = await this.accountStore.list();
     const target = accounts.accounts.find((account) => account.id === accountId);
@@ -1002,9 +1062,7 @@ export class DesktopController {
   }
 
   async switchCompany(tenantId) {
-    if (this.activeTask) {
-      throw new Error("Finish or stop the current task before switching companies");
-    }
+    this.requireNoActiveRuns("switching companies");
     if (this.remoteRefreshPromise) await this.remoteRefreshPromise;
 
     const settings = await this.settingsStore.read();
@@ -1609,7 +1667,78 @@ export class DesktopController {
   }
 
   async run(input) {
-    if (this.activeTask) throw new Error("AMOS is already running a task");
+    const settings = await this.settingsStore.read();
+    const taskRecordId = String(this.activeTaskRecordId || this.activeContextKey || "active");
+    if (this.runManager.findByTask(taskRecordId)) {
+      throw new Error("This task is already running. Add direction to steer it, or open another task.");
+    }
+    const scope = this.taskScope(settings);
+    const task = this.taskStore && scope && this.activeTaskRecordId
+      ? await this.taskStore.get(scope, this.activeTaskRecordId)
+      : null;
+    const taskId = randomUUID();
+    const approvals = new DesktopApprovalBridge({
+      onRequest: (request) => {
+        const lane = this.runManager.current();
+        if (lane) {
+          this.runManager.transition(lane.id, "waiting", {
+            phase: "waiting",
+            summary: "Waiting for approval"
+          });
+          lane.supervisor?.observe({
+            type: "phase",
+            phase: "waiting",
+            summary: "Waiting for approval"
+          });
+          this.send("desktop-runs:changed", this.runManager.active());
+        }
+        this.send("approval:requested", request);
+      }
+    });
+    const launched = this.runManager.launch({
+      id: taskId,
+      taskRecordId,
+      remoteTaskId: task?.remoteId || (isUuid(task?.id) ? task.id : ""),
+      projectId: task?.projectId || "",
+      contextKey: this.activeContextKey || "active",
+      settings: structuredClone(settings),
+      runtime: this.runtime,
+      activity: this.activity,
+      workingContinuity: this.workingContinuity,
+      activeContextKey: this.activeContextKey,
+      activeTaskRecordId: this.activeTaskRecordId,
+      attachments: this.attachments,
+      canvases: this.canvases,
+      canvasResults: this.canvasResults,
+      activeTask: null,
+      checkpointWrites: this.checkpointWrites,
+      automationSetup: this.automationSetup,
+      pendingAutomationActivations: this.pendingAutomationActivations,
+      approvals,
+      browserRecipeRecorder: this.browserRecipeRecorder
+    }, async () => this.executeRun(input, taskId));
+    this.resetShellSurfaceAfterLaunch(launched.lane);
+    this.send("desktop-runs:changed", this.runManager.active());
+    try {
+      const result = await launched.promise;
+      return {
+        ...result,
+        runId: launched.lane.id,
+        taskRecordId: launched.lane.taskRecordId,
+        contextKey: launched.lane.contextKey
+      };
+    } finally {
+      const selected = this.runManager.selectedRunId === launched.lane.id;
+      if (selected) {
+        this.adoptRunSurface(launched.lane);
+        this.runManager.select(null);
+      }
+      this.runManager.delete(launched.lane.id);
+      this.send("desktop-runs:changed", this.runManager.active());
+    }
+  }
+
+  async executeRun(input, taskId = randomUUID()) {
     const references = Array.isArray(input?.attachments) ? input.attachments : [];
     const requestedPrompt = typeof input === "string" ? input : input?.text;
     const resumeTaskId =
@@ -1619,12 +1748,13 @@ export class DesktopController {
     const prompt = String(requestedPrompt || "").trim() ||
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
-    const settings = await this.settingsStore.read();
+    const settings = this.runManager.current()?.settings || await this.settingsStore.read();
     await this.adoptConversationObjective(prompt, settings).catch((error) => {
       this.record("task", `Could not name the new conversation: ${error.message}`);
     });
-    const taskId = randomUUID();
     const abortController = new AbortController();
+    const lane = this.runManager.current();
+    if (lane) lane.abortController = abortController;
     this.activeTask = {
       id: taskId,
       abortController,
@@ -1667,6 +1797,7 @@ export class DesktopController {
     const company = boundary === "online";
     const receiptEvents = this.activeTask.receiptEvents;
     try {
+      await this.startRunSupervision(settings, abortController);
       const { config, runtime } = await this.getRuntime({
         requireAmos: company,
         boundary
@@ -1730,6 +1861,7 @@ export class DesktopController {
         },
         onEvent: (event) => {
           const safeEvent = sanitizeAgentEvent(event);
+          this.runManager.current()?.supervisor?.observe(safeEvent);
           this.send("agent:event", safeEvent);
           if (safeEvent.type !== "assistant_delta") {
             receiptEvents.push(receiptEvent(safeEvent));
@@ -1778,6 +1910,7 @@ export class DesktopController {
         this.record("task", `Could not snapshot the task canvas: ${error.message}`);
       });
       await this.recordNorthwindValue(settings, receiptEvents);
+      await this.finishRunSupervision("completed", answer);
       return {
         answer,
         taskId,
@@ -1793,6 +1926,7 @@ export class DesktopController {
       };
     } catch (error) {
       const canceled = isAbortError(error) || abortController.signal.aborted;
+      await this.finishRunSupervision(canceled ? "cancelled" : "failed", error.message);
       if (this.activeTask?.checkpointed) {
         await this.queueCheckpointUpdate(taskId, {
           status: canceled ? "canceled" : "failed",
@@ -1830,6 +1964,59 @@ export class DesktopController {
     }
   }
 
+  adoptRunSurface(lane) {
+    this._runtime = lane.runtime || null;
+    this._activity = lane.activity || [];
+    this._workingContinuity = lane.workingContinuity || null;
+    this._activeContextKey = lane.activeContextKey || "active";
+    this._activeTaskRecordId = lane.activeTaskRecordId || null;
+    this._attachments = lane.attachments || new AttachmentManager();
+    this._canvases = lane.canvases || new DesktopCanvasManager();
+    this._canvasResults = lane.canvasResults || new DesktopCanvasResultStore();
+    this._activeTask = lane.activeTask || null;
+    this._checkpointWrites = lane.checkpointWrites || Promise.resolve();
+    this._automationSetup = lane.automationSetup || null;
+    this._pendingAutomationActivations = lane.pendingAutomationActivations || new Map();
+    this._approvals = lane.approvals || new DesktopApprovalBridge({
+      onRequest: (request) => this.send("approval:requested", request)
+    });
+    this._browserRecipeRecorder = lane.browserRecipeRecorder || new BrowserRecipeRecorder();
+  }
+
+  resetShellSurfaceAfterLaunch(lane) {
+    this._runtime = null;
+    this._activity = [];
+    this._workingContinuity = null;
+    this._activeContextKey = lane.activeContextKey || "active";
+    this._activeTaskRecordId = lane.activeTaskRecordId || null;
+    this._attachments = new AttachmentManager();
+    this._canvases = new DesktopCanvasManager();
+    this._canvasResults = new DesktopCanvasResultStore();
+    this._activeTask = null;
+    this._checkpointWrites = Promise.resolve();
+    this._automationSetup = null;
+    this._pendingAutomationActivations = new Map();
+    this._approvals = new DesktopApprovalBridge({
+      onRequest: (request) => this.send("approval:requested", request)
+    });
+    this._browserRecipeRecorder = new BrowserRecipeRecorder();
+  }
+
+  async backgroundSelectedRun(settings = null) {
+    const lane = this.runManager.selected();
+    if (!lane) {
+      await this.snapshotActiveTask(settings).catch((error) => {
+        this.record("task", `Could not snapshot the previous task canvas: ${error.message}`);
+      });
+      return null;
+    }
+    await this.runManager.withLane(lane, () => this.snapshotActiveTask(settings)).catch((error) => {
+      this.record("task", `Could not snapshot the background task canvas: ${error.message}`);
+    });
+    this.runManager.select(null);
+    return lane;
+  }
+
   async recordNorthwindValue(settings, receiptEvents) {
     if (!this.telemetry) return;
     const usedCompanyTool = receiptEvents.some((event) =>
@@ -1854,6 +2041,10 @@ export class DesktopController {
   }
 
   async steerTask(id, content) {
+    const lane = id ? this.runManager.get(id) : this.runManager.selected();
+    if (lane && this.runManager.current() !== lane) {
+      return this.runManager.withLane(lane, () => this.steerTask(lane.id, content));
+    }
     const active = this.activeTask;
     if (!active || (id && active.id !== id)) {
       return { queued: false, message: "No matching AMOS task is running" };
@@ -1902,6 +2093,10 @@ export class DesktopController {
   }
 
   async cancelTask(id = null) {
+    const lane = id ? this.runManager.get(id) : this.runManager.selected();
+    if (lane && this.runManager.current() !== lane) {
+      return this.runManager.withLane(lane, () => this.cancelTask(lane.id));
+    }
     const active = this.activeTask;
     if (!active || (id && active.id !== id)) {
       return { canceled: false, message: "No matching AMOS task is running" };
@@ -1919,22 +2114,29 @@ export class DesktopController {
   }
 
   async interruptActiveTask() {
-    if (!this.activeTask) return false;
-    const active = this.activeTask;
-    if (active.checkpointed) {
-      await this.queueCheckpointUpdate(active.id, {
-        status: "interrupted",
-        phase: "interrupted",
-        summary: "AMOS Desktop closed before this task finished"
-      }).catch(() => {});
-    }
-    this.approvals.cancelAll();
-    active.abortController.abort();
+    const lanes = this.runManager.nonTerminal();
+    if (lanes.length === 0) return false;
+    await Promise.all(lanes.map((lane) => this.runManager.withLane(lane, async () => {
+      const active = this.activeTask;
+      if (active?.checkpointed) {
+        await this.queueCheckpointUpdate(active.id, {
+          status: "interrupted",
+          phase: "interrupted",
+          summary: "AMOS Desktop closed before this task finished"
+        }).catch(() => {});
+      }
+      this.approvals.cancelAll();
+      active?.abortController.abort();
+    })));
     return true;
   }
 
   resolveApproval(id, approved) {
-    return { resolved: this.approvals.resolve(id, approved) };
+    if (this.approvals.resolve(id, approved)) return { resolved: true };
+    for (const lane of this.runManager.nonTerminal()) {
+      if (lane.approvals?.resolve(id, approved)) return { resolved: true, taskId: lane.id };
+    }
+    return { resolved: false };
   }
 
   removeCanvas(id) {
@@ -2289,9 +2491,6 @@ export class DesktopController {
   }
 
   async startNewConversation(input = {}) {
-    if (this.activeTask) {
-      throw new Error("Finish or stop the current task before opening another conversation");
-    }
     const kind = String(input.kind || "general");
     if (!["general", "automation_builder", "goal_pursuit"].includes(kind)) {
       throw new Error("That task type is not supported by this Desktop build");
@@ -2306,9 +2505,7 @@ export class DesktopController {
       : "New task";
     const title = String(input.title || defaultTitle).trim().slice(0, 160) || defaultTitle;
     const settings = await this.settingsStore.read();
-    await this.snapshotActiveTask(settings).catch((error) => {
-      this.record("task", `Could not snapshot the previous task canvas: ${error.message}`);
-    });
+    await this.backgroundSelectedRun(settings);
     this.automationSetup = null;
     this.pendingAutomationActivations.clear();
     this.approvals.clearTaskGrants();
@@ -2384,17 +2581,40 @@ export class DesktopController {
   }
 
   async openTask(id) {
-    if (this.activeTask) throw new Error("Finish or stop the current run before opening another task");
     const settings = await this.settingsStore.read();
     const scope = this.taskScope(settings);
     if (!scope) throw new Error("Connect the AMOS account that owns this task");
-    await this.snapshotActiveTask(settings);
-    this.approvals.clearTaskGrants();
+    const selected = this.runManager.selected();
+    if (selected?.taskRecordId !== id) await this.backgroundSelectedRun(settings);
     let task = this.taskStore ? await this.taskStore.get(scope, id) : null;
     const remoteTask = this.tasks.tasks.find((item) => item.id === id || item.contextKey === task?.contextKey);
     if (!task && remoteTask) task = await this.retainRemoteTask(settings, remoteTask, null);
     if (!task) throw new Error("That AMOS task is not available to this account");
     if (task.archivedAt) throw new Error("Restore the task before opening it");
+
+    const runningLane = this.runManager.findByTask(task.id);
+    if (runningLane) {
+      this.runManager.select(runningLane.id);
+      if (task.workspaceMode !== "context_only" && task.workspace?.localPath) {
+        await this.settingsStore.write({ ...settings, workspace: task.workspace.localPath });
+      }
+      this.send("canvas:changed", this.canvases.state());
+      this.send("agent:status", {
+        running: true,
+        taskId: runningLane.id,
+        phase: runningLane.phase,
+        summary: runningLane.summary
+      });
+      await this.sendRemoteState();
+      return {
+        state: await this.state(),
+        task,
+        resume: null,
+        replayed: false,
+        running: true
+      };
+    }
+    this.approvals.clearTaskGrants();
 
     let resume = null;
     if (settings.operatingMode === "online" && this.identity?.principal_type === "user") {
@@ -2527,6 +2747,10 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const remote = await this.personalRemote(settings, "stopping this supervised task run");
     const canceled = await remote.cancelTaskRun(runId, reason);
+    const localLane = this.runManager.nonTerminal().find((lane) => lane.platformRunId === runId);
+    if (localLane) {
+      await this.runManager.withLane(localLane, () => this.cancelTask(localLane.id));
+    }
     this.record("project", "Requested a supervised task stop", {
       run_id: canceled.run.id,
       task_id: canceled.run.taskId,
@@ -2544,6 +2768,47 @@ export class DesktopController {
     this.projects = await client.projectsLibrary();
     if (send) await this.sendRemoteState();
     return structuredClone(this.projects);
+  }
+
+  async startRunSupervision(settings, abortController) {
+    const lane = this.runManager.current();
+    if (!lane || settings.operatingMode !== "online" || !lane.projectId) return null;
+    if (!lane.remoteTaskId) {
+      throw new Error("This Project task must finish syncing to AMOS Platform before it can run");
+    }
+    const remote = await this.personalRemote(settings, "starting this supervised Project task");
+    const supervisor = new DesktopRunSupervisor({
+      remote,
+      abortController,
+      onUpdate: (run) => {
+        lane.platformRunId = run.id;
+        this.upsertProjectRun(run);
+        this.send("desktop-runs:changed", this.runManager.active());
+        this.send("remote:changed", { projects: structuredClone(this.projects) });
+      }
+    });
+    lane.supervisor = supervisor;
+    const admitted = await supervisor.admit({
+      projectId: lane.projectId,
+      taskId: lane.remoteTaskId,
+      sourceClient: "amos_desktop",
+      clientRunId: lane.id,
+      executionMode: "local",
+      status: "running"
+    });
+    if (admitted.continue === false) {
+      throw createAbortError();
+    }
+    return admitted.run;
+  }
+
+  async finishRunSupervision(status, summary = "") {
+    const lane = this.runManager.current();
+    if (!lane?.supervisor) return null;
+    return lane.supervisor.finish(status, String(summary || "").slice(0, 8_000)).catch((error) => {
+      this.record("project", `Could not deliver the final Project run report: ${error.message}`);
+      return null;
+    });
   }
 
   async adoptConversationObjective(prompt, settings = null) {
@@ -3199,6 +3464,18 @@ export class DesktopController {
 
   captureTaskProgress(event) {
     const active = this.activeTask;
+    const lane = this.runManager.current();
+    if (lane && !["assistant_delta", "usage", "routing"].includes(event?.type)) {
+      const phase = String(event?.phase || lane.phase || "running").slice(0, 160);
+      const summary = String(
+        event?.summary ||
+        (event?.type === "tool_start" ? `Running ${event.name}` : "") ||
+        lane.summary ||
+        "Task is running"
+      ).slice(0, 500);
+      this.runManager.transition(lane.id, runStatusForEvent(event), { phase, summary });
+      this.send("desktop-runs:changed", this.runManager.active());
+    }
     if (!active?.checkpointed) return;
     if (event.type === "assistant_delta") {
       const text = String(event.text || "");
@@ -3373,8 +3650,12 @@ export class DesktopController {
     this.automationSetup = null;
     this.pendingAutomationActivations?.clear();
     this.send("automation-setup:requested", null);
-    this.browserRuntime?.closeAll?.();
-    this.localPreviewRuntime?.closeAll?.();
+    // Browser and preview runtimes are shared process services. A foreground
+    // conversation reset must not tear down sessions owned by background runs.
+    if (this.runManager.nonTerminal().length === 0) {
+      this.browserRuntime?.closeAll?.();
+      this.localPreviewRuntime?.closeAll?.();
+    }
     this.browserRecipeRecorder.clear();
     let removedBrowserCanvas = false;
     for (const canvas of this.canvases.list()) {
@@ -3385,6 +3666,12 @@ export class DesktopController {
     if (removedBrowserCanvas) this.send("canvas:changed", this.canvases.state());
     this.runtime = null;
     this.canvasResults.clear();
+  }
+
+  requireNoActiveRuns(action) {
+    if (this.runManager.nonTerminal().length > 0 || this.activeTask) {
+      throw new Error(`Finish or stop the current tasks before ${action}`);
+    }
   }
 
   async getRuntime({ requireAmos, offline = false, boundary = null }) {
@@ -3607,20 +3894,32 @@ export class DesktopController {
       ? await this.taskStore.list(scope, { includeArchived: true })
       : [];
     const remoteById = new Map((this.tasks?.tasks || []).map((task) => [task.id, task]));
-    const tasks = local.map((task) => ({
-      ...task,
-      remote: remoteById.has(task.remoteId || task.id),
-      active: task.id === this.activeTaskRecordId
-    }));
+    const tasks = local.map((task) => {
+      const run = this.runManager.findByTask(task.id);
+      return {
+        ...task,
+        remote: remoteById.has(task.remoteId || task.id),
+        active: task.id === this.activeTaskRecordId,
+        running: Boolean(run),
+        runId: run?.id || "",
+        runPhase: run?.phase || "",
+        runSummary: run?.summary || ""
+      };
+    });
     for (const remote of this.tasks?.tasks || []) {
       if (tasks.some((task) => task.id === remote.id || task.remoteId === remote.id)) continue;
+      const run = this.runManager.findByTask(remote.id);
       tasks.push({
         ...remote,
         remoteId: remote.id,
         canvasState: { activeCanvasId: null, canvases: [] },
         local: false,
         remote: true,
-        active: remote.contextKey === this.activeContextKey
+        active: remote.contextKey === this.activeContextKey,
+        running: Boolean(run),
+        runId: run?.id || "",
+        runPhase: run?.phase || "",
+        runSummary: run?.summary || ""
       });
     }
     tasks.sort((left, right) => {
@@ -3698,6 +3997,28 @@ export class DesktopController {
       ...this.projects,
       supported: true,
       projects: [project, ...projects.filter((item) => item.id !== project.id)]
+    };
+  }
+
+  upsertProjectRun(run) {
+    if (!run?.id) return;
+    const inbox = Array.isArray(this.projects?.inbox) ? this.projects.inbox : [];
+    const nextInbox = [run, ...inbox.filter((item) => item.id !== run.id)];
+    const activeStatuses = new Set([
+      "scheduled", "running", "waiting", "blocked", "cancel_requested"
+    ]);
+    const projects = (this.projects?.projects || []).map((project) => ({
+      ...project,
+      runningCount: nextInbox.filter((item) =>
+        item.projectId === project.id && activeStatuses.has(item.status)
+      ).length
+    }));
+    this.projects = {
+      ...emptyProjectsState(),
+      ...this.projects,
+      supported: true,
+      projects,
+      inbox: nextInbox
     };
   }
 
@@ -3942,6 +4263,24 @@ export class DesktopController {
   }
 
   send(channel, payload) {
+    const lane = this.runManager?.current();
+    if (!lane || channel === "desktop-runs:changed") {
+      this.emit(channel, payload);
+      return;
+    }
+    const run = {
+      runId: lane.id,
+      taskRecordId: lane.taskRecordId,
+      contextKey: lane.contextKey
+    };
+    if (channel === "activity:changed" && Array.isArray(payload)) {
+      this.emit(channel, { ...run, items: payload });
+      return;
+    }
+    if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+      this.emit(channel, { ...payload, ...run });
+      return;
+    }
     this.emit(channel, payload);
   }
 
@@ -4675,4 +5014,12 @@ function emptyProjectsState() {
     projectContract: null,
     runContract: null
   };
+}
+
+function runStatusForEvent(event) {
+  if (event?.type === "phase") {
+    if (event.phase === "completed") return "running";
+    if (["waiting", "blocked", "cancel_requested"].includes(event.phase)) return event.phase;
+  }
+  return "running";
 }
