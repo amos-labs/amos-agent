@@ -204,6 +204,31 @@ adapter or controller to reproduce useful activation and reconciliation steps
 with fewer inference passes. Compare against the explicit engine on held-out
 domains and workflow versions.
 
+The first two compact-model treatments now constrain this stage. Rank-16 v0.1
+learned its narrow generator but catastrophically regressed broader capability.
+Rank-8 v0.2 added 50% capability replay and improved a newly sealed suite from
+16/40 to 20/40 at step 150, but scored only raw 8/32 with two critical failures
+on the independent original suite. It learned bounded tool, authority, causal,
+and exact-grounding patterns; it did not acquire reliable correlated arithmetic,
+schedule search, executable algorithms, or complete long-flow synthesis.
+
+Stage B2 therefore proceeds only after an integration-first v0.3 produces
+verified multi-turn successes:
+
+1. route probability arithmetic and bounded planning into deterministic local
+   calculators or solvers;
+2. run code through generate, execute, diagnose, and repair rather than judging
+   one-shot source text;
+3. derive mandatory receipt fields from schemas and tool results before any
+   optional natural-language summary; and
+4. distill those successful engine traces while retaining broad replay and two
+   independent evaluation suites.
+
+The kill criterion is now system-level: no treatment advances unless it gains
+on both independent suites, has no critical receipt failure, improves
+executable code after one repair turn, and recovers base decode speed after
+adapter merge.
+
 ### Stage B3 — learned latent prediction
 
 Only after B1 identifies repeated failures or excessive scaffolding cost,

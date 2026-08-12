@@ -11,12 +11,16 @@ import {
   generateSyntheticDistillationPilot,
   syntheticPilotManifest
 } from "../src/research/syntheticDistillationPilot.js";
+import {
+  generateSyntheticDistillationRetention,
+  syntheticRetentionManifest
+} from "../src/research/syntheticDistillationRetention.js";
 
 const args = process.argv.slice(2);
 const outputArgument = argumentValue(args, "--output");
 if (!outputArgument) {
   throw new Error(
-    "Usage: npm run dataset:synthetic -- --output PATH [--profile seed|pilot] " +
+    "Usage: npm run dataset:synthetic -- --output PATH [--profile seed|pilot|retention] " +
     "[--train 1000] [--validation 200] [--variants-per-family 2] [--seed VALUE]"
   );
 }
@@ -41,6 +45,15 @@ function generateProfile(profileName, argumentsValue) {
       seed: argumentValue(argumentsValue, "--seed") || "amos-operator-pilot-v1"
     });
     return { records, manifest: syntheticPilotManifest(records) };
+  }
+  if (profileName === "retention") {
+    const records = generateSyntheticDistillationRetention({
+      train: integerArgument(argumentsValue, "--train", 2000),
+      validation: integerArgument(argumentsValue, "--validation", 400),
+      variantsPerFamily: integerArgument(argumentsValue, "--variants-per-family", 2),
+      seed: argumentValue(argumentsValue, "--seed") || "amos-operator-retention-v2"
+    });
+    return { records, manifest: syntheticRetentionManifest(records) };
   }
   throw new Error(`Unsupported synthetic dataset profile: ${profileName}`);
 }

@@ -119,3 +119,22 @@ This proves train/save/reload/infer compatibility only. Two steps over three
 records make no quality claim. The next treatment requires at least 1,000
 verified training trajectories and 200 family-isolated validation trajectories
 before measuring adaptation lift.
+
+## Student pilot results
+
+Two complete treatments are recorded beside this README:
+
+- `ministral-r16-pilot-v01.json`: narrow SFT reached 34/36 exact on unseen
+  generator-matched trajectories but regressed the original frozen suite, so
+  it was rejected and the planned rank-32 arm was cancelled.
+- `ministral-r8-pilot-v02.json`: lower-pressure training with 50% broad replay
+  improved a newly sealed suite from 16/40 to 20/40 at step 150 with no
+  critical failures. It nevertheless scored only raw 8/32 with two critical
+  final-report failures on the independent original suite and transferred no
+  executable-code case, so it is also rejected for production.
+
+Together these are positive evidence that compact-model behavior can be moved
+substantially, but negative evidence for one-pass SFT as the whole solution.
+The next treatment moves arithmetic, bounded optimization, code execution and
+repair, and required receipt rendering into the integration engine, then
+distills only successful verified multi-turn traces.

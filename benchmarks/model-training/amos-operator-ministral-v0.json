@@ -1,7 +1,7 @@
 {
   "schema": "amos.local-student-training-plan",
   "version": 1,
-  "status": "pilot_v01_rejected_capability_regression",
+  "status": "pilot_v02_rejected_for_production_partial_research_success",
   "student": {
     "name": "AMOS Operator Local v0",
     "base_model": "mistralai/Ministral-3-8B-Instruct-2512",
@@ -15,6 +15,11 @@
       "path": "benchmarks/muse-sonnet-paired-v1.json",
       "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
       "rule": "Never copy prompts, values, answers, or code solutions into training or validation. Train only analogous skills in isolated synthetic families."
+    },
+    {
+      "path": "benchmarks/amos-operator-preservation-v2.json",
+      "sha256": "41d09dad0f44247f804d8fffb3cb36df6f7e7e42ccacfe90c25dc5dc789ab078",
+      "rule": "Frozen before v0.2 training data generation. Never copy prompts, values, answers, tool sequences, or code solutions into training or validation."
     }
   ],
   "compatibility_spike": {
@@ -114,7 +119,7 @@
     "finding": "Synthetic validation alone selected a checkpoint that catastrophically narrowed broader capability."
   },
   "pilot_v02": {
-    "status": "planned",
+    "status": "rejected_for_production_partial_research_success",
     "adaptation_pressure": {
       "rank": 8,
       "alpha": 16,
@@ -138,7 +143,46 @@
       "multi-digit argument preservation and result-grounded arithmetic"
     ],
     "selection_rule": "A checkpoint must improve held-out target outcomes and retain the base on a separate capability-preservation suite. Loss alone cannot select a checkpoint.",
-    "new_sealed_evaluation_required": true
+    "verified_corpus": {
+      "generator": "src/research/syntheticDistillationRetention.js",
+      "trajectories": 2400,
+      "train": 2000,
+      "validation": 400,
+      "families": 1200,
+      "canonical_identity_sha256": "4480c9b945369c2aab6889987ea989992a34dc9416153c911a19ce0800af298d"
+    },
+    "result": {
+      "evidence": "evidence/amos-operator-local-2026-08-12/ministral-r8-pilot-v02.json",
+      "trained_tokens": 78382,
+      "peak_memory_gb": 13.018,
+      "selected_checkpoint": 150,
+      "selected_adapter_sha256": "5788ae48ec93d0b427cbfa9c283fc78829ffe9ab80bdf7472923ec45eb9ed20c",
+      "sealed_v2_base": "16/40",
+      "sealed_v2_step150": "20/40",
+      "sealed_v2_step150_critical_failures": 0,
+      "sealed_v2_step300": "18/40",
+      "original_v1_step150_raw": "8/32",
+      "original_v1_step150_critical_failures": 2,
+      "held_out_exact": "21/39",
+      "decision": "Do not promote or export. Continue through an integration-first treatment."
+    },
+    "new_sealed_evaluation_required": false
+  },
+  "pilot_v03": {
+    "status": "planned_integration_first",
+    "architecture": {
+      "correlated_math": "Local deterministic probability/calculation tool; the model supplies structure and reports checked values.",
+      "scheduling_and_optimization": "Bounded local solver with a machine-checkable plan receipt.",
+      "code": "Generate, execute tests in a sandbox, return structured failures, and repair before accepting output.",
+      "tool_receipts": "Render required material fields from a schema before optional natural-language compression.",
+      "training": "Distill only verified multi-turn engine trajectories, while retaining broad base replay and independent sealed suites."
+    },
+    "kill_criteria": [
+      "No improvement on both independent suites",
+      "Any critical receipt or false-execution failure",
+      "No executable-code gain after one repair turn",
+      "Merged inference cannot recover the base model's local decode rate"
+    ]
   },
   "pilot": {
     "name": "v0.1 shortest-correct SFT",

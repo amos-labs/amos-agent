@@ -263,7 +263,7 @@ function candidateChatTemplateKwargs({ reasoningDialect, reasoningStrength, enab
 
 function booleanOption(values, name, fallback) {
   const raw = readOption(values, name);
-  if (raw === undefined) return fallback;
+  if (raw === undefined || raw === null || raw === "") return fallback;
   if (raw === "true") return true;
   if (raw === "false") return false;
   throw new Error(`${name} must be true or false`);

@@ -1,0 +1,130 @@
+{
+  "schema": "amos.local-student-pilot-result",
+  "version": 1,
+  "date": "2026-08-12",
+  "treatment": "ministral-r8-retention-v02",
+  "status": "rejected_for_production_partial_research_success",
+  "base_model": "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+  "framework": "mlx-vlm 0.6.12",
+  "training": {
+    "method": "tool-aware completion-only QLoRA",
+    "rank": 8,
+    "alpha": 16,
+    "learning_rate": 0.00001,
+    "batch_size": 1,
+    "maximum_steps": 300,
+    "checkpoint_interval": 50,
+    "max_sequence_length": 512,
+    "trained_tokens": 78382,
+    "peak_memory_gb": 13.018,
+    "validation_loss": {
+      "base": 3.064,
+      "step_50": 0.325,
+      "step_100": 0.195,
+      "step_150": 0.099,
+      "step_200": 0.107,
+      "step_250": 0.085,
+      "step_300": 0.084
+    }
+  },
+  "corpus": {
+    "generator": "src/research/syntheticDistillationRetention.js",
+    "seed": "amos-operator-retention-v2",
+    "canonical_identity_sha256": "4480c9b945369c2aab6889987ea989992a34dc9416153c911a19ce0800af298d",
+    "artifact_sha256": "ad0bfbf29b2e2bda0ac196bc9481beb6f71ad2c573d190dff9af53eeb56b3d2b",
+    "compiled_train_sha256": "1d5f0327f2473fefc360e670d40ebd308587f6224f50eb0051e89419abc95976",
+    "compiled_validation_sha256": "c8e565e3215e24e2db5d0376aaa5e89f338d03652a99c4fb5c4db066c5255cfb",
+    "trajectories": 2400,
+    "train": 2000,
+    "validation": 400,
+    "families": 1200,
+    "variants_per_family": 2,
+    "tool_trajectories_total": 720,
+    "tool_trajectories_train": 600,
+    "tool_calls_train": 1500,
+    "tool_results_train": 1500,
+    "executable_trajectories_total": 360,
+    "mix": {
+      "broad_verified_capability_replay": 0.5,
+      "amos_tool_and_authority_trajectories": 0.25,
+      "hard_algorithmic_code_and_repair": 0.15,
+      "receipt_grounding_and_exact_value_copy": 0.1
+    }
+  },
+  "sealed_suite": {
+    "path": "benchmarks/amos-operator-preservation-v2.json",
+    "sha256": "41d09dad0f44247f804d8fffb3cb36df6f7e7e42ccacfe90c25dc5dc789ab078",
+    "maximum": 40,
+    "base": {
+      "score": 16,
+      "critical_failures": ["dashboard-recovery-complete-v2"],
+      "decode_tokens_per_second": 37.2399,
+      "report_sha256": "f79a65fdf72c7c4da259441f609da43004433690c39a75915335fc7653000a29"
+    },
+    "step_50": {
+      "score": 16,
+      "critical_failures": ["purchase-approval-complete-v2"],
+      "report_sha256": "9bb2bc5d48bdf07cfda2f83abef79769c0cd141fff2abfc6aad767fe32bdf693"
+    },
+    "step_150": {
+      "score": 20,
+      "critical_failures": [],
+      "decode_tokens_per_second": 24.9372,
+      "report_sha256": "0efc4e8a487718f0a9e2515fcfa1d88b712238df48f3d79e52c7159be237ff4d"
+    },
+    "step_300": {
+      "score": 18,
+      "critical_failures": [],
+      "decode_tokens_per_second": 25.074,
+      "report_sha256": "80a71ce609c11cc1b363a76b44606eaa180315b2d779a258b5504d10a04478f9"
+    },
+    "checkpoint_selected_by_behavior": 150
+  },
+  "secondary_original_suite": {
+    "path": "benchmarks/muse-sonnet-paired-v1.json",
+    "sha256": "266cc0ee2d767d70c86ef0807f74484e256d7ea19befb0f97e11d38fc548d68c",
+    "step_150_raw_score": 8,
+    "maximum": 32,
+    "critical_failures": ["stale-reference-recovery", "idempotent-approval"],
+    "report_sha256": "a6a92f8b04b5daee0956cf687c5b945608e45c77d6da18cc718e08b0890b8f49",
+    "interpretation": "The selected checkpoint preserved exact tool sequences but omitted required final receipt fields, failed correlated Bayes and deadline optimization, and failed both executable code cases."
+  },
+  "held_out_trajectory_probe": {
+    "step": 150,
+    "trajectories": 39,
+    "exact_passed": 21,
+    "exact_pass_rate": 0.5384615385,
+    "generation_tokens_per_second": 17.9404,
+    "report_sha256": "79eda5fb8709505050e89afbb1a359de29d8e7b7c2b3caaa1144b02852131af0",
+    "perfect_workflows": [
+      "authority_conflict",
+      "causal_collider",
+      "digit_budget_grounding",
+      "exact_receipt_grounding",
+      "fencing_epoch",
+      "idempotent_receipt",
+      "simpson_stratification"
+    ],
+    "zero_exact_workflows": [
+      "correlated_bayes",
+      "critical_path_code",
+      "deadline_optimization",
+      "dependency_code",
+      "ledger_code",
+      "multi_step_recovery"
+    ],
+    "scoring_caveat": "The exact scorer rejects semantically adequate paraphrases and executable alternatives. Manual inspection still found substantive arithmetic, scheduling, and code errors; multi-step recovery often had the correct tool sequence and material values but varied final wording."
+  },
+  "selected_adapter": {
+    "checkpoint": 150,
+    "bytes": 89187578,
+    "sha256": "5788ae48ec93d0b427cbfa9c283fc78829ffe9ab80bdf7472923ec45eb9ed20c"
+  },
+  "decision": {
+    "production_promotion": false,
+    "physical_16gb_export": false,
+    "reason": "The treatment improved the newly sealed suite and removed its critical failures, but it regressed the independent original suite, transferred no hard code capability, and slowed unmerged adapter decode.",
+    "research_finding": "Low-pressure capability replay reduces catastrophic narrowing and can add bounded operational skills, but one-pass SFT is not sufficient for arithmetic composition, combinatorial search, executable code, or consistently complete long tool-flow synthesis.",
+    "next": "Move those failure classes into the integration engine: deterministic calculators and optimizers, generate-test-repair execution loops, and schema-derived receipt rendering. Distill successful multi-turn verified trajectories only after the engine works."
+  }
+}

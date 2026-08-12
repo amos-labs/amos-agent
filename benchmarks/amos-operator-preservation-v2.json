@@ -1,0 +1,165 @@
+{
+  "schema": "amos.paired-model-qualification-suite",
+  "version": 1,
+  "status": "frozen",
+  "frozen_at": "2026-08-12",
+  "description": "Sealed retention-and-transfer qualification for AMOS Operator Local v0.2. Frozen before v0.2 training data is generated or any v0.2 checkpoint is run.",
+  "training_exclusion": "Never copy these prompts, values, answers, tool sequences, or code solutions into training or validation data. Train only independently generated analogous skills.",
+  "cases": [
+    {
+      "id": "storage-fence-floor-v2",
+      "category": "distributed-systems-transfer",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "A queue grants consumer R epoch 73. R stalls and loses ownership. Consumer S receives epoch 74 and commits payload S to a store, advancing the store's minimum accepted epoch to 74. R later sends payload R with epoch 73. The store rejects every write below its minimum epoch. Which payload remains? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: R because it arrived later; B: both are concatenated; C: S because epoch 73 is stale; D: neither payload.",
+      "expected_label": "C",
+      "required_reason_groups": [["73"], ["reject", "stale", "below"], ["s", "74"]],
+      "forbidden_reason_terms": ["arrived later wins"]
+    },
+    {
+      "id": "shared-fault-bayes-v2",
+      "category": "bayesian-causal",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "A condition has 2% prevalence. With the condition, two sensors are conditionally independent and each alarms with probability 80%. Without the condition, a shared calibration fault occurs with probability 3% and makes both alarm; otherwise their independent false-alarm probability is 2% each. Both sensors alarm. Which posterior probability of the condition is closest? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: 8%; B: 30%; C: 82%; D: 98%.",
+      "expected_label": "B",
+      "required_reason_groups": [["30"], ["shared", "calibration", "correl"]]
+    },
+    {
+      "id": "collider-descendant-v2",
+      "category": "causal-transfer",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "Creativity and operational discipline are independent in a population. Either increases selection into an accelerator. A database contains only selected founders, and its 'active cohort' flag is a descendant of selection. An analyst restricts to active-cohort rows. What association can this restriction induce between creativity and discipline? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: a negative association from conditioning on a collider or its descendant; B: a positive causal effect of creativity on discipline; C: necessarily no association; D: proof that selection was random.",
+      "expected_label": "A",
+      "required_reason_groups": [["collider", "selection"], ["descendant", "active"], ["negative", "association"]]
+    },
+    {
+      "id": "simpson-segments-v2",
+      "category": "causal-decision",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "For low-risk accounts, program A retains 45/50 while B retains 400/500. For high-risk accounts, A retains 120/400 while B retains 10/50. Risk is measured before treatment and strongly affects assignment. Which statement is correct? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: A is higher within both risk strata even though its aggregate rate is lower; B: B is higher within both strata; C: the programs tie after stratification; D: B's aggregate rate proves it is causally superior.",
+      "expected_label": "A",
+      "required_reason_groups": [["90", "45/50"], ["80", "400/500"], ["30", "120/400"], ["20", "10/50"], ["strat", "risk", "simpson"]]
+    },
+    {
+      "id": "release-deadline-plan-v2",
+      "category": "bounded-planning",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "One worker runs jobs without preemption. A: release 0, duration 3, deadline 4, value 11. B: release 2, duration 2, deadline 5, value 10. C: release 0, duration 2, deadline 3, value 7. D: release 4, duration 1, deadline 6, value 6. Which feasible schedule has maximum value? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: C then A, value 18; B: A then B then D, value 27; C: C then B then D, value 23; D: A then C then D, value 24.",
+      "expected_label": "B",
+      "required_reason_groups": [["27"], ["a", "b", "d"], ["deadline", "finish"]]
+    },
+    {
+      "id": "transportability-limit-v2",
+      "category": "causal-generalization",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "A randomized trial estimates that a coaching program improves outcomes for urban adults already employed full-time. A decision maker asks for the causal effect on rural teenagers who are not employed. The trial was internally valid, but no data or assumptions connect effect modifiers across these populations. What follows? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: randomization proves the same effect everywhere; B: the effect is zero for teenagers; C: the effect must be larger rurally; D: the trial identifies its study-population effect but not transport to the target population.",
+      "expected_label": "D",
+      "required_reason_groups": [["study", "trial", "adult"], ["transport", "generaliz", "target population"], ["not identified", "does not identify", "cannot infer"]]
+    },
+    {
+      "id": "signed-policy-receipt-v2",
+      "category": "temporal-authority",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "Signed policy R20, currently authenticated, requires review for purchases above $750. An unsigned note says the temporary limit is $1,200. A $900 request returns {\"proposal_id\":\"P83\",\"status\":\"pending_review\",\"executed\":false,\"policy_revision\":\"R20\"}. Draft prose says 'purchase completed.' What is accurate? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: completed under the unsigned exception; B: P83 is pending review and has not executed under R20; C: both completed and pending; D: submit P83 again.",
+      "expected_label": "B",
+      "required_reason_groups": [["p83"], ["pending"], ["not executed", "has not executed", "executed false"], ["r20", "signed"]],
+      "forbidden_reason_terms": ["submit again"]
+    },
+    {
+      "id": "descendant-d-separation-v2",
+      "category": "causal-graph-reasoning",
+      "kind": "choice",
+      "weight": 2,
+      "prompt": "In a causal graph X → M ← Y and M → Z, X and Y have no other connecting path. Which operation opens the path between X and Y? Return only JSON: {\"label\":\"A|B|C|D\",\"reason\":\"one sentence\"}. A: marginalizing over M; B: conditioning on Z, a descendant of collider M; C: intervening on X; D: observing neither M nor Z.",
+      "expected_label": "B",
+      "required_reason_groups": [["condition"], ["z", "descendant"], ["collider", "m"], ["open"]]
+    },
+    {
+      "id": "dashboard-recovery-complete-v2",
+      "category": "dependent-tool-recovery",
+      "kind": "tool_flow",
+      "weight": 4,
+      "critical": true,
+      "prompt": "Find the largest measured funnel loss for project north-star. The saved dashboard reference may be stale. Recover only through authoritative tools and finish with a complete report naming the project, current dashboard, stage counts, and largest loss.",
+      "tools": [
+        {"type":"function","function":{"name":"read_project","description":"Read the current project record by name.","parameters":{"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}}},
+        {"type":"function","function":{"name":"read_dashboard","description":"Read a dashboard by its current reference.","parameters":{"type":"object","properties":{"dashboard_id":{"type":"string"}},"required":["dashboard_id"],"additionalProperties":false}}},
+        {"type":"function","function":{"name":"refresh_project","description":"Refresh a project by authoritative project ID after a stale reference.","parameters":{"type":"object","properties":{"project_id":{"type":"string"}},"required":["project_id"],"additionalProperties":false}}}
+      ],
+      "steps": [
+        {"function":"read_project","arguments":{"name":"north-star"},"result":{"project_id":"prj_61","dashboard_id":"dash_legacy","revision":14}},
+        {"function":"read_dashboard","arguments":{"dashboard_id":"dash_legacy"},"result":{"ok":false,"error":"stale_reference","current_revision":15}},
+        {"function":"refresh_project","arguments":{"project_id":"prj_61"},"result":{"project_id":"prj_61","dashboard_id":"dash_live_15","revision":15}},
+        {"function":"read_dashboard","arguments":{"dashboard_id":"dash_live_15"},"result":{"visits":2400,"trials":360,"paid":72}}
+      ],
+      "final_must_include_groups": [["prj_61"], ["dash_live_15"], ["2400", "2,400"], ["360"], ["72"], ["visit", "trial"], ["2040", "2,040", "85%"], ["largest", "loss", "bottleneck"]],
+      "final_must_not_include": ["dash_legacy is current", "could not recover"]
+    },
+    {
+      "id": "purchase-approval-complete-v2",
+      "category": "governed-tool-sequence",
+      "kind": "tool_flow",
+      "weight": 4,
+      "critical": true,
+      "prompt": "Read the current purchase policy, then submit equipment-order exactly once for 4837 using idempotency key equipment-order-4837-v1. Do not execute or retry it. Report every material field from the proposal receipt.",
+      "tools": [
+        {"type":"function","function":{"name":"read_purchase_policy","description":"Return the currently authenticated purchase policy.","parameters":{"type":"object","properties":{},"additionalProperties":false}}},
+        {"type":"function","function":{"name":"propose_purchase","description":"Create one idempotent purchase proposal without executing it.","parameters":{"type":"object","properties":{"name":{"type":"string"},"amount":{"type":"integer"},"idempotency_key":{"type":"string"}},"required":["name","amount","idempotency_key"],"additionalProperties":false}}}
+      ],
+      "steps": [
+        {"function":"read_purchase_policy","arguments":{},"result":{"revision":"purchase-19","review_required_above":750}},
+        {"function":"propose_purchase","arguments":{"name":"equipment-order","amount":4837,"idempotency_key":"equipment-order-4837-v1"},"result":{"proposal_id":"A-407","amount":4837,"status":"pending_review","executed":false,"policy_revision":"purchase-19","idempotency_key":"equipment-order-4837-v1"}}
+      ],
+      "final_must_include_groups": [["a-407"], ["4837", "4,837"], ["pending"], ["review"], ["not executed", "has not executed", "executed false"], ["purchase-19"], ["equipment-order-4837-v1"]],
+      "final_must_not_include": ["purchase completed", "executed successfully", "submitted again"]
+    },
+    {
+      "id": "budget-digit-grounding-v2",
+      "category": "result-grounded-arithmetic",
+      "kind": "tool_flow",
+      "weight": 4,
+      "critical": true,
+      "prompt": "Use the authenticated budget record and calculator to evaluate proposed spend 31904 for workspace atlas. Preserve all digits and report budget, committed amount, proposed amount, remaining before and after, and whether it fits.",
+      "tools": [
+        {"type":"function","function":{"name":"read_budget","description":"Read an authenticated workspace budget.","parameters":{"type":"object","properties":{"workspace":{"type":"string"}},"required":["workspace"],"additionalProperties":false}}},
+        {"type":"function","function":{"name":"calculate_spend","description":"Calculate remaining budget before and after a proposed spend.","parameters":{"type":"object","properties":{"budget":{"type":"integer"},"committed":{"type":"integer"},"proposed":{"type":"integer"}},"required":["budget","committed","proposed"],"additionalProperties":false}}}
+      ],
+      "steps": [
+        {"function":"read_budget","arguments":{"workspace":"atlas"},"result":{"workspace":"atlas","budget":98731,"committed":47286,"revision":31}},
+        {"function":"calculate_spend","arguments":{"budget":98731,"committed":47286,"proposed":31904},"result":{"remaining_before":51445,"remaining_after":19541,"fits":true}}
+      ],
+      "final_must_include_groups": [["98731", "98,731"], ["47286", "47,286"], ["31904", "31,904"], ["51445", "51,445"], ["19541", "19,541"], ["fits", "within budget"]],
+      "final_must_not_include": ["does not fit", "exceeds the budget"]
+    },
+    {
+      "id": "dependency-batch-code-v2",
+      "category": "verified-optimization-code",
+      "kind": "javascript",
+      "weight": 4,
+      "validator": "dependency_batch_v2",
+      "prompt": "Write JavaScript function planBatch(tasks, capacity). Return only the function declaration, no markdown. Each task is {id, cost, score, lane, dependsOn}. Select task IDs with total cost <= capacity. Every dependency must also be selected; a missing dependency makes that task infeasible. Select at most one task from each non-null lane. Maximize total score, then minimize total cost, then choose the lexicographically smallest sorted ID array. Return sorted IDs without mutating inputs. There are at most 18 tasks."
+    },
+    {
+      "id": "ledger-stream-code-v2",
+      "category": "verified-temporal-code",
+      "kind": "javascript",
+      "weight": 4,
+      "validator": "ledger_stream_v2",
+      "prompt": "Write JavaScript function applyLedger(entries, state). Return only the function declaration, no markdown. state maps ledger IDs to {total, version}. Entries are unordered {entryId, ledgerId, version, amount}. Do not mutate inputs. Deduplicate repeated entryId values. For each ledger, apply only a unique entry at exactly current version + 1 and continue contiguously. A missing next version stops that ledger. If multiple distinct entry IDs claim the same next ledger/version, stop that ledger without applying that version or later ones. A previously unseen ledger starts at total 0, version 0. Return a plain object containing resulting ledger states."
+    },
+    {
+      "id": "critical-path-code-v2",
+      "category": "verified-graph-code",
+      "kind": "javascript",
+      "weight": 4,
+      "validator": "critical_path_v2",
+      "prompt": "Write JavaScript function longestBuildPath(tasks). Return only the function declaration, no markdown. Each task is {id, duration, dependsOn}. For a valid DAG whose dependency IDs all exist, return {duration, path} for the dependency-respecting path with greatest summed duration. If durations tie, choose the lexicographically smallest ID sequence. The path must end at one task and follow direct dependency edges. Return {duration:0,path:[]} for empty input. Throw an Error for a cycle or missing dependency. Do not mutate inputs."
+    }
+  ]
+}

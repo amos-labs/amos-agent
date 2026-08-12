@@ -101,3 +101,91 @@ test("event validator requires contiguous versions and rejects conflicting versi
   }`;
   assert.equal(evaluateJavaScript({ validator: "event_reconciliation" }, response).passed, true);
 });
+
+test("v2 dependency batch validator checks dependencies, lanes, and tie breaks", () => {
+  const response = `function planBatch(tasks, capacity) {
+    let best = { score: -1, cost: Infinity, ids: [] };
+    for (let mask = 0; mask < 2 ** tasks.length; mask += 1) {
+      const selected = tasks.filter((_, index) => mask & (1 << index));
+      const ids = selected.map((task) => task.id).sort();
+      const selectedIds = new Set(ids);
+      const lanes = selected.map((task) => task.lane).filter((lane) => lane != null);
+      const cost = selected.reduce((sum, task) => sum + task.cost, 0);
+      if (cost > capacity || new Set(lanes).size !== lanes.length) continue;
+      if (!selected.every((task) => (task.dependsOn || []).every((id) => selectedIds.has(id)))) continue;
+      const score = selected.reduce((sum, task) => sum + task.score, 0);
+      const lexical = JSON.stringify(ids);
+      const bestLexical = JSON.stringify(best.ids);
+      if (score > best.score || (score === best.score && cost < best.cost) ||
+          (score === best.score && cost === best.cost && lexical < bestLexical)) {
+        best = { score, cost, ids };
+      }
+    }
+    return best.ids;
+  }`;
+  assert.equal(evaluateJavaScript({ validator: "dependency_batch_v2" }, response).passed, true);
+});
+
+test("v2 ledger validator checks new ledgers, gaps, duplicates, and conflicts", () => {
+  const response = `function applyLedger(entries, state) {
+    const output = JSON.parse(JSON.stringify(state));
+    const unique = new Map();
+    for (const entry of entries) if (!unique.has(entry.entryId)) unique.set(entry.entryId, entry);
+    const ledgers = new Set([...Object.keys(output), ...[...unique.values()].map((entry) => entry.ledgerId)]);
+    for (const ledgerId of ledgers) {
+      if (!output[ledgerId]) output[ledgerId] = { total: 0, version: 0 };
+      const versions = new Map();
+      for (const entry of unique.values()) {
+        if (entry.ledgerId !== ledgerId || entry.version <= output[ledgerId].version) continue;
+        const sameVersion = versions.get(entry.version) || [];
+        sameVersion.push(entry);
+        versions.set(entry.version, sameVersion);
+      }
+      while (true) {
+        const next = output[ledgerId].version + 1;
+        const candidates = versions.get(next);
+        if (!candidates || candidates.length !== 1) break;
+        output[ledgerId].total += candidates[0].amount;
+        output[ledgerId].version = next;
+      }
+    }
+    return output;
+  }`;
+  assert.equal(evaluateJavaScript({ validator: "ledger_stream_v2" }, response).passed, true);
+});
+
+test("v2 critical path validator checks graph validity and lexical ties", () => {
+  const response = `function longestBuildPath(tasks) {
+    if (tasks.length === 0) return { duration: 0, path: [] };
+    const byId = new Map(tasks.map((task) => [task.id, task]));
+    const memo = new Map();
+    const visiting = new Set();
+    function bestTo(id) {
+      if (!byId.has(id)) throw new Error("missing dependency");
+      if (visiting.has(id)) throw new Error("cycle");
+      if (memo.has(id)) return memo.get(id);
+      visiting.add(id);
+      const task = byId.get(id);
+      let prefix = { duration: 0, path: [] };
+      for (const dependency of task.dependsOn || []) {
+        const candidate = bestTo(dependency);
+        if (candidate.duration > prefix.duration ||
+            (candidate.duration === prefix.duration && JSON.stringify(candidate.path) < JSON.stringify(prefix.path))) {
+          prefix = candidate;
+        }
+      }
+      visiting.delete(id);
+      const result = { duration: prefix.duration + task.duration, path: [...prefix.path, id] };
+      memo.set(id, result);
+      return result;
+    }
+    let best = null;
+    for (const task of tasks) {
+      const candidate = bestTo(task.id);
+      if (!best || candidate.duration > best.duration ||
+          (candidate.duration === best.duration && JSON.stringify(candidate.path) < JSON.stringify(best.path))) best = candidate;
+    }
+    return best;
+  }`;
+  assert.equal(evaluateJavaScript({ validator: "critical_path_v2" }, response).passed, true);
+});

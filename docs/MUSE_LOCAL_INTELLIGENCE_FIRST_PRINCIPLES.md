@@ -109,6 +109,33 @@ algorithmic families, exact receipt/value grounding, and dual early stopping
 on target lift plus capability retention. A newly sealed suite is required
 because frozen v1 has now informed the next design.
 
+### Rank-8 retention treatment: partial lift, integration boundary found
+
+The v0.2 treatment implemented that correction with 2,000 training and 400
+validation trajectories across 1,200 isolated families. Its mix was 50% broad
+capability replay, 25% AMOS tools and authority, 15% hard code, and 10% exact
+receipt/value grounding. Rank 8, a 1e-5 learning rate, and 50-step checkpoints
+kept peak training memory at 13.02 GB. The untouched base scored 16/40 on a new
+suite frozen before corpus generation. Step 150 improved to 20/40 with no
+critical failures; step 300 regressed to 18/40 despite a lower validation loss.
+
+This is progress, but not promotion. On the independent original suite, step
+150 scored only raw 8/32 and failed both critical final-report contracts. On 39
+held-out generated trajectories it was exact on 21: perfect for collider and
+Simpson reasoning, fencing, escalation, idempotent proposals, and exact value
+grounding, but zero-exact for correlated Bayes, deadline optimization, three
+hard-code families, and long recovery synthesis. Some exact misses were benign
+paraphrases, but the arithmetic, schedule, and code errors were substantive.
+
+The next move is therefore integration-first, not a larger SFT sweep. The
+resident model should express the problem and choose tools; deterministic local
+calculators and bounded optimizers should perform arithmetic and search; code
+should run through generate-test-repair; and required receipt fields should be
+rendered from schema before prose compression. Successful multi-turn verified
+trajectories can then be distilled back into the compact model. This preserves
+the central hypothesis: useful local intelligence is a property of the model
+plus its integration procedure, not parameter count alone.
+
 ## 1. The physical inference system
 
 Muse Glimmer is a dense transformer. The evaluated GGUF contains approximately

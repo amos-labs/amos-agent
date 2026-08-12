@@ -24,7 +24,13 @@ export function validatePairedSuite(value) {
     }
     if (testCase.kind === "choice") validateChoice(testCase);
     if (testCase.kind === "tool_flow") validateToolFlow(testCase);
-    if (testCase.kind === "javascript" && !["portfolio", "event_reconciliation"].includes(testCase.validator)) {
+    if (testCase.kind === "javascript" && ![
+      "portfolio",
+      "event_reconciliation",
+      "dependency_batch_v2",
+      "ledger_stream_v2",
+      "critical_path_v2"
+    ].includes(testCase.validator)) {
       throw new Error(`Unsupported JavaScript validator for ${testCase.id}: ${testCase.validator}`);
     }
   }
@@ -71,6 +77,9 @@ export function evaluateJavaScript(testCase, response) {
   const code = extractCode(response);
   if (testCase.validator === "portfolio") return evaluatePortfolio(code);
   if (testCase.validator === "event_reconciliation") return evaluateEventReconciliation(code);
+  if (testCase.validator === "dependency_batch_v2") return evaluateDependencyBatchV2(code);
+  if (testCase.validator === "ledger_stream_v2") return evaluateLedgerStreamV2(code);
+  if (testCase.validator === "critical_path_v2") return evaluateCriticalPathV2(code);
   throw new Error(`Unsupported JavaScript validator: ${testCase.validator}`);
 }
 
@@ -209,6 +218,147 @@ function evaluateEventReconciliation(code) {
       detail: { expected: test.expected, actual: output }
     };
   });
+}
+
+function evaluateDependencyBatchV2(code) {
+  const tests = [
+    {
+      tasks: [
+        { id: "base", cost: 2, score: 2, lane: null, dependsOn: [] },
+        { id: "alpha", cost: 3, score: 8, lane: "growth", dependsOn: ["base"] },
+        { id: "beta", cost: 4, score: 9, lane: "growth", dependsOn: [] },
+        { id: "gamma", cost: 2, score: 6, lane: null, dependsOn: ["alpha"] }
+      ],
+      capacity: 7,
+      expected: ["alpha", "base", "gamma"]
+    },
+    {
+      tasks: [
+        { id: "a", cost: 2, score: 5, lane: null, dependsOn: [] },
+        { id: "b", cost: 2, score: 5, lane: null, dependsOn: [] },
+        { id: "c", cost: 4, score: 10, lane: null, dependsOn: [] }
+      ],
+      capacity: 4,
+      expected: ["a", "b"]
+    },
+    {
+      tasks: [
+        { id: "a", cost: 1, score: 4, lane: "one", dependsOn: ["missing"] },
+        { id: "b", cost: 1, score: 4, lane: "one", dependsOn: [] },
+        { id: "c", cost: 1, score: 4, lane: "two", dependsOn: [] }
+      ],
+      capacity: 2,
+      expected: ["b", "c"]
+    }
+  ];
+  return runFunctionTests(code, "planBatch", tests, ({ fn, test }) => {
+    const before = JSON.stringify(test.tasks);
+    const output = Array.from(fn(structuredClone(test.tasks), test.capacity) || [], String);
+    return {
+      passed: JSON.stringify(output) === JSON.stringify(test.expected) && JSON.stringify(test.tasks) === before,
+      detail: { expected: test.expected, actual: output }
+    };
+  });
+}
+
+function evaluateLedgerStreamV2(code) {
+  const tests = [
+    {
+      state: { x: { total: 10, version: 1 } },
+      entries: [
+        { entryId: "x3", ledgerId: "x", version: 3, amount: -4 },
+        { entryId: "x2", ledgerId: "x", version: 2, amount: 9 },
+        { entryId: "x2", ledgerId: "x", version: 2, amount: 9 }
+      ],
+      expected: { x: { total: 15, version: 3 } }
+    },
+    {
+      state: {},
+      entries: [
+        { entryId: "a2", ledgerId: "a", version: 2, amount: 8 },
+        { entryId: "b1", ledgerId: "b", version: 1, amount: 5 }
+      ],
+      expected: { a: { total: 0, version: 0 }, b: { total: 5, version: 1 } }
+    },
+    {
+      state: { x: { total: 2, version: 0 } },
+      entries: [
+        { entryId: "left", ledgerId: "x", version: 1, amount: 3 },
+        { entryId: "right", ledgerId: "x", version: 1, amount: 7 },
+        { entryId: "later", ledgerId: "x", version: 2, amount: 11 }
+      ],
+      expected: { x: { total: 2, version: 0 } }
+    }
+  ];
+  return runFunctionTests(code, "applyLedger", tests, ({ fn, test }) => {
+    const entriesBefore = JSON.stringify(test.entries);
+    const stateBefore = JSON.stringify(test.state);
+    const output = fn(structuredClone(test.entries), structuredClone(test.state));
+    return {
+      passed:
+        JSON.stringify(output) === JSON.stringify(test.expected) &&
+        JSON.stringify(test.entries) === entriesBefore &&
+        JSON.stringify(test.state) === stateBefore,
+      detail: { expected: test.expected, actual: output }
+    };
+  });
+}
+
+function evaluateCriticalPathV2(code) {
+  const tests = [
+    {
+      tasks: [
+        { id: "compile", duration: 4, dependsOn: ["lint"] },
+        { id: "lint", duration: 2, dependsOn: [] },
+        { id: "docs", duration: 3, dependsOn: [] },
+        { id: "ship", duration: 1, dependsOn: ["compile", "docs"] }
+      ],
+      expected: { duration: 7, path: ["lint", "compile", "ship"] }
+    },
+    {
+      tasks: [
+        { id: "a", duration: 2, dependsOn: [] },
+        { id: "b", duration: 3, dependsOn: ["a"] },
+        { id: "c", duration: 2, dependsOn: [] },
+        { id: "d", duration: 3, dependsOn: ["c"] }
+      ],
+      expected: { duration: 5, path: ["a", "b"] }
+    },
+    { tasks: [], expected: { duration: 0, path: [] } }
+  ];
+  const outcome = runFunctionTests(code, "longestBuildPath", tests, ({ fn, test }) => {
+    const before = JSON.stringify(test.tasks);
+    const output = fn(structuredClone(test.tasks));
+    return {
+      passed: JSON.stringify(output) === JSON.stringify(test.expected) && JSON.stringify(test.tasks) === before,
+      detail: { expected: test.expected, actual: output }
+    };
+  });
+  if (!outcome.passed) return outcome;
+  try {
+    const sandbox = {};
+    vm.createContext(sandbox);
+    vm.runInContext(`"use strict";\n${code}`, sandbox, { timeout: 1_000 });
+    const fn = sandbox.longestBuildPath;
+    assertThrows(fn, [{ id: "a", duration: 1, dependsOn: ["missing"] }]);
+    assertThrows(fn, [
+      { id: "a", duration: 1, dependsOn: ["b"] },
+      { id: "b", duration: 1, dependsOn: ["a"] }
+    ]);
+    return outcome;
+  } catch (error) {
+    return { passed: false, error: error.message, code };
+  }
+}
+
+function assertThrows(fn, input) {
+  let threw = false;
+  try {
+    fn(structuredClone(input));
+  } catch {
+    threw = true;
+  }
+  if (!threw) throw new Error("longestBuildPath must throw for invalid dependency graphs");
 }
 
 function runFunctionTests(code, functionName, tests, execute) {
