@@ -32,7 +32,7 @@
             <span class="nav-icon">▱</span><span>Projects</span><span id="projectBadge" class="nav-badge project-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="tasks">
-            <span class="nav-icon">☷</span><span>Tasks</span><span id="taskBadge" class="nav-badge task-badge hidden">0</span>
+            <span class="nav-icon">☷</span><span>Conversations</span><span id="taskBadge" class="nav-badge task-badge hidden">0</span>
           </button>
           <button class="nav-item" data-view="canvas">
             <span class="nav-icon">▦</span><span>Briefings</span><span id="canvasBadge" class="nav-badge canvas-badge hidden">0</span>
@@ -404,21 +404,21 @@
         <section id="tasksView" class="view tasks-view hidden">
           <div class="section-heading tasks-heading">
             <div>
-              <span class="eyebrow">DURABLE WORK &amp; LINEAGE</span>
-              <h1>Tasks that keep their place.</h1>
+              <span class="eyebrow">CONVERSATIONS &amp; LINEAGE</span>
+              <h1>Conversations that keep their place.</h1>
               <p>
-                Resume a bounded context lane, reopen its work surface, or fork from an exact
+                Continue a durable conversation, reopen its work surface, or fork from an exact
                 milestone. AMOS revalidates identity, sources, policy, approvals, and receipts;
                 it never silently replays a model request or tool call.
               </p>
             </div>
-            <button id="newTaskButton" class="button primary" type="button">New task <span>→</span></button>
+            <button id="newTaskButton" class="button primary" type="button">New conversation <span>→</span></button>
           </div>
           <div id="taskSummary" class="task-summary"></div>
           <div class="task-toolbar">
             <label class="task-search">
               <span aria-hidden="true">⌕</span>
-              <input id="taskSearchInput" type="search" maxlength="160" placeholder="Search tasks and objectives" autocomplete="off" />
+              <input id="taskSearchInput" type="search" maxlength="160" placeholder="Search conversations and objectives" autocomplete="off" />
             </label>
             <label class="task-filter-label">
               <span>Show</span>
@@ -427,17 +427,24 @@
                 <option value="recent">Recent</option>
                 <option value="forks">Forks</option>
                 <option value="archived">Archived</option>
-                <option value="all">All tasks</option>
+                <option value="all">All conversations</option>
               </select>
             </label>
           </div>
           <div id="taskPlatformNotice" class="task-platform-notice hidden">
-            Tasks are encrypted on this computer. Cross-client task sync will turn on when the connected AMOS Platform advertises the task-resource contract.
+            Conversations are encrypted on this computer. Cross-client sync will turn on when the connected AMOS Platform advertises the conversation-resource contract.
           </div>
+          <section id="conversationRecovery" class="conversation-recovery hidden" aria-labelledby="conversationRecoveryTitle">
+            <div class="recent-heading proposal-heading">
+              <span id="conversationRecoveryTitle" class="eyebrow accent">INTERRUPTED &amp; FAILED CONVERSATIONS</span>
+              <p>Revalidate and reopen safe context in Operator. AMOS never silently repeats a model request or tool call.</p>
+            </div>
+            <div id="conversationRecoveryList" class="decision-list task-checkpoint-list conversation-recovery-list"></div>
+          </section>
           <div id="taskEmpty" class="automation-empty hidden">
             <span>☷</span>
-            <strong>No matching tasks</strong>
-            <p>Start a focused task in Operator, or build an automation in its own task lane.</p>
+            <strong>No matching conversations</strong>
+            <p>Start a conversation in Operator, then return here to continue, organize, or fork it.</p>
           </div>
           <div id="taskList" class="task-list"></div>
         </section>
@@ -666,14 +673,6 @@
               </div>
             </div>
             <div id="decisionNotice" class="decision-notice hidden"></div>
-            <div class="recent-heading proposal-heading">
-              <span class="eyebrow accent">INTERRUPTED &amp; FAILED WORK</span>
-              <p>
-                Encrypted conversation checkpoints. Revalidation restores safe context in
-                Operator for your review; it never silently repeats a model request or tool call.
-              </p>
-            </div>
-            <div id="interruptedTaskList" class="decision-list task-checkpoint-list"></div>
             <div class="recent-heading proposal-heading">
               <span class="eyebrow accent">OFFLINE DRAFTS</span>
               <p>
@@ -1066,23 +1065,26 @@
             <span>Objective</span>
             <textarea id="forkTaskObjective" rows="3" maxlength="6000" required></textarea>
           </label>
-          <fieldset class="task-fork-options">
-            <legend>Context to carry</legend>
-            <label><input type="radio" name="forkContextScope" value="everything" /> <span><strong>Everything</strong><small>Bounded orientation from the whole retained task lane.</small></span></label>
-            <label><input type="radio" name="forkContextScope" value="from_here" checked /> <span><strong>From here</strong><small>Only the bounded path through the selected milestone.</small></span></label>
-            <label><input type="radio" name="forkContextScope" value="selected_artifacts" /> <span><strong>Selected artifacts</strong><small>Start from only the work surfaces and references you choose.</small></span></label>
-          </fieldset>
-          <div id="forkArtifactPicker" class="fork-artifact-picker hidden">
-            <span>Artifacts to carry</span>
-            <div id="forkArtifactList"></div>
-          </div>
-          <fieldset class="task-fork-options">
-            <legend>Workspace</legend>
-            <label><input type="radio" name="forkWorkspaceMode" value="same_directory" checked /> <span><strong>Same directory</strong><small>Share the current files; concurrent edits can overlap.</small></span></label>
-            <label><input type="radio" name="forkWorkspaceMode" value="new_worktree" /> <span><strong>New Git worktree</strong><small>Start at the current commit on an isolated AMOS branch.</small></span></label>
-            <label><input type="radio" name="forkWorkspaceMode" value="context_only" /> <span><strong>Context only</strong><small>No local filesystem grant follows the fork.</small></span></label>
-          </fieldset>
-          <div id="forkTaskPreview" class="task-fork-preview"></div>
+          <details id="forkAdvancedOptions" class="fork-advanced-options">
+            <summary>Advanced context &amp; workspace options</summary>
+            <fieldset class="task-fork-options">
+              <legend>Context to carry</legend>
+              <label><input type="radio" name="forkContextScope" value="everything" /> <span><strong>Everything</strong><small>Bounded orientation from the whole retained conversation.</small></span></label>
+              <label><input type="radio" name="forkContextScope" value="from_here" checked /> <span><strong>From here</strong><small>Only the bounded path through the selected milestone.</small></span></label>
+              <label><input type="radio" name="forkContextScope" value="selected_artifacts" /> <span><strong>Selected artifacts</strong><small>Start from only the work surfaces and references you choose.</small></span></label>
+            </fieldset>
+            <div id="forkArtifactPicker" class="fork-artifact-picker hidden">
+              <span>Artifacts to carry</span>
+              <div id="forkArtifactList"></div>
+            </div>
+            <fieldset class="task-fork-options">
+              <legend>Workspace</legend>
+              <label><input type="radio" name="forkWorkspaceMode" value="same_directory" checked /> <span><strong>Same directory</strong><small>Share the current files; concurrent edits can overlap.</small></span></label>
+              <label><input type="radio" name="forkWorkspaceMode" value="new_worktree" /> <span><strong>New Git worktree</strong><small>Start at the current commit on an isolated AMOS branch.</small></span></label>
+              <label><input type="radio" name="forkWorkspaceMode" value="context_only" /> <span><strong>Context only</strong><small>No local filesystem grant follows the fork.</small></span></label>
+            </fieldset>
+            <div id="forkTaskPreview" class="task-fork-preview"></div>
+          </details>
           <div id="forkTaskError" class="connection-modal-error hidden"></div>
           <div class="connection-modal-actions">
             <button id="forkTaskCancel" class="button secondary" type="button">Cancel</button>

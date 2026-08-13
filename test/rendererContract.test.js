@@ -112,6 +112,9 @@ test("routine approval review stays inside Desktop", async () => {
   assert.match(javascript, /function decisionSummary\([\s\S]*?structuredTail/);
   assert.doesNotMatch(javascript, /decided by \$\{approval\.decided_by\}/);
   assert.match(javascript, /Revalidate & reopen/);
+  const decisions = html.match(/<section id="workView"([\s\S]*?)<section id="settingsView"/)?.[1] || "";
+  assert.doesNotMatch(decisions, /INTERRUPTED &amp; FAILED WORK|interruptedTaskList/);
+  assert.match(html, /id="conversationRecovery"[\s\S]*?INTERRUPTED &amp; FAILED CONVERSATIONS/);
   assert.match(javascript, /state\.approvalDecisionMode === "desktop"/);
   assert.match(javascript, /reviewCanvasApproval\(block\.pendingId, review\)/);
   assert.match(javascript, /approvalIdFromUrl\(node\.href\)/);
@@ -249,7 +252,7 @@ test("Operator exposes guided Platform-owned Automation setup beside chat", asyn
   assert.doesNotMatch(html, /Stripe|QuickBooks|Neighborly/);
 });
 
-test("Tasks expose durable resume, governed forking, lineage, and task-bound canvases", async () => {
+test("Conversations expose durable resume, explicit forking capability, lineage, and bound canvases", async () => {
   const [javascript, html, preload, main, controller, taskStore, workspace] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
@@ -261,14 +264,17 @@ test("Tasks expose durable resume, governed forking, lineage, and task-bound can
   ]);
 
   assert.match(html, /id="tasksView"/);
-  assert.match(html, /id="newTaskButton"[^>]*>New task/);
+  assert.match(html, /data-view="tasks"[\s\S]*?Conversations/);
+  assert.match(html, /id="newTaskButton"[^>]*>New conversation/);
   assert.match(html, /id="newConversationButton"[^>]*>[\s\S]*?New conversation/);
   assert.match(html, /id="forkConversationButton"[^>]*>[\s\S]*?Fork conversation/);
   assert.match(html, /Everything[\s\S]*?From here[\s\S]*?Selected artifacts/);
   assert.match(html, /Same directory[\s\S]*?New Git worktree[\s\S]*?Context only/);
   assert.match(javascript, /api\.openTask\(task\.id\)/);
   assert.match(javascript, /api\.startNewConversation\(\{\s*kind: "general"\s*\}\)/);
-  assert.match(javascript, /forkCurrentConversation[\s\S]*?openTaskForkModal\(task, latestTaskEventId\(task\)\)/);
+  assert.match(javascript, /forkCurrentConversation[\s\S]*?capability\.latestMilestoneId/);
+  assert.match(javascript, /state\?\.conversationCapabilities/);
+  assert.doesNotMatch(javascript, /latestTaskEventId/);
   assert.doesNotMatch(javascript, /What should this task move forward\?/);
   assert.match(javascript, /api\.forkTask\(\{/);
   assert.match(javascript, /Fork from here/);
@@ -276,6 +282,12 @@ test("Tasks expose durable resume, governed forking, lineage, and task-bound can
   assert.match(preload, /desktop:fork-task/);
   assert.match(main, /controller\.forkTaskResource\(input\)/);
   assert.match(controller, /this\.canvases\.restore\(durableCanvasState\(task\.canvasState \|\| \{\}\)\)/);
+  assert.match(controller, /function conversationForkCapability\(task, continuity\)/);
+  assert.match(controller, /reason: "no_persisted_milestone"/);
+  const capabilityContract = controller.match(
+    /function conversationForkCapability\(task, continuity\)([\s\S]*?)function conversationForkUnavailableMessage/
+  )?.[1] || "";
+  assert.doesNotMatch(capabilityContract, /RegExp|\.match\(|\.test\(/);
   assert.match(controller, /function durableCanvasState[\s\S]*?block\?\.type !== "browser"/);
   assert.match(controller, /replayed: false/);
   assert.match(taskStore, /pendingOperationsCopied: false/);
