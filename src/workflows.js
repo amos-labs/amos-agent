@@ -45,12 +45,41 @@ export const BUILT_IN_SKILLS = Object.freeze([
     id: "governed-execution",
     name: "Governed execution",
     purpose: "Prepare or perform an action through policy, approval, idempotency, and proof."
+  },
+  {
+    id: "spreadsheet-modeling",
+    name: "Deterministic spreadsheet modeling",
+    purpose: "Translate assumptions into typed formulas, preserve baselines across scenarios, and verify a native XLSX before delivery."
   }
 ]);
 
 const SKILLS = new Map(BUILT_IN_SKILLS.map((skill) => [skill.id, skill]));
 
 const RECIPES = Object.freeze([
+  {
+    id: "spreadsheet-model",
+    title: "Build and verify the spreadsheet",
+    summary: "Turn confirmed assumptions into a native, formula-driven XLSX with deterministic checks and an immediate visual preview.",
+    skills: ["spreadsheet-modeling", "evidence-collection", "verification"],
+    steps: [
+      "Confirm the workbook purpose, current-state inputs, units, scenarios, and expected outputs.",
+      "Use desktop_calculate for consequential arithmetic and explicit period conversions.",
+      "Build the native XLSX with formula-driven scenarios and baseline checks; do not fall back to Bash or Python.",
+      "Reopen and verify the workbook, inspect required checks, and deliver the canvas preview plus direct artifact path."
+    ],
+    doneWhen: "The XLSX reopens, formulas and units validate, all required baselines pass, and the user can open it directly from the canvas.",
+    patterns: [/\.(?:xlsx|xls)\b/i],
+    phrases: [
+      "spreadsheet",
+      "excel",
+      "financial model",
+      "scenario model",
+      "forecast",
+      "hiring plan",
+      "budget model",
+      "kpi workbook"
+    ]
+  },
   {
     id: "github-issue-diagnosis",
     title: "Diagnose the GitHub issue",

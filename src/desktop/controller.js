@@ -23,6 +23,7 @@ import { adaptBriefingRun, adaptCompanyResult } from "./canvasAdapters.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import { DesktopCanvasResultStore } from "./canvasResults.js";
 import { documentArtifactCanvas } from "./documentArtifactCanvas.js";
+import { spreadsheetArtifactCanvas } from "./spreadsheetArtifactCanvas.js";
 import { browserSessionCanvas } from "./browserCanvas.js";
 import { BrowserRecipeRecorder } from "./browserRecipeRecorder.js";
 import {
@@ -3062,6 +3063,27 @@ export class DesktopController {
     return canvas;
   }
 
+  presentSpreadsheetArtifact(input) {
+    const spec = spreadsheetArtifactCanvas(input);
+    const artifactPath = spec.blocks[0].artifact.path;
+    const existing = this.canvases.list().find((canvas) =>
+      canvas.blocks.some((block) => block.type === "spreadsheet" && block.artifact.path === artifactPath)
+    );
+    const canvas = existing
+      ? this.canvases.update(existing.id, spec)
+      : this.canvases.present(spec);
+    this.record("artifact", `${existing ? "Refreshed" : "Previewed"} ${canvas.title}`, {
+      canvasId: canvas.id,
+      revision: canvas.revision,
+      format: "xlsx",
+      verified: input.verification.verified,
+      sheetCount: input.verification.sheetCount
+    });
+    this.send("canvas:changed", this.canvases.state());
+    this.snapshotActiveTask().catch(() => {});
+    return canvas;
+  }
+
   presentBrowserSession(input) {
     const sessionId = String(input.session_id || "");
     const preview = input.preview || this.browserRuntime?.localPreviewForSession?.(sessionId);
@@ -3167,17 +3189,17 @@ export class DesktopController {
   async resolveDocumentArtifactPath(value) {
     const artifactPath = String(value || "").trim();
     if (!artifactPath || artifactPath.length > 1_000) {
-      throw new Error("AMOS blocked an invalid document artifact path");
+      throw new Error("AMOS blocked an invalid local artifact path");
     }
-    if (![".docx", ".pdf"].includes(extname(artifactPath).toLowerCase())) {
-      throw new Error("AMOS can open only DOCX and PDF document artifacts");
+    if (![".docx", ".pdf", ".xlsx"].includes(extname(artifactPath).toLowerCase())) {
+      throw new Error("AMOS can open only DOCX, PDF, and XLSX artifacts");
     }
     const settings = await this.settingsStore.read();
-    if (!settings.workspace) throw new Error("Choose the document workspace first");
+    if (!settings.workspace) throw new Error("Choose the local workspace first");
     const absolutePath = resolveWorkspacePath(settings.workspace, artifactPath, false);
     assertSafeAgentPath(absolutePath, settings.workspace);
     const info = await stat(absolutePath);
-    if (!info.isFile()) throw new Error("That document artifact is not a file");
+    if (!info.isFile()) throw new Error("That local artifact is not a file");
     return absolutePath;
   }
 
@@ -3888,6 +3910,7 @@ export class DesktopController {
         includeAmos: !isOffline && !isPersonal,
         includeWeb: !isOffline,
         artifactPresenter: (input) => this.presentDocumentArtifact(input),
+        spreadsheetPresenter: (input) => this.presentSpreadsheetArtifact(input),
         intelligenceRouter,
         systemPrompt: `${desktopSystemPrompt(isOffline
           ? OFFLINE_SYSTEM_PROMPT
@@ -4409,6 +4432,8 @@ const CONTINUITY_LOCAL_TOOLS = new Set([
   "read_file",
   "write_file",
   "desktop_create_document",
+  "desktop_create_spreadsheet",
+  "desktop_calculate",
   "search_files",
   "git_status",
   "apply_patch"
@@ -4558,6 +4583,7 @@ function continuityArtifactReferences(name, result, workspace) {
     if (safe) paths.push(safe);
   };
   addPath(result.path);
+  addPath(result.artifact?.path);
   for (const path of Array.isArray(result.files) ? result.files : []) addPath(path);
   for (const artifact of Array.isArray(result.artifacts) ? result.artifacts : []) addPath(artifact?.path);
   for (const path of Array.isArray(result.manifests) ? result.manifests : []) addPath(path);

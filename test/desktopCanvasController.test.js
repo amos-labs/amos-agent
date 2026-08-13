@@ -130,6 +130,61 @@ test("regenerating the same document refreshes one bounded artifact canvas", () 
   assert.equal(bounded.blocks[0].total_blocks, 61);
 });
 
+test("a generated spreadsheet opens a verified dynamic canvas and refreshes in place", () => {
+  const events = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-spreadsheet-canvas-controller",
+    settingsStore: {},
+    openBrowser() {},
+    emit(channel, payload) { events.push({ channel, payload }); }
+  });
+  const input = {
+    generatedAt: timestamp,
+    spreadsheet: { title: "Financial model" },
+    artifact: {
+      path: "models/financial-model.xlsx",
+      format: "xlsx",
+      bytes: 4_096,
+      sha256: "e".repeat(64),
+      verified: true
+    },
+    verification: {
+      verified: true,
+      sheetCount: 3,
+      formulaCount: 20,
+      checkCount: 2,
+      checksPassed: 2,
+      requiredChecksPassed: true
+    },
+    preview: {
+      sheetNames: ["Assumptions", "Base Case"],
+      table: { sheet: "Assumptions", headers: ["A", "B"], rows: [["Current MRR", 2_200]] },
+      charts: [{
+        type: "line",
+        title: "MRR",
+        yUnit: "usd_per_month",
+        categories: ["Aug"],
+        series: [{ name: "Base", values: [2_200] }]
+      }],
+      checks: [{ label: "Starting MRR", passed: true, required: true, note: "Tied" }]
+    }
+  };
+
+  const first = controller.presentSpreadsheetArtifact(input);
+  const second = controller.presentSpreadsheetArtifact({
+    ...input,
+    artifact: { ...input.artifact, bytes: 5_000, sha256: "f".repeat(64) }
+  });
+
+  assert.equal(first.blocks[0].type, "spreadsheet");
+  assert.equal(first.blocks[1].type, "table");
+  assert.equal(first.blocks[2].type, "timeseries");
+  assert.equal(second.id, first.id);
+  assert.equal(second.revision, 2);
+  assert.equal(second.blocks[0].artifact.bytes, 5_000);
+  assert.equal(events.filter((event) => event.channel === "canvas:changed").length, 2);
+});
+
 test("browser canvas refreshes one local frame, supports user takeover, and removal revokes its session", async () => {
   const closed = [];
   const frames = [];
@@ -302,9 +357,10 @@ test("local preview attestation survives browser follow-up actions", () => {
   assert.equal(second.blocks[0].summary, "Score 1");
 });
 
-test("document artifact actions resolve only existing DOCX or PDF files inside the workspace", async () => {
+test("artifact actions resolve only existing DOCX, PDF, or XLSX files inside the workspace", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "amos-artifact-actions-"));
   await writeFile(join(workspace, "brief.pdf"), "%PDF-1.7\n");
+  await writeFile(join(workspace, "model.xlsx"), "PK\u0003\u0004");
   await writeFile(join(workspace, "notes.txt"), "not an artifact\n");
   const controller = new DesktopController({
     userDataPath: join(workspace, ".amos"),
@@ -317,13 +373,17 @@ test("document artifact actions resolve only existing DOCX or PDF files inside t
     await controller.resolveDocumentArtifactPath("brief.pdf"),
     await realpath(join(workspace, "brief.pdf"))
   );
+  assert.equal(
+    await controller.resolveDocumentArtifactPath("model.xlsx"),
+    await realpath(join(workspace, "model.xlsx"))
+  );
   await assert.rejects(
     controller.resolveDocumentArtifactPath("../brief.pdf"),
     /escapes workspace/
   );
   await assert.rejects(
     controller.resolveDocumentArtifactPath("notes.txt"),
-    /only DOCX and PDF/
+    /only DOCX, PDF, and XLSX/
   );
   await assert.rejects(
     controller.resolveDocumentArtifactPath("missing.docx"),

@@ -3638,6 +3638,7 @@ function renderCanvasBlock(block) {
   else if (block.type === "markdown") card = renderCanvasMarkdown(block);
   else if (block.type === "code") card = renderCanvasCode(block);
   else if (block.type === "document") card = renderCanvasDocument(block);
+  else if (block.type === "spreadsheet") card = renderCanvasSpreadsheet(block);
   else if (block.type === "browser") card = renderCanvasBrowser(block);
   else if (block.type === "link") card = renderCanvasLink(block);
   else if (block.type === "sources") card = renderCanvasSources(block);
@@ -4008,6 +4009,87 @@ function renderCanvasDocument(block) {
   return card;
 }
 
+function renderCanvasSpreadsheet(block) {
+  const card = canvasCard(block, "canvas-spreadsheet-block wide");
+  const summary = document.createElement("div");
+  summary.className = "spreadsheet-preview-summary";
+  const verified = document.createElement("span");
+  verified.className = `spreadsheet-verification-status ${block.verification.verified ? "ready" : "attention"}`;
+  verified.textContent = block.verification.verified ? "Reopened and verified" : "Verification incomplete";
+  const sheets = document.createElement("span");
+  sheets.textContent = `${block.verification.sheetCount} ${block.verification.sheetCount === 1 ? "sheet" : "sheets"}`;
+  const formulas = document.createElement("span");
+  formulas.textContent = `${block.verification.formulaCount} formulas checked`;
+  const checks = document.createElement("span");
+  checks.textContent = block.verification.checkCount
+    ? `${block.verification.checksPassed}/${block.verification.checkCount} checks passed`
+    : "No explicit checks";
+  summary.append(verified, sheets, formulas, checks);
+  card.append(summary);
+
+  if (block.sheetNames.length > 0) {
+    const sheetList = document.createElement("div");
+    sheetList.className = "spreadsheet-sheet-list";
+    for (const name of block.sheetNames) {
+      const chip = document.createElement("span");
+      chip.textContent = name;
+      sheetList.append(chip);
+    }
+    card.append(sheetList);
+  }
+
+  const failed = block.checks.filter((check) => !check.passed);
+  if (failed.length > 0) {
+    const diagnostics = document.createElement("div");
+    diagnostics.className = "spreadsheet-checks";
+    for (const check of failed.slice(0, 10)) {
+      const item = document.createElement("div");
+      const label = document.createElement("strong");
+      label.textContent = check.label;
+      const note = document.createElement("span");
+      note.textContent = check.note || "This spreadsheet check did not pass.";
+      item.append(label, note);
+      diagnostics.append(item);
+    }
+    card.append(diagnostics);
+  }
+
+  const artifactRow = document.createElement("div");
+  artifactRow.className = "document-artifacts spreadsheet-artifacts";
+  const row = document.createElement("div");
+  row.className = "document-artifact-row";
+  const copy = document.createElement("div");
+  const name = document.createElement("button");
+  name.type = "button";
+  name.className = "spreadsheet-artifact-link";
+  name.textContent = block.artifact.path;
+  name.title = "Open this Excel workbook";
+  name.addEventListener("click", () =>
+    openDocumentArtifact(block.artifact.path, "open", name, block.artifact.path)
+  );
+  const detail = document.createElement("small");
+  detail.textContent = `XLSX · ${formatBytes(block.artifact.bytes)} · SHA-256 ${block.artifact.sha256.slice(0, 12)}…`;
+  copy.append(name, detail);
+  const actions = document.createElement("div");
+  const open = actionButton("Open in Excel", "primary");
+  open.addEventListener("click", () => openDocumentArtifact(block.artifact.path, "open", open));
+  const reveal = actionButton("Show in folder", "secondary");
+  reveal.addEventListener("click", () => openDocumentArtifact(block.artifact.path, "reveal", reveal));
+  actions.append(open, reveal);
+  row.append(copy, actions);
+  artifactRow.append(row);
+  const refine = actionButton("Refine with AMOS", "secondary");
+  refine.classList.add("document-refine-button");
+  refine.addEventListener("click", () => {
+    showView("operator");
+    elements.promptInput.value = `Revise “${block.artifact.path}” and regenerate the verified Excel workbook. Preserve its current assumptions, formulas, and required checks unless I specify a change.`;
+    elements.promptInput.focus();
+  });
+  artifactRow.append(refine);
+  card.append(artifactRow);
+  return card;
+}
+
 function renderCanvasBrowser(block) {
   const card = canvasCard(block, "canvas-browser-block wide");
   const chrome = document.createElement("div");
@@ -4216,14 +4298,14 @@ function renderDocumentPreviewBlock(block) {
   return sources;
 }
 
-async function openDocumentArtifact(path, mode, button) {
+async function openDocumentArtifact(path, mode, button, idleLabel = "") {
   setButtonBusy(button, true, mode === "open" ? "Opening…" : "Finding…");
   try {
     await api.openDocumentArtifact(path, mode);
   } catch (error) {
     toast(error.message, true);
   } finally {
-    setButtonBusy(button, false, mode === "open" ? "Open" : "Show in folder");
+    setButtonBusy(button, false, idleLabel || (mode === "open" ? "Open" : "Show in folder"));
   }
 }
 
@@ -6478,18 +6560,35 @@ function addMessage(role, content, { eventId = "" } = {}) {
     markdown.className = "markdown-content";
     renderMarkdown(markdown, content);
     message.append(markdown);
+    const actions = document.createElement("div");
+    actions.className = "message-task-actions";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "message-copy-button";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      copy.disabled = true;
+      try {
+        await api.copyText(content);
+        copy.textContent = "Copied";
+        setTimeout(() => { copy.textContent = "Copy"; }, 1_500);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        copy.disabled = false;
+      }
+    });
+    actions.append(copy);
     const task = activeDurableTask();
     if (eventId && task) {
-      const actions = document.createElement("div");
-      actions.className = "message-task-actions";
       const fork = document.createElement("button");
       fork.type = "button";
       fork.className = "message-fork-button";
       fork.textContent = "Fork from here";
       fork.addEventListener("click", () => openTaskForkModal(task, eventId));
       actions.append(fork);
-      message.append(actions);
     }
+    message.append(actions);
   } else {
     const paragraph = document.createElement("p");
     paragraph.textContent = content;

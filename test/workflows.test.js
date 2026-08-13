@@ -34,6 +34,15 @@ test("attachments select document analysis without overriding explicit issue wor
   );
 });
 
+test("Excel and financial-model requests select deterministic spreadsheet modeling", () => {
+  const workflow = selectTaskWorkflow({
+    objective: "Build an Excel financial model with four ARR scenarios and a hiring plan"
+  });
+  assert.equal(workflow.id, "spreadsheet-model");
+  assert.ok(workflow.skills.some((skill) => skill.id === "spreadsheet-modeling"));
+  assert.match(workflow.doneWhen, /baselines pass/i);
+});
+
 test("workflow guidance is bounded and can be added to multimodal input", () => {
   const workflow = selectTaskWorkflow({ objective: "Implement this code change" });
   const content = applyWorkflowToModelContent(

@@ -506,6 +506,12 @@ test("canvas code and previews stay typed, inert, and outside the privileged ren
   assert.match(javascript, /api\.readDocumentPreview\(preview\.path\)/);
   assert.match(main, /shell\.openPath\(artifactPath\)/);
   assert.match(main, /shell\.showItemInFolder\(artifactPath\)/);
+  assert.match(javascript, /function renderCanvasSpreadsheet[\s\S]*?Open in Excel[\s\S]*?Show in folder/);
+  assert.match(javascript, /className = "spreadsheet-artifact-link"/);
+  assert.match(javascript, /className = "message-copy-button"/);
+  assert.match(javascript, /await api\.copyText\(content\)/);
+  assert.match(preload, /desktop:copy-text/);
+  assert.match(main, /clipboard\.writeText\(copy\)/);
 });
 
 test("chat renders only typed Platform-authorized connect actions", async () => {

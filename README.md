@@ -348,6 +348,7 @@ as the AMOS platform grows.
 - [Typed company canvas](docs/CANVAS.md)
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Governed browser and computer use](docs/BROWSER_AND_COMPUTER_USE.md)
+- [Verified spreadsheet artifact engine](docs/SPREADSHEET_ARTIFACT_ENGINE.md)
 - [Guided Automation setup](docs/GUIDED_AUTOMATION_SETUP.md)
 - [Browser/CUA gap analysis and roadmap](docs/BROWSER_CUA_GAP_ANALYSIS.md)
 - [Contributing](CONTRIBUTING.md)
@@ -356,7 +357,7 @@ as the AMOS platform grows.
 
 The near-term product path is:
 
-1. add spreadsheet and presentation engines beside the completed DOCX/PDF artifact system;
+1. add the presentation engine beside the completed DOCX/PDF and XLSX artifact systems;
 2. qualify and promote stable Desktop browser recipes into governed Platform
    connectors and scheduled automations where browser execution should not be
    the system of record;

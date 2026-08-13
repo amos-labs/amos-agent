@@ -10,6 +10,7 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "markdown",
   "code",
   "document",
+  "spreadsheet",
   "browser",
   "link",
   "sources",
@@ -35,6 +36,8 @@ const MAX_DECISION_DETAILS = 20;
 const MAX_DOCUMENT_ARTIFACTS = 2;
 const MAX_DOCUMENT_DIAGNOSTICS = 20;
 const MAX_DOCUMENT_PREVIEW_PAGES = 12;
+const MAX_SPREADSHEET_SHEETS = 32;
+const MAX_SPREADSHEET_CHECKS = 300;
 const SOURCE_KINDS = new Set(["live", "cached", "private", "local"]);
 const DECISION_KINDS = new Set(["approval", "receipt"]);
 const DECISION_STATUSES = new Set([
@@ -378,6 +381,72 @@ function normalizeBlock(input, index, canvasSource) {
     };
   }
 
+  if (type === "spreadsheet") {
+    const artifact = normalizeSpreadsheetArtifact(
+      block.artifact,
+      `blocks[${index}].artifact`
+    );
+    const verification = object(
+      block.verification || {},
+      `blocks[${index}].verification must be an object`
+    );
+    const sheetNames = array(
+      block.sheet_names || block.sheetNames || [],
+      `blocks[${index}].sheet_names`,
+      MAX_SPREADSHEET_SHEETS
+    ).map((name, sheetIndex) =>
+      text(name, `blocks[${index}].sheet_names[${sheetIndex}]`, 31)
+    );
+    const checks = array(
+      block.checks || [],
+      `blocks[${index}].checks`,
+      MAX_SPREADSHEET_CHECKS
+    ).map((check, checkIndex) => {
+      const value = object(check, `blocks[${index}].checks[${checkIndex}] must be an object`);
+      return {
+        label: text(value.label, `blocks[${index}].checks[${checkIndex}].label`, 240),
+        passed: value.passed === true,
+        required: value.required !== false,
+        note: optionalText(value.note, `blocks[${index}].checks[${checkIndex}].note`, 500)
+      };
+    });
+    return {
+      ...common,
+      artifact,
+      sheetNames,
+      checks,
+      verification: {
+        verified: verification.verified === true,
+        sheetCount: boundedInteger(
+          verification.sheetCount ?? verification.sheet_count ?? sheetNames.length,
+          `blocks[${index}].verification.sheet_count`,
+          1,
+          MAX_SPREADSHEET_SHEETS + 1
+        ),
+        formulaCount: boundedInteger(
+          verification.formulaCount ?? verification.formula_count ?? 0,
+          `blocks[${index}].verification.formula_count`,
+          0,
+          100_000
+        ),
+        checkCount: boundedInteger(
+          verification.checkCount ?? verification.check_count ?? checks.length,
+          `blocks[${index}].verification.check_count`,
+          0,
+          MAX_SPREADSHEET_CHECKS
+        ),
+        checksPassed: boundedInteger(
+          verification.checksPassed ?? verification.checks_passed ?? checks.filter((check) => check.passed).length,
+          `blocks[${index}].verification.checks_passed`,
+          0,
+          MAX_SPREADSHEET_CHECKS
+        ),
+        requiredChecksPassed: verification.requiredChecksPassed === true ||
+          verification.required_checks_passed === true
+      }
+    };
+  }
+
   if (type === "browser") {
     const viewport = object(block.viewport || {}, `blocks[${index}].viewport must be an object`);
     const localPreviewAttested = block[LOCAL_PREVIEW_ATTESTATION] === true;
@@ -645,6 +714,29 @@ function normalizeDocumentArtifact(input, path) {
   return {
     path: portablePath,
     format,
+    bytes: boundedInteger(artifact.bytes, `${path}.bytes`, 1, Number.MAX_SAFE_INTEGER),
+    sha256,
+    verified: artifact.verified === true
+  };
+}
+
+function normalizeSpreadsheetArtifact(input, path) {
+  const artifact = object(input, `${path} must be an object`);
+  const artifactPath = text(artifact.path, `${path}.path`, 1_000);
+  const portablePath = artifactPath.replaceAll("\\", "/");
+  if (
+    portablePath.startsWith("/") ||
+    /^[a-z]:\//i.test(portablePath) ||
+    portablePath.split("/").includes("..") ||
+    !portablePath.toLowerCase().endsWith(".xlsx")
+  ) {
+    throw new Error(`${path}.path must be a workspace-relative XLSX path`);
+  }
+  const sha256 = text(artifact.sha256, `${path}.sha256`, 64).toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error(`${path}.sha256 must be a SHA-256 digest`);
+  return {
+    path: portablePath,
+    format: "xlsx",
     bytes: boundedInteger(artifact.bytes, `${path}.bytes`, 1, Number.MAX_SAFE_INTEGER),
     sha256,
     verified: artifact.verified === true

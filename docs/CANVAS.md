@@ -10,6 +10,8 @@ Chat remains the command surface. The canvas is a presentation surface for:
 - time-series charts;
 - Markdown briefs;
 - inert, syntax-labelled code;
+- verified DOCX/PDF document previews;
+- verified XLSX workbook summaries, tables, and charts with direct open actions;
 - safe browser destinations for app, page, and course previews;
 - task-bound public browser observations with opaque local screenshot frames;
 - source and evidence lists; and
@@ -52,6 +54,7 @@ The v1 limits are intentionally bounded:
 - 6 series and 300 points per series;
 - 100 source references; and
 - 20 details per decision card; and
+- 32 sheet names and 300 spreadsheet checks per workbook card;
 - 50,000 characters per inert code block.
 
 Unknown block types, non-finite numeric values, oversized content, and malformed

@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -471,9 +472,9 @@ function registerIpc() {
       properties: ["openFile", "multiSelections"],
       filters: [
         {
-          name: "Documents, code, and images",
+          name: "Documents, spreadsheets, code, and images",
           extensions: [
-            "pdf", "docx", "txt", "md", "csv", "tsv", "json", "yaml", "yml",
+            "pdf", "docx", "xlsx", "txt", "md", "csv", "tsv", "json", "yaml", "yml",
             "html", "css", "js", "jsx", "ts", "tsx", "py", "rb", "rs", "go",
             "java", "c", "cpp", "h", "swift", "sql", "png", "jpg", "jpeg", "webp", "gif"
           ]
@@ -535,7 +536,7 @@ function registerIpc() {
   ipcMain.handle("desktop:open-document-artifact", async (_event, input) => {
     const mode = input?.mode || "open";
     if (!["open", "reveal"].includes(mode)) {
-      throw new Error("AMOS blocked an unsupported document artifact action");
+      throw new Error("AMOS blocked an unsupported local artifact action");
     }
     const artifactPath = await controller.resolveDocumentArtifactPath(input?.path);
     if (mode === "reveal") {
@@ -543,8 +544,14 @@ function registerIpc() {
       return { ok: true, mode };
     }
     const error = await shell.openPath(artifactPath);
-    if (error) throw new Error(`AMOS could not open that document artifact: ${error}`);
+    if (error) throw new Error(`AMOS could not open that local artifact: ${error}`);
     return { ok: true, mode };
+  });
+  ipcMain.handle("desktop:copy-text", (_event, value) => {
+    const copy = String(value || "");
+    if (!copy || copy.length > 1_000_000) throw new Error("AMOS blocked invalid copy text");
+    clipboard.writeText(copy);
+    return { ok: true, characters: copy.length };
   });
   ipcMain.handle("desktop:read-document-preview", async (_event, input) => {
     const previewPath = await controller.resolveDocumentPreviewPath(input?.path);

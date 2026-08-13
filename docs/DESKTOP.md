@@ -395,7 +395,7 @@ proof govern any resulting action. See
 The next product layers build on the signed distribution foundation:
 
 1. signed device identity and policy-controlled environment grants;
-2. spreadsheet and presentation artifact engines on the same typed contract;
+2. presentation artifacts beside the completed typed DOCX/PDF and XLSX engines;
 3. Platform promotion and scheduling for stable deterministic browser recipes;
 4. richer typed canvas blocks and managed AMOS result adapters;
 5. richer private-memory retrieval and sharing proposals;
