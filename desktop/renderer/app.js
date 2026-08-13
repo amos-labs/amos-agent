@@ -112,7 +112,7 @@ const elements = Object.fromEntries(
     "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
-    "recentDecisions", "interruptedTaskList", "updateButton", "privateMemoryList", "privateMemoryEmpty",
+    "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "workDecisionsTab", "workProofTab", "workDecisionTabCount", "workDecisionsPanel", "workProofPanel",
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
     "workingContinuityCard", "workingContinuityStatus", "workingContinuityDetail",
@@ -136,7 +136,7 @@ const elements = Object.fromEntries(
     "automationSetupPhases", "automationSetupBody", "automationSetupError",
     "automationSetupBack", "automationSetupNext", "automationSetupClose", "canvasSurface",
     "taskSummary", "taskSearchInput", "taskFilterInput", "taskPlatformNotice", "taskEmpty",
-    "taskList", "newTaskButton",
+    "taskList", "newTaskButton", "conversationRecovery", "conversationRecoveryList",
     "projectSummary", "projectUnavailable", "projectSearchInput", "projectEmpty", "projectList",
     "refreshProjectsButton", "newProjectButton", "activityCenterScope", "projectRunFilter",
     "activityCenterEmpty", "activityCenterList", "projectModal", "projectForm",
@@ -162,7 +162,7 @@ const elements = Object.fromEntries(
     "briefingIntervalField", "briefingScheduleError", "briefingScheduleCancel",
     "briefingScheduleSubmit",
     "forkTaskModal", "forkTaskForm", "forkTaskTitle", "forkTaskParent",
-    "forkTaskParentId", "forkTaskSourceEventId", "forkTaskName", "forkTaskObjective",
+    "forkTaskParentId", "forkTaskSourceEventId", "forkTaskName", "forkTaskObjective", "forkAdvancedOptions",
     "forkArtifactPicker", "forkArtifactList", "forkTaskPreview", "forkTaskError",
     "forkTaskCancel", "forkTaskSubmit"
   ].map((id) => [id, document.getElementById(id)])
@@ -419,6 +419,8 @@ function bindEvents() {
   api.on("task-checkpoints:changed", (taskCheckpoints) => {
     if (!state) return;
     state.taskCheckpoints = taskCheckpoints || [];
+    renderTasks();
+    renderProjects();
     renderDecisions();
   });
   api.on("remote:changed", (remote) => {
@@ -452,7 +454,7 @@ function bindEvents() {
   });
   api.on("approval:requested", (approval) => {
     if (!eventMatchesActiveTask(approval)) {
-      toast("A background task needs local approval. Open it from Tasks to review.");
+      toast("A background run needs local approval. Open its Conversation to review.");
       return;
     }
     pendingApproval = approval;
@@ -2552,9 +2554,15 @@ function renderActivityCenter(projects, inbox) {
     if (filter === "completed") return terminal.has(run.status);
     return true;
   });
-  elements.activityCenterScope.textContent = selectedProject?.name || "All Projects";
-  elements.activityCenterEmpty.classList.toggle("hidden", visible.length > 0);
+  const recoveries = !selectedProjectId && ["attention", "completed", "all"].includes(filter)
+    ? (state.taskCheckpoints || [])
+    : [];
+  elements.activityCenterScope.textContent = selectedProject?.name || "All Projects & Conversations";
+  elements.activityCenterEmpty.classList.toggle("hidden", visible.length + recoveries.length > 0);
   elements.activityCenterList.replaceChildren();
+  for (const checkpoint of recoveries) {
+    elements.activityCenterList.append(taskCheckpointCard(checkpoint));
+  }
   for (const run of visible) elements.activityCenterList.append(activityRunCard(run));
 }
 
@@ -2744,6 +2752,7 @@ function renderTasks() {
   if (!state) return;
   const library = state.tasks || { supported: false, tasks: [] };
   const tasks = Array.isArray(library.tasks) ? library.tasks : [];
+  const checkpoints = Array.isArray(state.taskCheckpoints) ? state.taskCheckpoints : [];
   const query = elements.taskSearchInput.value.trim().toLowerCase();
   const filter = elements.taskFilterInput.value || "current";
   const visible = tasks.filter((task) => {
@@ -2762,15 +2771,25 @@ function renderTasks() {
   const waiting = current.filter((task) => task.status === "waiting").length;
   const forks = current.filter((task) => task.parentTaskId || task.kind === "fork").length;
   const active = current.filter((task) => task.status === "active").length;
+  const visibleCheckpoints = ["current", "recent", "all"].includes(filter)
+    ? checkpoints.filter((checkpoint) => (
+        !query || `${checkpoint.title}\n${checkpoint.objective}`.toLowerCase().includes(query)
+      ))
+    : [];
 
-  elements.taskBadge.textContent = String(waiting || active);
-  elements.taskBadge.classList.toggle("hidden", waiting + active === 0);
+  elements.taskBadge.textContent = String(waiting + checkpoints.length || active);
+  elements.taskBadge.classList.toggle("hidden", waiting + active + checkpoints.length === 0);
   elements.taskPlatformNotice.classList.toggle("hidden", library.platformSupported !== false);
-  elements.taskEmpty.classList.toggle("hidden", visible.length > 0);
+  elements.taskEmpty.classList.toggle("hidden", visible.length + visibleCheckpoints.length > 0);
+  elements.conversationRecovery.classList.toggle("hidden", visibleCheckpoints.length === 0);
+  elements.conversationRecoveryList.replaceChildren();
+  for (const checkpoint of visibleCheckpoints) {
+    elements.conversationRecoveryList.append(taskCheckpointCard(checkpoint));
+  }
   elements.taskSummary.replaceChildren();
   for (const [label, value, detail] of [
-    ["Active", active, "context lanes ready to continue"],
-    ["Waiting", waiting, "tasks waiting on a person or external event"],
+    ["Open", active, "conversation lanes ready to continue"],
+    ["Waiting", waiting + checkpoints.length, "conversations waiting for attention"],
     ["Forks", forks, "bounded branches with visible lineage"]
   ]) {
     const item = document.createElement("article");
@@ -2835,7 +2854,7 @@ function taskCard(task) {
   title.textContent = task.title;
   copy.append(meta, title);
   const updated = document.createElement("time");
-  updated.textContent = task.updatedAt ? relativeTime(task.updatedAt) : "Local task";
+  updated.textContent = task.updatedAt ? relativeTime(task.updatedAt) : "Local conversation";
   heading.append(copy, updated);
 
   const objective = document.createElement("p");
@@ -2847,7 +2866,7 @@ function taskCard(task) {
   for (const value of [
     task.kind === "automation_builder" ? "Automation build" : humanizeTool(task.kind || "general"),
     taskWorkspaceLabel(task),
-    task.parentTaskId ? `From ${shortTaskId(task.parentTaskId)}` : "Root task",
+    task.parentTaskId ? `From ${shortTaskId(task.parentTaskId)}` : "Root conversation",
     task.remote ? "Platform + local" : "Encrypted local"
   ]) {
     const chip = document.createElement("span");
@@ -2858,17 +2877,19 @@ function taskCard(task) {
   const actions = document.createElement("div");
   actions.className = "task-card-actions";
   const archived = Boolean(task.archivedAt || task.archived);
-  const open = actionButton(task.active || taskRunning ? "Open in Operator" : "Resume", "primary");
+  const open = actionButton(task.active || taskRunning ? "Open in Operator" : "Continue", "primary");
   open.disabled = archived;
   open.addEventListener("click", () => openManagedTask(task, open));
   const fork = actionButton("Fork", "secondary");
-  fork.disabled = archived;
-  fork.addEventListener("click", () => openTaskForkModal(task));
+  const forkCapability = task.forkCapability || { canFork: false, reason: "no_persisted_milestone" };
+  fork.disabled = archived || !forkCapability.canFork;
+  fork.title = conversationForkCapabilityMessage(forkCapability);
+  fork.addEventListener("click", () => openTaskForkModal(task, forkCapability.latestMilestoneId));
   const pin = actionButton(task.pinned ? "Unpin" : "Pin", "ghost");
   pin.addEventListener("click", () => updateManagedTask(task, { pinned: !task.pinned }, pin));
   const rename = actionButton("Rename", "ghost");
   rename.addEventListener("click", async () => {
-    const next = window.prompt("Task name", task.title);
+    const next = window.prompt("Conversation name", task.title);
     if (next?.trim() && next.trim() !== task.title) {
       await updateManagedTask(task, { title: next.trim() }, rename);
     }
@@ -2917,7 +2938,7 @@ async function createNewConversation(sourceButton = elements.newConversationButt
     adoptOpenedTask(response);
     elements.promptInput.value = "";
     elements.promptInput.focus();
-    toast("Started a new conversation. Its context and branches are managed under Tasks.");
+    toast("Started a new conversation. Continue or manage its branches under Conversations.");
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -2930,11 +2951,15 @@ async function createNewConversation(sourceButton = elements.newConversationButt
 
 function forkCurrentConversation() {
   const task = activeDurableTask();
-  if (!task) {
-    toast("Start a conversation before creating a fork.", true);
+  const capability = state?.conversationCapabilities || task?.forkCapability || {
+    canFork: false,
+    reason: "no_conversation"
+  };
+  if (!task || !capability.canFork) {
+    toast(conversationForkCapabilityMessage(capability), true);
     return;
   }
-  openTaskForkModal(task, latestTaskEventId(task));
+  openTaskForkModal(task, capability.latestMilestoneId);
 }
 
 async function openManagedTask(task, button) {
@@ -2942,11 +2967,11 @@ async function openManagedTask(task, button) {
   try {
     const response = await api.openTask(task.id);
     adoptOpenedTask(response);
-    toast("Task restored. AMOS will revalidate current sources and authority before acting.");
+    toast("Conversation opened. AMOS will revalidate current sources and authority before acting.");
   } catch (error) {
     toast(error.message, true);
   } finally {
-    if (button.isConnected) setButtonBusy(button, false, task.active ? "Open in Operator" : "Resume");
+    if (button.isConnected) setButtonBusy(button, false, task.active ? "Open in Operator" : "Continue");
   }
 }
 
@@ -3002,10 +3027,17 @@ function adoptOpenedTask(response) {
 }
 
 function openTaskForkModal(task, sourceEventId = "") {
+  const capability = task?.forkCapability || (
+    task?.id === state?.tasks?.activeTaskId ? state?.conversationCapabilities : null
+  );
+  const exactEventId = sourceEventId || capability?.latestMilestoneId || "";
+  if (!task || !capability?.canFork || !exactEventId) {
+    toast(conversationForkCapabilityMessage(capability), true);
+    return;
+  }
   forkTaskSource = task;
-  const exactEventId = sourceEventId || latestTaskEventId(task);
   elements.forkTaskParentId.value = task.id;
-  elements.forkTaskSourceEventId.value = exactEventId || task.contextKey || `task:${task.id}`;
+  elements.forkTaskSourceEventId.value = exactEventId;
   elements.forkTaskParent.textContent = sourceEventId
     ? `Branching from an exact milestone in “${task.title}”.`
     : `Branching from “${task.title}”.`;
@@ -3030,6 +3062,7 @@ function openTaskForkModal(task, sourceEventId = "") {
   }
   elements.forkTaskError.textContent = "";
   elements.forkTaskError.classList.add("hidden");
+  elements.forkAdvancedOptions.open = false;
   renderTaskForkPreview();
   elements.forkTaskModal.classList.remove("hidden");
   elements.forkTaskName.focus();
@@ -3039,6 +3072,7 @@ function closeTaskForkModal() {
   forkTaskSource = null;
   elements.forkTaskModal.classList.add("hidden");
   elements.forkTaskForm.reset();
+  elements.forkAdvancedOptions.open = false;
   elements.forkTaskError.classList.add("hidden");
 }
 
@@ -3091,11 +3125,6 @@ async function submitTaskFork(event) {
   } finally {
     setButtonBusy(elements.forkTaskSubmit, false, "Create fork");
   }
-}
-
-function latestTaskEventId(task) {
-  if (task.id !== state.tasks?.activeTaskId) return "";
-  return state.sessionContinuity?.turns?.at(-1)?.id || "";
 }
 
 function taskArtifacts(task) {
@@ -5094,21 +5123,21 @@ function renderConversationChrome() {
 
 function renderConversationActions() {
   elements.newConversationButton.disabled = false;
-  const active = activeDurableTask();
-  elements.forkConversationButton.disabled = !active;
-  elements.forkConversationButton.title = active
-    ? "Create a governed branch from the latest retained milestone"
-    : "Start a conversation before creating a fork";
+  const capability = state?.conversationCapabilities || activeDurableTask()?.forkCapability || {
+    canFork: false,
+    reason: "no_conversation"
+  };
+  elements.forkConversationButton.disabled = !capability.canFork;
+  elements.forkConversationButton.title = conversationForkCapabilityMessage(capability);
 }
 
 function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
   const proposals = Array.isArray(state.offlineProposals) ? state.offlineProposals : [];
-  const checkpoints = Array.isArray(state.taskCheckpoints) ? state.taskCheckpoints : [];
   const pending = approvals.filter((approval) => approval.status === "pending");
   const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  const waitingCount = pending.length + proposals.length + checkpoints.length;
+  const waitingCount = pending.length + proposals.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
   elements.workDecisionTabCount.textContent = String(waitingCount);
@@ -5139,17 +5168,6 @@ function renderDecisions() {
             : "";
   elements.decisionNotice.textContent = notice;
   elements.decisionNotice.classList.toggle("hidden", !notice);
-
-  elements.interruptedTaskList.replaceChildren();
-  if (checkpoints.length === 0) {
-    elements.interruptedTaskList.append(
-      decisionEmpty("No interrupted or failed conversations are waiting to be reopened.")
-    );
-  } else {
-    for (const checkpoint of checkpoints) {
-      elements.interruptedTaskList.append(taskCheckpointCard(checkpoint));
-    }
-  }
 
   elements.offlineProposalList.replaceChildren();
   if (proposals.length === 0) {
@@ -5204,7 +5222,7 @@ function taskCheckpointCard(checkpoint) {
   const title = document.createElement("h2");
   title.textContent = checkpoint.title;
   const summary = document.createElement("p");
-  summary.textContent = checkpoint.progress?.summary || "Task stopped before completion.";
+  summary.textContent = checkpoint.progress?.summary || "Conversation run stopped before completion.";
   const provenance = document.createElement("small");
   provenance.textContent = [
     checkpoint.source?.tenantSlug,
@@ -5265,6 +5283,8 @@ async function resumeTaskCheckpoint(id, button) {
     resumingCheckpointId = id;
     showView("operator");
     elements.promptInput.focus();
+    renderTasks();
+    renderProjects();
     renderDecisions();
     toast("Context revalidated and reopened. Review the continuation, then press Run.");
   } catch (error) {
@@ -5280,8 +5300,10 @@ async function removeTaskCheckpoint(checkpoint, button) {
   try {
     const result = await api.removeTaskCheckpoint(checkpoint.id);
     state.taskCheckpoints = result.taskCheckpoints || [];
+    renderTasks();
+    renderProjects();
     renderDecisions();
-    toast("Task checkpoint removed.");
+    toast("Conversation checkpoint removed.");
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -6395,8 +6417,18 @@ async function runTask(event) {
       resumeTaskId: resumingCheckpointId,
       attachments: submitted.map((item) => ({ id: item.id, retention: item.retention }))
     });
+    if (!submittedTask.taskRecordId && result.taskRecordId) {
+      state.activeTaskRecordId = result.taskRecordId;
+      state.activeContextKey = result.contextKey || state.activeContextKey;
+      submittedTask.taskRecordId = result.taskRecordId;
+      submittedTask.contextKey = result.contextKey || submittedTask.contextKey;
+      const materialized = await api.state().catch(() => null);
+      state.tasks = materialized?.tasks || state.tasks;
+      state.conversationCapabilities = materialized?.conversationCapabilities || state.conversationCapabilities;
+      state.sessionContinuity = materialized?.sessionContinuity || state.sessionContinuity;
+    }
     if (!isStillVisible() || !eventMatchesActiveTask(result)) {
-      toast("A background task completed. Open it from Tasks or Projects to review the result.");
+      toast("A background run completed. Open its Conversation or Project to review the result.");
       return;
     }
     resumingCheckpointId = null;
@@ -6435,7 +6467,7 @@ async function runTask(event) {
     addMessage(
       "error",
       error?.code === "AMOS_TASK_CANCELED" || /task canceled/i.test(error.message)
-        ? "Task stopped safely. Its encrypted checkpoint is available under Decisions if you want to revalidate and continue."
+        ? "Run stopped safely. Its encrypted checkpoint is available under Conversations if you want to revalidate and continue."
         : error.message
     );
   } finally {
@@ -6446,11 +6478,14 @@ async function runTask(event) {
       state.localReceipts = latest.localReceipts || [];
       state.tasks = latest.tasks || state.tasks;
       state.activeTaskRecordId = latest.activeTaskRecordId || state.activeTaskRecordId;
+      state.activeContextKey = latest.activeContextKey || state.activeContextKey;
+      state.conversationCapabilities = latest.conversationCapabilities || state.conversationCapabilities;
       state.sessionContinuity = latest.sessionContinuity || state.sessionContinuity;
       renderPrivateMemory();
       renderDecisions();
       renderHistory();
       renderTasks();
+      renderConversationActions();
     } catch {
       // Task completion must not be masked if a local memory refresh fails.
     }
@@ -6633,6 +6668,17 @@ function activeDurableTask() {
   return (state?.tasks?.tasks || []).find((task) =>
     task.id === state.tasks?.activeTaskId || task.id === state.activeTaskRecordId
   ) || null;
+}
+
+function conversationForkCapabilityMessage(capability = {}) {
+  if (capability.canFork) {
+    return "Create a governed branch from the latest persisted conversation milestone";
+  }
+  if (capability.reason === "archived") return "Restore this conversation before forking it";
+  if (capability.reason === "no_persisted_milestone") {
+    return "Complete the first exchange before forking this conversation";
+  }
+  return "Start a conversation before creating a fork";
 }
 
 function eventMatchesActiveTask(value = {}) {

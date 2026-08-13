@@ -1733,6 +1733,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   font-size: 9px;
   line-height: 1.5;
 }
+.conversation-recovery {
+  max-width: 1240px;
+  margin: 0 0 16px;
+}
+.conversation-recovery .recent-heading { margin-top: 0; }
+.conversation-recovery-list { display: grid; gap: 10px; }
 .task-list { display: grid; max-width: 1240px; gap: 11px; padding-bottom: 42px; }
 .task-card {
   display: grid;
@@ -1873,6 +1879,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .project-budget-grid .connection-field:last-child { grid-column: 1 / -1; }
 .task-fork-modal { width: min(720px, 100%); }
+.fork-advanced-options {
+  margin-top: 17px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--modal-inset);
+}
+.fork-advanced-options > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
 .connection-field textarea {
   width: 100%;
   box-sizing: border-box;

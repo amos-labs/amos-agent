@@ -233,6 +233,9 @@ export class DesktopController {
 
   async state() {
     const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    await this.backfillActiveConversation(settings).catch((error) => {
+      this.record("task", `Could not index the current conversation: ${error.message}`);
+    });
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
@@ -256,6 +259,8 @@ export class DesktopController {
     const accounts = this.accountStore
       ? await this.accountStore.list()
       : { currentAccountId: useOAuth ? "legacy" : "", accounts: [] };
+    const tasks = await this.tasksState(settings);
+    const sessionContinuity = await this.sessionContinuityState(settings);
     return {
       configured,
       connected: useOAuth || Boolean(config.amos.apiKey),
@@ -284,7 +289,8 @@ export class DesktopController {
       ),
       automationSetup: publicAutomationSetup(this.automationSetup),
       browserRecipes: await this.browserRecipeState(settings),
-      tasks: await this.tasksState(settings),
+      tasks,
+      conversationCapabilities: tasks.activeForkCapability,
       projects: structuredClone(this.projects),
       companies: {
         currentTenantId: this.companies.currentTenantId,
@@ -312,7 +318,7 @@ export class DesktopController {
       companyCache: await this.companyCacheState(),
       offlineProposals: await this.offlineProposalState(),
       taskCheckpoints: await this.taskCheckpointState(),
-      sessionContinuity: await this.sessionContinuityState(settings),
+      sessionContinuity,
       localReceipts: this.localReceiptStore
         ? await this.localReceiptStore.list(privateMemoryScope(this.identity))
         : [],
@@ -1669,6 +1675,7 @@ export class DesktopController {
 
   async run(input) {
     const settings = await this.settingsStore.read();
+    await this.ensureActiveConversation(conversationObjectiveFromInput(input), settings);
     const taskRecordId = String(this.activeTaskRecordId || this.activeContextKey || "active");
     if (this.runManager.findByTask(taskRecordId)) {
       throw new Error("This task is already running. Add direction to steer it, or open another task.");
@@ -2532,6 +2539,97 @@ export class DesktopController {
     };
   }
 
+  async backfillActiveConversation(settings = null) {
+    if (!this.taskStore || this.activeTaskRecordId) return null;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return null;
+    const indexed = await this.taskStore.findByContext(scope, this.activeContextKey || "active");
+    if (indexed) {
+      this.activeTaskRecordId = indexed.id;
+      return indexed;
+    }
+    const continuityScopeValue = this.sessionContinuityScope(
+      currentSettings,
+      currentSettings.operatingMode
+    );
+    const continuity = continuityScopeValue && this.sessionContinuityStore
+      ? await this.sessionContinuityStore.load(continuityScopeValue)
+      : null;
+    const latestTurn = continuity?.turns?.at(-1);
+    if (!latestTurn) return null;
+    return this.materializeConversation(latestTurn.objective, currentSettings, {
+      contextKey: this.activeContextKey || "active"
+    });
+  }
+
+  async ensureActiveConversation(objective, settings = null) {
+    if (!this.taskStore) return null;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return null;
+    if (this.activeTaskRecordId) {
+      const active = await this.taskStore.get(scope, this.activeTaskRecordId);
+      if (active) return active;
+      this.activeTaskRecordId = null;
+    }
+    const indexed = await this.taskStore.findByContext(scope, this.activeContextKey || "active");
+    if (indexed) {
+      this.activeTaskRecordId = indexed.id;
+      return indexed;
+    }
+    return this.materializeConversation(objective, currentSettings);
+  }
+
+  async materializeConversation(objective, settings, { contextKey = "" } = {}) {
+    const scope = this.taskScope(settings);
+    if (!this.taskStore || !scope) return null;
+    const id = randomUUID();
+    const normalizedObjective = String(objective || NEW_CONVERSATION_OBJECTIVE)
+      .trim()
+      .slice(0, 6_000) || NEW_CONVERSATION_OBJECTIVE;
+    const normalizedContextKey = contextKey || `task:${id}`;
+    const workspace = await this.localTaskWorkspace(settings, "same_directory");
+    let task = await this.taskStore.create(scope, {
+      id,
+      contextKey: normalizedContextKey,
+      title: conversationTitle(normalizedObjective),
+      objective: normalizedObjective,
+      kind: "general",
+      status: "active",
+      workspaceMode: "same_directory",
+      workspace
+    });
+    this.activeContextKey = normalizedContextKey;
+    this.activeTaskRecordId = id;
+    if (settings.operatingMode === "online" && this.identity?.principal_type === "user") {
+      try {
+        const remote = await this.personalRemote(settings, "creating this conversation");
+        const registered = await remote.registerTask({
+          id,
+          contextKey: normalizedContextKey,
+          title: task.title,
+          objective: task.objective,
+          kind: task.kind,
+          status: task.status,
+          workspaceMode: task.workspaceMode,
+          workspace: portableTaskWorkspace(workspace),
+          resourceRefs: []
+        });
+        task = await this.retainRemoteTask(settings, registered.task, task);
+        this.upsertRemoteTask(registered.task);
+      } catch (error) {
+        this.record("task", `Conversation will sync when Platform is available: ${error.message}`);
+      }
+    }
+    this.record("task", `Indexed conversation ${task.title}`, {
+      context_key: normalizedContextKey,
+      task_id: id,
+      replay_allowed: false
+    });
+    return task;
+  }
+
   async startNewConversation(input = {}) {
     const kind = String(input.kind || "general");
     if (!["general", "automation_builder", "goal_pursuit"].includes(kind)) {
@@ -2901,9 +2999,24 @@ export class DesktopController {
     const parentId = String(input.taskId || this.activeTaskRecordId || "");
     const parent = await this.taskStore.get(scope, parentId);
     if (!parent) throw new Error("That parent task is not available to this account");
+    const parentContinuityScope = continuityScope({
+      identity: this.identity,
+      boundary: settings.operatingMode,
+      workspace: parent.workspace?.localPath || settings.workspace || homedir(),
+      contextKey: parent.contextKey
+    });
+    const parentContinuity = this.sessionContinuityStore && parentContinuityScope
+      ? await this.sessionContinuityStore.load(parentContinuityScope)
+      : null;
+    const forkCapability = conversationForkCapability(parent, parentContinuity);
+    if (!forkCapability.canFork) {
+      throw new Error(conversationForkUnavailableMessage(forkCapability.reason));
+    }
     const name = String(input.name || "").trim().slice(0, 160);
     const objective = String(input.objective || "").trim().slice(0, 6_000);
-    const sourceEventId = String(input.sourceEventId || "").trim().slice(0, 160);
+    const sourceEventId = String(
+      input.sourceEventId || forkCapability.latestMilestoneId || ""
+    ).trim().slice(0, 160);
     const contextScope = String(input.contextScope || "from_here");
     const workspaceMode = String(input.workspaceMode || "same_directory");
     const selectedArtifacts = Array.isArray(input.selectedArtifacts)
@@ -2911,6 +3024,9 @@ export class DesktopController {
       : [];
     if (!name || !objective || !sourceEventId) {
       throw new Error("A task fork needs a name, objective, and source milestone");
+    }
+    if (!parentContinuity?.turns?.some((turn) => turn.id === sourceEventId)) {
+      throw new Error("The selected conversation milestone is no longer available to fork");
     }
     if (!["everything", "from_here", "selected_artifacts"].includes(contextScope)) {
       throw new Error("Choose a valid task context scope");
@@ -2962,12 +3078,6 @@ export class DesktopController {
       boundary: settings.operatingMode,
       workspace: workspace.localPath || settings.workspace || homedir(),
       contextKey: childContextKey
-    });
-    const parentContinuityScope = continuityScope({
-      identity: this.identity,
-      boundary: settings.operatingMode,
-      workspace: parent.workspace?.localPath || settings.workspace || homedir(),
-      contextKey: parent.contextKey
     });
     let continuity = null;
     if (this.sessionContinuityStore && parentContinuityScope && childScope) {
@@ -3954,6 +4064,16 @@ export class DesktopController {
   async tasksState(settings = null) {
     const currentSettings = settings || await this.settingsStore.read();
     const scope = this.taskScope(currentSettings);
+    const continuityOwnerScope = this.sessionContinuityScope(
+      currentSettings,
+      currentSettings.operatingMode
+    );
+    const continuityRecords = this.sessionContinuityStore && continuityOwnerScope
+      ? await this.sessionContinuityStore.listForOwner(continuityOwnerScope)
+      : [];
+    const continuityByContext = new Map(
+      continuityRecords.map((record) => [record.contextKey, record])
+    );
     const local = this.taskStore && scope
       ? await this.taskStore.list(scope, { includeArchived: true })
       : [];
@@ -3962,6 +4082,10 @@ export class DesktopController {
       const run = this.runManager.findByTask(task.id);
       return {
         ...task,
+        forkCapability: conversationForkCapability(
+          task,
+          continuityByContext.get(task.contextKey)
+        ),
         remote: remoteById.has(task.remoteId || task.id),
         active: task.id === this.activeTaskRecordId,
         running: Boolean(run),
@@ -3975,6 +4099,10 @@ export class DesktopController {
       const run = this.runManager.findByTask(remote.id);
       tasks.push({
         ...remote,
+        forkCapability: conversationForkCapability(
+          remote,
+          continuityByContext.get(remote.contextKey)
+        ),
         remoteId: remote.id,
         canvasState: { activeCanvasId: null, canvases: [] },
         local: false,
@@ -3990,10 +4118,12 @@ export class DesktopController {
       if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
       return String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""));
     });
+    const activeTask = tasks.find((task) => task.id === this.activeTaskRecordId) || null;
     return {
       supported: Boolean(this.taskStore) || this.tasks?.supported === true,
       platformSupported: this.tasks?.supported === true,
       activeTaskId: this.activeTaskRecordId,
+      activeForkCapability: activeTask?.forkCapability || conversationForkCapability(null, null),
       tasks,
       contract: this.tasks?.contract || {
         replayAllowed: false,
@@ -4373,6 +4503,9 @@ export class DesktopController {
         ? await this.browserRecipeState(taskSettings)
         : { supported: false, recipes: [] },
       tasks,
+      ...(tasks.activeForkCapability
+        ? { conversationCapabilities: tasks.activeForkCapability }
+        : {}),
       projects: structuredClone(this.projects),
       companies: {
         currentTenantId: this.companies.currentTenantId,
@@ -5001,6 +5134,58 @@ function conversationTitle(objective) {
     .trim()
     .replace(/\s+/g, " ")
     .slice(0, 80) || NEW_CONVERSATION_TITLE;
+}
+
+function conversationObjectiveFromInput(input) {
+  const attachments = Array.isArray(input?.attachments) ? input.attachments : [];
+  const requested = typeof input === "string" ? input : input?.text;
+  return String(requested || "").trim() || (
+    attachments.length > 0
+      ? "Review the attached material and tell me what is important."
+      : NEW_CONVERSATION_OBJECTIVE
+  );
+}
+
+function conversationForkCapability(task, continuity) {
+  if (!task) {
+    return {
+      canFork: false,
+      reason: "no_conversation",
+      latestMilestoneId: "",
+      milestoneCount: 0
+    };
+  }
+  if (task.archivedAt || task.archived) {
+    return {
+      canFork: false,
+      reason: "archived",
+      latestMilestoneId: "",
+      milestoneCount: 0
+    };
+  }
+  const milestones = (continuity?.turns || []).filter((turn) => turn.status === "completed");
+  if (milestones.length === 0) {
+    return {
+      canFork: false,
+      reason: "no_persisted_milestone",
+      latestMilestoneId: "",
+      milestoneCount: 0
+    };
+  }
+  return {
+    canFork: true,
+    reason: "ready",
+    latestMilestoneId: milestones.at(-1).id,
+    milestoneCount: milestones.length
+  };
+}
+
+function conversationForkUnavailableMessage(reason) {
+  if (reason === "archived") return "Restore this conversation before forking it";
+  if (reason === "no_persisted_milestone") {
+    return "Complete the first exchange before forking this conversation";
+  }
+  return "Start a conversation before creating a fork";
 }
 
 function receiptEvent(event) {

@@ -73,6 +73,65 @@ test("a new conversation opens without a prompt and adopts its first objective",
   );
 });
 
+test("an ordinary first message materializes a durable conversation and exposes typed fork state", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-auto-conversation-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:00:00.000Z")
+  });
+  const continuity = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:01:00.000Z")
+  });
+  const settings = settingsStore(root);
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    sessionContinuityStore: continuity,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.executeRun = async () => ({ answer: "Hello", taskEventId: "run:test" });
+
+  const result = await controller.run({ text: "Hello AMOS" });
+  const owner = taskOwnerScope({ boundary: "personal", workspace: root });
+  const [conversation] = await tasks.list(owner);
+  assert.equal(conversation.objective, "Hello AMOS");
+  assert.equal(controller.activeTaskRecordId, conversation.id);
+  assert.equal(result.taskRecordId, conversation.id);
+
+  let library = await controller.tasksState(await settings.read());
+  assert.deepEqual(library.activeForkCapability, {
+    canFork: false,
+    reason: "no_persisted_milestone",
+    latestMilestoneId: "",
+    milestoneCount: 0
+  });
+
+  await continuity.appendTurn(
+    continuityScope({
+      boundary: "personal",
+      workspace: root,
+      contextKey: conversation.contextKey
+    }),
+    {
+      eventId: "turn:hello",
+      objective: "Hello AMOS",
+      answer: "Hello"
+    }
+  );
+  library = await controller.tasksState(await settings.read());
+  assert.deepEqual(library.activeForkCapability, {
+    canFork: true,
+    reason: "ready",
+    latestMilestoneId: "turn:hello",
+    milestoneCount: 1
+  });
+});
+
 test("Desktop opens and forks durable tasks without replaying a model or tool call", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-managed-tasks-"));
   const tasks = new DesktopTaskStore({
@@ -153,6 +212,18 @@ test("Desktop opens and forks durable tasks without replaying a model or tool ca
     modelRuns += 1;
     throw new Error("model must not run during task navigation");
   };
+
+  await assert.rejects(
+    controller.forkTaskResource({
+      taskId: parentId,
+      name: "Invalid milestone",
+      objective: "This must not fork",
+      sourceEventId: "turn:not-present",
+      contextScope: "from_here",
+      workspaceMode: "context_only"
+    }),
+    /milestone is no longer available/
+  );
 
   const opened = await controller.openTask(parentId);
   assert.equal(opened.replayed, false);

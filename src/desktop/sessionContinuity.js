@@ -30,6 +30,15 @@ export class SessionContinuityStore {
     return record ? publicRecord(record) : null;
   }
 
+  async listForOwner(scope) {
+    const normalizedScope = normalizeScope(scope);
+    const store = await this.readStore();
+    return store.records
+      .filter((record) => sameContinuityOwner(record, normalizedScope))
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .map(publicRecord);
+  }
+
   async appendTurn(
     scope,
     {
