@@ -78,6 +78,27 @@ test("canvas contract normalizes every safe block type", () => {
         total_blocks: 1
       },
       {
+        type: "spreadsheet",
+        title: "Verified workbook",
+        artifact: {
+          path: "models/quarterly-plan.xlsx",
+          format: "xlsx",
+          bytes: 4096,
+          sha256: "d".repeat(64),
+          verified: true
+        },
+        sheet_names: ["Assumptions", "Base Case"],
+        verification: {
+          verified: true,
+          sheet_count: 3,
+          formula_count: 42,
+          check_count: 2,
+          checks_passed: 2,
+          required_checks_passed: true
+        },
+        checks: [{ label: "Starting MRR", passed: true, required: true }]
+      },
+      {
         type: "browser",
         title: "Public page",
         session_id: "browser-session-1",
@@ -121,13 +142,15 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.blocks[4].content.includes("<script>"), true);
   assert.equal(canvas.blocks[5].artifacts[0].path, "reports/quarterly.pdf");
   assert.equal(canvas.blocks[5].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
-  assert.equal(canvas.blocks[6].sessionId, "browser-session-1");
-  assert.equal(canvas.blocks[6].frameId, "frame-1");
-  assert.equal(canvas.blocks[6].frameSha256, "c".repeat(64));
-  assert.equal(canvas.blocks[6].visualFallback, true);
-  assert.equal(canvas.blocks[6].takeoverActive, true);
-  assert.equal(canvas.blocks[7].url, "http://127.0.0.1:3000/preview");
-  assert.equal(canvas.blocks[9].pendingId, "pending-1");
+  assert.equal(canvas.blocks[6].artifact.path, "models/quarterly-plan.xlsx");
+  assert.equal(canvas.blocks[6].verification.formulaCount, 42);
+  assert.equal(canvas.blocks[7].sessionId, "browser-session-1");
+  assert.equal(canvas.blocks[7].frameId, "frame-1");
+  assert.equal(canvas.blocks[7].frameSha256, "c".repeat(64));
+  assert.equal(canvas.blocks[7].visualFallback, true);
+  assert.equal(canvas.blocks[7].takeoverActive, true);
+  assert.equal(canvas.blocks[8].url, "http://127.0.0.1:3000/preview");
+  assert.equal(canvas.blocks[10].pendingId, "pending-1");
 });
 
 test("canvas contract rejects arbitrary block types and unbounded tables", () => {

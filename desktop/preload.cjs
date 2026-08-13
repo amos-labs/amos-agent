@@ -126,6 +126,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   openApprovals: () => ipcRenderer.invoke("desktop:open-approvals"),
   openDocumentArtifact: (path, mode = "open") =>
     ipcRenderer.invoke("desktop:open-document-artifact", { path, mode }),
+  copyText: (value) => ipcRenderer.invoke("desktop:copy-text", value),
   readDocumentPreview: (path) =>
     ipcRenderer.invoke("desktop:read-document-preview", { path }),
   readBrowserFrame: (sessionId, frameId) =>

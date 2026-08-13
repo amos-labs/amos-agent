@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { extname, basename } from "node:path";
 import { readFile, stat } from "node:fs/promises";
+import ExcelJS from "exceljs";
 
 const MAX_ATTACHMENTS = 12;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
@@ -26,6 +27,7 @@ const MIME_BY_EXTENSION = {
   ".gif": "image/gif",
   ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".md": "text/markdown",
   ".csv": "text/csv",
   ".tsv": "text/tab-separated-values",
@@ -80,8 +82,8 @@ export class AttachmentManager {
     if (buffer.length > MAX_FILE_BYTES) throw new Error("The browser download exceeds the 20 MB attachment limit");
     const safeName = cleanName(name);
     const extension = extname(safeName).toLowerCase();
-    if (!IMAGE_MIMES.has(mimeForName(safeName)) && extension !== ".pdf" && extension !== ".docx" && !TEXT_EXTENSIONS.has(extension)) {
-      throw new Error(`${safeName} is not supported yet. Download PDF, DOCX, text, markdown, CSV, JSON, source code, or an image.`);
+    if (!IMAGE_MIMES.has(mimeForName(safeName)) && extension !== ".pdf" && extension !== ".docx" && extension !== ".xlsx" && !TEXT_EXTENSIONS.has(extension)) {
+      throw new Error(`${safeName} is not supported yet. Download PDF, DOCX, XLSX, text, markdown, CSV, JSON, source code, or an image.`);
     }
     assertBrowserImageSignature(safeName, buffer);
     const item = await attachmentFromBuffer({
@@ -353,11 +355,58 @@ export async function extractDocumentText({ name, mime, buffer }) {
     const result = await mammoth.extractRawText({ buffer });
     return normalizeText(result.value).slice(0, MAX_EXTRACTED_CHARS);
   }
+  if (
+    mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    extension === ".xlsx"
+  ) {
+    return extractSpreadsheet(buffer);
+  }
   if (TEXT_EXTENSIONS.has(extension) || mime.startsWith("text/") || mime === "application/json") {
     if (looksBinary(buffer)) throw new Error(`${name} does not appear to be a UTF-8 text file`);
     return normalizeText(buffer.toString("utf8"));
   }
-  throw new Error(`${name} is not supported yet. Attach PDF, DOCX, text, markdown, CSV, JSON, source code, or an image.`);
+  throw new Error(`${name} is not supported yet. Attach PDF, DOCX, XLSX, text, markdown, CSV, JSON, source code, or an image.`);
+}
+
+async function extractSpreadsheet(buffer) {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const output = [];
+  let characters = 0;
+  for (const worksheet of workbook.worksheets.slice(0, 32)) {
+    const lines = [`[Sheet: ${worksheet.name}]`];
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      if (rowNumber > 1_000 || characters >= MAX_EXTRACTED_CHARS) return;
+      const values = [];
+      row.eachCell({ includeEmpty: true }, (cell, columnNumber) => {
+        if (columnNumber > 64) return;
+        values.push(spreadsheetCellText(cell.value));
+      });
+      while (values.at(-1) === "") values.pop();
+      if (values.length > 0) {
+        const line = `${rowNumber}\t${values.join("\t")}`;
+        lines.push(line);
+        characters += line.length + 1;
+      }
+    });
+    output.push(lines.join("\n"));
+    characters += lines[0].length + 2;
+    if (characters >= MAX_EXTRACTED_CHARS) break;
+  }
+  return normalizeText(output.join("\n\n")).slice(0, MAX_EXTRACTED_CHARS);
+}
+
+function spreadsheetCellText(value) {
+  if (value == null) return "";
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object") {
+    if (value.formula) return `=${value.formula}${value.result == null ? "" : ` [result: ${value.result}]`}`;
+    if (value.richText) return value.richText.map((part) => part.text || "").join("");
+    if (value.text) return String(value.text);
+    if (value.error) return String(value.error);
+    return JSON.stringify(value);
+  }
+  return String(value);
 }
 
 async function extractPdf(buffer) {

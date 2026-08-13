@@ -7,6 +7,7 @@ import { createBashTool } from "./tools/bash.js";
 import { createCodingTools } from "./tools/coding.js";
 import { createFileTools } from "./tools/files.js";
 import { createArtifactTools } from "./tools/artifacts.js";
+import { createSpreadsheetTools } from "./tools/spreadsheets.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { createWebTools } from "./tools/web.js";
 
@@ -15,7 +16,8 @@ export function createRegistry({
   includeLocal = true,
   includeAmos = true,
   includeWeb = true,
-  artifactPresenter = null
+  artifactPresenter = null,
+  spreadsheetPresenter = null
 } = {}) {
   const registry = new ToolRegistry();
   if (includeLocal) {
@@ -23,6 +25,7 @@ export function createRegistry({
     for (const tool of createCodingTools()) registry.register(tool);
     for (const tool of createFileTools()) registry.register(tool);
     for (const tool of createArtifactTools({ present: artifactPresenter })) registry.register(tool);
+    for (const tool of createSpreadsheetTools({ present: spreadsheetPresenter })) registry.register(tool);
   }
   if (includeWeb) {
     for (const tool of createWebTools()) registry.register(tool);
@@ -45,6 +48,7 @@ export function createRuntime({
   includeAmos = true,
   includeWeb = true,
   artifactPresenter = null,
+  spreadsheetPresenter = null,
   systemPrompt,
   onToolResult = null,
   intelligenceRouter = null
@@ -54,7 +58,8 @@ export function createRuntime({
     includeLocal,
     includeAmos,
     includeWeb,
-    artifactPresenter
+    artifactPresenter,
+    spreadsheetPresenter
   });
   const modelConfig = {
     ...config.model,

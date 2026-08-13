@@ -10,7 +10,7 @@
   "gguf_sha256": "cbe690bd7550f8f8e6597681bde03d72ad783216c1446bef5386ee44a0da9305",
   "gguf_size_bytes": 529296768,
   "prompt": "intelligence-router-v1.txt",
-  "prompt_sha256": "fa38ebea6ea41711216ceb8adfed6d570887be136376dbb2b88683ad42e642d7",
+  "prompt_sha256": "f3a46c1f188511705d4de29d121cac158adf6b57f578f22e88ad76bccc05555e",
   "development_accuracy": 0.9,
   "untuned_2b_development_accuracy": 0.85,
   "qualified": false,

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import ExcelJS from "exceljs";
 import { AttachmentManager } from "../src/desktop/attachments.js";
 
 test("document attachments become bounded model reference material", async () => {
@@ -71,6 +72,31 @@ test("browser downloads enter the supported attachment pipeline and retain verif
     }),
     /does not match its image format/
   );
+});
+
+test("native XLSX attachments expose sheet values and formulas to the model", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-xlsx-attachment-"));
+  const file = join(root, "model.xlsx");
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Assumptions");
+  sheet.getCell("A1").value = "Current MRR";
+  sheet.getCell("B1").value = 2_200;
+  sheet.getCell("A2").value = "Annualized";
+  sheet.getCell("B2").value = { formula: "B1*12", result: 26_400 };
+  await workbook.xlsx.writeFile(file);
+
+  const manager = new AttachmentManager();
+  const [attachment] = await manager.addPaths([file]);
+  const content = manager.buildMessageContent(
+    "Review the model",
+    [{ id: attachment.id, retention: "task" }],
+    { vision: false }
+  );
+
+  assert.match(content, /\[Sheet: Assumptions\]/);
+  assert.match(content, /Current MRR\t2200/);
+  assert.match(content, /=B1\*12 \[result: 26400\]/);
+  assert.equal(attachment.mime, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
 });
 
 test("pasted screenshots are sent only to vision-capable models", async () => {
