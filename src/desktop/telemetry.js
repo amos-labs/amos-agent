@@ -29,16 +29,16 @@ export class DesktopTelemetry {
     this.releaseChannel = clean(releaseChannel, 32);
     this.fetch = fetchImpl;
     this.writeChain = Promise.resolve();
-    this.enabled = false;
+    this.preference = null;
   }
 
   setEnabled(enabled) {
-    this.enabled = enabled === true;
+    this.preference = enabled === true ? true : enabled === false ? false : null;
   }
 
   async initialize({ mcpUrl, telemetryEnabled } = {}) {
     this.setEnabled(telemetryEnabled);
-    if (!this.enabled) return "";
+    if (this.preference !== true) return "";
     const state = await this.read();
     await this.record("desktop_first_launch", {
       mcpUrl,
@@ -50,7 +50,7 @@ export class DesktopTelemetry {
 
   async applyPreference({ enabled, mcpUrl } = {}) {
     this.setEnabled(enabled);
-    if (!this.enabled) {
+    if (this.preference !== true) {
       const state = await this.read();
       state.queued = [];
       await this.write(state);
@@ -79,11 +79,11 @@ export class DesktopTelemetry {
     context = {},
     once = false
   } = {}) {
-    if (!this.enabled) {
-      if (QUEUED_MILESTONES.has(eventType)) {
+    if (this.preference !== true) {
+      if (this.preference === null && QUEUED_MILESTONES.has(eventType)) {
         return this.queueMilestone(eventType, { context, once });
       }
-      return { accepted: false, reason: "disabled" };
+      return { accepted: false, reason: this.preference === false ? "disabled" : "unanswered" };
     }
     if (!mcpUrl) return { accepted: false, reason: "missing_endpoint" };
     const state = await this.read();

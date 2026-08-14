@@ -165,7 +165,7 @@ test("first-run boundary and onboarding events stay local until telemetry opt-in
   });
   let settings = {
     ...DEFAULT_DESKTOP_SETTINGS,
-    telemetryEnabled: false,
+    telemetryEnabled: null,
     amosMcpUrl: "https://app.amoslabs.com/mcp"
   };
   const controller = new DesktopController({
@@ -190,7 +190,7 @@ test("first-run boundary and onboarding events stay local until telemetry opt-in
 
   await telemetry.initialize({
     mcpUrl: settings.amosMcpUrl,
-    telemetryEnabled: false
+    telemetryEnabled: null
   });
   await controller.startPersonal();
   await controller.completeOnboarding({ boundary: "personal" });
@@ -225,6 +225,65 @@ test("first-run boundary and onboarding events stay local until telemetry opt-in
       "desktop_onboarding_completed",
       "desktop_first_task_started"
     ]
+  );
+});
+
+test("explicit telemetry decline does not queue milestones for a later opt-in", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-telemetry-decline-"));
+  const requests = [];
+  const telemetry = new DesktopTelemetry({
+    filePath: join(directory, "telemetry.json"),
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return { ok: true, status: 202 };
+    }
+  });
+  let settings = {
+    ...DEFAULT_DESKTOP_SETTINGS,
+    telemetryEnabled: false,
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  };
+  const controller = new DesktopController({
+    userDataPath: directory,
+    settingsStore: {
+      read: async () => ({ ...settings }),
+      write: async (value) => {
+        settings = { ...value };
+        return { ...settings };
+      }
+    },
+    telemetry,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = () => ({
+    status: async () => null,
+    logout: async () => {}
+  });
+  controller.state = async () => ({ settings });
+  controller.clearEphemeralCompanyBoundary = () => {};
+
+  await telemetry.applyPreference({
+    enabled: false,
+    mcpUrl: settings.amosMcpUrl
+  });
+  await controller.startPersonal();
+  await controller.completeOnboarding({ boundary: "personal" });
+  await controller.recordAcquisitionEvent(settings, "desktop_first_task_started", {
+    boundary: "personal"
+  }, { once: true });
+
+  const stored = JSON.parse(await readFile(join(directory, "telemetry.json"), "utf8"));
+  assert.deepEqual(stored.queued, []);
+  assert.equal(requests.length, 0);
+
+  await telemetry.applyPreference({
+    enabled: true,
+    mcpUrl: settings.amosMcpUrl
+  });
+  assert.deepEqual(
+    requests.map((event) => event.event_type),
+    ["desktop_first_launch", "desktop_telemetry_choice"]
   );
 });
 

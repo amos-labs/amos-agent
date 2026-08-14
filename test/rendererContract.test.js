@@ -623,7 +623,10 @@ test("first-run funnel events fire only after telemetry opt-in", async () => {
     /async recordAcquisitionEvent\(settings, eventType, context = \{\}, \{ once = false \} = \{\}\) \{\s*if \(!this\.telemetry\) return;\s*await this\.telemetry\s*\.record\(/
   );
   assert.match(telemetry, /QUEUED_MILESTONES/);
-  assert.match(telemetry, /if \(QUEUED_MILESTONES\.has\(eventType\)\) \{\s*return this\.queueMilestone/);
+  assert.match(
+    telemetry,
+    /if \(this\.preference === null && QUEUED_MILESTONES\.has\(eventType\)\) \{\s*return this\.queueMilestone/
+  );
   assert.match(telemetry, /await this\.flushQueued\(\{ mcpUrl \}\)/);
   assert.match(javascript, /setTelemetryPreference/);
   assert.match(javascript, /desktop:set-telemetry-preference|setTelemetryPreference\(\{ enabled \}\)/);
