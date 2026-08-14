@@ -73,6 +73,9 @@ export function memoryClassSpec(value) {
   return spec;
 }
 
+export const EVIDENCE_PACK_SCHEMA = "amos.evidence-pack.v1";
+export const MAX_PLATFORM_EVIDENCE_ITEMS = 200;
+
 export function exportDecision(memoryClass, { amosAuthorized = false, signed = false } = {}) {
   const spec = memoryClassSpec(memoryClass);
   if (spec.exportPolicy === "promote_first") {
@@ -89,6 +92,18 @@ export function exportDecision(memoryClass, { amosAuthorized = false, signed = f
   return amosAuthorized
     ? { allowed: true, encryptionRequired: true, signatureRequired: true }
     : { allowed: false, reason: "Managed memory exports require a current AMOS policy decision." };
+}
+
+// Read-only Proof-panel bundle. Not a MEMORY_CLASSES.receipt / exportDecision capsule.
+export function evidencePackDecision() {
+  return {
+    allowed: true,
+    readOnly: true,
+    signed: false,
+    signatureRequired: false,
+    encryptionRequired: false,
+    memoryClassExport: false
+  };
 }
 
 export function createSyncJournalEntry({

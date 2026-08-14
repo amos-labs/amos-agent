@@ -113,6 +113,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   forgetPrivateMemory: (id) => ipcRenderer.invoke("desktop:forget-private-memory", id),
   exportPrivateMemoryCapsule: (input) =>
     ipcRenderer.invoke("desktop:export-private-memory-capsule", input),
+  exportEvidencePack: () => ipcRenderer.invoke("desktop:export-evidence-pack"),
   previewPrivateMemoryCapsule: (input) =>
     ipcRenderer.invoke("desktop:preview-private-memory-capsule", input),
   importPrivateMemoryCapsule: (previewId) =>
