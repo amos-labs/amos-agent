@@ -160,9 +160,9 @@ contains:
 
 | AMOS profile | Underlying model | Approximate download | Recommended memory | Best fit |
 | --- | --- | ---: | ---: | --- |
-| Compact | `qwen3:4b` | 2.6 GB | 12 GB | Fast summaries, drafting, extraction, and lightweight workspace tasks |
-| Balanced | `qwen3:8b` | 5.2 GB | 16 GB | Stronger reasoning, coding, documents, and everyday local tool use |
-| Capable | `gpt-oss:20b` | 14 GB | 24 GB | Primary interactive text, coding, retrieval, and tool work |
+| Compact | `qwen3:4b` | 2.6 GB | 12 GB | Installable, unmeasured — not recommended for governed work |
+| Balanced | `qwen3:8b` | 5.2 GB | 16 GB | Installable, unmeasured — not recommended for governed work |
+| Capable | `gpt-oss:20b` | 14 GB | 24 GB | Measured primary for interactive text, coding, retrieval, and tool work |
 | Vision | `qwen3.6:27b-q4_K_M` | 17 GB | 32 GB | Secondary multimodal profile for tasks that contain images |
 | Vision Max | `qwen3.6:27b-q8_0` | 30 GB | 64 GB | Experimental higher-precision multimodal profile |
 
@@ -179,11 +179,14 @@ that have been measured at that window. The context compiler still targets a
 smaller information-dense working set for routine turns.
 
 The catalog's recommendation is evidence-driven rather than “largest model
-that fits.” On the 64 GB qualification machine, GPT-OSS 20B matched both Qwen
-27B quantizations on the hard AMOS suite while running more than five times
-faster. Qwen Q4 is recommended only when an image requires a multimodal model;
-Qwen Q8 remains available for experiments but showed no quality gain on the
-current suite. See the
+that fits.” Only measured primary profiles are recommended; today that is
+GPT-OSS 20B. Qwen 4B and 8B remain installable but unmeasured, so machines
+below 16 GB are pointed at hosted or customer-cloud intelligence rather than
+an unmeasured compact profile. On the 64 GB qualification machine, GPT-OSS
+20B matched both Qwen 27B quantizations on the hard AMOS suite while running
+more than five times faster. Qwen Q4 is recommended only when an image
+requires a multimodal model; Qwen Q8 remains available for experiments but
+showed no quality gain on the current suite. See the
 [qualification report](docs/LOCAL_MODEL_QUALIFICATION.md).
 
 For work beyond the laptop's dependable capabilities, the user can switch to

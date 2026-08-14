@@ -46,10 +46,10 @@ const LOCAL_PASSED_WORKFLOWS = Object.freeze([
 // integrity is therefore covered by the same Developer ID signature and
 // notarization gate as the executable that consumes it.
 export const OFFLINE_MODEL_MANIFEST = Object.freeze({
-  version: 4,
+  version: 5,
   trust: "release-signed",
   runtime: "ollama",
-  updatedAt: "2026-07-28T00:00:00.000Z",
+  updatedAt: "2026-08-14T00:00:00.000Z",
   models: Object.freeze([
     Object.freeze({
       id: "qwen3:4b",
@@ -58,7 +58,11 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
       approximateSizeBytes: 2_600_000_000,
       minimumMemoryGb: 8,
       recommendedMemoryGb: 12,
-      capabilities: Object.freeze(["text", "tools", "code", "reasoning"])
+      capabilities: Object.freeze(["text", "tools", "code", "reasoning"]),
+      primary: false,
+      qualification: Object.freeze({
+        status: "unqualified"
+      })
     }),
     Object.freeze({
       id: "qwen3:8b",
@@ -67,7 +71,11 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
       approximateSizeBytes: 5_200_000_000,
       minimumMemoryGb: 12,
       recommendedMemoryGb: 16,
-      capabilities: Object.freeze(["text", "tools", "code", "reasoning"])
+      capabilities: Object.freeze(["text", "tools", "code", "reasoning"]),
+      primary: false,
+      qualification: Object.freeze({
+        status: "unqualified"
+      })
     }),
     Object.freeze({
       id: "gpt-oss:20b",
@@ -242,9 +250,12 @@ export function assessHardware({
   const total = finiteNumber(memoryGb);
   const free = finiteNumber(freeMemoryGb);
   const candidates = OFFLINE_MODEL_MANIFEST.models
-    .filter((model) => model.primary !== false && total >= model.minimumMemoryGb)
+    .filter((model) => measuredPrimary(model) && total >= model.minimumMemoryGb)
     .sort((left, right) => right.recommendedMemoryGb - left.recommendedMemoryGb);
-  const recommended = candidates.find((model) => total >= model.recommendedMemoryGb) || candidates.at(-1) || null;
+  const recommended = candidates.find((model) => total >= model.recommendedMemoryGb) || null;
+  const attemptable = recommended
+    ? null
+    : candidates.find((model) => total >= model.minimumMemoryGb) || null;
   const recommendedVision = OFFLINE_MODEL_MANIFEST.models
     .filter((model) => model.capabilities.includes("vision") && total >= model.recommendedMemoryGb)
     .sort((left, right) => left.approximateSizeBytes - right.approximateSizeBytes)
@@ -274,7 +285,9 @@ export function assessHardware({
       ? recommendedVision
         ? `${recommended.name} is the primary offline profile; ${recommendedVision.name} handles image tasks.`
         : `${recommended.name} is the recommended offline profile for this computer.`
-      : "Use AMOS-hosted or customer-cloud intelligence on this computer."
+      : attemptable
+        ? `${attemptable.name} can be installed here but is not recommended below ${attemptable.recommendedMemoryGb} GB.`
+        : "Use AMOS-hosted or customer-cloud intelligence on this computer."
   };
 }
 
@@ -587,6 +600,11 @@ export class OllamaModelManager {
     } while (Date.now() <= deadline);
     throw lastError || new Error("AMOS Local did not become ready");
   }
+}
+
+function measuredPrimary(model) {
+  return model.primary === true
+    && ["qualified", "conditional"].includes(model.qualification?.status);
 }
 
 function curatedModel(modelId) {

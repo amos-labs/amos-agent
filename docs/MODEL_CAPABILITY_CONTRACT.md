@@ -134,7 +134,7 @@ instead of guessing a fallback.
 
 ## Current local contracts
 
-Offline catalog version 4 embeds release-signed contracts for GPT-OSS 20B and
+Offline catalog version 5 embeds release-signed contracts for GPT-OSS 20B and
 the two measured Qwen 3.6 27B quantizations. Their July 2026 evidence grants
 observe, draft, and propose behavior. It withholds:
 
@@ -144,8 +144,10 @@ observe, draft, and propose behavior. It withholds:
 - qualified `vision`, because the text-heavy screenshot extraction test
   failed.
 
-The Qwen 4B and 8B catalog entries remain installable but have no capability
-contract, so the router will not silently admit them to governed workflows.
+The Qwen 4B and 8B catalog entries remain installable but are unmeasured
+(`primary: false`, no capability contract). Hardware assessment will not
+recommend them, and the router will not silently admit them to governed
+workflows.
 
 ## Next integration boundary
 
