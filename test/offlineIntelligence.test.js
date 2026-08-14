@@ -22,6 +22,10 @@ test("hardware assessment recommends a bounded curated profile", () => {
   });
   assert.equal(compact.localTier, "compact");
   assert.equal(compact.recommendedModelId, null);
+  assert.equal(
+    compact.localRecommendation,
+    "Use AMOS-hosted or customer-cloud intelligence on this computer."
+  );
 
   const twelveGig = assessHardware({
     platform: "darwin",
@@ -32,6 +36,21 @@ test("hardware assessment recommends a bounded curated profile", () => {
   });
   assert.equal(twelveGig.localTier, "balanced");
   assert.equal(twelveGig.recommendedModelId, null);
+  assert.equal(
+    twelveGig.localRecommendation,
+    "Use AMOS-hosted or customer-cloud intelligence on this computer."
+  );
+
+  const sixteenGig = assessHardware({
+    platform: "darwin",
+    release: "test",
+    arch: "arm64",
+    memoryGb: 16,
+    freeMemoryGb: 8
+  });
+  assert.equal(sixteenGig.localTier, "balanced");
+  assert.equal(sixteenGig.recommendedModelId, "gpt-oss:20b");
+  assert.equal(sixteenGig.recommendedVisionModelId, null);
 
   const capable = assessHardware({
     platform: "darwin",
