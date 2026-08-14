@@ -232,7 +232,7 @@ export class DesktopController {
   }
 
   async state() {
-    const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    let settings = this.runManager.current()?.settings || await this.settingsStore.read();
     await this.backfillActiveConversation(settings).catch((error) => {
       this.record("task", `Could not index the current conversation: ${error.message}`);
     });
@@ -248,6 +248,16 @@ export class DesktopController {
         !useOAuth
       );
     const demoExpired = Boolean(credentials?.demo) && !useOAuth;
+    if (
+      demoExpired &&
+      (settings.onboardingCompletedAt || settings.onboardingBoundary === "northwind")
+    ) {
+      settings = await this.settingsStore.write({
+        ...settings,
+        onboardingCompletedAt: "",
+        onboardingBoundary: ""
+      });
+    }
     const demo = credentials?.demo
       ? {
           tenantId: credentials.tenant_id,

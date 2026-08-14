@@ -97,7 +97,7 @@ const elements = Object.fromEntries(
     "providerCheck", "onboardingProviderText", "onboardingIntelligenceHint",
     "workspaceCheck", "enterButton", "boundaryReadinessText",
     "personalIntelligenceCallout",
-    "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
+    "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
     "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "newConversationButton", "forkConversationButton",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
@@ -517,11 +517,7 @@ function bindEvents() {
 
 function render() {
   applyAppearance(state.settings.appearance || "system");
-  const needsOnboarding =
-    !state.settings.onboardingCompletedAt &&
-    ((!state.connected && !state.mode?.personal && !state.mode?.offline) ||
-      !state.configured ||
-      !state.settings.workspace);
+  const needsOnboarding = firstRunNeeded(state);
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
@@ -800,6 +796,18 @@ function bindContextResize() {
   });
 }
 
+function firstRunNeeded(current = state) {
+  if (!current) return true;
+  const liveBoundary = Boolean(
+    current.connected || current.mode?.personal || current.mode?.offline
+  );
+  return (
+    current.connectionMode === "demo_expired" ||
+    !liveBoundary ||
+    !current.settings?.onboardingCompletedAt
+  );
+}
+
 function showView(view) {
   if (view === "decisions" || view === "activity") {
     showWorkTab(view === "activity" ? "history" : "open");
@@ -817,8 +825,11 @@ function showView(view) {
     work: elements.workView,
     settings: elements.settingsView
   };
-  for (const [name, section] of Object.entries(map)) section.classList.toggle("hidden", name !== view);
-  elements.onboardingView.classList.add("hidden");
+  const keepOnboarding = view !== "settings" && firstRunNeeded();
+  for (const [name, section] of Object.entries(map)) {
+    section.classList.toggle("hidden", keepOnboarding || name !== view);
+  }
+  elements.onboardingView.classList.toggle("hidden", !keepOnboarding);
   for (const button of document.querySelectorAll(".nav-item")) {
     button.classList.toggle("active", button.dataset.view === view);
   }
@@ -6186,9 +6197,16 @@ function telemetryPreferenceLabel(value) {
 
 function renderTelemetryPreference() {
   const value = state?.settings?.telemetryEnabled;
+  const pending = value !== true && value !== false;
   elements.telemetryConsentText.textContent = telemetryPreferenceLabel(value);
   elements.telemetryAllowButton.setAttribute("aria-pressed", String(value === true));
   elements.telemetryDeclineButton.setAttribute("aria-pressed", String(value === false));
+  elements.telemetryConsent.classList.toggle("hidden", !pending);
+  if (pending && elements.onboardingView.classList.contains("hidden")) {
+    elements.operatorView.prepend(elements.telemetryConsent);
+  } else if (pending && elements.enterButton) {
+    elements.enterButton.before(elements.telemetryConsent);
+  }
   if (document.activeElement !== elements.telemetryInput) {
     elements.telemetryInput.value = value === true ? "true" : value === false ? "false" : "";
   }

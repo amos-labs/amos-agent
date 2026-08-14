@@ -556,7 +556,9 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.doesNotMatch(javascript, /sessionStorage\.(setItem|getItem|removeItem)/);
   assert.match(settings, /onboardingCompletedAt: isoOrEmpty\(input\.onboardingCompletedAt\)/);
   assert.match(settings, /\["personal", "northwind", "company"\]\.includes\(input\.onboardingBoundary\)/);
-  assert.match(javascript, /!state\.settings\.onboardingCompletedAt/);
+  assert.match(javascript, /function firstRunNeeded/);
+  assert.match(javascript, /connectionMode === "demo_expired"/);
+  assert.match(javascript, /!current\.settings\?\.onboardingCompletedAt/);
   assert.match(javascript, /api\.completeOnboarding\(\{ boundary \}\)/);
   assert.match(preload, /desktop:complete-onboarding/);
   assert.match(main, /controller\.completeOnboarding\(input\)/);
@@ -601,4 +603,6 @@ test("first-run funnel events fire only after telemetry opt-in", async () => {
   assert.match(telemetry, /if \(!this\.enabled\) return \{ accepted: false, reason: "disabled" \}/);
   assert.match(javascript, /setTelemetryPreference/);
   assert.match(javascript, /desktop:set-telemetry-preference|setTelemetryPreference\(\{ enabled \}\)/);
+  assert.match(javascript, /telemetryConsent\.classList\.toggle\("hidden", !pending\)/);
+  assert.match(javascript, /operatorView\.prepend\(elements\.telemetryConsent\)/);
 });

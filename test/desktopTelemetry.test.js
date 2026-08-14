@@ -227,3 +227,41 @@ test("first-run boundary and onboarding events stay local until telemetry opt-in
     ]
   );
 });
+
+test("expired Northwind demo clears persisted first-run so the shell can reopen", async () => {
+  let settings = {
+    ...DEFAULT_DESKTOP_SETTINGS,
+    operatingMode: "online",
+    workspace: "/tmp/northwind-demo-workspace",
+    onboardingCompletedAt: "2026-08-14T12:00:00.000Z",
+    onboardingBoundary: "northwind",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-expired-northwind",
+    settingsStore: {
+      read: async () => ({ ...settings }),
+      write: async (value) => {
+        settings = { ...value };
+        return { ...settings };
+      }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = () => ({
+    status: async () => ({
+      demo: true,
+      access_token: "expired-demo",
+      expires_at: 1
+    })
+  });
+
+  const snapshot = await controller.state();
+
+  assert.equal(snapshot.connectionMode, "demo_expired");
+  assert.equal(snapshot.connected, false);
+  assert.equal(settings.onboardingCompletedAt, "");
+  assert.equal(settings.onboardingBoundary, "");
+  assert.equal(snapshot.settings.onboardingCompletedAt, "");
+});

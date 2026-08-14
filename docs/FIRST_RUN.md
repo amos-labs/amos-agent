@@ -12,7 +12,9 @@ screen.
 
 Completion is stored as `onboardingCompletedAt` and `onboardingBoundary` in
 Desktop settings (`personal`, `northwind`, or `company`). Those keys survive
-process restart because `sanitizeSettings` keeps them.
+process restart because `sanitizeSettings` keeps them. An expired Northwind
+demo is not a live boundary: Desktop clears the Northwind completion and
+reopens first-run so the user is not left in a dead Online company shell.
 
 Anonymous usage events stay off until the first-run privacy choice. Telemetry
 never gates **Enter**.
