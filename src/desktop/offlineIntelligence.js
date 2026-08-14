@@ -252,7 +252,10 @@ export function assessHardware({
   const candidates = OFFLINE_MODEL_MANIFEST.models
     .filter((model) => measuredPrimary(model) && total >= model.minimumMemoryGb)
     .sort((left, right) => right.recommendedMemoryGb - left.recommendedMemoryGb);
-  const recommended = candidates.find((model) => total >= model.recommendedMemoryGb) || candidates.at(-1) || null;
+  const recommended = candidates.find((model) => total >= model.recommendedMemoryGb) || null;
+  const attemptable = recommended
+    ? null
+    : candidates.find((model) => total >= model.minimumMemoryGb) || null;
   const recommendedVision = OFFLINE_MODEL_MANIFEST.models
     .filter((model) => model.capabilities.includes("vision") && total >= model.recommendedMemoryGb)
     .sort((left, right) => left.approximateSizeBytes - right.approximateSizeBytes)
@@ -282,7 +285,9 @@ export function assessHardware({
       ? recommendedVision
         ? `${recommended.name} is the primary offline profile; ${recommendedVision.name} handles image tasks.`
         : `${recommended.name} is the recommended offline profile for this computer.`
-      : "Use AMOS-hosted or customer-cloud intelligence on this computer."
+      : attemptable
+        ? `${attemptable.name} can be installed here but is not recommended below ${attemptable.recommendedMemoryGb} GB.`
+        : "Use AMOS-hosted or customer-cloud intelligence on this computer."
   };
 }
 

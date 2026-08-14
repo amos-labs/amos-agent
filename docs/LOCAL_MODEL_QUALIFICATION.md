@@ -122,9 +122,12 @@ for authoritative execution narration, hidden-test optimization code, or raw
 text-heavy screenshot extraction.
 
 Hardware assessment recommends only measured primary profiles
-(`primary: true` with a `qualified` or `conditional` contract). That is
-currently GPT-OSS 20B. Computers below 16 GB receive no local primary
-recommendation and should use hosted or customer-cloud intelligence.
+(`primary: true` with a `qualified` or `conditional` contract) that also
+meet the profile's **recommended** memory, not merely its minimum. That is
+currently GPT-OSS 20B at **24 GB or more**. A 16 GB machine can install
+that profile but does not receive a “recommended” badge. Computers below
+the 16 GB minimum receive no local primary recommendation and should use
+hosted or customer-cloud intelligence.
 
 The Qwen 4B and 8B profiles remain installable, but they are unmeasured:
 `primary: false`, `qualification.status: "unqualified"`, and no capability

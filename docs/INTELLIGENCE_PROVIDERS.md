@@ -199,7 +199,7 @@ extended by model output. The first profiles are:
 
 - `qwen3:4b` as an installable, unmeasured compact profile (not recommended);
 - `qwen3:8b` as an installable, unmeasured balanced profile (not recommended);
-- `gpt-oss:20b` as the measured primary interactive profile;
+- `gpt-oss:20b` as the measured primary interactive profile (recommended at 24 GB+, attemptable at the 16 GB minimum);
 - `qwen3.6:27b-q4_K_M` as the secondary image-capable profile; and
 - `qwen3.6:27b-q8_0` as an optional experimental multimodal profile.
 

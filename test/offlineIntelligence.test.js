@@ -49,8 +49,12 @@ test("hardware assessment recommends a bounded curated profile", () => {
     freeMemoryGb: 8
   });
   assert.equal(sixteenGig.localTier, "balanced");
-  assert.equal(sixteenGig.recommendedModelId, "gpt-oss:20b");
+  assert.equal(sixteenGig.recommendedModelId, null);
   assert.equal(sixteenGig.recommendedVisionModelId, null);
+  assert.match(
+    sixteenGig.localRecommendation,
+    /not recommended below 24 GB/
+  );
 
   const capable = assessHardware({
     platform: "darwin",
