@@ -184,6 +184,16 @@
                 <button id="onboardingWorkspaceButton" class="text-button">Choose workspace</button>
               </div>
             </div>
+            <div id="telemetryConsent" class="local-setup-callout">
+              <div>
+                <strong>Anonymous usage events</strong>
+                <span id="telemetryConsentText">AMOS can send an install ID and first-launch events. No tokens, no prompts. Nothing is sent until you choose.</span>
+              </div>
+              <div class="offline-actions">
+                <button id="telemetryAllowButton" class="button secondary" type="button">Allow</button>
+                <button id="telemetryDeclineButton" class="button ghost" type="button">Don't send</button>
+              </div>
+            </div>
             <button id="enterButton" class="button primary wide" disabled>Enter AMOS Desktop</button>
           </div>
         </section>
@@ -808,6 +818,15 @@
                   <label>AMOS MCP</label>
                   <input id="mcpInput" name="amosMcpUrl" value="https://app.amoslabs.com/mcp">
                 </div>
+              </div>
+              <div class="field">
+                <label for="telemetryInput">Anonymous usage events</label>
+                <select id="telemetryInput" name="telemetryEnabled">
+                  <option value="">Not chosen — nothing is sent</option>
+                  <option value="true">Allow</option>
+                  <option value="false">Don't send</option>
+                </select>
+                <small>Install UUID and first-launch events only. No tokens or prompts. The change takes effect immediately.</small>
               </div>
               <div id="managedConnectionCallout" class="local-setup-callout hidden">
                 <div>

@@ -32,6 +32,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   localApprovalWorkspace: "",
   localApprovalKinds: [],
   amosMcpUrl: "https://app.amoslabs.com/mcp",
+  telemetryEnabled: null,
   notifiedApprovalIds: [],
   deliveredApprovalOutcomeIds: []
 });
@@ -168,6 +169,10 @@ export function sanitizeSettings(input = {}) {
     amosMcpUrl: validateEndpoint(input.amosMcpUrl || DEFAULT_DESKTOP_SETTINGS.amosMcpUrl, {
       requireHttps: true
     }),
+    telemetryEnabled:
+      input.telemetryEnabled === true ? true
+        : input.telemetryEnabled === false ? false
+          : null,
     notifiedApprovalIds: Array.isArray(input.notifiedApprovalIds)
       ? input.notifiedApprovalIds
           .map((value) => clean(value, 64))

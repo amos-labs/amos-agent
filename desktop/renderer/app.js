@@ -95,6 +95,7 @@ const elements = Object.fromEntries(
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
     "providerCheck", "onboardingProviderText", "workspaceCheck", "enterButton", "boundaryReadinessText",
+    "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
     "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "newConversationButton", "forkConversationButton",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
@@ -212,6 +213,14 @@ function bindActions() {
   elements.workspaceButton.addEventListener("click", chooseWorkspace);
   elements.localApprovalButton.addEventListener("click", toggleLocalApproval);
   elements.onboardingWorkspaceButton.addEventListener("click", chooseWorkspace);
+  elements.telemetryAllowButton.addEventListener("click", () => setTelemetryPreference(true));
+  elements.telemetryDeclineButton.addEventListener("click", () => setTelemetryPreference(false));
+  elements.telemetryInput.addEventListener("change", () => {
+    const value = elements.telemetryInput.value;
+    if (value === "true") setTelemetryPreference(true);
+    else if (value === "false") setTelemetryPreference(false);
+    else renderTelemetryPreference();
+  });
   elements.enterButton.addEventListener("click", () => {
     sessionStorage.setItem("amos-onboarding-complete", "true");
     render();
@@ -5700,6 +5709,7 @@ function renderSettings() {
   elements.operatingModeInput.value = settings.operatingMode || "online";
   elements.appearanceInput.value = settings.appearance || "system";
   elements.mcpInput.value = settings.amosMcpUrl;
+  renderTelemetryPreference();
   elements.apiKeyHelp.textContent = settings.hasApiKey
     ? "A credential is stored securely. Leave blank to keep it."
     : (providerDefaults[selectedProvider]?.credential || "Provider credential");
@@ -6109,6 +6119,40 @@ async function saveSettings(event) {
   } catch (error) {
     elements.settingsError.textContent = error.message;
     elements.settingsError.classList.remove("hidden");
+  }
+}
+
+function telemetryPreferenceLabel(value) {
+  if (value === true) {
+    return "Allowed. Anonymous install and first-launch events only.";
+  }
+  if (value === false) {
+    return "Don't send. No usage events leave this computer.";
+  }
+  return "AMOS can send an install ID and first-launch events. No tokens, no prompts. Nothing is sent until you choose.";
+}
+
+function renderTelemetryPreference() {
+  const value = state?.settings?.telemetryEnabled;
+  elements.telemetryConsentText.textContent = telemetryPreferenceLabel(value);
+  elements.telemetryAllowButton.setAttribute("aria-pressed", String(value === true));
+  elements.telemetryDeclineButton.setAttribute("aria-pressed", String(value === false));
+  if (document.activeElement !== elements.telemetryInput) {
+    elements.telemetryInput.value = value === true ? "true" : value === false ? "false" : "";
+  }
+}
+
+async function setTelemetryPreference(enabled) {
+  try {
+    const result = await api.setTelemetryPreference({ enabled });
+    if (state?.settings) state.settings.telemetryEnabled = result.telemetryEnabled;
+    renderTelemetryPreference();
+    toast(enabled
+      ? "Anonymous usage events allowed."
+      : "Usage events will not be sent.");
+  } catch (error) {
+    toast(error.message, true);
+    renderTelemetryPreference();
   }
 }
 

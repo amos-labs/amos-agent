@@ -19,6 +19,38 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalMode, "ask");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalWorkspace, "");
   assert.deepEqual(DEFAULT_DESKTOP_SETTINGS.localApprovalKinds, []);
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.telemetryEnabled, null);
+});
+
+test("desktop telemetry preference survives an unrelated settings write", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-telemetry-pref-"));
+  const path = join(directory, "settings.json");
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => value,
+    decrypt: (value) => value
+  });
+
+  await store.write({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    telemetryEnabled: true
+  });
+  await store.write({
+    ...(await store.read()),
+    appearance: "dark"
+  });
+
+  const saved = await store.read();
+  assert.equal(saved.telemetryEnabled, true);
+  assert.equal(saved.appearance, "dark");
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, telemetryEnabled: false }).telemetryEnabled,
+    false
+  );
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, telemetryEnabled: "yes" }).telemetryEnabled,
+    null
+  );
 });
 
 test("local auto-approve is pinned to one exact selected workspace", () => {

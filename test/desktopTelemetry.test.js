@@ -6,7 +6,30 @@ import test from "node:test";
 import { DesktopController } from "../src/desktop/controller.js";
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
 
-test("Desktop telemetry creates a random install id and sends first launch once", async () => {
+test("Desktop telemetry initialize does not fire without consent", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-telemetry-opt-out-"));
+  const requests = [];
+  const telemetry = new DesktopTelemetry({
+    filePath: join(directory, "telemetry.json"),
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options, body: JSON.parse(options.body) });
+      return { ok: true, status: 202 };
+    }
+  });
+
+  const unset = await telemetry.initialize({ mcpUrl: "https://app.amoslabs.com/mcp" });
+  const declined = await telemetry.initialize({
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    telemetryEnabled: false
+  });
+  await telemetry.record("desktop_first_launch", { mcpUrl: "https://app.amoslabs.com/mcp" });
+
+  assert.equal(unset, "");
+  assert.equal(declined, "");
+  assert.equal(requests.length, 0);
+});
+
+test("Desktop telemetry creates a random install id and sends first launch once after consent", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-desktop-telemetry-"));
   const requests = [];
   const telemetry = new DesktopTelemetry({
@@ -20,8 +43,14 @@ test("Desktop telemetry creates a random install id and sends first launch once"
     }
   });
 
-  const firstId = await telemetry.initialize({ mcpUrl: "https://app.amoslabs.com/mcp" });
-  const secondId = await telemetry.initialize({ mcpUrl: "https://app.amoslabs.com/mcp" });
+  const firstId = await telemetry.initialize({
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    telemetryEnabled: true
+  });
+  const secondId = await telemetry.initialize({
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    telemetryEnabled: true
+  });
 
   assert.match(firstId, /^[0-9a-f-]{36}$/i);
   assert.equal(secondId, firstId);
@@ -37,6 +66,34 @@ test("Desktop telemetry creates a random install id and sends first launch once"
   assert.deepEqual(stored.completed, ["desktop_first_launch"]);
 });
 
+test("Desktop telemetry records first launch and the consent choice only after opt-in", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-telemetry-choice-"));
+  const requests = [];
+  const telemetry = new DesktopTelemetry({
+    filePath: join(directory, "telemetry.json"),
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return { ok: true, status: 202 };
+    }
+  });
+
+  await telemetry.applyPreference({
+    enabled: false,
+    mcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(requests.length, 0);
+
+  await telemetry.applyPreference({
+    enabled: true,
+    mcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.deepEqual(requests.map((event) => event.event_type), [
+    "desktop_first_launch",
+    "desktop_telemetry_choice"
+  ]);
+  assert.equal(requests[1].context.enabled, true);
+});
+
 test("Desktop telemetry retains transient failures and never persists bearer tokens", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-desktop-telemetry-retry-"));
   let attempts = 0;
@@ -48,6 +105,7 @@ test("Desktop telemetry retains transient failures and never persists bearer tok
       return { ok: attempts > 1, status: attempts > 1 ? 202 : 503 };
     }
   });
+  telemetry.setEnabled(true);
 
   await telemetry.record("northwind_demo_value_reached", {
     mcpUrl: "https://app.amoslabs.com/mcp",
