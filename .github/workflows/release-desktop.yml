@@ -125,7 +125,8 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Managed Windows signing is unavailable because ${missing[*]} is not configured; use the isolated unsigned preview workflow."
+            echo "::error::Managed Windows signing is required for an official cross-platform release; missing ${missing[*]}."
+            exit 1
           fi
 
   windows:
@@ -216,6 +217,11 @@ jobs:
           if ($signature.SignerCertificate.Subject -ne $env:WINDOWS_SIGNING_PUBLISHER_NAME) {
             throw "Windows installer publisher '$($signature.SignerCertificate.Subject)' does not match the configured publisher"
           }
+          $installerBytes = (Get-Item "dist/AMOS-Desktop-Windows-x64-Setup.exe").Length
+          if ($installerBytes -gt 1100000000) {
+            throw "Windows installer is $installerBytes bytes; the production ceiling is 1100000000 bytes"
+          }
+          Write-Host "Verified production Windows installer size: $installerBytes bytes"
 
       - name: Upload Windows release assets
         uses: actions/upload-artifact@v4
@@ -229,8 +235,8 @@ jobs:
             dist/latest.yml
 
   publish:
-    name: Publish notarized macOS release
-    needs: macos
+    name: Publish verified cross-platform release
+    needs: [macos, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

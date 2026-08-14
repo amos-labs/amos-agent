@@ -10,7 +10,8 @@ import {
 } from "../src/desktop/managedOllamaRuntime.js";
 import {
   OLLAMA_RUNTIME_RELEASE,
-  ollamaRuntimeAsset
+  ollamaRuntimeAsset,
+  ollamaRuntimeProfile
 } from "../src/desktop/ollamaRuntimeManifest.js";
 
 test("runtime manifest pins the official release and verified platform assets", () => {
@@ -22,6 +23,12 @@ test("runtime manifest pins the official release and verified platform assets", 
   assert.equal(mac.binary, "ollama");
   const windows = ollamaRuntimeAsset("win32", "x64");
   assert.equal(windows.binary, "ollama.exe");
+  assert.deepEqual(
+    ollamaRuntimeProfile("win32", "x64").excludedDirectories,
+    ["lib/ollama/cuda_v12", "lib/ollama/cuda_v13"]
+  );
+  assert.equal(ollamaRuntimeProfile("win32", "x64").id, "portable");
+  assert.equal(ollamaRuntimeProfile("darwin", "arm64").id, "full");
   assert.throws(() => ollamaRuntimeAsset("linux", "s390x"), /does not have/);
 });
 
