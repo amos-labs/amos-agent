@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   intelligenceRoutingEnvelope,
@@ -14,6 +13,7 @@ import {
   normalizeIntelligenceRouterRolloutMode,
   parseIntelligenceRouterOutput
 } from "../src/model/intelligenceRouter.js";
+import { signedTextSha256 } from "../src/model/signedText.js";
 
 test("local router uses the narrow 0.8B class-only contract", async () => {
   let request;
@@ -46,10 +46,16 @@ test("local router release pins the champion artifact and conservative prompt", 
   assert.equal(INTELLIGENCE_ROUTER_MODEL, "amos-router:0.8b-pilot003-v2");
   assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.qualified, false);
   assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.default_rollout_mode, "active");
+  const prompt = readFileSync(
+    new URL("../src/model/intelligence-router-v1.txt", import.meta.url),
+    "utf8"
+  );
   assert.equal(
-    createHash("sha256").update(readFileSync(
-      new URL("../src/model/intelligence-router-v1.txt", import.meta.url)
-    )).digest("hex"),
+    signedTextSha256(prompt),
+    INTELLIGENCE_ROUTER_ARTIFACT.prompt_sha256
+  );
+  assert.equal(
+    signedTextSha256(prompt.replaceAll("\n", "\r\n")),
     INTELLIGENCE_ROUTER_ARTIFACT.prompt_sha256
   );
 });

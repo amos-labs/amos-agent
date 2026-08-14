@@ -6,12 +6,16 @@ import { copyFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/
 import { basename, dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import {
+  canonicalizeSignedText,
+  signedTextSha256
+} from "../src/model/signedText.js";
 
 const root = resolve(import.meta.dirname, "..");
 const manifestPath = join(root, "src", "model", "intelligence-router-artifact-v1.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 const promptPath = join(dirname(manifestPath), manifest.prompt);
-const prompt = await readFile(promptPath, "utf8");
+const prompt = canonicalizeSignedText(await readFile(promptPath, "utf8"));
 const defaultSource = resolve(
   root,
   "..",
@@ -29,7 +33,7 @@ const destination = join(root, "desktop", "vendor", "router");
 const destinationGguf = join(destination, manifest.gguf);
 
 assertManifest(manifest);
-await verifyFile(promptPath, manifest.prompt_sha256);
+await verifyTextFile(promptPath, manifest.prompt_sha256);
 await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 const sourceStats = await stat(source).catch(() => null);
@@ -83,6 +87,15 @@ async function verifyFile(filePath, expected) {
   const actual = await digest(filePath);
   if (actual !== expected) {
     throw new Error(`SHA-256 mismatch for ${filePath}: expected ${expected}, got ${actual}`);
+  }
+}
+
+async function verifyTextFile(filePath, expected) {
+  const actual = signedTextSha256(await readFile(filePath, "utf8"));
+  if (actual !== expected) {
+    throw new Error(
+      `Canonical SHA-256 mismatch for ${filePath}: expected ${expected}, got ${actual}`
+    );
   }
 }
 
