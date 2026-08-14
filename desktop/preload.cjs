@@ -95,6 +95,12 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   openTask: (id) => ipcRenderer.invoke("desktop:open-task", id),
   updateTask: (id, changes) => ipcRenderer.invoke("desktop:update-task", { id, changes }),
   forkTask: (input) => ipcRenderer.invoke("desktop:fork-task", input),
+  confirmConsultativeAssertion: (input) =>
+    ipcRenderer.invoke("desktop:confirm-consultative-assertion", input),
+  correctConsultativeAssertion: (input) =>
+    ipcRenderer.invoke("desktop:correct-consultative-assertion", input),
+  proposeConsultativeUpdate: (input) =>
+    ipcRenderer.invoke("desktop:propose-consultative-update", input),
   createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
   updateProject: (id, changes) =>
     ipcRenderer.invoke("desktop:update-project", { id, changes }),

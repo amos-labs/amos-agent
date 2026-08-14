@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+  applyConsultativeUpdate,
+  compileConsultativeContext,
+  forkConsultativeState,
+  normalizeConsultativeState,
+  resolveConsultativeUpdate
+} from "./consultativeState.js";
 
 const STORE_VERSION = 2;
 const LEGACY_STORE_VERSION = 1;
@@ -48,7 +55,8 @@ export class SessionContinuityStore {
       artifacts = [],
       receipt = null,
       model = "",
-      continuity = null
+      continuity = null,
+      consultativeState = undefined
     } = {}
   ) {
     const normalizedScope = normalizeScope(scope);
@@ -69,6 +77,17 @@ export class SessionContinuityStore {
       ...(continuity && typeof continuity === "object" ? continuity : {}),
       at: now
     });
+    const nextConsultative = applyConsultativeUpdate(
+      existing?.consultativeState || null,
+      resolveConsultativeUpdate(
+        consultativeState !== undefined
+          ? consultativeState
+          : continuity && Object.hasOwn(continuity, "consultativeState")
+            ? continuity.consultativeState
+            : undefined,
+        { allowConfirmed: false, now: () => new Date(now) }
+      )
+    );
     const record = normalizeRecord({
       ...(existing || {}),
       ...normalizedScope,
@@ -77,8 +96,97 @@ export class SessionContinuityStore {
         ...(existing?.artifacts || []),
         ...artifacts
       ], MAX_ARTIFACTS, 1_024),
+      consultativeState: nextConsultative,
+      revision: Math.max(1, Number(existing?.revision || 0) + 1),
       createdAt: existing?.createdAt || now,
       updatedAt: now
+    });
+    store.records = [
+      record,
+      ...store.records.filter((item) => item.key !== record.key)
+    ].slice(0, MAX_RECORDS);
+    await this.writeStore(store);
+    return publicRecord(record);
+  }
+
+  async updateConsultativeState(
+    scope,
+    {
+      consultativeState,
+      expectedRevision = null,
+      allowConfirmed = true
+    } = {}
+  ) {
+    const normalizedScope = normalizeScope(scope);
+    const store = await this.readStore();
+    const existing = store.records.find((item) => item.key === normalizedScope.key);
+    const currentRevision = Math.max(0, Number(existing?.revision || 0));
+    if (!existing && expectedRevision != null && Number(expectedRevision) !== 0) {
+      throw new Error("Consultative state can only create a lane at revision 0");
+    }
+    if (expectedRevision != null && Number(expectedRevision) !== currentRevision) {
+      throw new Error(
+        `stale continuity revision: expected ${expectedRevision}, found ${currentRevision}`
+      );
+    }
+    const now = this.now().toISOString();
+    const record = normalizeRecord({
+      ...(existing || normalizedScope),
+      consultativeState: applyConsultativeUpdate(
+        existing?.consultativeState || null,
+        resolveConsultativeUpdate(consultativeState, {
+          allowConfirmed,
+          now: () => new Date(now)
+        })
+      ),
+      revision: currentRevision + 1,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    });
+    store.records = [
+      record,
+      ...store.records.filter((item) => item.key !== record.key)
+    ].slice(0, MAX_RECORDS);
+    await this.writeStore(store);
+    return publicRecord(record);
+  }
+
+  async applySharedManifest(scope, manifest) {
+    if (!manifest?.transitions?.length && !manifest?.consultativeState) return null;
+    const normalizedScope = normalizeScope(scope);
+    const store = await this.readStore();
+    const existing = store.records.find((item) => item.key === normalizedScope.key);
+    const now = this.now().toISOString();
+    const turns = (Array.isArray(manifest.transitions) && manifest.transitions.length
+      ? manifest.transitions
+      : existing?.turns || []
+    ).map((transition) => normalizeTurn({
+      id: transition.eventId || transition.id,
+      objective: transition.objective,
+      answer: transition.outcome || transition.answer,
+      taskId: transition.taskId,
+      status: transition.status,
+      model: transition.model,
+      workflow: transition.workflow,
+      actions: transition.actions,
+      decisions: transition.decisions,
+      commitments: transition.commitments,
+      corrections: transition.corrections,
+      openLoops: transition.openLoops,
+      artifacts: transition.artifacts,
+      receiptId: transition.receipt?.id,
+      receiptDigest: transition.receipt?.digest,
+      at: transition.at
+    }));
+    const record = normalizeRecord({
+      ...(existing || {}),
+      ...normalizedScope,
+      turns,
+      artifacts: uniqueStrings(manifest.artifacts || [], MAX_ARTIFACTS, 1_024),
+      consultativeState: manifest.consultativeState ?? existing?.consultativeState ?? null,
+      revision: Math.max(1, Number(manifest.revision || existing?.revision || 1)),
+      createdAt: existing?.createdAt || manifest.updatedAt || now,
+      updatedAt: manifest.updatedAt || now
     });
     store.records = [
       record,
@@ -119,10 +227,18 @@ export class SessionContinuityStore {
         throw new Error("Choose at least one artifact for this task fork");
       }
     }
+    const consultativeState = forkConsultativeState(source?.consultativeState || null, {
+      contextScope,
+      sourceEventId,
+      selectedArtifacts,
+      keptEventIds: turns.flatMap((turn) => [turn.id, turn.taskId].filter(Boolean))
+    });
     const record = normalizeRecord({
       ...child,
       turns,
       artifacts,
+      consultativeState,
+      revision: 1,
       createdAt: now,
       updatedAt: now
     });
@@ -234,7 +350,7 @@ export function buildSessionContinuityPrompt(record, options = {}) {
 }
 
 export function buildContinuityManifest(record, { currentModel = "" } = {}) {
-  if (!record?.turns?.length) return null;
+  if (!record?.turns?.length && !record?.consultativeState) return null;
   const transitions = record.turns.map((turn) => ({
     eventId: turn.id,
     taskId: turn.taskId,
@@ -283,6 +399,8 @@ export function buildContinuityManifest(record, { currentModel = "" } = {}) {
     transitions,
     handoffs,
     artifacts: uniqueStrings(record.artifacts || [], MAX_ARTIFACTS, 1_024),
+    consultativeState: record.consultativeState || null,
+    revision: Math.max(0, Number(record.revision || 0)),
     safeguards: {
       orientationOnly: true,
       requiresFreshAuthority: true,
@@ -315,7 +433,10 @@ export function normalizeSharedContinuityManifest(value, { tenantId = "" } = {})
   const transitions = (Array.isArray(value.transitions) ? value.transitions : [])
     .slice(-MAX_TURNS)
     .map(normalizeSharedTransition);
-  if (transitions.length === 0) {
+  const consultativeState = value.consultativeState
+    ? normalizeConsultativeState(value.consultativeState, { allowConfirmed: true })
+    : null;
+  if (transitions.length === 0 && !consultativeState) {
     throw new Error("AMOS working continuity has no usable transitions");
   }
   const contextKey = cleanRequired(value.scope?.contextKey || "active", 128, "context key");
@@ -339,6 +460,7 @@ export function normalizeSharedContinuityManifest(value, { tenantId = "" } = {})
       .slice(-MAX_TURNS)
       .flatMap(normalizeHandoff),
     artifacts: uniqueStrings(value.artifacts || [], MAX_ARTIFACTS, 1_024),
+    consultativeState,
     safeguards: {
       orientationOnly: true,
       requiresFreshAuthority: true,
@@ -351,7 +473,7 @@ export function normalizeSharedContinuityManifest(value, { tenantId = "" } = {})
 }
 
 export function compileContinuityContext(manifest, { maxChars = DEFAULT_CONTEXT_CHARS } = {}) {
-  if (!manifest?.transitions?.length) return "";
+  if (!manifest?.transitions?.length && !manifest?.consultativeState) return "";
   const ceiling = boundedInteger(maxChars, DEFAULT_CONTEXT_CHARS, 3_000, 20_000);
   const closing = "</amos_continuity>";
   const shared = Boolean(manifest.scope?.tenantId);
@@ -391,9 +513,11 @@ export function compileContinuityContext(manifest, { maxChars = DEFAULT_CONTEXT_
     return true;
   };
 
-  const latest = manifest.transitions.at(-1);
-  if (!append(`current ${safeJson(compactTransition(latest, true))}`)) {
-    append(`current ${safeJson(minimalTransition(latest))}`);
+  const latest = manifest.transitions?.at(-1);
+  if (latest) {
+    if (!append(`current ${safeJson(compactTransition(latest, true))}`)) {
+      append(`current ${safeJson(minimalTransition(latest))}`);
+    }
   }
 
   const latestArtifacts = uniqueStrings(
@@ -409,6 +533,11 @@ export function compileContinuityContext(manifest, { maxChars = DEFAULT_CONTEXT_
   const lastHandoff = manifest.handoffs?.at(-1);
   if (lastHandoff) {
     append(`intelligence_handoff ${safeJson(lastHandoff)}`);
+  }
+
+  const consultative = compileConsultativeContext(manifest.consultativeState);
+  if (consultative) {
+    append(consultative) || append("consultative_state omitted_for_budget");
   }
 
   let includedPrior = 0;
@@ -456,6 +585,10 @@ function normalizeRecord(value) {
       .map(normalizeTurn)
       .slice(-MAX_TURNS),
     artifacts: uniqueStrings(value?.artifacts || [], MAX_ARTIFACTS, 1_024),
+    consultativeState: value?.consultativeState
+      ? normalizeConsultativeState(value.consultativeState, { allowConfirmed: true })
+      : null,
+    revision: Math.max(0, Math.min(Number(value?.revision || 0), Number.MAX_SAFE_INTEGER)),
     createdAt: cleanTimestamp(value?.createdAt),
     updatedAt: cleanTimestamp(value?.updatedAt)
   };

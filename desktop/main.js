@@ -428,6 +428,15 @@ function registerIpc() {
     controller.updateTaskResource(input?.id, input?.changes)
   );
   ipcMain.handle("desktop:fork-task", (_event, input) => controller.forkTaskResource(input));
+  ipcMain.handle("desktop:confirm-consultative-assertion", (_event, input) =>
+    controller.confirmConsultativeAssertion(input)
+  );
+  ipcMain.handle("desktop:correct-consultative-assertion", (_event, input) =>
+    controller.correctConsultativeAssertion(input)
+  );
+  ipcMain.handle("desktop:propose-consultative-update", (_event, input) =>
+    controller.proposeConsultativeUpdate(input)
+  );
   ipcMain.handle("desktop:create-project", (_event, input) => controller.createProject(input));
   ipcMain.handle("desktop:update-project", (_event, input) =>
     controller.updateProjectResource(input?.id, input?.changes)

@@ -211,7 +211,19 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(main, /controller\.repairAutomationFailure\(input\?\.incidentId, input\?\.resolution\)/);
   assert.match(main, /controller\.removeBrowserRecipe\(id\)/);
   assert.match(controller, /const id = randomUUID\(\);[\s\S]*?this\.activeContextKey = `task:\$\{id\}`/);
-  assert.match(controller, /continuityCapturePayload\(transition, settings, this\.activeContextKey\)/);
+  assert.match(controller, /continuityCapturePayload\(transition, settings, this\.activeContextKey, record\)/);
+  const turnPayload = controller.slice(
+    controller.indexOf("function continuityCapturePayload"),
+    controller.indexOf("function compactContinuityField")
+  );
+  assert.doesNotMatch(turnPayload, /consultative_state/);
+  assert.match(controller, /origin: "user_gesture"/);
+  assert.match(preload, /desktop:confirm-consultative-assertion/);
+  assert.match(preload, /desktop:correct-consultative-assertion/);
+  assert.match(preload, /desktop:propose-consultative-update/);
+  assert.match(main, /controller\.confirmConsultativeAssertion\(input\)/);
+  assert.match(main, /controller\.correctConsultativeAssertion\(input\)/);
+  assert.match(main, /controller\.proposeConsultativeUpdate\(input\)/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);
   assert.match(remoteState, /active \? "resume_automation" : "pause_automation"/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automation_grants"/);
