@@ -526,6 +526,28 @@ test("canvas code and previews stay typed, inert, and outside the privileged ren
   assert.match(main, /clipboard\.writeText\(copy\)/);
 });
 
+test("offline model cards badge unmeasured, conditional, and experimental profiles", async () => {
+  const [javascript, css] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+  ]);
+
+  assert.match(javascript, /function offlineCatalogBadge\(/);
+  assert.match(javascript, /const badge = offlineCatalogBadge\(model\)/);
+  assert.match(javascript, /labels\.append\(status\)/);
+  assert.match(javascript, /model\.experimental \|\| model\.qualification\?\.status === "experimental"/);
+  assert.match(javascript, /Unmeasured — not for governed work/);
+  assert.match(javascript, /label: "Experimental"/);
+  assert.match(javascript, /label: "Conditional"/);
+  assert.match(javascript, /offlineCatalogFailures\(model\)/);
+  assert.match(javascript, /model\.capabilityContract\?\.failures/);
+  assert.match(css, /\.offline-model-labels \.unmeasured \{ color: var\(--coral\); \}/);
+  assert.match(
+    css,
+    /\.offline-model-labels \.conditional,\s*\.offline-model-labels \.experimental \{ color: var\(--warning\); \}/
+  );
+});
+
 test("chat renders only typed Platform-authorized connect actions", async () => {
   const javascript = await readFile(
     new URL("../desktop/renderer/app.js", import.meta.url),
@@ -600,7 +622,9 @@ test("first-run funnel events fire only after telemetry opt-in", async () => {
     controller,
     /async recordAcquisitionEvent\(settings, eventType, context = \{\}, \{ once = false \} = \{\}\) \{\s*if \(!this\.telemetry\) return;\s*await this\.telemetry\s*\.record\(/
   );
-  assert.match(telemetry, /if \(!this\.enabled\) return \{ accepted: false, reason: "disabled" \}/);
+  assert.match(telemetry, /QUEUED_MILESTONES/);
+  assert.match(telemetry, /if \(QUEUED_MILESTONES\.has\(eventType\)\) \{\s*return this\.queueMilestone/);
+  assert.match(telemetry, /await this\.flushQueued\(\{ mcpUrl \}\)/);
   assert.match(javascript, /setTelemetryPreference/);
   assert.match(javascript, /desktop:set-telemetry-preference|setTelemetryPreference\(\{ enabled \}\)/);
   assert.match(javascript, /telemetryConsent\.classList\.toggle\("hidden", !pending\)/);

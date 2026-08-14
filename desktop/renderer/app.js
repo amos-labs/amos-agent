@@ -5742,6 +5742,28 @@ function renderSettings() {
   );
 }
 
+function offlineCatalogBadge(model) {
+  if (model.experimental || model.qualification?.status === "experimental") {
+    return { className: "experimental", label: "Experimental" };
+  }
+  const status = model.qualification?.status;
+  if (status === "conditional") {
+    return { className: "conditional", label: "Conditional" };
+  }
+  if (status === "unmeasured" || status === "unqualified" || !model.qualification) {
+    return { className: "unmeasured", label: "Unmeasured — not for governed work" };
+  }
+  return null;
+}
+
+function offlineCatalogFailures(model) {
+  const named = [
+    ...(model.qualification?.failed || []),
+    ...((model.capabilityContract?.failures || []).map((item) => item?.scenario))
+  ];
+  return [...new Set(named.filter(Boolean))];
+}
+
 function renderOfflineModels() {
   if (!state?.offline) return;
   const offline = state.offline;
@@ -5783,15 +5805,12 @@ function renderOfflineModels() {
         ? "Recommended for image tasks"
         : model.id;
     labels.append(profile);
-    if (!measured || qualificationStatus === "conditional" || qualificationStatus === "experimental") {
-      const badge = document.createElement("span");
-      badge.className = `qualification-badge ${qualificationStatus}`;
-      badge.textContent = qualificationStatus === "conditional"
-        ? "Conditional"
-        : qualificationStatus === "experimental"
-          ? "Experimental"
-          : "Unmeasured — not for governed work";
-      labels.append(badge);
+    const badge = offlineCatalogBadge(model);
+    if (badge) {
+      const status = document.createElement("span");
+      status.className = badge.className;
+      status.textContent = badge.label;
+      labels.append(status);
     }
     if (model.installed) {
       const installed = document.createElement("span");
@@ -5808,9 +5827,11 @@ function renderOfflineModels() {
     for (const value of [
       `≈ ${formatBytes(model.approximateSizeBytes)}`,
       `${model.recommendedMemoryGb} GB recommended`,
-      ...(model.capabilities || []).slice(0, 3)
+      ...(model.capabilities || []).slice(0, 3),
+      ...offlineCatalogFailures(model).map((scenario) => `Failed: ${scenario}`)
     ]) {
       const pill = document.createElement("span");
+      if (value.startsWith("Failed: ")) pill.className = "failed";
       pill.textContent = value;
       meta.append(pill);
     }

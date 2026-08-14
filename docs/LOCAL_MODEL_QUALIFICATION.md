@@ -113,7 +113,7 @@ change must be requalified before it inherits these contracts.
 
 ## Machine-enforced contracts
 
-Offline catalog version 4 converts these results into release-signed
+Offline catalog version 5 converts these results into release-signed
 [model capability contracts](MODEL_CAPABILITY_CONTRACT.md). The 11/16 aggregate
 score is retained for display, but routing uses the individual grants and
 failures. GPT-OSS 20B and Qwen 3.6 27B therefore qualify for observed text,
@@ -121,6 +121,17 @@ retrieval, drafting, proposal, and measured tool-sequencing work; none qualifies
 for authoritative execution narration, hidden-test optimization code, or raw
 text-heavy screenshot extraction.
 
-The Qwen 4B and 8B profiles do not yet have measured contracts. They may remain
-available as user-selected local inference profiles, but the deterministic
-router does not admit them to governed workflows until they complete the suite.
+Hardware assessment recommends only measured primary profiles
+(`primary: true` with a `qualified` or `conditional` contract) that also
+meet the profile's **recommended** memory, not merely its minimum. That is
+currently GPT-OSS 20B at **24 GB or more**. A 16 GB machine can install
+that profile but does not receive a “recommended” badge. Computers below
+the 16 GB minimum receive no local primary recommendation and should use
+hosted or customer-cloud intelligence.
+
+The Qwen 4B and 8B profiles remain installable, but they are unmeasured:
+`primary: false`, `qualification.status: "unqualified"`, and no capability
+contract. Desktop badges them **Unmeasured — not for governed work** and does
+not recommend them. The deterministic router does not admit them to governed
+workflows until they complete the suite. Qwen Q8 stays an experimental option
+and is labeled Experimental; it is not a default.

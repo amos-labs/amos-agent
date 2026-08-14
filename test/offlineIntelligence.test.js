@@ -21,7 +21,40 @@ test("hardware assessment recommends a bounded curated profile", () => {
     freeMemoryGb: 4
   });
   assert.equal(compact.localTier, "compact");
-  assert.equal(compact.recommendedModelId, "qwen3:4b");
+  assert.equal(compact.recommendedModelId, null);
+  assert.equal(
+    compact.localRecommendation,
+    "Use AMOS-hosted or customer-cloud intelligence on this computer."
+  );
+
+  const twelveGig = assessHardware({
+    platform: "darwin",
+    release: "test",
+    arch: "arm64",
+    memoryGb: 12,
+    freeMemoryGb: 6
+  });
+  assert.equal(twelveGig.localTier, "balanced");
+  assert.equal(twelveGig.recommendedModelId, null);
+  assert.equal(
+    twelveGig.localRecommendation,
+    "Use AMOS-hosted or customer-cloud intelligence on this computer."
+  );
+
+  const sixteenGig = assessHardware({
+    platform: "darwin",
+    release: "test",
+    arch: "arm64",
+    memoryGb: 16,
+    freeMemoryGb: 8
+  });
+  assert.equal(sixteenGig.localTier, "balanced");
+  assert.equal(sixteenGig.recommendedModelId, null);
+  assert.equal(sixteenGig.recommendedVisionModelId, null);
+  assert.match(
+    sixteenGig.localRecommendation,
+    /not recommended below 24 GB/
+  );
 
   const capable = assessHardware({
     platform: "darwin",
@@ -58,6 +91,7 @@ test("hardware assessment recommends a bounded curated profile", () => {
 
 test("curated model manifest is release-signed and content-addressed", () => {
   const manifest = releaseSignedManifest();
+  assert.equal(manifest.version, 5);
   assert.equal(manifest.trust, "release-signed");
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
@@ -70,6 +104,22 @@ test("curated model manifest is release-signed and content-addressed", () => {
       "qwen3.6:27b-q8_0"
     ]
   );
+  const compact = manifest.models.find((model) => model.id === "qwen3:4b");
+  const balanced = manifest.models.find((model) => model.id === "qwen3:8b");
+  const capable = manifest.models.find((model) => model.id === "gpt-oss:20b");
+  const visionMax = manifest.models.find((model) => model.id === "qwen3.6:27b-q8_0");
+  assert.equal(compact.primary, false);
+  assert.equal(balanced.primary, false);
+  assert.equal(compact.qualification.status, "unqualified");
+  assert.equal(balanced.qualification.status, "unqualified");
+  assert.equal(compact.qualification.score, undefined);
+  assert.equal(balanced.qualification.score, undefined);
+  assert.equal(compact.capabilityContract, undefined);
+  assert.equal(balanced.capabilityContract, undefined);
+  assert.equal(capable.primary, true);
+  assert.equal(capable.qualification.status, "conditional");
+  assert.equal(visionMax.experimental, true);
+  assert.equal(visionMax.qualification.status, "experimental");
 });
 
 test("release-signed local contracts expose qualified grants instead of marketing claims", () => {

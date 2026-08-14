@@ -2993,17 +2993,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .offline-model-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
 .offline-model-card { display: flex; min-width: 0; min-height: 220px; flex-direction: column; padding: 18px; border: 1px solid var(--line); border-radius: 13px; background: var(--field); }
 .offline-model-card.recommended { border-color: rgba(109,147,255,.52); box-shadow: inset 0 0 0 1px rgba(109,147,255,.12); }
-.offline-model-labels { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.offline-model-labels { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .offline-model-labels span { color: var(--blue-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
 .offline-model-labels .installed { color: var(--green); }
-.offline-model-labels .qualification-badge { color: var(--warning); letter-spacing: .06em; }
-.offline-model-labels .qualification-badge.unqualified { color: var(--danger-text); }
-.offline-model-labels .qualification-badge.conditional { color: var(--warning); }
-.offline-model-labels .qualification-badge.experimental { color: var(--muted); }
+.offline-model-labels .unmeasured { color: var(--coral); }
+.offline-model-labels .conditional,
+.offline-model-labels .experimental { color: var(--warning); }
 .offline-model-card h3 { margin: 14px 0 6px; font-size: 15px; }
 .offline-model-card > p { margin: 0; color: var(--muted-2); font-size: 10px; line-height: 1.55; }
 .offline-model-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }
 .offline-model-meta span { padding: 5px 7px; border-radius: 999px; background: var(--surface-pill); color: var(--muted); font-size: 8px; }
+.offline-model-meta .failed { color: var(--coral); }
 .offline-model-progress { height: 5px; margin: auto 0 9px; overflow: hidden; border-radius: 999px; background: var(--progress-track); }
 .offline-model-progress i { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
 .offline-model-progress-label { margin: 0 0 10px; color: var(--muted-2); font-size: 9px; }
