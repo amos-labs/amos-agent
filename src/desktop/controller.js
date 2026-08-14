@@ -54,6 +54,10 @@ import {
   reconcileTaskCheckpoint
 } from "./taskCheckpoint.js";
 import {
+  confirmConsultativeAssertion,
+  correctConsultativeAssertion
+} from "./consultativeState.js";
+import {
   compileContinuityContext,
   buildSessionContinuityPrompt,
   continuityScope
@@ -4414,6 +4418,9 @@ export class DesktopController {
       : buildSessionContinuityPrompt(record, {
           currentModel: continuityModelIdentity(settings)
         });
+    if (useShared) {
+      await this.sessionContinuityStore.applySharedManifest(scope, manifest).catch(() => {});
+    }
     const restored = runtimeState.runtime.loop.restoreContinuity(prompt);
     return restored ? (useShared ? { source: "shared", manifest } : record) : null;
   }
@@ -4441,6 +4448,73 @@ export class DesktopController {
     return record;
   }
 
+  async confirmConsultativeAssertion({ assertionId } = {}) {
+    return this.applyConsultativeMutation((state) => (
+      confirmConsultativeAssertion(state, assertionId, { now: () => new Date() })
+    ));
+  }
+
+  async correctConsultativeAssertion({ assertionId, statement } = {}) {
+    return this.applyConsultativeMutation((state) => (
+      correctConsultativeAssertion(state, assertionId, statement, {
+        now: () => new Date(),
+        sourceEventId: this.activeTask?.continuityArtifacts?.at?.(-1) || ""
+      })
+    ));
+  }
+
+  async applyConsultativeMutation(mutate) {
+    if (!this.sessionContinuityStore) {
+      throw new Error("Consultative state requires encrypted session continuity");
+    }
+    const settings = await this.settingsStore.read();
+    const scope = this.sessionContinuityScope(settings, settings.operatingMode);
+    if (!scope) throw new Error("Consultative state is unavailable in this session");
+    const current = await this.sessionContinuityStore.load(scope);
+    if (!current?.consultativeState) {
+      throw new Error("There is no consultative state to update");
+    }
+    const nextState = mutate(current.consultativeState);
+    const record = await this.sessionContinuityStore.updateConsultativeState(scope, {
+      consultativeState: nextState,
+      expectedRevision: current.revision || null,
+      allowConfirmed: true
+    });
+    if (
+      settings.operatingMode === "online" &&
+      this.identity?.principal_type === "user" &&
+      this.identity?.tenant_id &&
+      Number(this.workingContinuity?.revision) >= 1
+    ) {
+      await this.captureSharedConsultativeState(settings, record).catch((error) => {
+        this.record("continuity", `Could not sync consultative state: ${error.message}`);
+      });
+    }
+    await this.sendRemoteState();
+    return record;
+  }
+
+  async captureSharedConsultativeState(settings, record) {
+    const expectedRevision = Number(this.workingContinuity?.revision || 0);
+    if (!Number.isFinite(expectedRevision) || expectedRevision < 1) {
+      throw new Error("Consultative state-only sync needs a hydrated continuity revision");
+    }
+    const config = this.configFrom(settings);
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth: this.oauthFor(settings),
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const result = await remote.captureContinuity({
+      context_key: String(this.activeContextKey || "active"),
+      source_client: "amos_desktop",
+      expected_revision: expectedRevision,
+      consultative_state: record.consultativeState
+    }, { tenantId: this.identity.tenant_id });
+    this.workingContinuity = result;
+    return result;
+  }
+
   async captureSharedContinuity(settings, record) {
     const transition = record?.manifest?.transitions?.at(-1);
     if (!transition) return null;
@@ -4451,7 +4525,7 @@ export class DesktopController {
       requestTimeoutMs: config.amos.requestTimeoutMs
     });
     const result = await remote.captureContinuity(
-      continuityCapturePayload(transition, settings, this.activeContextKey),
+      continuityCapturePayload(transition, settings, this.activeContextKey, record),
       { tenantId: this.identity.tenant_id }
     );
     this.workingContinuity = result;
@@ -4764,7 +4838,7 @@ function continuityTimestamp(manifest) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function continuityCapturePayload(transition, settings, contextKey = "active") {
+function continuityCapturePayload(transition, settings, contextKey = "active", record = null) {
   const stateItems = (value) => (Array.isArray(value) ? value : [])
     .slice(-4)
     .flatMap((item) => {
@@ -4816,7 +4890,10 @@ function continuityCapturePayload(transition, settings, contextKey = "active") {
             ? String(transition.receipt.digest).toLowerCase()
             : undefined
         }
-      : undefined
+      : undefined,
+    ...(record?.consultativeState
+      ? { consultative_state: record.consultativeState }
+      : {})
   };
 }
 

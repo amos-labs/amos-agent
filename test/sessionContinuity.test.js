@@ -11,6 +11,10 @@ import {
   normalizeSharedContinuityManifest,
   SessionContinuityStore
 } from "../src/desktop/sessionContinuity.js";
+import {
+  confirmConsultativeAssertion,
+  correctConsultativeAssertion
+} from "../src/desktop/consultativeState.js";
 
 function codec() {
   return {
@@ -316,4 +320,164 @@ test("version-one continuity records migrate without losing restart context", as
     answer: "Next milestone"
   });
   assert.equal(JSON.parse(await readFile(filePath, "utf8")).version, 2);
+});
+
+function consultativeObjective(status = "inferred", sourceEventId = "turn:one") {
+  return {
+    schemaVersion: 1,
+    status: "active",
+    objective: {
+      id: "obj-1",
+      kind: "objective",
+      statement: "Stop duplicate books",
+      status,
+      source: status === "confirmed" ? "application" : "inference",
+      sourceEventId
+    },
+    currentState: {
+      systems: [{
+        id: "sys-1",
+        kind: "system",
+        statement: "QBO owns the ledger",
+        status: "inferred",
+        source: "inference",
+        sourceEventId: "turn:two"
+      }]
+    }
+  };
+}
+
+test("consultative state is preserved on omit, downgraded on model capture, and confirmed only by typed operations", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-consultative-state-"));
+  const store = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    ...codec(),
+    now: () => new Date("2026-08-14T12:00:00.000Z")
+  });
+  const currentScope = scope();
+  await store.appendTurn(currentScope, {
+    eventId: "turn:one",
+    objective: "Inspect Stripe and QBO",
+    answer: "Mapped the current invoice path",
+    consultativeState: consultativeObjective("confirmed")
+  });
+  let record = await store.load(currentScope);
+  assert.equal(record.consultativeState.objective.status, "inferred");
+  assert.equal(record.consultativeState.objective.source, "inference");
+
+  await store.appendTurn(currentScope, {
+    eventId: "turn:two",
+    objective: "Recommend the next move",
+    answer: "Recommended a governed customer-identity rule"
+  });
+  record = await store.load(currentScope);
+  assert.equal(record.turns.length, 2);
+  assert.equal(record.consultativeState.objective.statement, "Stop duplicate books");
+
+  const confirmed = confirmConsultativeAssertion(record.consultativeState, "obj-1", {
+    now: () => new Date("2026-08-14T12:05:00.000Z")
+  });
+  record = await store.updateConsultativeState(currentScope, {
+    consultativeState: confirmed,
+    expectedRevision: record.revision,
+    allowConfirmed: true
+  });
+  assert.equal(record.consultativeState.objective.status, "confirmed");
+  assert.equal(record.consultativeState.objective.source, "application");
+  assert.match(buildSessionContinuityPrompt(record), /consultative_state/);
+  assert.match(buildSessionContinuityPrompt(record), /Stop duplicate books/);
+
+  await assert.rejects(
+    () => store.updateConsultativeState(currentScope, {
+      consultativeState: confirmed,
+      expectedRevision: 1
+    }),
+    /stale continuity revision/
+  );
+});
+
+test("task forks filter consultative assertions by the selected milestone", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-consultative-fork-"));
+  const store = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    ...codec(),
+    now: () => new Date("2026-08-14T12:00:00.000Z")
+  });
+  const parent = scope({}, "task:parent");
+  await store.appendTurn(parent, {
+    eventId: "turn:one",
+    objective: "Inspect the KPI gap",
+    answer: "Located the margin issue",
+    artifacts: ["reports/margin.csv"],
+    consultativeState: consultativeObjective("inferred", "turn:one")
+  });
+  const fromHere = await store.fork(parent, scope({}, "task:from-here"), {
+    contextScope: "from_here",
+    sourceEventId: "turn:one"
+  });
+  assert.equal(fromHere.consultativeState.objective.id, "obj-1");
+  assert.equal(fromHere.consultativeState.currentState.systems.length, 0);
+
+  const artifactsOnly = await store.fork(parent, scope({}, "task:artifacts"), {
+    contextScope: "selected_artifacts",
+    selectedArtifacts: ["reports/margin.csv"]
+  });
+  assert.equal(artifactsOnly.consultativeState, null);
+
+  const withPlan = await store.fork(parent, scope({}, "task:plan"), {
+    contextScope: "selected_artifacts",
+    selectedArtifacts: ["operating-plan:renewals"]
+  });
+  assert.equal(withPlan.consultativeState.objective.statement, "Stop duplicate books");
+
+  const everything = await store.fork(parent, scope({}, "task:all"), {
+    contextScope: "everything"
+  });
+  assert.equal(everything.consultativeState.currentState.systems[0].id, "sys-1");
+});
+
+test("shared v1 continuity still hydrates when consultative state is absent", () => {
+  const manifest = normalizeSharedContinuityManifest({
+    format: "amos.continuity_manifest",
+    version: 1,
+    revision: 4,
+    scope: {
+      boundary: "online",
+      tenantId: "tenant-1",
+      contextKey: "active",
+      workspaceHint: "neighborly-demo"
+    },
+    updatedAt: "2026-08-03T10:00:00.000Z",
+    transitions: [{
+      at: "2026-08-03T10:00:00.000Z",
+      status: "completed",
+      objective: "Show the generated learning course",
+      outcome: "The draft course is ready for review",
+      artifacts: ["https://learning.example/courses/42"]
+    }],
+    handoffs: [],
+    artifacts: ["https://learning.example/courses/42"],
+    safeguards: {
+      orientationOnly: true,
+      requiresFreshAuthority: true,
+      replayAllowed: false,
+      clientReported: true,
+      credentialsIncluded: false,
+      companyMemory: false
+    }
+  }, { tenantId: "tenant-1" });
+  assert.equal(manifest.consultativeState, null);
+  assert.match(compileContinuityContext(manifest), /Show the generated learning course/);
+});
+
+test("typed corrections keep a bounded history instead of renderer inference", () => {
+  const corrected = correctConsultativeAssertion(
+    consultativeObjective("inferred"),
+    "obj-1",
+    "Keep Stripe as cash owner and QBO as ledger owner",
+    { now: () => new Date("2026-08-14T12:10:00.000Z"), sourceEventId: "turn:one" }
+  );
+  assert.equal(corrected.objective.status, "confirmed");
+  assert.equal(corrected.objective.source, "application");
+  assert.equal(corrected.objective.corrections[0].previousStatement, "Stop duplicate books");
 });

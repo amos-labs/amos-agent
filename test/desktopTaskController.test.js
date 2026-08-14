@@ -386,6 +386,51 @@ test("desktop prefers a newer tenant-private checkpoint from another client", as
   assert.match(prompt, /not a filesystem grant/);
 });
 
+test("typed consultative confirm is an application operation, not renderer inference", async () => {
+  const store = await continuityStore();
+  const settings = await settingsStore().read();
+  const currentScope = continuityScope({
+    identity: identity(),
+    boundary: "online",
+    workspace: settings.workspace
+  });
+  await store.appendTurn(currentScope, {
+    eventId: "turn:one",
+    objective: "Inspect Stripe and QBO",
+    answer: "Mapped the current invoice path",
+    consultativeState: {
+      objective: {
+        id: "obj-1",
+        kind: "objective",
+        statement: "Stop duplicate books",
+        status: "inferred",
+        source: "inference",
+        sourceEventId: "turn:one"
+      }
+    }
+  });
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-consultative-confirm",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.sendRemoteState = async () => {};
+  let captured = null;
+  controller.captureSharedConsultativeState = async (_settings, record) => {
+    captured = record;
+    return { supported: true, available: true, revision: 2 };
+  };
+  controller.workingContinuity = { revision: 1, available: true };
+
+  const confirmed = await controller.confirmConsultativeAssertion({ assertionId: "obj-1" });
+  assert.equal(confirmed.consultativeState.objective.status, "confirmed");
+  assert.equal(confirmed.consultativeState.objective.source, "application");
+  assert.equal(captured.consultativeState.objective.status, "confirmed");
+});
+
 test("desktop automatically offers completed online state to the shared continuity lane", async () => {
   const store = await continuityStore();
   const controller = new DesktopController({
