@@ -1,0 +1,94 @@
+name: Qualify managed Windows signing
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-signing-qualification
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: Build and verify signed Windows installer
+    environment: WINDOWS_SIGNING
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: |
+          npm test
+          npm run check
+
+      - name: Verify managed signing configuration
+        shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT_NAME: ${{ vars.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          WINDOWS_SIGNING_PUBLISHER_NAME: ${{ vars.WINDOWS_SIGNING_PUBLISHER_NAME }}
+        run: node -e 'require("./desktop/electron-builder.windows-azure.cjs")'
+
+      - name: Build managed signed installer
+        run: npm run desktop:release:win
+        env:
+          AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT_NAME: ${{ vars.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          WINDOWS_SIGNING_PUBLISHER_NAME: ${{ vars.WINDOWS_SIGNING_PUBLISHER_NAME }}
+
+      - name: Verify installer signature and updater assets
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PUBLISHER_NAME: ${{ vars.WINDOWS_SIGNING_PUBLISHER_NAME }}
+        run: |
+          $required = @(
+            "dist/AMOS-Desktop-Windows-x64-Setup.exe",
+            "dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap",
+            "dist/latest.yml"
+          )
+          foreach ($asset in $required) {
+            if (!(Test-Path $asset) -or (Get-Item $asset).Length -eq 0) {
+              throw "Missing qualification asset: $asset"
+            }
+          }
+          if (!(Select-String -Path "dist/latest.yml" -Pattern "AMOS-Desktop-Windows-x64-Setup.exe" -Quiet)) {
+            throw "Windows update metadata does not reference the signed installer"
+          }
+          $signature = Get-AuthenticodeSignature "dist/AMOS-Desktop-Windows-x64-Setup.exe"
+          if ($signature.Status -ne "Valid") {
+            throw "Windows installer signature is not valid: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Subject -ne $env:WINDOWS_SIGNING_PUBLISHER_NAME) {
+            throw "Windows installer publisher '$($signature.SignerCertificate.Subject)' does not match the configured publisher"
+          }
+
+      - name: Upload qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-managed-signing-qualification
+          if-no-files-found: error
+          retention-days: 3
+          path: |
+            dist/AMOS-Desktop-Windows-x64-Setup.exe
+            dist/AMOS-Desktop-Windows-x64-Setup.exe.blockmap
+            dist/latest.yml
