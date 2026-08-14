@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   createCapsuleManifest,
   createSyncJournalEntry,
+  evidencePackDecision,
   exportDecision,
   MEMORY_CLASSES,
   validateCapsuleManifest
@@ -23,6 +24,17 @@ test("export policy requires AMOS authorization and signatures for managed memor
   assert.equal(exportDecision("company", { amosAuthorized: true }).signatureRequired, true);
   assert.equal(exportDecision("receipt", { amosAuthorized: true, signed: false }).allowed, false);
   assert.equal(exportDecision("receipt", { amosAuthorized: true, signed: true }).readOnly, true);
+});
+
+test("evidence pack export is a read-only unsigned window dump, not a receipt capsule", () => {
+  const decision = evidencePackDecision();
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.readOnly, true);
+  assert.equal(decision.signed, false);
+  assert.equal(decision.signatureRequired, false);
+  assert.equal(decision.memoryClassExport, false);
+  assert.equal(exportDecision("receipt").allowed, false);
+  assert.equal(exportDecision("receipt", { amosAuthorized: true, signed: false }).allowed, false);
 });
 
 test("capsule manifests prohibit credentials and require managed signatures", () => {

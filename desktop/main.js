@@ -290,6 +290,9 @@ function registerIpc() {
     }).catch(() => {});
     return { telemetryEnabled: saved.telemetryEnabled };
   });
+  ipcMain.handle("desktop:complete-onboarding", (_event, input) =>
+    controller.completeOnboarding(input)
+  );
   ipcMain.handle("desktop:start-personal", () => controller.startPersonal());
   ipcMain.handle("desktop:start-demo", () => controller.startDemo());
   ipcMain.handle("desktop:login", () => controller.login());
@@ -462,6 +465,20 @@ function registerIpc() {
       passphrase: input?.passphrase,
       ids: Array.isArray(input?.ids) ? input.ids : null
     });
+    return { canceled: false, summary };
+  });
+  ipcMain.handle("desktop:export-evidence-pack", async () => {
+    const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const result = await dialog.showSaveDialog(window, {
+      title: "Export receipt evidence pack",
+      defaultPath: `amos-evidence-${day}.json`,
+      filters: [{ name: "AMOS evidence pack", extensions: ["json"] }]
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    const filePath = result.filePath.endsWith(".json")
+      ? result.filePath
+      : `${result.filePath}.json`;
+    const summary = await controller.exportEvidencePack({ filePath });
     return { canceled: false, summary };
   });
   ipcMain.handle("desktop:preview-private-memory-capsule", async (_event, input) => {

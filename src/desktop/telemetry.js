@@ -5,7 +5,13 @@ import { fetchCompat } from "../util/fetchCompat.js";
 
 const VERSION = 1;
 const MAX_PENDING = 100;
+const MAX_QUEUED = 50;
 const REQUEST_TIMEOUT_MS = 5_000;
+const QUEUED_MILESTONES = new Set([
+  "desktop_boundary_selected",
+  "desktop_onboarding_completed",
+  "desktop_first_task_started"
+]);
 
 export class DesktopTelemetry {
   constructor({
@@ -23,16 +29,16 @@ export class DesktopTelemetry {
     this.releaseChannel = clean(releaseChannel, 32);
     this.fetch = fetchImpl;
     this.writeChain = Promise.resolve();
-    this.enabled = false;
+    this.preference = null;
   }
 
   setEnabled(enabled) {
-    this.enabled = enabled === true;
+    this.preference = enabled === true ? true : enabled === false ? false : null;
   }
 
   async initialize({ mcpUrl, telemetryEnabled } = {}) {
     this.setEnabled(telemetryEnabled);
-    if (!this.enabled) return "";
+    if (this.preference !== true) return "";
     const state = await this.read();
     await this.record("desktop_first_launch", {
       mcpUrl,
@@ -44,7 +50,12 @@ export class DesktopTelemetry {
 
   async applyPreference({ enabled, mcpUrl } = {}) {
     this.setEnabled(enabled);
-    if (!this.enabled) return { telemetryEnabled: false };
+    if (this.preference !== true) {
+      const state = await this.read();
+      state.queued = [];
+      await this.write(state);
+      return { telemetryEnabled: false };
+    }
     await this.record("desktop_first_launch", {
       mcpUrl,
       once: true,
@@ -54,6 +65,7 @@ export class DesktopTelemetry {
       mcpUrl,
       context: { enabled: true }
     });
+    await this.flushQueued({ mcpUrl });
     return { telemetryEnabled: true };
   }
 
@@ -67,7 +79,12 @@ export class DesktopTelemetry {
     context = {},
     once = false
   } = {}) {
-    if (!this.enabled) return { accepted: false, reason: "disabled" };
+    if (this.preference !== true) {
+      if (this.preference === null && QUEUED_MILESTONES.has(eventType)) {
+        return this.queueMilestone(eventType, { context, once });
+      }
+      return { accepted: false, reason: this.preference === false ? "disabled" : "unanswered" };
+    }
     if (!mcpUrl) return { accepted: false, reason: "missing_endpoint" };
     const state = await this.read();
     const onceKey = once ? clean(eventType, 64) : "";
@@ -94,6 +111,44 @@ export class DesktopTelemetry {
     state.pending = state.pending.slice(-MAX_PENDING);
     await this.write(state);
     return this.flush({ mcpUrl, accessToken });
+  }
+
+  async queueMilestone(eventType, { context = {}, once = false } = {}) {
+    const state = await this.read();
+    const onceKey = once ? clean(eventType, 64) : "";
+    if (
+      onceKey &&
+      (state.completed.includes(onceKey) ||
+        state.queued.some((event) => event.onceKey === onceKey) ||
+        state.pending.some((event) => event.onceKey === onceKey))
+    ) {
+      return { accepted: true, queued: true, duplicate: true };
+    }
+    state.queued.push({
+      event_type: clean(eventType, 64),
+      context: safeContext(context),
+      onceKey
+    });
+    state.queued = state.queued.slice(-MAX_QUEUED);
+    await this.write(state);
+    return { accepted: true, queued: true };
+  }
+
+  async flushQueued({ mcpUrl, accessToken = "" } = {}) {
+    const state = await this.read();
+    const queued = state.queued.splice(0, state.queued.length);
+    await this.write(state);
+    let flushed = 0;
+    for (const event of queued) {
+      await this.record(event.event_type, {
+        mcpUrl,
+        accessToken,
+        context: event.context,
+        once: Boolean(event.onceKey)
+      });
+      flushed += 1;
+    }
+    return { accepted: true, flushed };
   }
 
   async flush({ mcpUrl, accessToken = "" } = {}) {
@@ -156,6 +211,7 @@ export class DesktopTelemetry {
         Array.isArray(stored.pending) &&
         Array.isArray(stored.completed)
       ) {
+        if (!Array.isArray(stored.queued)) stored.queued = [];
         return stored;
       }
     } catch (error) {
@@ -168,6 +224,7 @@ export class DesktopTelemetry {
       version: VERSION,
       installId: randomUUID(),
       pending: [],
+      queued: [],
       completed: []
     };
     await this.write(state);

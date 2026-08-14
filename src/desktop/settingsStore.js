@@ -33,6 +33,8 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   localApprovalKinds: [],
   amosMcpUrl: "https://app.amoslabs.com/mcp",
   telemetryEnabled: null,
+  onboardingCompletedAt: "",
+  onboardingBoundary: "",
   notifiedApprovalIds: [],
   deliveredApprovalOutcomeIds: []
 });
@@ -173,6 +175,10 @@ export function sanitizeSettings(input = {}) {
       input.telemetryEnabled === true ? true
         : input.telemetryEnabled === false ? false
           : null,
+    onboardingCompletedAt: isoOrEmpty(input.onboardingCompletedAt),
+    onboardingBoundary: ["personal", "northwind", "company"].includes(input.onboardingBoundary)
+      ? input.onboardingBoundary
+      : "",
     notifiedApprovalIds: Array.isArray(input.notifiedApprovalIds)
       ? input.notifiedApprovalIds
           .map((value) => clean(value, 64))
@@ -222,6 +228,13 @@ function validateEndpoint(value, { requireHttps = false } = {}) {
   url.username = "";
   url.password = "";
   return url.toString().replace(/\/$/, "");
+}
+
+function isoOrEmpty(value) {
+  const cleaned = clean(value, 40);
+  if (!cleaned) return "";
+  const parsed = Date.parse(cleaned);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
 }
 
 function clean(value, maxLength) {

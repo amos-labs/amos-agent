@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   saveSettings: (settings) => ipcRenderer.invoke("desktop:save-settings", settings),
   setTelemetryPreference: (input) =>
     ipcRenderer.invoke("desktop:set-telemetry-preference", input),
+  completeOnboarding: (input) =>
+    ipcRenderer.invoke("desktop:complete-onboarding", input),
   startPersonal: () => ipcRenderer.invoke("desktop:start-personal"),
   startDemo: () => ipcRenderer.invoke("desktop:start-demo"),
   login: () => ipcRenderer.invoke("desktop:login"),
@@ -111,6 +113,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   forgetPrivateMemory: (id) => ipcRenderer.invoke("desktop:forget-private-memory", id),
   exportPrivateMemoryCapsule: (input) =>
     ipcRenderer.invoke("desktop:export-private-memory-capsule", input),
+  exportEvidencePack: () => ipcRenderer.invoke("desktop:export-evidence-pack"),
   previewPrivateMemoryCapsule: (input) =>
     ipcRenderer.invoke("desktop:preview-private-memory-capsule", input),
   importPrivateMemoryCapsule: (previewId) =>

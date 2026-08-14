@@ -33,7 +33,14 @@ import {
   readPrivateMemoryCapsule,
   writePrivateMemoryCapsule
 } from "./memoryCapsule.js";
-import { MEMORY_CLASSES } from "./memoryContract.js";
+import {
+  buildEvidencePack,
+  writeEvidencePack
+} from "./localReceiptStore.js";
+import {
+  evidencePackDecision,
+  MEMORY_CLASSES
+} from "./memoryContract.js";
 import { assessHardware } from "./offlineIntelligence.js";
 import {
   buildReauthorizationPrompt,
@@ -116,11 +123,13 @@ export class DesktopController {
     telemetry = null,
     openBrowser,
     emit,
-    notify = () => {}
+    notify = () => {},
+    createRuntime: createRuntimeImpl = createRuntime
   }) {
     this.runManager = new DesktopRunManager();
     this.userDataPath = userDataPath;
     this.settingsStore = settingsStore;
+    this.createRuntime = createRuntimeImpl;
     this.openBrowser = openBrowser;
     this.emit = emit;
     this.notify = notify;
@@ -129,6 +138,7 @@ export class DesktopController {
     this.identity = null;
     this.accountStatus = null;
     this.companyReceipts = [];
+    this.companyReceiptRows = [];
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -232,7 +242,7 @@ export class DesktopController {
   }
 
   async state() {
-    const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    let settings = this.runManager.current()?.settings || await this.settingsStore.read();
     await this.backfillActiveConversation(settings).catch((error) => {
       this.record("task", `Could not index the current conversation: ${error.message}`);
     });
@@ -248,6 +258,16 @@ export class DesktopController {
         !useOAuth
       );
     const demoExpired = Boolean(credentials?.demo) && !useOAuth;
+    if (
+      demoExpired &&
+      (settings.onboardingCompletedAt || settings.onboardingBoundary === "northwind")
+    ) {
+      settings = await this.settingsStore.write({
+        ...settings,
+        onboardingCompletedAt: "",
+        onboardingBoundary: ""
+      });
+    }
     const demo = credentials?.demo
       ? {
           tenantId: credentials.tenant_id,
@@ -722,15 +742,21 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const credentials = await this.oauthFor(settings).status();
     if (credentials?.demo) await this.oauthFor(settings).logout();
-    await this.settingsStore.write({
+    const saved = await this.settingsStore.write({
       ...settings,
       workspace: credentials?.demo
         ? credentials.previous_workspace || ""
         : settings.workspace,
-      operatingMode: "personal"
+      operatingMode: "personal",
+      onboardingBoundary: "personal"
     });
     this.clearEphemeralCompanyBoundary();
     this.record("mode", "Private personal workspace enabled");
+    if (settings.onboardingBoundary !== "personal") {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
+        boundary: "personal"
+      });
+    }
     return this.state();
   }
 
@@ -770,7 +796,7 @@ export class DesktopController {
         tenantSlug: "northwind-demo"
       });
     }
-    await this.settingsStore.write({
+    const saved = await this.settingsStore.write({
       ...settings,
       provider: "amos-hosted",
       model: "auto",
@@ -778,11 +804,46 @@ export class DesktopController {
       intelligenceProfile: "auto",
       reasoningEffort: "",
       operatingMode: "online",
-      workspace: demoWorkspace
+      workspace: demoWorkspace,
+      onboardingBoundary: "northwind",
+      onboardingCompletedAt: settings.onboardingCompletedAt || new Date().toISOString()
     });
     this.clearEphemeralCompanyBoundary();
     this.record("auth", "Northwind Labs demo company connected");
+    if (settings.onboardingBoundary !== "northwind") {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
+        boundary: "northwind"
+      });
+    }
+    if (!settings.onboardingCompletedAt) {
+      await this.recordAcquisitionEvent(saved, "desktop_onboarding_completed", {
+        boundary: "northwind"
+      }, { once: true });
+    }
     await this.refreshRemote({ notify: false });
+    return this.state();
+  }
+
+  async completeOnboarding(input = {}) {
+    const settings = await this.settingsStore.read();
+    const requested = String(input?.boundary || "").trim();
+    const boundary = ["personal", "northwind", "company"].includes(requested)
+      ? requested
+      : settings.onboardingBoundary || inferOnboardingBoundary(settings);
+    const completedAt = settings.onboardingCompletedAt || new Date().toISOString();
+    const saved = await this.settingsStore.write({
+      ...settings,
+      onboardingBoundary: boundary,
+      onboardingCompletedAt: completedAt
+    });
+    if (boundary && boundary !== settings.onboardingBoundary) {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", { boundary });
+    }
+    if (!settings.onboardingCompletedAt) {
+      await this.recordAcquisitionEvent(saved, "desktop_onboarding_completed", {
+        boundary
+      }, { once: true });
+    }
     return this.state();
   }
 
@@ -873,6 +934,34 @@ export class DesktopController {
       }
     );
     return publicCapsuleSummary(summary);
+  }
+
+  async exportEvidencePack({ filePath }) {
+    const decision = evidencePackDecision();
+    if (!decision.allowed) {
+      throw new Error(decision.reason || "Evidence pack export is not allowed");
+    }
+    const localReceipts = this.localReceiptStore
+      ? await this.localReceiptStore.list(privateMemoryScope(this.identity))
+      : [];
+    const platformReceipts = Array.isArray(this.companyReceiptRows) && this.companyReceiptRows.length > 0
+      ? this.companyReceiptRows
+      : this.companyReceipts;
+    const pack = buildEvidencePack({
+      localReceipts,
+      platformReceipts,
+      exportedAt: new Date().toISOString()
+    });
+    await writeEvidencePack(filePath, pack);
+    this.record("proof", `Exported a read-only evidence pack (${pack.items.length} items)`, {
+      schema: pack.schema,
+      item_count: pack.items.length
+    });
+    return {
+      schema: pack.schema,
+      itemCount: pack.items.length,
+      filePath
+    };
   }
 
   async previewPrivateMemoryCapsule({ filePath, passphrase }) {
@@ -974,7 +1063,8 @@ export class DesktopController {
       operatingMode: "online",
       workspace: previous?.demo
         ? previous.previous_workspace || ""
-        : settings.workspace
+        : settings.workspace,
+      onboardingBoundary: "company"
     };
     if (shouldActivateAmosHosted(settings) || previous?.demo) {
       Object.assign(nextSettings, {
@@ -985,7 +1075,7 @@ export class DesktopController {
         reasoningEffort: ""
       });
     }
-    await this.settingsStore.write(nextSettings);
+    const saved = await this.settingsStore.write(nextSettings);
     if (shouldActivateAmosHosted(settings) || previous?.demo) {
       this.record(
         "settings",
@@ -995,6 +1085,11 @@ export class DesktopController {
     this.resetRuntime();
     this.clearEphemeralCompanyBoundary();
     this.record("auth", "AMOS account connected");
+    if (settings.onboardingBoundary !== "company") {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
+        boundary: "company"
+      });
+    }
     await this.refreshRemote({ notify: true });
     if (this.accountStore && this.identity) {
       await this.accountStore.updateActiveProfile(this.identity);
@@ -1024,6 +1119,12 @@ export class DesktopController {
         : credentials?.demo
           ? "personal"
           : settings.operatingMode,
+      onboardingCompletedAt: remainingAccounts?.currentAccountId
+        ? settings.onboardingCompletedAt
+        : "",
+      onboardingBoundary: remainingAccounts?.currentAccountId
+        ? settings.onboardingBoundary
+        : "",
       notifiedApprovalIds: [],
       deliveredApprovalOutcomeIds: []
     });
@@ -1144,6 +1245,7 @@ export class DesktopController {
       this.accountStatus = null;
       this.companyApprovals = [];
       this.companyReceipts = [];
+      this.companyReceiptRows = [];
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -1187,7 +1289,7 @@ export class DesktopController {
       remote.intelligenceStatus(),
       remote.connectionsCatalog(),
       oauth.companies(),
-      remote.receipts({ limit: 50 }),
+      remote.receiptWindow({ limit: 200 }),
       remote.hydrateContinuity({ contextKey: this.activeContextKey }),
       remote.briefingsLibrary(),
       remote.automationsLibrary(),
@@ -1295,9 +1397,11 @@ export class DesktopController {
     }
 
     if (receiptsResult.status === "fulfilled") {
-      this.companyReceipts = receiptsResult.value;
+      this.companyReceipts = receiptsResult.value.display;
+      this.companyReceiptRows = receiptsResult.value.platform;
     } else {
       this.companyReceipts = [];
+      this.companyReceiptRows = [];
     }
 
     if (companiesResult.status === "fulfilled") {
@@ -1757,6 +1861,9 @@ export class DesktopController {
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
     const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    await this.recordAcquisitionEvent(settings, "desktop_first_task_started", {
+      boundary: settings.onboardingBoundary || inferOnboardingBoundary(settings)
+    }, { once: true });
     await this.adoptConversationObjective(prompt, settings).catch((error) => {
       this.record("task", `Could not name the new conversation: ${error.message}`);
     });
@@ -2023,6 +2130,17 @@ export class DesktopController {
     });
     this.runManager.select(null);
     return lane;
+  }
+
+  async recordAcquisitionEvent(settings, eventType, context = {}, { once = false } = {}) {
+    if (!this.telemetry) return;
+    await this.telemetry
+      .record(eventType, {
+        mcpUrl: settings?.amosMcpUrl,
+        context,
+        once
+      })
+      .catch(() => {});
   }
 
   async recordNorthwindValue(settings, receiptEvents) {
@@ -4011,7 +4129,7 @@ export class DesktopController {
       demo: Boolean(credentials?.demo),
       config,
       oauth,
-      runtime: createRuntime({
+      runtime: this.createRuntime({
         config,
         approvals: this.approvals,
         oauth,
@@ -4422,6 +4540,7 @@ export class DesktopController {
     this.accountStatus = null;
     this.companyApprovals = [];
     this.companyReceipts = [];
+    this.companyReceiptRows = [];
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -4897,6 +5016,15 @@ function systemProfile() {
     memoryGb,
     freeMemoryGb: Math.round((freemem() / 1024 ** 3) * 10) / 10,
   });
+}
+
+function inferOnboardingBoundary(settings = {}) {
+  if (settings.operatingMode === "personal" || settings.operatingMode === "offline") {
+    return "personal";
+  }
+  if (settings.onboardingBoundary === "northwind") return "northwind";
+  if (settings.operatingMode === "online") return "company";
+  return "";
 }
 
 function operatingMode(settings, config) {

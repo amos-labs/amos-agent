@@ -562,3 +562,78 @@ test("chat renders only typed Platform-authorized connect actions", async () => 
   assert.match(javascript, /url\.protocol !== "https:"/);
   assert.match(javascript, /await api\.openExternal\(action\.url\)/);
 });
+
+test("first-run persists completion and requires local or BYO for My workspace", async () => {
+  const [javascript, html, preload, main, settings, controller] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/settingsStore.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
+  ]);
+  const onboarding = html.match(/<section id="onboardingView"([\s\S]*?)<section id="operatorView"/)?.[1] || "";
+
+  assert.doesNotMatch(javascript, /amos-onboarding-complete/);
+  assert.doesNotMatch(javascript, /sessionStorage\.(setItem|getItem|removeItem)/);
+  assert.match(settings, /onboardingCompletedAt: isoOrEmpty\(input\.onboardingCompletedAt\)/);
+  assert.match(settings, /\["personal", "northwind", "company"\]\.includes\(input\.onboardingBoundary\)/);
+  assert.match(javascript, /function firstRunNeeded/);
+  assert.match(javascript, /connectionMode === "demo_expired"/);
+  assert.match(javascript, /!current\.settings\?\.onboardingCompletedAt/);
+  assert.match(javascript, /api\.completeOnboarding\(\{ boundary \}\)/);
+  assert.match(preload, /desktop:complete-onboarding/);
+  assert.match(main, /controller\.completeOnboarding\(input\)/);
+  assert.match(controller, /onboardingCompletedAt: settings\.onboardingCompletedAt \|\| new Date\(\)\.toISOString\(\)/);
+
+  assert.match(onboarding, /What do you want to operate\?/);
+  assert.match(onboarding, /<strong>My workspace<\/strong>/);
+  assert.match(onboarding, /id="demoModeButton" class="start-mode-card featured"/);
+  assert.match(onboarding, /<strong>Northwind demo<\/strong>/);
+  assert.match(onboarding, /<strong>My company<\/strong>/);
+  assert.match(onboarding, /Your model, this computer/);
+  assert.match(html, /Choose a local profile or your own key\. AMOS Intelligence needs a sign-in — use Northwind or My company\./);
+  assert.match(javascript, /personalNeedsIntelligence/);
+  assert.match(javascript, /Choose a local profile or your own key/);
+  assert.match(
+    javascript,
+    /enterButton\.disabled = !\(\s*\(state\.connected \|\| state\.mode\?\.personal \|\| state\.mode\?\.offline\) &&\s*state\.configured &&\s*state\.settings\.workspace/
+  );
+  assert.match(
+    controller,
+    /settings\.operatingMode === "personal" &&\s*settings\.provider === "amos-hosted" &&\s*!useOAuth/
+  );
+  assert.match(controller, /createRuntime: createRuntimeImpl = createRuntime/);
+  assert.match(controller, /this\.createRuntime = createRuntimeImpl/);
+  assert.match(controller, /runtime: this\.createRuntime\(\{/);
+  assert.doesNotMatch(controller, /unqualified[\s\S]{0,80}configured\s*=\s*false/);
+  assert.doesNotMatch(controller, /officialWindowsPublished/);
+  assert.doesNotMatch(onboarding, /Claude Desktop|paste this URL|Connectors/i);
+  assert.doesNotMatch(onboarding, /anonymous auto|no account[\s\S]{0,40}automatic/i);
+});
+
+test("first-run funnel events fire only after telemetry opt-in", async () => {
+  const [javascript, controller, telemetry] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/telemetry.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(controller, /desktop_boundary_selected/);
+  assert.match(controller, /desktop_onboarding_completed/);
+  assert.match(controller, /desktop_first_task_started/);
+  assert.match(
+    controller,
+    /async recordAcquisitionEvent\(settings, eventType, context = \{\}, \{ once = false \} = \{\}\) \{\s*if \(!this\.telemetry\) return;\s*await this\.telemetry\s*\.record\(/
+  );
+  assert.match(telemetry, /QUEUED_MILESTONES/);
+  assert.match(
+    telemetry,
+    /if \(this\.preference === null && QUEUED_MILESTONES\.has\(eventType\)\) \{\s*return this\.queueMilestone/
+  );
+  assert.match(telemetry, /await this\.flushQueued\(\{ mcpUrl \}\)/);
+  assert.match(javascript, /setTelemetryPreference/);
+  assert.match(javascript, /desktop:set-telemetry-preference|setTelemetryPreference\(\{ enabled \}\)/);
+  assert.match(javascript, /telemetryConsent\.classList\.toggle\("hidden", !pending\)/);
+  assert.match(javascript, /operatorView\.prepend\(elements\.telemetryConsent\)/);
+});

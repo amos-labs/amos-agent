@@ -1,7 +1,10 @@
 # Privacy
 
 AMOS Desktop does not send usage analytics until you choose **Allow**. The
-default is no send until you answer. You can change this later in Settings.
+default is no send until you answer. First-run milestones that happen before
+that answer stay on this computer and flush after Allow. Don't send discards
+them, and later milestones after a decline are not saved. A later Allow does
+not send work that happened while declined. You can change this later in Settings.
 
 ## What Desktop may send
 
@@ -10,6 +13,9 @@ platform (`/api/v1/desktop/events`, stored as `desktop_acquisition_events`):
 
 - `desktop_first_launch` — this installation started
 - `desktop_telemetry_choice` — you allowed analytics
+- `desktop_boundary_selected` — My workspace, Northwind, or My company was chosen
+- `desktop_onboarding_completed` — first-run finished
+- `desktop_first_task_started` — the first Desktop task began
 - `northwind_demo_value_reached` — a completed, tool-backed Northwind demo task
 
 Each event includes a random installation UUID, app version, operating system,
