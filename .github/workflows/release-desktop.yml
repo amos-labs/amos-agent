@@ -92,7 +92,7 @@ jobs:
 
   windows-signing-config:
     name: Check Windows signing availability
-    environment: WIN_CSC_LINK
+    environment: WINDOWS_SIGNING
     runs-on: ubuntu-latest
     outputs:
       configured: ${{ steps.check.outputs.configured }}
@@ -100,21 +100,39 @@ jobs:
       - name: Check protected signing secrets
         id: check
         env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT_NAME: ${{ vars.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          WINDOWS_SIGNING_PUBLISHER_NAME: ${{ vars.WINDOWS_SIGNING_PUBLISHER_NAME }}
         run: |
-          if [[ -n "$WIN_CSC_LINK" && -n "$WIN_CSC_KEY_PASSWORD" ]]; then
+          required=(
+            AZURE_TENANT_ID
+            AZURE_CLIENT_ID
+            AZURE_CLIENT_SECRET
+            WINDOWS_SIGNING_ENDPOINT
+            WINDOWS_SIGNING_ACCOUNT_NAME
+            WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME
+            WINDOWS_SIGNING_PUBLISHER_NAME
+          )
+          missing=()
+          for name in "${required[@]}"; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if [[ ${#missing[@]} -eq 0 ]]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Signed Windows publishing is unavailable; use the isolated unsigned preview workflow."
+            echo "::notice::Managed Windows signing is unavailable because ${missing[*]} is not configured; use the isolated unsigned preview workflow."
           fi
 
   windows:
     name: Sign and package Windows
     needs: windows-signing-config
     if: needs.windows-signing-config.outputs.configured == 'true'
-    environment: WIN_CSC_LINK
+    environment: WINDOWS_SIGNING
     runs-on: windows-2025
     timeout-minutes: 45
     steps:
@@ -136,26 +154,47 @@ jobs:
       - name: Verify release version and signing configuration
         shell: pwsh
         env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT_NAME: ${{ vars.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          WINDOWS_SIGNING_PUBLISHER_NAME: ${{ vars.WINDOWS_SIGNING_PUBLISHER_NAME }}
         run: |
           node -e 'const p=require("./package.json"); const tag=process.env.GITHUB_REF_NAME; if (tag !== `v${p.version}`) { console.error(`Tag ${tag} must match package version v${p.version}`); process.exit(1); }'
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) {
-            throw "WIN_CSC_LINK is not configured"
+          $required = @(
+            "AZURE_TENANT_ID",
+            "AZURE_CLIENT_ID",
+            "AZURE_CLIENT_SECRET",
+            "WINDOWS_SIGNING_ENDPOINT",
+            "WINDOWS_SIGNING_ACCOUNT_NAME",
+            "WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME",
+            "WINDOWS_SIGNING_PUBLISHER_NAME"
+          )
+          foreach ($name in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name is not configured"
+            }
           }
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
-            throw "WIN_CSC_KEY_PASSWORD is not configured"
-          }
+          node -e 'require("./desktop/electron-builder.windows-azure.cjs")'
 
       - name: Build signed installer
         run: npm run desktop:release:win
         env:
           AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT_NAME: ${{ vars.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ vars.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          WINDOWS_SIGNING_PUBLISHER_NAME: ${{ vars.WINDOWS_SIGNING_PUBLISHER_NAME }}
 
       - name: Verify Windows release assets and signature
         shell: pwsh
+        env:
+          WINDOWS_SIGNING_PUBLISHER_NAME: ${{ vars.WINDOWS_SIGNING_PUBLISHER_NAME }}
         run: |
           $required = @(
             "dist/AMOS-Desktop-Windows-x64-Setup.exe",
@@ -173,6 +212,9 @@ jobs:
           $signature = Get-AuthenticodeSignature "dist/AMOS-Desktop-Windows-x64-Setup.exe"
           if ($signature.Status -ne "Valid") {
             throw "Windows installer signature is not valid: $($signature.Status)"
+          }
+          if ($signature.SignerCertificate.Subject -ne $env:WINDOWS_SIGNING_PUBLISHER_NAME) {
+            throw "Windows installer publisher '$($signature.SignerCertificate.Subject)' does not match the configured publisher"
           }
 
       - name: Upload Windows release assets

@@ -293,15 +293,34 @@ Release secrets live in the protected `MAC_CSC_LINK` GitHub environment:
 - `APPLE_APP_SPECIFIC_PASSWORD`
 - `APPLE_TEAM_ID`
 
-Windows release secrets live in the protected `WIN_CSC_LINK` environment:
+Windows releases use Microsoft Artifact Signing. The private signing key stays
+in Microsoft's managed service instead of being exported to GitHub. The
+protected `WINDOWS_SIGNING` environment contains these secrets for a narrowly
+scoped Entra service principal:
 
-- `WIN_CSC_LINK`
-- `WIN_CSC_KEY_PASSWORD`
+- `AZURE_TENANT_ID`
+- `AZURE_CLIENT_ID`
+- `AZURE_CLIENT_SECRET`
 
-`WIN_CSC_LINK` is a base64-encoded or otherwise electron-builder-compatible
-Windows code-signing certificate. The release build is fail-closed:
-`forceCodeSigning` prevents an official tag from publishing an unsigned
+The same environment defines these non-secret variables from the Artifact
+Signing account and public-trust certificate profile:
+
+- `WINDOWS_SIGNING_ENDPOINT`
+- `WINDOWS_SIGNING_ACCOUNT_NAME`
+- `WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME`
+- `WINDOWS_SIGNING_PUBLISHER_NAME`
+
+The service principal must have only the **Artifact Signing Certificate Profile
+Signer** role scoped to the release certificate profile. The release build is
+fail-closed: the config rejects missing managed-signing values and
+`forceCodeSigning` prevents an official Windows job from producing an unsigned
 installer.
+
+After changing the account, certificate profile, identity, or environment
+configuration, run the manual `Qualify managed Windows signing` workflow. It
+builds the real stable installer, verifies its Authenticode status and exact
+publisher subject, and uploads short-lived evidence without publishing a
+release.
 
 No signing or notarization secret belongs in the repository.
 
