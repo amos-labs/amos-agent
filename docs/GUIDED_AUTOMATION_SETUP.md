@@ -6,7 +6,10 @@ or switch to a separate workflow builder.
 
 ```text
 plain-language request in Operator
-  -> desktop_begin_automation_setup
+  -> inspect connections, schemas, and company context when the
+     objective or current workflow is still unclear
+  -> desktop_begin_automation_setup once the workflow is understood
+     (or immediately when the request is already precise)
   -> live Platform Blueprint/template catalog
   -> secure connection setup
   -> active typed operation contract
