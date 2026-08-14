@@ -603,7 +603,11 @@ test("first-run persists completion and requires local or BYO for My workspace",
     controller,
     /settings\.operatingMode === "personal" &&\s*settings\.provider === "amos-hosted" &&\s*!useOAuth/
   );
+  assert.match(controller, /createRuntime: createRuntimeImpl = createRuntime/);
+  assert.match(controller, /this\.createRuntime = createRuntimeImpl/);
+  assert.match(controller, /runtime: this\.createRuntime\(\{/);
   assert.doesNotMatch(controller, /unqualified[\s\S]{0,80}configured\s*=\s*false/);
+  assert.doesNotMatch(controller, /officialWindowsPublished/);
   assert.doesNotMatch(onboarding, /Claude Desktop|paste this URL|Connectors/i);
   assert.doesNotMatch(onboarding, /anonymous auto|no account[\s\S]{0,40}automatic/i);
 });
