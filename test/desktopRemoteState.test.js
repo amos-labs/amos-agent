@@ -135,7 +135,7 @@ test("Desktop projects bounded tenant proof from the canonical AMOS receipt ledg
   const receipts = await client.receipts({ limit: 500 });
 
   assert.equal(requests[0].params.name, "list_receipts");
-  assert.deepEqual(requests[0].params.arguments, { limit: 100 });
+  assert.deepEqual(requests[0].params.arguments, { limit: 200 });
   assert.deepEqual(receipts, [{
     id: "receipt-1",
     operation: "create_ad",

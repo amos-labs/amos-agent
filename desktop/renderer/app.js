@@ -117,6 +117,7 @@ const elements = Object.fromEntries(
     "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
     "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "workDecisionsTab", "workProofTab", "workDecisionTabCount", "workDecisionsPanel", "workProofPanel",
+    "exportEvidencePackButton",
     "memoryClassGrid", "memoryImportButton", "memoryExportButton",
     "workingContinuityCard", "workingContinuityStatus", "workingContinuityDetail",
     "workingContinuityMeta",
@@ -309,6 +310,7 @@ function bindActions() {
   elements.approvalsButton.addEventListener("click", () => showView("decisions"));
   elements.workDecisionsTab.addEventListener("click", () => showWorkTab("open"));
   elements.workProofTab.addEventListener("click", () => showWorkTab("history"));
+  elements.exportEvidencePackButton.addEventListener("click", exportEvidencePack);
   elements.allApprovalsButton.addEventListener("click", () => api.openApprovals());
   elements.refreshDecisionsButton.addEventListener("click", refreshDecisions);
   elements.approveButton.addEventListener("click", () => resolveApproval(true));
@@ -7139,6 +7141,20 @@ const CONSEQUENTIAL_RECEIPT_STATES = new Set([
   "canceled",
   "cancelled"
 ]);
+
+async function exportEvidencePack() {
+  setButtonBusy(elements.exportEvidencePackButton, true, "Exporting…");
+  try {
+    const result = await api.exportEvidencePack();
+    if (result.canceled) return;
+    const count = result.summary?.itemCount || 0;
+    toast(`Saved a read-only evidence pack with ${count} ${count === 1 ? "item" : "items"}.`);
+  } catch (error) {
+    toast(friendlyError(error), true);
+  } finally {
+    setButtonBusy(elements.exportEvidencePackButton, false, "Export evidence pack…");
+  }
+}
 
 function renderHistory() {
   if (!state) return;

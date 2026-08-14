@@ -33,7 +33,14 @@ import {
   readPrivateMemoryCapsule,
   writePrivateMemoryCapsule
 } from "./memoryCapsule.js";
-import { MEMORY_CLASSES } from "./memoryContract.js";
+import {
+  buildEvidencePack,
+  writeEvidencePack
+} from "./localReceiptStore.js";
+import {
+  evidencePackDecision,
+  MEMORY_CLASSES
+} from "./memoryContract.js";
 import { assessHardware } from "./offlineIntelligence.js";
 import {
   buildReauthorizationPrompt,
@@ -131,6 +138,7 @@ export class DesktopController {
     this.identity = null;
     this.accountStatus = null;
     this.companyReceipts = [];
+    this.companyReceiptRows = [];
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -928,6 +936,34 @@ export class DesktopController {
     return publicCapsuleSummary(summary);
   }
 
+  async exportEvidencePack({ filePath }) {
+    const decision = evidencePackDecision();
+    if (!decision.allowed) {
+      throw new Error(decision.reason || "Evidence pack export is not allowed");
+    }
+    const localReceipts = this.localReceiptStore
+      ? await this.localReceiptStore.list(privateMemoryScope(this.identity))
+      : [];
+    const platformReceipts = Array.isArray(this.companyReceiptRows) && this.companyReceiptRows.length > 0
+      ? this.companyReceiptRows
+      : this.companyReceipts;
+    const pack = buildEvidencePack({
+      localReceipts,
+      platformReceipts,
+      exportedAt: new Date().toISOString()
+    });
+    await writeEvidencePack(filePath, pack);
+    this.record("proof", `Exported a read-only evidence pack (${pack.items.length} items)`, {
+      schema: pack.schema,
+      item_count: pack.items.length
+    });
+    return {
+      schema: pack.schema,
+      itemCount: pack.items.length,
+      filePath
+    };
+  }
+
   async previewPrivateMemoryCapsule({ filePath, passphrase }) {
     this.pruneCapsulePreviews();
     const capsule = await readPrivateMemoryCapsule({ filePath, passphrase });
@@ -1209,6 +1245,7 @@ export class DesktopController {
       this.accountStatus = null;
       this.companyApprovals = [];
       this.companyReceipts = [];
+      this.companyReceiptRows = [];
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
@@ -1252,7 +1289,7 @@ export class DesktopController {
       remote.intelligenceStatus(),
       remote.connectionsCatalog(),
       oauth.companies(),
-      remote.receipts({ limit: 50 }),
+      remote.receiptWindow({ limit: 200 }),
       remote.hydrateContinuity({ contextKey: this.activeContextKey }),
       remote.briefingsLibrary(),
       remote.automationsLibrary(),
@@ -1360,9 +1397,11 @@ export class DesktopController {
     }
 
     if (receiptsResult.status === "fulfilled") {
-      this.companyReceipts = receiptsResult.value;
+      this.companyReceipts = receiptsResult.value.display;
+      this.companyReceiptRows = receiptsResult.value.platform;
     } else {
       this.companyReceipts = [];
+      this.companyReceiptRows = [];
     }
 
     if (companiesResult.status === "fulfilled") {
@@ -4501,6 +4540,7 @@ export class DesktopController {
     this.accountStatus = null;
     this.companyApprovals = [];
     this.companyReceipts = [];
+    this.companyReceiptRows = [];
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };

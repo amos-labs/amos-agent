@@ -14,6 +14,7 @@ import {
   normalizeAutomationOperations,
   normalizeAutomationTemplateCatalog
 } from "./automationSetup.js";
+import { toPlatformEvidenceItem } from "./localReceiptStore.js";
 
 export class DesktopRemoteStateClient {
   constructor({ mcpUrl, oauth, requestTimeoutMs = 30_000 }, fetchImpl = fetchCompat) {
@@ -284,7 +285,11 @@ export class DesktopRemoteStateClient {
   }
 
   async receipts({ limit = 50, signal = null } = {}) {
-    const boundedLimit = Math.max(1, Math.min(100, Number(limit) || 50));
+    return (await this.receiptWindow({ limit, signal })).display;
+  }
+
+  async receiptWindow({ limit = 50, signal = null } = {}) {
+    const boundedLimit = Math.max(1, Math.min(200, Number(limit) || 50));
     try {
       const result = await this.mcp.callTool(
         "list_receipts",
@@ -292,11 +297,13 @@ export class DesktopRemoteStateClient {
         { signal }
       );
       const payload = parseMcpJson(result, "AMOS proof receipts");
-      return Array.isArray(payload?.receipts)
-        ? payload.receipts.map(normalizeReceipt).filter(Boolean)
-        : [];
+      const rows = Array.isArray(payload?.receipts) ? payload.receipts : [];
+      return {
+        display: rows.map(normalizeReceipt).filter(Boolean),
+        platform: rows.map(toPlatformEvidenceItem).filter(Boolean).slice(0, 200)
+      };
     } catch (error) {
-      if (isUnknownTool(error, "list_receipts")) return [];
+      if (isUnknownTool(error, "list_receipts")) return { display: [], platform: [] };
       throw error;
     }
   }
