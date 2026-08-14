@@ -526,6 +526,21 @@ test("canvas code and previews stay typed, inert, and outside the privileged ren
   assert.match(main, /clipboard\.writeText\(copy\)/);
 });
 
+test("offline model cards badge unmeasured, conditional, and experimental profiles", async () => {
+  const javascript = await readFile(
+    new URL("../desktop/renderer/app.js", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(javascript, /function offlineCatalogBadge\(/);
+  assert.match(javascript, /model\.experimental \|\| model\.qualification\?\.status === "experimental"/);
+  assert.match(javascript, /Unmeasured — not for governed work/);
+  assert.match(javascript, /label: "Experimental"/);
+  assert.match(javascript, /label: "Conditional"/);
+  assert.match(javascript, /offlineCatalogFailures\(model\)/);
+  assert.match(javascript, /model\.capabilityContract\?\.failures/);
+});
+
 test("chat renders only typed Platform-authorized connect actions", async () => {
   const javascript = await readFile(
     new URL("../desktop/renderer/app.js", import.meta.url),
