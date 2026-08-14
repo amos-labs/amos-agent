@@ -210,29 +210,62 @@ test("first-run personal local/BYO walks to cancelTask and a local receipt", asy
   assert.equal(requests.some((event) => event.event_type === "desktop_first_launch"), false);
 });
 
-for (const telemetryEnabled of [null, false]) {
-  const label = telemetryEnabled === null ? "unset" : "false";
-  test(`telemetryEnabled ${label} blocks desktop_first_launch through first-run`, async (t) => {
-    const { controller, workspace, requests, startedPromise, telemetry } = await firstRunHarness({
-      telemetryEnabled
-    });
-
-    await controller.startPersonal();
-    await controller.completeOnboarding({ boundary: "personal" });
-    await controller.saveSettings({
-      provider: "openai",
-      model: "gpt-5.6-terra",
-      apiKey: "sk-test-first-run"
-    });
-    await controller.chooseWorkspace(workspace);
-    await runAndCancel(t, controller, startedPromise);
-
-    assert.equal(requests.length, 0);
-
-    await telemetry.applyPreference({
-      enabled: true,
-      mcpUrl: DEFAULT_DESKTOP_SETTINGS.amosMcpUrl
-    });
-    assert.equal(requests[0]?.event_type, "desktop_first_launch");
+test("telemetryEnabled unset queues first-run milestones and flushes them after opt-in", async (t) => {
+  const { controller, workspace, requests, startedPromise, telemetry } = await firstRunHarness({
+    telemetryEnabled: null
   });
-}
+
+  await controller.startPersonal();
+  await controller.completeOnboarding({ boundary: "personal" });
+  await controller.saveSettings({
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    apiKey: "sk-test-first-run"
+  });
+  await controller.chooseWorkspace(workspace);
+  await runAndCancel(t, controller, startedPromise);
+
+  assert.equal(requests.length, 0);
+
+  await telemetry.applyPreference({
+    enabled: true,
+    mcpUrl: DEFAULT_DESKTOP_SETTINGS.amosMcpUrl
+  });
+  assert.deepEqual(
+    requests.map((event) => event.event_type),
+    [
+      "desktop_first_launch",
+      "desktop_telemetry_choice",
+      "desktop_boundary_selected",
+      "desktop_onboarding_completed",
+      "desktop_first_task_started"
+    ]
+  );
+});
+
+test("telemetryEnabled false does not queue first-run milestones for a later opt-in", async (t) => {
+  const { controller, workspace, requests, startedPromise, telemetry } = await firstRunHarness({
+    telemetryEnabled: false
+  });
+
+  await controller.startPersonal();
+  await controller.completeOnboarding({ boundary: "personal" });
+  await controller.saveSettings({
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    apiKey: "sk-test-first-run"
+  });
+  await controller.chooseWorkspace(workspace);
+  await runAndCancel(t, controller, startedPromise);
+
+  assert.equal(requests.length, 0);
+
+  await telemetry.applyPreference({
+    enabled: true,
+    mcpUrl: DEFAULT_DESKTOP_SETTINGS.amosMcpUrl
+  });
+  assert.deepEqual(
+    requests.map((event) => event.event_type),
+    ["desktop_first_launch", "desktop_telemetry_choice"]
+  );
+});
