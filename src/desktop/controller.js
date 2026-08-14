@@ -116,11 +116,13 @@ export class DesktopController {
     telemetry = null,
     openBrowser,
     emit,
-    notify = () => {}
+    notify = () => {},
+    createRuntime: createRuntimeImpl = createRuntime
   }) {
     this.runManager = new DesktopRunManager();
     this.userDataPath = userDataPath;
     this.settingsStore = settingsStore;
+    this.createRuntime = createRuntimeImpl;
     this.openBrowser = openBrowser;
     this.emit = emit;
     this.notify = notify;
@@ -4088,7 +4090,7 @@ export class DesktopController {
       demo: Boolean(credentials?.demo),
       config,
       oauth,
-      runtime: createRuntime({
+      runtime: this.createRuntime({
         config,
         approvals: this.approvals,
         oauth,
