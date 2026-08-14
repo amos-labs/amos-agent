@@ -11,7 +11,7 @@ export const CONSULTATIVE_SCENARIOS = [
     id: "discoverable-answer",
     prompt: "Who owns the customer record?",
     expect: "retrieve from connected context instead of asking",
-    context: "Trusted company context: QuickBooks Online owns the customer record and the general ledger. Stripe is the payment processor and is not the customer system of record."
+    context: "A read-only company_lookup tool can answer ownership questions from current company records. Do not guess and do not ask the user to restate discoverable facts."
   },
   {
     id: "precise-request",
@@ -219,16 +219,19 @@ function checksFor(id, signal) {
   return checks;
 }
 
-export function buildConsultativeEvalPrompt(scenario, constitution) {
+export function buildConsultativeEvalPrompt(scenario) {
   return [
-    String(constitution || "").trim(),
-    "",
     "Evaluation fixture context (untrusted orientation, not live authority):",
     String(scenario.context || "").trim(),
     "",
-    `User: ${scenario.prompt}`
+    scenario.prompt
   ].join("\n");
 }
+
+export const DISCOVERABLE_LOOKUP = {
+  name: "company_lookup",
+  result: "QuickBooks Online owns the customer record. Stripe is the payment processor."
+};
 
 export function summarizeConsultativeResults(profile, model, scored) {
   const passed = scored.filter((item) => item.passed).length;

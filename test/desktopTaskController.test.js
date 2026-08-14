@@ -405,7 +405,9 @@ test("typed consultative confirm is an application operation, not renderer infer
         statement: "Stop duplicate books",
         status: "inferred",
         source: "inference",
-        sourceEventId: "turn:one"
+        sourceEventId: "turn:one",
+        observedAt: "2026-08-14T12:00:00.000Z",
+        confidence: 0.7
       }
     }
   });
@@ -429,6 +431,62 @@ test("typed consultative confirm is an application operation, not renderer infer
   assert.equal(confirmed.consultativeState.objective.status, "confirmed");
   assert.equal(confirmed.consultativeState.objective.source, "application");
   assert.equal(captured.consultativeState.objective.status, "confirmed");
+});
+
+test("propose then confirm survives a later completed turn", async () => {
+  const store = await continuityStore();
+  const settings = await settingsStore().read();
+  const currentScope = continuityScope({
+    identity: identity(),
+    boundary: "online",
+    workspace: settings.workspace
+  });
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-consultative-e2e",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.sendRemoteState = async () => {};
+  controller.captureSharedConsultativeState = async (_settings, record) => {
+    return { supported: true, available: true, revision: record.revision, manifest: record.manifest };
+  };
+  controller.workingContinuity = { revision: 0, available: false };
+
+  const proposed = await controller.proposeConsultativeUpdate({
+    objective: { statement: "Stop duplicate books", confidence: 0.8 }
+  });
+  assert.equal(proposed.consultativeState.objective.status, "inferred");
+  assert.ok(proposed.consultativeState.objective.sourceEventId);
+  assert.ok(proposed.consultativeState.objective.observedAt);
+
+  const confirmed = await controller.confirmConsultativeAssertion({
+    assertionId: proposed.consultativeState.objective.id
+  });
+  assert.equal(confirmed.consultativeState.objective.status, "confirmed");
+
+  await controller.saveSessionContinuity({
+    settings,
+    boundary: "online",
+    objective: "Recommend the next move",
+    answer: "Recommended a governed customer-identity rule",
+    artifacts: [],
+    receipt: null
+  });
+  const afterTurn = await store.load(currentScope);
+  assert.equal(afterTurn.consultativeState.objective.status, "confirmed");
+  assert.equal(afterTurn.turns.length, 1);
+
+  const runtimeState = {
+    runtime: { loop: { restoreContinuity() { return true; } } }
+  };
+  const restored = await controller.hydrateSessionContinuity(settings, "online", runtimeState);
+  assert.equal(
+    restored.consultativeState?.objective?.status || restored.manifest?.consultativeState?.objective?.status,
+    "confirmed"
+  );
 });
 
 test("desktop automatically offers completed online state to the shared continuity lane", async () => {

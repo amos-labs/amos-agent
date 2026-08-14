@@ -248,6 +248,109 @@ export function correctConsultativeAssertion(
   return current;
 }
 
+export function proposeConsultativeState(
+  previous,
+  proposal = {},
+  { sourceEventId, now = () => new Date() } = {}
+) {
+  const eventId = cleanText(sourceEventId, 160);
+  if (!eventId) throw new Error("A consultative proposal needs a source event id");
+  const observedAt = isoNow(now);
+  const current = previous
+    ? normalizeConsultativeState(previous, { allowConfirmed: true, now })
+    : normalizeConsultativeState({ status: proposal.status || "active" }, { allowConfirmed: true, now });
+  const stamp = (item, defaultKind) => {
+    if (!item || typeof item !== "object") return null;
+    const statement = redact(cleanText(item.statement, 600));
+    if (!statement) return null;
+    return {
+      id: cleanText(item.id, 64) || newAssertionId(),
+      kind: item.kind || defaultKind,
+      statement,
+      status: "inferred",
+      source: "inference",
+      sourceEventId: eventId,
+      observedAt,
+      confidence: item.confidence == null ? 0.6 : Number(item.confidence),
+      visibility: "task_private"
+    };
+  };
+  if (proposal.objective) {
+    current.objective = stamp(proposal.objective, "objective");
+  }
+  if (proposal.recommendation) {
+    current.recommendation = stamp(proposal.recommendation, "move");
+  }
+  if (proposal.intervention) {
+    current.intervention = stamp(proposal.intervention, "move");
+  }
+  for (const item of Array.isArray(proposal.assertions) ? proposal.assertions : []) {
+    const kind = item?.kind || "assumption";
+    const stamped = stamp(item, kind);
+    if (!stamped) continue;
+    placeAssertion(current, stamped);
+  }
+  if (proposal.status && LANE_STATUSES.includes(proposal.status)) {
+    current.status = proposal.status;
+  }
+  current.updatedAt = observedAt;
+  return normalizeConsultativeState(current, { allowConfirmed: false, now });
+}
+
+function placeAssertion(state, assertion) {
+  const collection = collectionForKind(assertion.kind);
+  if (collection === "objective") {
+    state.objective = assertion;
+    return;
+  }
+  if (collection === "recommendation") {
+    state.recommendation = assertion;
+    return;
+  }
+  if (collection === "intervention") {
+    state.intervention = assertion;
+    return;
+  }
+  if (CURRENT_STATE_CAPS[collection]) {
+    state.currentState[collection] = upsertAssertion(state.currentState[collection], assertion);
+    return;
+  }
+  if (COLLECTION_CAPS[collection]) {
+    state[collection] = upsertAssertion(state[collection], assertion);
+  }
+}
+
+function collectionForKind(kind) {
+  switch (kind) {
+    case "objective": return "objective";
+    case "person": return "people";
+    case "system": return "systems";
+    case "step": return "workflowSteps";
+    case "handoff": return "handoffs";
+    case "exception": return "exceptions";
+    case "control": return "controls";
+    case "measure": return "successMeasures";
+    case "evidence": return "evidence";
+    case "assumption": return "assumptions";
+    case "unknown": return "materialUnknowns";
+    case "move": return "candidateMoves";
+    case "outcome": return "outcomes";
+    default: return "assumptions";
+  }
+}
+
+function upsertAssertion(list, assertion) {
+  const items = Array.isArray(list) ? [...list] : [];
+  const index = items.findIndex((item) => item.id === assertion.id);
+  if (index >= 0) items[index] = assertion;
+  else items.push(assertion);
+  return items;
+}
+
+function newAssertionId() {
+  return `c:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function compileConsultativeContext(state, { maxChars = 1_800 } = {}) {
   if (!state) return "";
   const lines = [
@@ -381,17 +484,27 @@ function normalizeAssertion(value, defaultKind, allowConfirmed, now) {
     throw new Error("Consultative assertion has an invalid source");
   }
   let confirmedAt = cleanOptionalTimestamp(firstDefined(value.confirmedAt, value.confirmed_at));
+  let downgraded = false;
   if (status === "confirmed" && !allowConfirmed) {
     status = "inferred";
     source = "inference";
     confirmedAt = "";
+    downgraded = true;
   }
   if (status === "confirmed" && !confirmedAt) confirmedAt = now;
   if (status !== "confirmed") confirmedAt = "";
-  const confidence = value.confidence == null ? null : Number(value.confidence);
+  let confidence = value.confidence == null ? null : Number(value.confidence);
   if (confidence != null && !(confidence >= 0 && confidence <= 1)) {
     throw new Error("Consultative assertion confidence must be between 0 and 1");
   }
+  if (status === "inferred" && confidence == null) {
+    if (!downgraded) throw new Error("Inferred consultative assertions need a confidence");
+    confidence = 0.5;
+  }
+  const sourceEventId = cleanText(firstDefined(value.sourceEventId, value.source_event_id), 160);
+  if (!sourceEventId) throw new Error("Each consultative assertion needs a sourceEventId");
+  const observedAt = cleanOptionalTimestamp(firstDefined(value.observedAt, value.observed_at)) || now;
+  if (!observedAt) throw new Error("Each consultative assertion needs observedAt");
   const visibility = value.visibility || "task_private";
   if (visibility !== "task_private") {
     throw new Error("Consultative assertion visibility must be task_private");
@@ -403,8 +516,8 @@ function normalizeAssertion(value, defaultKind, allowConfirmed, now) {
     status,
     source,
     sourceRefs: uniqueStrings(firstDefined(value.sourceRefs, value.source_refs), MAX_SOURCE_REFS, 256),
-    sourceEventId: cleanText(firstDefined(value.sourceEventId, value.source_event_id), 160),
-    observedAt: cleanOptionalTimestamp(firstDefined(value.observedAt, value.observed_at)),
+    sourceEventId,
+    observedAt,
     confidence,
     visibility,
     confirmedAt,

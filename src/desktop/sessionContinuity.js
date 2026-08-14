@@ -120,10 +120,10 @@ export class SessionContinuityStore {
     const normalizedScope = normalizeScope(scope);
     const store = await this.readStore();
     const existing = store.records.find((item) => item.key === normalizedScope.key);
-    if (!existing) {
-      throw new Error("Consultative state can only update an existing continuity lane");
+    const currentRevision = Math.max(0, Number(existing?.revision || 0));
+    if (!existing && expectedRevision != null && Number(expectedRevision) !== 0) {
+      throw new Error("Consultative state can only create a lane at revision 0");
     }
-    const currentRevision = Math.max(0, Number(existing.revision || 0));
     if (expectedRevision != null && Number(expectedRevision) !== currentRevision) {
       throw new Error(
         `stale continuity revision: expected ${expectedRevision}, found ${currentRevision}`
@@ -131,15 +131,16 @@ export class SessionContinuityStore {
     }
     const now = this.now().toISOString();
     const record = normalizeRecord({
-      ...existing,
+      ...(existing || normalizedScope),
       consultativeState: applyConsultativeUpdate(
-        existing.consultativeState || null,
+        existing?.consultativeState || null,
         resolveConsultativeUpdate(consultativeState, {
           allowConfirmed,
           now: () => new Date(now)
         })
       ),
       revision: currentRevision + 1,
+      createdAt: existing?.createdAt || now,
       updatedAt: now
     });
     store.records = [
@@ -151,15 +152,18 @@ export class SessionContinuityStore {
   }
 
   async applySharedManifest(scope, manifest) {
-    if (!manifest?.transitions?.length) return null;
+    if (!manifest?.transitions?.length && !manifest?.consultativeState) return null;
     const normalizedScope = normalizeScope(scope);
     const store = await this.readStore();
     const existing = store.records.find((item) => item.key === normalizedScope.key);
     const now = this.now().toISOString();
-    const turns = manifest.transitions.map((transition) => normalizeTurn({
-      id: transition.eventId,
+    const turns = (Array.isArray(manifest.transitions) && manifest.transitions.length
+      ? manifest.transitions
+      : existing?.turns || []
+    ).map((transition) => normalizeTurn({
+      id: transition.eventId || transition.id,
       objective: transition.objective,
-      answer: transition.outcome,
+      answer: transition.outcome || transition.answer,
       taskId: transition.taskId,
       status: transition.status,
       model: transition.model,
@@ -346,7 +350,7 @@ export function buildSessionContinuityPrompt(record, options = {}) {
 }
 
 export function buildContinuityManifest(record, { currentModel = "" } = {}) {
-  if (!record?.turns?.length) return null;
+  if (!record?.turns?.length && !record?.consultativeState) return null;
   const transitions = record.turns.map((turn) => ({
     eventId: turn.id,
     taskId: turn.taskId,
@@ -429,7 +433,10 @@ export function normalizeSharedContinuityManifest(value, { tenantId = "" } = {})
   const transitions = (Array.isArray(value.transitions) ? value.transitions : [])
     .slice(-MAX_TURNS)
     .map(normalizeSharedTransition);
-  if (transitions.length === 0) {
+  const consultativeState = value.consultativeState
+    ? normalizeConsultativeState(value.consultativeState, { allowConfirmed: true })
+    : null;
+  if (transitions.length === 0 && !consultativeState) {
     throw new Error("AMOS working continuity has no usable transitions");
   }
   const contextKey = cleanRequired(value.scope?.contextKey || "active", 128, "context key");
@@ -453,9 +460,7 @@ export function normalizeSharedContinuityManifest(value, { tenantId = "" } = {})
       .slice(-MAX_TURNS)
       .flatMap(normalizeHandoff),
     artifacts: uniqueStrings(value.artifacts || [], MAX_ARTIFACTS, 1_024),
-    consultativeState: value.consultativeState
-      ? normalizeConsultativeState(value.consultativeState, { allowConfirmed: true })
-      : null,
+    consultativeState,
     safeguards: {
       orientationOnly: true,
       requiresFreshAuthority: true,
@@ -468,7 +473,7 @@ export function normalizeSharedContinuityManifest(value, { tenantId = "" } = {})
 }
 
 export function compileContinuityContext(manifest, { maxChars = DEFAULT_CONTEXT_CHARS } = {}) {
-  if (!manifest?.transitions?.length) return "";
+  if (!manifest?.transitions?.length && !manifest?.consultativeState) return "";
   const ceiling = boundedInteger(maxChars, DEFAULT_CONTEXT_CHARS, 3_000, 20_000);
   const closing = "</amos_continuity>";
   const shared = Boolean(manifest.scope?.tenantId);
@@ -508,9 +513,11 @@ export function compileContinuityContext(manifest, { maxChars = DEFAULT_CONTEXT_
     return true;
   };
 
-  const latest = manifest.transitions.at(-1);
-  if (!append(`current ${safeJson(compactTransition(latest, true))}`)) {
-    append(`current ${safeJson(minimalTransition(latest))}`);
+  const latest = manifest.transitions?.at(-1);
+  if (latest) {
+    if (!append(`current ${safeJson(compactTransition(latest, true))}`)) {
+      append(`current ${safeJson(minimalTransition(latest))}`);
+    }
   }
 
   const latestArtifacts = uniqueStrings(

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AMOS_OPERATOR_CONSTITUTION } from "../src/prompts.js";
 import {
   CONSULTATIVE_SCENARIOS,
   buildConsultativeEvalPrompt,
@@ -95,10 +94,13 @@ test("the scorer accepts inspect-first traces and rejects questionnaires", () =>
   );
 });
 
-test("eval prompts carry the live constitution rather than a second classifier", () => {
-  const prompt = buildConsultativeEvalPrompt(CONSULTATIVE_SCENARIOS[0], AMOS_OPERATOR_CONSTITUTION);
-  assert.match(prompt, /AMOS Operator constitution v1/);
+test("eval prompts do not double the constitution or leak discoverable answers", () => {
+  const prompt = buildConsultativeEvalPrompt(CONSULTATIVE_SCENARIOS[0]);
   assert.match(prompt, /Help improve the business/);
-  assert.match(prompt, /Do not implement this as a fixed question list/);
-  assert.match(prompt, /or a second model call to classify personality/);
+  assert.doesNotMatch(prompt, /AMOS Operator constitution v1/);
+  const discoverable = buildConsultativeEvalPrompt(
+    CONSULTATIVE_SCENARIOS.find((item) => item.id === "discoverable-answer")
+  );
+  assert.match(discoverable, /company_lookup/);
+  assert.doesNotMatch(discoverable, /QuickBooks Online owns the customer record/);
 });

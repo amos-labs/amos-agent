@@ -1,5 +1,6 @@
 import { extractMcpText } from "../mcp/amosMcpClient.js";
 import { sanitizeToolName } from "./registry.js";
+import { sanitizeModelContinuityCapture } from "./consultativeState.js";
 
 export function createAmosTools() {
   return [
@@ -70,7 +71,9 @@ export function createAmosTools() {
                 {
                   engine: args.engine,
                   tool: originalName,
-                  arguments: toolArgs
+                  arguments: originalName === "capture_context"
+                    ? sanitizeModelContinuityCapture(toolArgs)
+                    : toolArgs
                 },
                 { signal: innerContext.signal }
               );
@@ -106,7 +109,9 @@ export function createAmosTools() {
           {
             engine: args.engine,
             tool: args.tool,
-            arguments: args.arguments || {}
+            arguments: args.tool === "capture_context"
+              ? sanitizeModelContinuityCapture(args.arguments || {})
+              : args.arguments || {}
           },
           { signal: context.signal }
         );

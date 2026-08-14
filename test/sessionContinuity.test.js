@@ -332,7 +332,9 @@ function consultativeObjective(status = "inferred", sourceEventId = "turn:one") 
       statement: "Stop duplicate books",
       status,
       source: status === "confirmed" ? "application" : "inference",
-      sourceEventId
+      sourceEventId,
+      observedAt: "2026-08-14T12:00:00.000Z",
+      confidence: 0.7
     },
     currentState: {
       systems: [{
@@ -341,7 +343,9 @@ function consultativeObjective(status = "inferred", sourceEventId = "turn:one") 
         statement: "QBO owns the ledger",
         status: "inferred",
         source: "inference",
-        sourceEventId: "turn:two"
+        sourceEventId: "turn:two",
+        observedAt: "2026-08-14T12:00:00.000Z",
+        confidence: 0.6
       }]
     }
   };
