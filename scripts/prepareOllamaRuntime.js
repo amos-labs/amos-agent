@@ -7,12 +7,14 @@ import { pipeline } from "node:stream/promises";
 import { spawn } from "node:child_process";
 import {
   OLLAMA_RUNTIME_RELEASE,
-  ollamaRuntimeAsset
+  ollamaRuntimeAsset,
+  ollamaRuntimeProfile
 } from "../src/desktop/ollamaRuntimeManifest.js";
 
 const root = resolve(import.meta.dirname, "..");
 const destination = join(root, "desktop", "vendor", "ollama");
 const asset = ollamaRuntimeAsset();
+const profile = ollamaRuntimeProfile();
 const archivePath = join(
   tmpdir(),
   `amos-ollama-${OLLAMA_RUNTIME_RELEASE.version}-${basename(asset.archive)}`
@@ -26,6 +28,11 @@ if (!(await matchesDigest(archivePath, asset.sha256))) {
 }
 await verifyDigest(archivePath, asset.sha256);
 await extract(archivePath, destination);
+await Promise.all(
+  profile.excludedDirectories.map((directory) =>
+    rm(join(destination, directory), { recursive: true, force: true })
+  )
+);
 
 const binaryPath = join(destination, asset.binary);
 const binary = await stat(binaryPath).catch(() => null);
@@ -47,11 +54,15 @@ await writeFile(
     archive: asset.archive,
     sha256: asset.sha256,
     platform: asset.platform,
-    arch: asset.arch
+    arch: asset.arch,
+    profile: profile.id,
+    excludedDirectories: profile.excludedDirectories
   }, null, 2)}\n`
 );
 
-console.log(`Prepared AMOS Local runtime ${OLLAMA_RUNTIME_RELEASE.version} at ${destination}`);
+console.log(
+  `Prepared AMOS Local runtime ${OLLAMA_RUNTIME_RELEASE.version} (${profile.id}) at ${destination}`
+);
 
 async function download(url, filePath) {
   console.log(`Downloading verified AMOS Local runtime from ${url}`);

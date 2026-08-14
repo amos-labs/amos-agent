@@ -13,15 +13,13 @@ Download the current signed installer:
 
 - [Apple Silicon](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg)
 - [Intel Mac](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
-- [Windows 10/11 x64 releases](https://github.com/amos-labs/amos-agent/releases)
+- [Windows 10/11 x64](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-Windows-x64-Setup.exe)
 
 On macOS, open the DMG and drag **AMOS Desktop** into **Applications**. Official
 macOS releases are signed with the AMOS Labs Developer ID and notarized by
-Apple. When a signed Windows installer is present, run the per-user installer;
-no administrator account is required. Until the Windows signing identity is
-configured, use only the newest release explicitly labeled **Windows unsigned
-preview** and expect an unknown-publisher warning. Preview builds are for direct
-testing, install side-by-side, and do not auto-update.
+Apple. Windows releases are Authenticode-signed under the verified Richard
+Barkley publisher identity. Run the per-user Windows installer; no administrator
+account is required. Both platforms use the stable signed update channel.
 
 ## First run
 
@@ -237,16 +235,24 @@ npm run desktop:build:win
 Local builds are intentionally unsigned and cannot validate the production
 auto-update chain.
 
-## Unsigned Windows preview
+The Windows release packages Ollama's CPU and Vulkan backends with the local
+router and omits the two vendor CUDA-version directories. Vulkan remains the
+portable GPU path on supported Windows hardware, while CPU fallback keeps the
+router and local models functional. CI rejects a Windows installer larger than
+1.1 GB so an accidental return to the multi-CUDA payload cannot silently reach
+the stable channel.
 
-Until the public Windows signing identity is available, maintainers can run the
-manual `Publish unsigned Windows preview` GitHub Actions workflow. It publishes
-a GitHub prerelease containing:
+## Legacy unsigned Windows preview
+
+The production Windows signing identity is configured. The manual `Publish
+unsigned Windows preview` GitHub Actions workflow remains only for isolated
+signing-infrastructure diagnostics. It publishes a GitHub prerelease containing:
 
 - `AMOS-Desktop-Windows-Unsigned-Preview-x64-Setup.exe`; and
 - a dedicated SHA-256 checksum file.
 
-The preview uses the separate `com.amoslabs.desktop.preview` application ID,
+Never direct production users to this build. The preview uses the separate
+`com.amoslabs.desktop.preview` application ID,
 installs as **AMOS Desktop Preview**, and disables automatic updates. Windows
 will report an unknown publisher and may show a SmartScreen warning. It is only
 for direct testing and must not be represented as an official or managed
@@ -272,18 +278,19 @@ The workflow:
 1. runs tests and syntax checks;
 2. verifies the tag and signing/notarization configuration;
 3. builds, signs, and notarizes Apple Silicon and Intel applications;
-4. publishes the verified macOS applications as one non-draft release;
-5. checks whether the protected Windows signing identity is configured;
-6. when configured, builds and Authenticode-signs the Windows x64 NSIS
+4. verifies that the protected Windows signing identity is configured;
+5. builds and Authenticode-signs the Windows x64 NSIS
    installer on a native runner;
-7. verifies its signature before attaching the installer, blockmap, and
+6. verifies the Windows signature and publisher identity;
+7. publishes the verified macOS applications only after both platform builds
+   pass, then attaches the Windows installer, blockmap, and
    `latest.yml` to the same release; and
 8. extends the release SHA-256 manifest with the Windows artifacts.
 
-The absence of Windows signing credentials does not block an official notarized
-macOS release. It also never produces an unsigned artifact under the official
-application identity; unsigned Windows testing remains isolated in the preview
-workflow.
+Official releases fail closed when Windows signing credentials are absent or a
+Windows build or signature check fails. They never produce an unsigned artifact
+under the official application identity; unsigned Windows testing remains
+isolated in the legacy preview workflow.
 
 Release secrets live in the protected `MAC_CSC_LINK` GitHub environment:
 

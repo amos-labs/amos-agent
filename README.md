@@ -82,7 +82,7 @@ AMOS managed platform
 - Visible, skill-backed workflows with task-specific verification criteria
 - Live work, decisions, approval notifications, activity, and proof
 - AMOS-hosted, customer-cloud, provider API, and local-model profiles
-- Signed macOS and Windows releases with in-app update notifications
+- Production-ready, signed macOS and Windows releases with in-app update notifications
 
 AMOS Desktop is not a second CRM, integration vault, or company database.
 Shared business state, integrations, governance, and receipts remain in AMOS.
@@ -104,6 +104,10 @@ Shared business state, integrations, governance, and receipts remain in AMOS.
 
 The app checks for signed updates after launch and every six hours. It notifies
 you before downloading and never restarts during an active task.
+
+Official Windows installers are Authenticode-signed under the verified Richard
+Barkley publisher identity and participate in the same stable update channel as
+the signed and notarized macOS applications.
 
 See [Desktop installation and releases](docs/DESKTOP.md) for packaging,
 signing, update, and troubleshooting details. See

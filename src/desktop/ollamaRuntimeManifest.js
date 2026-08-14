@@ -16,6 +16,26 @@ export const OLLAMA_RUNTIME_RELEASE = Object.freeze({
   })
 });
 
+const WINDOWS_PORTABLE_EXCLUDES = Object.freeze([
+  "lib/ollama/cuda_v12",
+  "lib/ollama/cuda_v13"
+]);
+
+export function ollamaRuntimeProfile(platform = process.platform, arch = process.arch) {
+  if (platform === "win32" && arch === "x64") {
+    return Object.freeze({
+      id: "portable",
+      description: "CPU and Vulkan backends for the bundled router and local models",
+      excludedDirectories: WINDOWS_PORTABLE_EXCLUDES
+    });
+  }
+  return Object.freeze({
+    id: "full",
+    description: "Official platform runtime",
+    excludedDirectories: Object.freeze([])
+  });
+}
+
 export function ollamaRuntimeAsset(platform = process.platform, arch = process.arch) {
   const key = platform === "darwin" ? "darwin" : `${platform}-${arch}`;
   const asset = OLLAMA_RUNTIME_RELEASE.assets[key];

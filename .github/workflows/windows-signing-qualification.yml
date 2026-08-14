@@ -81,6 +81,11 @@ jobs:
           if ($signature.SignerCertificate.Subject -ne $env:WINDOWS_SIGNING_PUBLISHER_NAME) {
             throw "Windows installer publisher '$($signature.SignerCertificate.Subject)' does not match the configured publisher"
           }
+          $installerBytes = (Get-Item "dist/AMOS-Desktop-Windows-x64-Setup.exe").Length
+          if ($installerBytes -gt 1100000000) {
+            throw "Windows installer is $installerBytes bytes; the production ceiling is 1100000000 bytes"
+          }
+          Write-Host "Verified production Windows installer size: $installerBytes bytes"
 
       - name: Upload qualification evidence
         uses: actions/upload-artifact@v4
