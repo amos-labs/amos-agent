@@ -1,7 +1,9 @@
 # Privacy
 
 AMOS Desktop does not send usage analytics until you choose **Allow**. The
-default is no send until you answer. You can change this later in Settings.
+default is no send until you answer. First-run milestones that happen before
+that answer stay on this computer and flush after Allow. Don't send discards
+them. You can change this later in Settings.
 
 ## What Desktop may send
 

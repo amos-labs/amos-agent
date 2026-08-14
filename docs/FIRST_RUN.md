@@ -78,7 +78,10 @@ it in the app data directory with owner-only permissions. It is not derived
 from hardware, an advertising identifier, an email address, or another device
 fingerprint.
 
-Nothing is sent until the user chooses **Allow**. After opt-in, the
+Nothing is sent until the user chooses **Allow**. Boundary, onboarding, and
+first-task milestones that happen while consent is unanswered stay in a
+local queue and flush after opt-in. Decline discards that queue and sends
+nothing — the official client has no opt-out event. After opt-in, the
 installation UUID lets AMOS distinguish a download from a successful first
 launch, a selected operating boundary, completed onboarding, a first task, and
 a completed tool-backed Northwind task. A person and company are attached only

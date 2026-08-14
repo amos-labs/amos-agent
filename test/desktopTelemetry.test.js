@@ -201,20 +201,20 @@ test("first-run boundary and onboarding events stay local until telemetry opt-in
   assert.equal(settings.onboardingBoundary, "personal");
   assert.match(settings.onboardingCompletedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.equal(requests.length, 0);
+  const queued = JSON.parse(await readFile(join(directory, "telemetry.json"), "utf8")).queued;
+  assert.deepEqual(
+    queued.map((event) => event.event_type),
+    [
+      "desktop_boundary_selected",
+      "desktop_onboarding_completed",
+      "desktop_first_task_started"
+    ]
+  );
 
   await telemetry.applyPreference({
     enabled: true,
     mcpUrl: settings.amosMcpUrl
   });
-  await controller.recordAcquisitionEvent(settings, "desktop_boundary_selected", {
-    boundary: "personal"
-  });
-  await controller.recordAcquisitionEvent(settings, "desktop_onboarding_completed", {
-    boundary: "personal"
-  }, { once: true });
-  await controller.recordAcquisitionEvent(settings, "desktop_first_task_started", {
-    boundary: "personal"
-  }, { once: true });
 
   assert.deepEqual(
     requests.map((event) => event.event_type),
