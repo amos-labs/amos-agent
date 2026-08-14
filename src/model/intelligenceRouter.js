@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { canonicalizeSignedText } from "./signedText.js";
 
 export const INTELLIGENCE_ROUTER_CONTRACT = "amos-router:2026-08-09";
 export const INTELLIGENCE_ROUTER_ARTIFACT = validateArtifactManifest(JSON.parse(readFileSync(
@@ -12,10 +13,10 @@ export const INTELLIGENCE_ROUTER_CLASSES = Object.freeze([
   "deep",
   "frontier"
 ]);
-export const INTELLIGENCE_ROUTER_PROMPT = readFileSync(
+export const INTELLIGENCE_ROUTER_PROMPT = canonicalizeSignedText(readFileSync(
   new URL("./intelligence-router-v1.txt", import.meta.url),
   "utf8"
-).trim();
+)).trim();
 export const INTELLIGENCE_ROUTER_ROLLOUT_MODES = Object.freeze([
   "disabled",
   "shadow",

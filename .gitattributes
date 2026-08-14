@@ -1,0 +1,2 @@
+# The router prompt has a signed canonical digest and must remain LF in worktrees.
+src/model/intelligence-router-v1.txt text eol=lf
