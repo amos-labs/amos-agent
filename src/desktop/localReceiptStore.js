@@ -235,6 +235,22 @@ const EMBEDDED_HASH_KEYS = Object.freeze([
   "content_hash",
   "receipt_hash"
 ]);
+const NESTED_RECEIPT_KEYS = Object.freeze([
+  "receipt_version",
+  "operation",
+  "tenant_id",
+  "actor",
+  "agency",
+  "lifecycle_state",
+  "effect_applied",
+  "correlation",
+  "intent",
+  "policy",
+  "validation",
+  "result_summary",
+  "emitted_at",
+  ...EMBEDDED_HASH_KEYS
+]);
 const HEX64 = /^[a-f0-9]{64}$/;
 
 export function toDesktopLocalItem(receipt) {
@@ -486,8 +502,11 @@ function verifyPlatformItem(item, index) {
 }
 
 function verifyNestedReceipt(receipt, prefix, errors) {
-  if (hasNonEmptyInputs(receipt.inputs)) {
-    errors.push(`${prefix}.inputs must be omitted or {}`);
+  if (hasAnyInputs(receipt.inputs)) {
+    errors.push(`${prefix}.inputs must be omitted`);
+  }
+  if (hasAnyOutputs(receipt.outputs)) {
+    errors.push(`${prefix}.outputs must be omitted`);
   }
   requireString(receipt.operation, `${prefix}.operation`, errors, { nonempty: true });
   requireString(receipt.actor, `${prefix}.actor`, errors, { nonempty: true });
@@ -514,10 +533,56 @@ function verifyNestedReceipt(receipt, prefix, errors) {
 
 function sanitizeNestedReceipt(receipt) {
   if (!isPlainObject(receipt) || !nestedReceiptExportable(receipt)) return undefined;
-  const nested = { ...receipt };
-  if (hasNonEmptyInputs(nested.inputs)) delete nested.inputs;
-  else if (isPlainObject(nested.inputs)) nested.inputs = {};
+  const nested = {};
+  for (const key of NESTED_RECEIPT_KEYS) {
+    if (receipt[key] === undefined) continue;
+    if (key === "correlation") {
+      nested.correlation = sanitizeCorrelation(receipt.correlation);
+      continue;
+    }
+    if (key === "intent") {
+      nested.intent = sanitizeIntent(receipt.intent);
+      continue;
+    }
+    if (key === "policy") {
+      nested.policy = sanitizePolicy(receipt.policy);
+      continue;
+    }
+    if (key === "validation") {
+      nested.validation = sanitizeValidation(receipt.validation);
+      continue;
+    }
+    nested[key] = receipt[key];
+  }
   return nested;
+}
+
+function sanitizeIntent(value) {
+  if (!isPlainObject(value)) return {};
+  const intent = {};
+  if (typeof value.summary === "string") intent.summary = value.summary;
+  if (typeof value.self_modifying === "boolean") intent.self_modifying = value.self_modifying;
+  if (typeof value.scope_classification === "string") {
+    intent.scope_classification = value.scope_classification;
+  }
+  return intent;
+}
+
+function sanitizePolicy(value) {
+  if (!isPlainObject(value)) return {};
+  const guardrails = Array.isArray(value.guardrails)
+    ? value.guardrails.filter((item) => typeof item === "string")
+    : [];
+  return { guardrails };
+}
+
+function sanitizeValidation(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 50).map((check) => ({
+    id: String(check?.id || ""),
+    status: String(check?.status || ""),
+    detail: String(check?.detail || "")
+  }));
 }
 
 function nestedReceiptExportable(receipt) {
@@ -557,8 +622,12 @@ function checkEmbeddedHashes(target, prefix, errors) {
   }
 }
 
-function hasNonEmptyInputs(value) {
-  return isPlainObject(value) && Object.keys(value).length > 0;
+function hasAnyInputs(value) {
+  return value !== undefined;
+}
+
+function hasAnyOutputs(value) {
+  return value !== undefined;
 }
 
 function coerceEnum(value, allowed, fallback) {

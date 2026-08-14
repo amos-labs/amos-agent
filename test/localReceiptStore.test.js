@@ -128,6 +128,8 @@ test("evidence pack uses public local shape and platform rows without tool args"
   assert.equal(pack.items.filter((item) => item.kind === "platform").length, 200);
   assert.equal(pack.items[1].kind, "platform");
   assert.equal(pack.items[1].receipt.inputs, undefined);
+  assert.equal(pack.items[1].receipt.outputs, undefined);
+  assert.equal(pack.items[1].receipt.unexpected, undefined);
   assert.equal(JSON.stringify(pack).includes("must-not-export"), false);
   assert.equal(pack.items[1].digest, undefined);
 
@@ -169,15 +171,48 @@ test("evidence pack verify is per-kind and does not hash platform rows as local 
   assert.equal(verified.items[1].digest, "n/a");
   assert.notEqual(platformItem.digest, localItem.digest);
 
-  const withInputs = verifyEvidencePack({
+  const withObjectInputs = verifyEvidencePack({
     ...pack,
     items: [{
       ...platformItem,
       receipt: { ...completeNestedReceipt(), inputs: { prompt: "secret" } }
     }]
   });
-  assert.equal(withInputs.ok, false);
-  assert.match(withInputs.errors.join("\n"), /inputs must be omitted or \{\}/);
+  assert.equal(withObjectInputs.ok, false);
+  assert.match(withObjectInputs.errors.join("\n"), /inputs must be omitted/);
+
+  const withStringInputs = verifyEvidencePack({
+    ...pack,
+    items: [{
+      ...platformItem,
+      receipt: { ...completeNestedReceipt(), inputs: "raw-secret" }
+    }]
+  });
+  assert.equal(withStringInputs.ok, false);
+  assert.match(withStringInputs.errors.join("\n"), /inputs must be omitted/);
+
+  const withArrayInputs = verifyEvidencePack({
+    ...pack,
+    items: [{
+      ...platformItem,
+      receipt: { ...completeNestedReceipt(), inputs: ["raw-secret"] }
+    }]
+  });
+  assert.equal(withArrayInputs.ok, false);
+  assert.match(withArrayInputs.errors.join("\n"), /inputs must be omitted/);
+
+  const withOutputs = verifyEvidencePack({
+    ...pack,
+    items: [{
+      ...platformItem,
+      receipt: {
+        ...completeNestedReceipt(),
+        outputs: { customer_email: "secret@example.test" }
+      }
+    }]
+  });
+  assert.equal(withOutputs.ok, false);
+  assert.match(withOutputs.errors.join("\n"), /outputs must be omitted/);
 
   const badSchema = verifyEvidencePack({ ...pack, schema: "amos-memory-capsule" });
   assert.equal(badSchema.ok, false);
@@ -208,7 +243,53 @@ test("verifyReceiptBundle.js accepts a valid pack and rejects a non-empty inputs
 
   const invalid = spawnSync(process.execPath, [script, invalidPath], { encoding: "utf8" });
   assert.equal(invalid.status, 1);
-  assert.match(invalid.stderr, /inputs must be omitted or \{\}/);
+  assert.match(invalid.stderr, /inputs must be omitted/);
+});
+
+test("evidence pack omits every inputs type and every outputs field", () => {
+  const pack = buildEvidencePack({
+    localReceipts: [],
+    platformReceipts: [
+      completePlatformRow({
+        id: "string-inputs",
+        receipt: {
+          ...completeNestedReceipt(),
+          inputs: "raw-secret",
+          outputs: { customer_email: "secret@example.test" },
+          unexpected: "keep-me-out"
+        }
+      }),
+      completePlatformRow({
+        id: "array-inputs",
+        receipt: {
+          ...completeNestedReceipt(),
+          inputs: ["raw-secret"]
+        }
+      }),
+      completePlatformRow({
+        id: "empty-object-inputs",
+        receipt: {
+          ...completeNestedReceipt(),
+          inputs: {},
+          outputs: {}
+        }
+      })
+    ],
+    exportedAt: "2026-08-14T12:00:00.000Z"
+  });
+
+  const raw = JSON.stringify(pack);
+  assert.equal(raw.includes("raw-secret"), false);
+  assert.equal(raw.includes("secret@example.test"), false);
+  assert.equal(raw.includes("keep-me-out"), false);
+  for (const item of pack.items) {
+    assert.equal(item.receipt.inputs, undefined);
+    assert.equal(item.receipt.outputs, undefined);
+    assert.equal(item.receipt.unexpected, undefined);
+    assert.equal(item.receipt.operation, "repair_automation_failure");
+    assert.equal(item.receipt.intent.summary, "Retry a replay-safe automation step");
+  }
+  assert.equal(verifyEvidencePack(pack).ok, true);
 });
 
 function completePlatformRow(overrides = {}) {
@@ -245,7 +326,6 @@ function completeNestedReceipt(overrides = {}) {
     },
     policy: { guardrails: ["tenant_isolation"] },
     validation: [{ id: "step_replayed", status: "passed", detail: "step_run settled" }],
-    outputs: {},
     result_summary: "Replay applied; incident closed.",
     emitted_at: "2026-08-14T12:00:00.000Z",
     ...overrides
