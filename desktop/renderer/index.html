@@ -152,7 +152,7 @@
               <button id="localModeButton" class="start-mode-card" type="button">
                 <span class="start-mode-kicker">NO ACCOUNT REQUIRED</span>
                 <strong>My workspace</strong>
-                <span>Code, research, documents, and local automation with the model you choose.</span>
+                <span>Your model, this computer. Local profile or your own key — AMOS Intelligence needs a sign-in.</span>
                 <em>Start privately →</em>
               </button>
               <button id="demoModeButton" class="start-mode-card featured" type="button">
@@ -175,7 +175,7 @@
               </div>
               <div>
                 <span id="providerCheck" class="step-check">—</span>
-                <button class="text-button" data-open-settings>
+                <button class="text-button onboarding-provider-link" data-open-settings>
                   <span id="onboardingProviderText">Choose intelligence</span>
                 </button>
               </div>
@@ -184,6 +184,9 @@
                 <button id="onboardingWorkspaceButton" class="text-button">Choose workspace</button>
               </div>
             </div>
+            <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint hidden">
+              Choose a local profile or your own key. AMOS Intelligence needs a sign-in — use Northwind or My company.
+            </p>
             <div id="telemetryConsent" class="local-setup-callout">
               <div>
                 <strong>Anonymous usage events</strong>
@@ -751,6 +754,17 @@
             </div>
 
             <div class="configuration-card">
+              <div id="personalIntelligenceCallout" class="local-setup-callout hidden">
+                <div>
+                  <strong>Your model, this computer</strong>
+                  <span>
+                    Choose a local profile or your own key. AMOS Intelligence needs a
+                    sign-in — use Northwind or My company. Recommended: a measured local
+                    profile or a provider key. Compact and Balanced stay available for
+                    personal or ungoverned work.
+                  </span>
+                </div>
+              </div>
               <div class="field">
                 <label for="appearanceInput">Appearance</label>
                 <select id="appearanceInput" name="appearance">
@@ -772,7 +786,7 @@
               <div id="localSetupField" class="local-setup-callout hidden">
                 <div>
                   <strong>Finish local setup below</strong>
-                  <span>Choose a recommended model; AMOS handles the runtime, download, and activation.</span>
+                  <span>Recommended: a measured local profile or your own key. Compact and Balanced can still be used for personal work.</span>
                 </div>
                 <button id="localSetupButton" class="button secondary" type="button">Open guided setup ↓</button>
               </div>
@@ -856,11 +870,10 @@
                 <span class="eyebrow accent">LOCAL INTELLIGENCE · OPTIONAL</span>
                 <h2>Run AMOS privately on this computer.</h2>
                 <p>
-                  AMOS Local is included with Desktop. Choose the model AMOS recommends,
-                  then use it with your company or fully offline. Model downloads are
-                  resumable and remain installed across app updates. Local-only work can
-                  use files, private memory, and canvases—but never pretends to have live
-                  company authority.
+                  AMOS Local is included with Desktop. The recommended path is a measured
+                  profile or your own key. Compact and Balanced stay installable for
+                  personal or ungoverned work and are badged, not recommended. Model
+                  downloads are resumable and remain installed across app updates.
                 </p>
               </div>
               <div class="offline-actions">

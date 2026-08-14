@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { DesktopController } from "../src/desktop/controller.js";
+import { DEFAULT_DESKTOP_SETTINGS } from "../src/desktop/settingsStore.js";
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
 
 test("Desktop telemetry initialize does not fire without consent", async () => {
@@ -150,4 +151,79 @@ test("completed Northwind tool work records the value milestone once", async () 
   assert.equal(calls[0][0], "northwind_demo_value_reached");
   assert.equal(calls[0][1].accessToken, "demo-secret");
   assert.equal(calls[0][1].once, true);
+});
+
+test("first-run boundary and onboarding events stay local until telemetry opt-in", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-onboarding-events-"));
+  const requests = [];
+  const telemetry = new DesktopTelemetry({
+    filePath: join(directory, "telemetry.json"),
+    fetchImpl: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return { ok: true, status: 202 };
+    }
+  });
+  let settings = {
+    ...DEFAULT_DESKTOP_SETTINGS,
+    telemetryEnabled: false,
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  };
+  const controller = new DesktopController({
+    userDataPath: directory,
+    settingsStore: {
+      read: async () => ({ ...settings }),
+      write: async (value) => {
+        settings = { ...value };
+        return { ...settings };
+      }
+    },
+    telemetry,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = () => ({
+    status: async () => null,
+    logout: async () => {}
+  });
+  controller.state = async () => ({ settings });
+  controller.clearEphemeralCompanyBoundary = () => {};
+
+  await telemetry.initialize({
+    mcpUrl: settings.amosMcpUrl,
+    telemetryEnabled: false
+  });
+  await controller.startPersonal();
+  await controller.completeOnboarding({ boundary: "personal" });
+  await controller.recordAcquisitionEvent(settings, "desktop_first_task_started", {
+    boundary: "personal"
+  }, { once: true });
+
+  assert.equal(settings.onboardingBoundary, "personal");
+  assert.match(settings.onboardingCompletedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(requests.length, 0);
+
+  await telemetry.applyPreference({
+    enabled: true,
+    mcpUrl: settings.amosMcpUrl
+  });
+  await controller.recordAcquisitionEvent(settings, "desktop_boundary_selected", {
+    boundary: "personal"
+  });
+  await controller.recordAcquisitionEvent(settings, "desktop_onboarding_completed", {
+    boundary: "personal"
+  }, { once: true });
+  await controller.recordAcquisitionEvent(settings, "desktop_first_task_started", {
+    boundary: "personal"
+  }, { once: true });
+
+  assert.deepEqual(
+    requests.map((event) => event.event_type),
+    [
+      "desktop_first_launch",
+      "desktop_telemetry_choice",
+      "desktop_boundary_selected",
+      "desktop_onboarding_completed",
+      "desktop_first_task_started"
+    ]
+  );
 });

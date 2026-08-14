@@ -722,15 +722,21 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const credentials = await this.oauthFor(settings).status();
     if (credentials?.demo) await this.oauthFor(settings).logout();
-    await this.settingsStore.write({
+    const saved = await this.settingsStore.write({
       ...settings,
       workspace: credentials?.demo
         ? credentials.previous_workspace || ""
         : settings.workspace,
-      operatingMode: "personal"
+      operatingMode: "personal",
+      onboardingBoundary: "personal"
     });
     this.clearEphemeralCompanyBoundary();
     this.record("mode", "Private personal workspace enabled");
+    if (settings.onboardingBoundary !== "personal") {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
+        boundary: "personal"
+      });
+    }
     return this.state();
   }
 
@@ -770,7 +776,7 @@ export class DesktopController {
         tenantSlug: "northwind-demo"
       });
     }
-    await this.settingsStore.write({
+    const saved = await this.settingsStore.write({
       ...settings,
       provider: "amos-hosted",
       model: "auto",
@@ -778,11 +784,46 @@ export class DesktopController {
       intelligenceProfile: "auto",
       reasoningEffort: "",
       operatingMode: "online",
-      workspace: demoWorkspace
+      workspace: demoWorkspace,
+      onboardingBoundary: "northwind",
+      onboardingCompletedAt: settings.onboardingCompletedAt || new Date().toISOString()
     });
     this.clearEphemeralCompanyBoundary();
     this.record("auth", "Northwind Labs demo company connected");
+    if (settings.onboardingBoundary !== "northwind") {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
+        boundary: "northwind"
+      });
+    }
+    if (!settings.onboardingCompletedAt) {
+      await this.recordAcquisitionEvent(saved, "desktop_onboarding_completed", {
+        boundary: "northwind"
+      }, { once: true });
+    }
     await this.refreshRemote({ notify: false });
+    return this.state();
+  }
+
+  async completeOnboarding(input = {}) {
+    const settings = await this.settingsStore.read();
+    const requested = String(input?.boundary || "").trim();
+    const boundary = ["personal", "northwind", "company"].includes(requested)
+      ? requested
+      : settings.onboardingBoundary || inferOnboardingBoundary(settings);
+    const completedAt = settings.onboardingCompletedAt || new Date().toISOString();
+    const saved = await this.settingsStore.write({
+      ...settings,
+      onboardingBoundary: boundary,
+      onboardingCompletedAt: completedAt
+    });
+    if (boundary && boundary !== settings.onboardingBoundary) {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", { boundary });
+    }
+    if (!settings.onboardingCompletedAt) {
+      await this.recordAcquisitionEvent(saved, "desktop_onboarding_completed", {
+        boundary
+      }, { once: true });
+    }
     return this.state();
   }
 
@@ -974,7 +1015,8 @@ export class DesktopController {
       operatingMode: "online",
       workspace: previous?.demo
         ? previous.previous_workspace || ""
-        : settings.workspace
+        : settings.workspace,
+      onboardingBoundary: "company"
     };
     if (shouldActivateAmosHosted(settings) || previous?.demo) {
       Object.assign(nextSettings, {
@@ -985,7 +1027,7 @@ export class DesktopController {
         reasoningEffort: ""
       });
     }
-    await this.settingsStore.write(nextSettings);
+    const saved = await this.settingsStore.write(nextSettings);
     if (shouldActivateAmosHosted(settings) || previous?.demo) {
       this.record(
         "settings",
@@ -995,6 +1037,11 @@ export class DesktopController {
     this.resetRuntime();
     this.clearEphemeralCompanyBoundary();
     this.record("auth", "AMOS account connected");
+    if (settings.onboardingBoundary !== "company") {
+      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
+        boundary: "company"
+      });
+    }
     await this.refreshRemote({ notify: true });
     if (this.accountStore && this.identity) {
       await this.accountStore.updateActiveProfile(this.identity);
@@ -1024,6 +1071,12 @@ export class DesktopController {
         : credentials?.demo
           ? "personal"
           : settings.operatingMode,
+      onboardingCompletedAt: remainingAccounts?.currentAccountId
+        ? settings.onboardingCompletedAt
+        : "",
+      onboardingBoundary: remainingAccounts?.currentAccountId
+        ? settings.onboardingBoundary
+        : "",
       notifiedApprovalIds: [],
       deliveredApprovalOutcomeIds: []
     });
@@ -1757,6 +1810,9 @@ export class DesktopController {
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
     const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    await this.recordAcquisitionEvent(settings, "desktop_first_task_started", {
+      boundary: settings.onboardingBoundary || inferOnboardingBoundary(settings)
+    }, { once: true });
     await this.adoptConversationObjective(prompt, settings).catch((error) => {
       this.record("task", `Could not name the new conversation: ${error.message}`);
     });
@@ -2023,6 +2079,17 @@ export class DesktopController {
     });
     this.runManager.select(null);
     return lane;
+  }
+
+  async recordAcquisitionEvent(settings, eventType, context = {}, { once = false } = {}) {
+    if (!this.telemetry) return;
+    await this.telemetry
+      .record(eventType, {
+        mcpUrl: settings?.amosMcpUrl,
+        context,
+        once
+      })
+      .catch(() => {});
   }
 
   async recordNorthwindValue(settings, receiptEvents) {
@@ -4897,6 +4964,15 @@ function systemProfile() {
     memoryGb,
     freeMemoryGb: Math.round((freemem() / 1024 ** 3) * 10) / 10,
   });
+}
+
+function inferOnboardingBoundary(settings = {}) {
+  if (settings.operatingMode === "personal" || settings.operatingMode === "offline") {
+    return "personal";
+  }
+  if (settings.onboardingBoundary === "northwind") return "northwind";
+  if (settings.operatingMode === "online") return "company";
+  return "";
 }
 
 function operatingMode(settings, config) {

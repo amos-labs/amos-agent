@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   saveSettings: (settings) => ipcRenderer.invoke("desktop:save-settings", settings),
   setTelemetryPreference: (input) =>
     ipcRenderer.invoke("desktop:set-telemetry-preference", input),
+  completeOnboarding: (input) =>
+    ipcRenderer.invoke("desktop:complete-onboarding", input),
   startPersonal: () => ipcRenderer.invoke("desktop:start-personal"),
   startDemo: () => ipcRenderer.invoke("desktop:start-demo"),
   login: () => ipcRenderer.invoke("desktop:login"),

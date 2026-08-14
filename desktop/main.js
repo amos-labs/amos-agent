@@ -290,6 +290,9 @@ function registerIpc() {
     }).catch(() => {});
     return { telemetryEnabled: saved.telemetryEnabled };
   });
+  ipcMain.handle("desktop:complete-onboarding", (_event, input) =>
+    controller.completeOnboarding(input)
+  );
   ipcMain.handle("desktop:start-personal", () => controller.startPersonal());
   ipcMain.handle("desktop:start-demo", () => controller.startDemo());
   ipcMain.handle("desktop:login", () => controller.login());

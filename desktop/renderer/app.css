@@ -660,6 +660,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   font-size: 11px;
 }
 .setup-readiness .text-button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.setup-readiness .text-button.onboarding-provider-link { white-space: normal; }
+.onboarding-intelligence-hint {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
 .setup-step {
   display: grid;
   grid-template-columns: 42px 1fr 30px;
@@ -2986,6 +2993,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .offline-model-labels { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .offline-model-labels span { color: var(--blue-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
 .offline-model-labels .installed { color: var(--green); }
+.offline-model-labels .qualification-badge { color: var(--warning); letter-spacing: .06em; }
+.offline-model-labels .qualification-badge.unqualified { color: var(--danger-text); }
+.offline-model-labels .qualification-badge.conditional { color: var(--warning); }
+.offline-model-labels .qualification-badge.experimental { color: var(--muted); }
 .offline-model-card h3 { margin: 14px 0 6px; font-size: 15px; }
 .offline-model-card > p { margin: 0; color: var(--muted-2); font-size: 10px; line-height: 1.55; }
 .offline-model-meta { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0; }

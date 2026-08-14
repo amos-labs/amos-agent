@@ -20,6 +20,8 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalWorkspace, "");
   assert.deepEqual(DEFAULT_DESKTOP_SETTINGS.localApprovalKinds, []);
   assert.equal(DEFAULT_DESKTOP_SETTINGS.telemetryEnabled, null);
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.onboardingCompletedAt, "");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.onboardingBoundary, "");
 });
 
 test("desktop telemetry preference survives an unrelated settings write", async () => {
@@ -50,6 +52,43 @@ test("desktop telemetry preference survives an unrelated settings write", async 
   assert.equal(
     sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, telemetryEnabled: "yes" }).telemetryEnabled,
     null
+  );
+});
+
+test("desktop onboarding completion survives an unrelated settings write", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-onboarding-pref-"));
+  const path = join(directory, "settings.json");
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => value,
+    decrypt: (value) => value
+  });
+  const completedAt = "2026-08-14T12:00:00.000Z";
+
+  await store.write({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    onboardingCompletedAt: completedAt,
+    onboardingBoundary: "personal"
+  });
+  await store.write({
+    ...(await store.read()),
+    appearance: "dark"
+  });
+
+  const saved = await store.read();
+  assert.equal(saved.onboardingCompletedAt, completedAt);
+  assert.equal(saved.onboardingBoundary, "personal");
+  assert.equal(saved.appearance, "dark");
+  assert.equal(
+    sanitizeSettings({ ...DEFAULT_DESKTOP_SETTINGS, onboardingBoundary: "lab" }).onboardingBoundary,
+    ""
+  );
+  assert.equal(
+    sanitizeSettings({
+      ...DEFAULT_DESKTOP_SETTINGS,
+      onboardingCompletedAt: "not-a-date"
+    }).onboardingCompletedAt,
+    ""
   );
 });
 

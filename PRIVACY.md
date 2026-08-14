@@ -10,6 +10,9 @@ platform (`/api/v1/desktop/events`, stored as `desktop_acquisition_events`):
 
 - `desktop_first_launch` — this installation started
 - `desktop_telemetry_choice` — you allowed analytics
+- `desktop_boundary_selected` — My workspace, Northwind, or My company was chosen
+- `desktop_onboarding_completed` — first-run finished
+- `desktop_first_task_started` — the first Desktop task began
 - `northwind_demo_value_reached` — a completed, tool-backed Northwind demo task
 
 Each event includes a random installation UUID, app version, operating system,
