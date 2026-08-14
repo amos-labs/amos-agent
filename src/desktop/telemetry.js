@@ -23,9 +23,16 @@ export class DesktopTelemetry {
     this.releaseChannel = clean(releaseChannel, 32);
     this.fetch = fetchImpl;
     this.writeChain = Promise.resolve();
+    this.enabled = false;
   }
 
-  async initialize({ mcpUrl }) {
+  setEnabled(enabled) {
+    this.enabled = enabled === true;
+  }
+
+  async initialize({ mcpUrl, telemetryEnabled } = {}) {
+    this.setEnabled(telemetryEnabled);
+    if (!this.enabled) return "";
     const state = await this.read();
     await this.record("desktop_first_launch", {
       mcpUrl,
@@ -33,6 +40,21 @@ export class DesktopTelemetry {
       context: { surface: "desktop" }
     });
     return state.installId;
+  }
+
+  async applyPreference({ enabled, mcpUrl } = {}) {
+    this.setEnabled(enabled);
+    if (!this.enabled) return { telemetryEnabled: false };
+    await this.record("desktop_first_launch", {
+      mcpUrl,
+      once: true,
+      context: { surface: "desktop" }
+    });
+    await this.record("desktop_telemetry_choice", {
+      mcpUrl,
+      context: { enabled: true }
+    });
+    return { telemetryEnabled: true };
   }
 
   async installId() {
@@ -45,6 +67,7 @@ export class DesktopTelemetry {
     context = {},
     once = false
   } = {}) {
+    if (!this.enabled) return { accepted: false, reason: "disabled" };
     if (!mcpUrl) return { accepted: false, reason: "missing_endpoint" };
     const state = await this.read();
     const onceKey = once ? clean(eventType, 64) : "";

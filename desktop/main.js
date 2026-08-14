@@ -44,6 +44,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const { autoUpdater } = electronUpdater;
 let window;
 let controller;
+let settingsStore;
+let telemetry;
 let offlineManager;
 let browserRuntime;
 let localPreviewRuntime;
@@ -273,6 +275,21 @@ function decrypt(value) {
 function registerIpc() {
   ipcMain.handle("desktop:state", () => controller.state());
   ipcMain.handle("desktop:save-settings", (_event, settings) => controller.saveSettings(settings));
+  ipcMain.handle("desktop:set-telemetry-preference", async (_event, input) => {
+    if (input?.enabled !== true && input?.enabled !== false) {
+      throw new Error("Telemetry preference must be true or false");
+    }
+    const current = await settingsStore.read();
+    const saved = await settingsStore.write({
+      ...current,
+      telemetryEnabled: input.enabled
+    });
+    await telemetry.applyPreference({
+      enabled: saved.telemetryEnabled === true,
+      mcpUrl: saved.amosMcpUrl
+    }).catch(() => {});
+    return { telemetryEnabled: saved.telemetryEnabled };
+  });
   ipcMain.handle("desktop:start-personal", () => controller.startPersonal());
   ipcMain.handle("desktop:start-demo", () => controller.startDemo());
   ipcMain.handle("desktop:login", () => controller.login());
@@ -612,7 +629,7 @@ if (process.platform === "win32") {
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
   if (process.platform !== "darwin") Menu.setApplicationMenu(null);
-  const settingsStore = new DesktopSettingsStore({
+  settingsStore = new DesktopSettingsStore({
     filePath: join(app.getPath("userData"), "settings.json"),
     encrypt,
     decrypt
@@ -692,14 +709,17 @@ app.whenReady().then(async () => {
     transferRoot: join(app.getPath("userData"), "browser-transfers")
   });
   localPreviewRuntime = new LocalPreviewRuntime();
-  const telemetry = new DesktopTelemetry({
+  telemetry = new DesktopTelemetry({
     filePath: join(app.getPath("userData"), "desktop-telemetry.json"),
     appVersion: app.getVersion(),
     platform: process.platform,
     architecture: process.arch
   });
   const initialSettings = await settingsStore.read();
-  await telemetry.initialize({ mcpUrl: initialSettings.amosMcpUrl }).catch(() => {});
+  await telemetry.initialize({
+    mcpUrl: initialSettings.amosMcpUrl,
+    telemetryEnabled: initialSettings.telemetryEnabled
+  }).catch(() => {});
   controller = new DesktopController({
     userDataPath: app.getPath("userData"),
     settingsStore,

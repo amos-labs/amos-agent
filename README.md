@@ -244,8 +244,9 @@ Company actions always pass through AMOS identity, tenant isolation, RBAC,
 operation policy, approvals, and proof. A local model cannot weaken those
 server-side controls.
 
-Read [Safety](docs/SAFETY.md), [Authentication](docs/AUTHENTICATION.md), and
-[Security policy](SECURITY.md) before extending local authority.
+Read [Safety](docs/SAFETY.md), [Authentication](docs/AUTHENTICATION.md),
+[Security policy](SECURITY.md), and [Privacy](PRIVACY.md) before extending
+local authority. Desktop does not send usage events until you choose Allow.
 
 ## Build from source
 
