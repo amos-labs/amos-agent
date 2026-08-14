@@ -31,7 +31,8 @@ Telemetry is never used for authentication, billing, policy, or authorization.
 The installation UUID is created locally and stored with owner-only
 permissions in the app data directory. It is not a device fingerprint. Signing
 in or starting the Northwind demo can attach that same UUID to the browser
-handoff so AMOS can tell a download from a successful launch. A person and
+handoff so AMOS can tell a download from a successful launch. That OAuth and
+demo install-UUID handoff is independent of Allow / Don't send. A person and
 company are attached only after OAuth or the demo handoff.
 
 ## Turn off or delete
