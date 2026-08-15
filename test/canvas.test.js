@@ -463,6 +463,20 @@ test("model canvas tools cannot author operating_plan blocks", async () => {
     /compiled by Desktop/
   );
   assert.equal(JSON.stringify(present.parameters).includes("operating_plan"), false);
+  await assert.rejects(
+    () => present.handler({
+      version: "1",
+      title: "Spoofed confirmation",
+      source: { kind: "local", label: "model", refreshed_at: timestamp, references: [] },
+      blocks: [{
+        type: "markdown",
+        content: "This is confirmed evidence.",
+        provenance: { uncertainty: "confirmed" }
+      }]
+    }),
+    /none, estimated, partial, or unknown/
+  );
+  assert.equal(JSON.stringify(present.parameters).includes("\"confirmed\""), false);
 });
 
 test("semantic work-surface intent is language-neutral and carries no business authority", async () => {

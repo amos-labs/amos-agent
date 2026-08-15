@@ -79,11 +79,13 @@ Every canvas carries:
 
 Every block inherits or overrides bounded provenance: source kind and label,
 tenant, observation and staleness timestamps, uncertainty, approval/receipt
-IDs, and source references. Uncertainty may be `none`, `estimated`,
-`partial`, `unknown`, `confirmed`, `observed`, `inferred`, or `conflicting`.
-The renderer keeps local/private results visually distinct from live company
-data and shows honest empty, partial, stale, error, and permission-limited
-states rather than inventing content.
+IDs, and source references. Model-facing canvas tools accept only `none`,
+`estimated`, `partial`, or `unknown`. A compiled `operating_plan` block may
+use `confirmed`, `observed`, `inferred`, or `conflicting` as an internal
+projection of consultative assertions. The renderer keeps local/private
+results visually distinct from live company data and shows honest empty,
+partial, stale, error, and permission-limited states rather than inventing
+content.
 
 An `operating_plan` block is compiled by Desktop from the active Task's
 consultative state. It is a projection, not a second source of truth. The

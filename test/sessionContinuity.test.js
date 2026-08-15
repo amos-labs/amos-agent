@@ -19,6 +19,7 @@ import {
   rejectConsultativeAssertion,
   reopenConsultativeAssertion
 } from "../src/desktop/consultativeState.js";
+import { normalizeCanvasSpec } from "../src/desktop/canvas.js";
 
 function codec() {
   return {
@@ -480,6 +481,37 @@ test("operating-plan canvas compiles only when consultative state has useful str
     .flatMap((section) => section.items)
     .find((item) => item.id === "sys-1");
   assert.equal(system.kind, "system");
+});
+
+test("a full consultative understanding section still compiles to a valid canvas", () => {
+  const assertion = (id, kind, statement) => ({
+    id,
+    kind,
+    statement,
+    status: "inferred",
+    source: "inference",
+    sourceEventId: "turn:one",
+    observedAt: "2026-08-14T12:00:00.000Z",
+    confidence: 0.6
+  });
+  const state = {
+    schemaVersion: 1,
+    status: "active",
+    objective: assertion("obj-1", "objective", "Stop duplicate books"),
+    currentState: {
+      people: [assertion("p-1", "person", "Controller owns the close")],
+      systems: Array.from({ length: 16 }, (_, index) =>
+        assertion(`sys-${index + 1}`, "system", `System ${index + 1}`)
+      ),
+      workflowSteps: Array.from({ length: 16 }, (_, index) =>
+        assertion(`step-${index + 1}`, "step", `Step ${index + 1}`)
+      )
+    }
+  };
+  const spec = compileOperatingPlanCanvas(state);
+  const understanding = spec.blocks[0].sections.find((section) => section.id === "understanding");
+  assert.equal(understanding.items.length, 33);
+  assert.doesNotThrow(() => normalizeCanvasSpec(spec));
 });
 
 test("shared v1 continuity still hydrates when consultative state is absent", () => {

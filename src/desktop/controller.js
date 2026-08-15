@@ -2916,7 +2916,9 @@ export class DesktopController {
       fresh_identity_required: true,
       fresh_policy_required: true
     });
-    const continuity = await this.sessionContinuityState(settings).catch(() => null);
+    const continuity = await this.reconcileSharedContinuity(settings).catch(() =>
+      this.sessionContinuityState(settings).catch(() => null)
+    );
     this.syncOperatingPlanCanvas(continuity?.consultativeState || null);
     this.send("canvas:changed", this.canvases.state());
     await this.sendRemoteState();
@@ -4401,22 +4403,50 @@ export class DesktopController {
     return this.sessionContinuityStore.load(scope);
   }
 
+  matchingSharedManifest() {
+    const shared = this.workingContinuity;
+    const manifest = shared?.available === true ? shared.manifest : null;
+    if (!manifest) return null;
+    if (
+      manifest.scope?.tenantId &&
+      this.identity?.tenant_id &&
+      manifest.scope.tenantId !== this.identity.tenant_id
+    ) {
+      return null;
+    }
+    if (
+      manifest.scope?.contextKey &&
+      this.activeContextKey &&
+      manifest.scope.contextKey !== this.activeContextKey
+    ) {
+      return null;
+    }
+    return manifest;
+  }
+
+  async reconcileSharedContinuity(settings = null) {
+    const currentSettings = settings || await this.settingsStore.read();
+    const local = await this.sessionContinuityState(currentSettings);
+    if (currentSettings.operatingMode !== "online") return local;
+    const manifest = this.matchingSharedManifest();
+    if (!manifest || !sharedContinuityIsNewer(local, this.workingContinuity)) return local;
+    const scope = this.sessionContinuityScope(currentSettings, currentSettings.operatingMode);
+    if (!scope) return local;
+    try {
+      return await this.sessionContinuityStore.applySharedManifest(scope, manifest);
+    } catch {
+      return local;
+    }
+  }
+
   async hydrateSessionContinuity(settings, boundary, runtimeState = this.runtime) {
     if (!runtimeState || runtimeState.demo || !this.sessionContinuityStore) return null;
     const scope = this.sessionContinuityScope(settings, boundary);
     if (!scope) return null;
     const record = await this.sessionContinuityStore.load(scope);
     const localManifest = record?.manifest || null;
-    const sharedManifest =
-      boundary === "online" &&
-      this.workingContinuity?.available === true &&
-      this.workingContinuity.manifest?.scope?.tenantId === this.identity?.tenant_id &&
-      this.workingContinuity.manifest?.scope?.contextKey === this.activeContextKey
-        ? this.workingContinuity.manifest
-        : null;
-    const useShared =
-      sharedManifest &&
-      (!localManifest || continuityTimestamp(sharedManifest) > continuityTimestamp(localManifest));
+    const sharedManifest = this.matchingSharedManifest();
+    const useShared = Boolean(sharedManifest) && sharedContinuityIsNewer(record, this.workingContinuity);
     const manifest = useShared ? sharedManifest : localManifest;
     const continuityKey = manifest
       ? `${scope.key}:${manifest.updatedAt}:${manifest.revision || 0}`
@@ -4531,7 +4561,7 @@ export class DesktopController {
         allowConfirmed: origin === "user_gesture"
       });
     };
-    let current = await this.sessionContinuityStore.load(scope);
+    let current = await this.reconcileSharedContinuity(settings);
     let record = await applyLocal(current, current ? current.revision : 0);
     if (
       settings.operatingMode === "online" &&
@@ -4951,6 +4981,17 @@ function publicWorkingContinuity(value) {
 function continuityTimestamp(manifest) {
   const timestamp = new Date(manifest?.updatedAt || "").getTime();
   return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sharedContinuityIsNewer(localRecord, shared) {
+  const manifest = shared?.available === true ? shared.manifest : null;
+  if (!manifest) return false;
+  if (!localRecord) return true;
+  const sharedRevision = Number(shared.revision ?? manifest.revision ?? 0);
+  const localRevision = Number(localRecord.revision || 0);
+  if (sharedRevision > localRevision) return true;
+  if (sharedRevision < localRevision) return false;
+  return continuityTimestamp(manifest) > continuityTimestamp(localRecord.manifest || localRecord);
 }
 
 function continuityCapturePayload(transition, settings, contextKey = "active", record = null) {
