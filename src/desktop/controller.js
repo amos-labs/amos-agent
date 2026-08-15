@@ -69,7 +69,10 @@ import {
 } from "./sessionContinuity.js";
 import {
   compileRelationshipProfile,
-  profileCatalog
+  emptyRelationshipProfile,
+  profileCatalog,
+  removeExplicitPreference,
+  setExplicitPreference
 } from "./relationshipProfile.js";
 import { profileOwnerScope } from "./relationshipProfileStore.js";
 import { taskOwnerScope } from "./taskStore.js";
@@ -167,6 +170,7 @@ export class DesktopController {
     this.projects = emptyProjectsState();
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
+    this.onlineRelationshipProfile = null;
     this.activeContextKey = "active";
     this.activeTaskRecordId = null;
     this.remoteStatus = {
@@ -1240,6 +1244,7 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     if (settings.operatingMode !== "online") {
       this.workingContinuity = null;
+      this.onlineRelationshipProfile = null;
       this.automations = { supported: false, automations: [] };
       this.automationTemplates = emptyAutomationTemplateCatalog();
       this.automationSetup = null;
@@ -1276,6 +1281,7 @@ export class DesktopController {
       this.projects = emptyProjectsState();
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
+      this.onlineRelationshipProfile = null;
       this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
       await this.sendRemoteState();
       return this.state();
@@ -1296,6 +1302,7 @@ export class DesktopController {
       companiesResult,
       receiptsResult,
       continuityResult,
+      collaborationProfileResult,
       briefingsResult,
       automationsResult,
       automationTemplatesResult,
@@ -1309,6 +1316,7 @@ export class DesktopController {
       oauth.companies(),
       remote.receiptWindow({ limit: 200 }),
       remote.hydrateContinuity({ contextKey: this.activeContextKey }),
+      remote.getCollaborationProfile(),
       remote.briefingsLibrary(),
       remote.automationsLibrary(),
       remote.automationTemplateCatalog(),
@@ -1336,6 +1344,7 @@ export class DesktopController {
     } else {
       this.identity = null;
       this.workingContinuity = null;
+      this.onlineRelationshipProfile = null;
       errors.push(identityResult.reason?.message || "Could not load AMOS identity");
     }
 
@@ -1452,6 +1461,16 @@ export class DesktopController {
       this.workingContinuity = null;
       errors.push(
         continuityResult.reason?.message || "Could not load cross-client working continuity"
+      );
+    }
+
+    if (collaborationProfileResult.status === "fulfilled") {
+      this.onlineRelationshipProfile = collaborationProfileResult.value;
+    } else {
+      this.onlineRelationshipProfile = null;
+      errors.push(
+        collaborationProfileResult.reason?.message
+          || "Could not load collaboration preferences"
       );
     }
 
@@ -4405,26 +4424,54 @@ export class DesktopController {
 
   relationshipProfileScope(settings = null) {
     if (!this.relationshipProfileStore) return null;
+    const boundary = settings?.operatingMode || "personal";
     try {
       return profileOwnerScope({
         identity: this.identity,
-        boundary: settings?.operatingMode || "personal"
+        boundary
       });
-    } catch {
-      return profileOwnerScope({ boundary: "personal" });
+    } catch (error) {
+      if (boundary === "online") return null;
+      throw error;
     }
   }
 
   async relationshipProfileState(settings = null) {
     const currentSettings = settings || await this.settingsStore.read();
+    const catalog = profileCatalog();
     const scope = this.relationshipProfileScope(currentSettings);
-    const profile = scope && this.relationshipProfileStore
-      ? await this.relationshipProfileStore.load(scope)
-      : null;
-    return {
-      catalog: profileCatalog(),
-      profile
-    };
+    if (currentSettings?.operatingMode === "online") {
+      if (!scope) {
+        return {
+          catalog,
+          profile: null,
+          available: false,
+          error: "Company collaboration preferences require a signed-in user and tenant"
+        };
+      }
+      const cached = this.onlineRelationshipProfile;
+      if (!cached) {
+        return { catalog, profile: null, available: false };
+      }
+      if (cached.supported === false) {
+        return {
+          catalog,
+          profile: null,
+          available: false,
+          error: "This AMOS company does not yet store collaboration preferences"
+        };
+      }
+      return {
+        catalog,
+        profile: cached.profile,
+        available: cached.available === true
+      };
+    }
+    if (!scope || !this.relationshipProfileStore) {
+      return { catalog, profile: null, available: false };
+    }
+    const profile = await this.relationshipProfileStore.load(scope);
+    return { catalog, profile, available: true };
   }
 
   async compiledRelationshipProfilePrompt(settings = null) {
@@ -4434,44 +4481,77 @@ export class DesktopController {
   }
 
   async setRelationshipPreference({ key, value, expectedRevision = null } = {}) {
-    if (!this.relationshipProfileStore) {
-      throw new Error("Collaboration preferences require encrypted local storage");
-    }
     const settings = await this.settingsStore.read();
-    const scope = this.relationshipProfileScope(settings);
-    if (!scope) throw new Error("Collaboration preferences are unavailable in this session");
-    const profile = await this.relationshipProfileStore.setPreference(scope, key, value, {
-      expectedRevision
-    });
-    this.runtime = null;
-    await this.sendRemoteState();
+    const profile = await this.mutateRelationshipProfile(settings, expectedRevision, (current) => (
+      setExplicitPreference(current, key, value)
+    ));
     return { profile, catalog: profileCatalog() };
   }
 
   async clearRelationshipPreference({ key, expectedRevision = null } = {}) {
-    if (!this.relationshipProfileStore) {
-      throw new Error("Collaboration preferences require encrypted local storage");
-    }
     const settings = await this.settingsStore.read();
-    const scope = this.relationshipProfileScope(settings);
-    const profile = await this.relationshipProfileStore.clearPreference(scope, key, {
-      expectedRevision
-    });
-    this.runtime = null;
-    await this.sendRemoteState();
+    const profile = await this.mutateRelationshipProfile(settings, expectedRevision, (current) => (
+      removeExplicitPreference(current, key)
+    ));
     return { profile, catalog: profileCatalog() };
   }
 
-  async resetRelationshipProfile() {
-    if (!this.relationshipProfileStore) {
-      throw new Error("Collaboration preferences require encrypted local storage");
-    }
+  async resetRelationshipProfile({ expectedRevision = null } = {}) {
     const settings = await this.settingsStore.read();
+    const profile = await this.mutateRelationshipProfile(settings, expectedRevision, () => (
+      emptyRelationshipProfile()
+    ), { reset: true });
+    return { profile, catalog: profileCatalog() };
+  }
+
+  async mutateRelationshipProfile(settings, expectedRevision, mutate, { reset = false } = {}) {
     const scope = this.relationshipProfileScope(settings);
-    const profile = await this.relationshipProfileStore.reset(scope);
+    if (settings?.operatingMode === "online") {
+      if (!scope || this.identity?.principal_type !== "user" || !this.identity?.tenant_id) {
+        throw new Error("Company collaboration preferences require a signed-in user and tenant");
+      }
+      const remote = this.relationshipProfileRemote(settings);
+      const current = this.onlineRelationshipProfile?.profile || emptyRelationshipProfile();
+      const expected = expectedRevision ?? current.revision;
+      if (reset) {
+        const result = await remote.resetCollaborationProfile({ expectedRevision: expected });
+        this.onlineRelationshipProfile = result;
+        this.runtime = null;
+        await this.sendRemoteState();
+        return result.profile;
+      }
+      const next = mutate(current);
+      const result = await remote.updateCollaborationProfile({
+        expected_revision: expected,
+        profile: next
+      });
+      this.onlineRelationshipProfile = result;
+      this.runtime = null;
+      await this.sendRemoteState();
+      return result.profile;
+    }
+    if (!this.relationshipProfileStore || !scope) {
+      throw new Error(
+        this.relationshipProfileStore
+          ? "Collaboration preferences are unavailable in this session"
+          : "Collaboration preferences require encrypted local storage"
+      );
+    }
+    const profile = reset
+      ? await this.relationshipProfileStore.reset(scope, { expectedRevision })
+      : await this.relationshipProfileStore.mutate(scope, mutate, expectedRevision);
     this.runtime = null;
     await this.sendRemoteState();
-    return { profile, catalog: profileCatalog() };
+    return profile;
+  }
+
+  relationshipProfileRemote(settings) {
+    const config = this.configFrom(settings);
+    return new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth: this.oauthFor(settings),
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
   }
 
   async sessionContinuityState(settings = null) {
@@ -4851,6 +4931,7 @@ export class DesktopController {
     this.projects = emptyProjectsState();
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
+    this.onlineRelationshipProfile = null;
     this.activeContextKey = "active";
     this.activeTaskRecordId = null;
     this.remoteStatus = { syncing: false, lastSyncedAt: null, error: null, paused: false };
@@ -4932,7 +5013,13 @@ export class DesktopController {
         ? await this.accountStore.list()
         : { currentAccountId: this.identity ? "legacy" : "", accounts: [] },
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
-      relationshipProfile: await this.relationshipProfileState(taskSettings),
+      relationshipProfile: typeof this.relationshipProfileState === "function"
+        ? await this.relationshipProfileState(taskSettings).catch(() => ({
+          catalog: profileCatalog(),
+          profile: null,
+          available: false
+        }))
+        : { catalog: profileCatalog(), profile: null, available: false },
       activeContextKey: this.activeContextKey || "active",
       activeTaskRecordId: this.activeTaskRecordId,
       remoteStatus: { ...this.remoteStatus },

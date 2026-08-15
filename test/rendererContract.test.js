@@ -231,7 +231,10 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(main, /controller\.rejectConsultativeAssertion\(input\)/);
   assert.match(main, /controller\.reopenConsultativeAssertion\(input\)/);
   assert.match(main, /controller\.setRelationshipPreference\(input\)/);
-  assert.match(main, /controller\.resetRelationshipProfile\(\)/);
+  assert.match(main, /controller\.resetRelationshipProfile\(input\)/);
+  assert.match(remoteState, /this\.mcp\.callTool\("get_collaboration_profile"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("update_collaboration_profile"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("reset_collaboration_profile"/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);
   assert.match(remoteState, /active \? "resume_automation" : "pause_automation"/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automation_grants"/);

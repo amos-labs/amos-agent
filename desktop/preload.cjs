@@ -109,8 +109,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:set-relationship-preference", input),
   clearRelationshipPreference: (input) =>
     ipcRenderer.invoke("desktop:clear-relationship-preference", input),
-  resetRelationshipProfile: () =>
-    ipcRenderer.invoke("desktop:reset-relationship-profile"),
+  resetRelationshipProfile: (input) =>
+    ipcRenderer.invoke("desktop:reset-relationship-profile", input),
   createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
   updateProject: (id, changes) =>
     ipcRenderer.invoke("desktop:update-project", { id, changes }),

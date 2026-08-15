@@ -260,7 +260,9 @@ function bindActions() {
   elements.settingsForm.addEventListener("submit", saveSettings);
   elements.resetCollaborationProfileButton.addEventListener("click", async () => {
     try {
-      state.relationshipProfile = await api.resetRelationshipProfile();
+      state.relationshipProfile = await api.resetRelationshipProfile({
+        expectedRevision: state.relationshipProfile?.profile?.revision ?? 0
+      });
       renderCollaborationProfile();
     } catch (error) {
       toast(error.message, true);

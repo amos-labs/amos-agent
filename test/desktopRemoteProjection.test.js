@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DesktopController } from "../src/desktop/controller.js";
+import { profileCatalog } from "../src/desktop/relationshipProfile.js";
 
 test("remote state events project every refreshed platform surface into Desktop", async () => {
   const emitted = [];
@@ -90,6 +91,11 @@ test("remote state events project every refreshed platform surface into Desktop"
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,
+    relationshipProfile: {
+      catalog: profileCatalog(),
+      profile: null,
+      available: false
+    },
     activeContextKey: "active",
     activeTaskRecordId: "task-1",
     remoteStatus: controller.remoteStatus,

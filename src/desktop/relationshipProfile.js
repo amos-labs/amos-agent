@@ -11,10 +11,10 @@ export const PROFILE_KEYS = Object.freeze({
 const KEYS = Object.keys(PROFILE_KEYS);
 const MAX_PREFS = KEYS.length;
 
-export function emptyRelationshipProfile({ now = () => new Date() } = {}) {
+export function emptyRelationshipProfile({ now = () => new Date(), revision = 0 } = {}) {
   return {
     schemaVersion: PROFILE_SCHEMA_VERSION,
-    revision: 0,
+    revision: Math.max(0, Number(revision || 0)),
     explicitPreferences: [],
     learnedPreferences: [],
     updatedAt: isoNow(now)

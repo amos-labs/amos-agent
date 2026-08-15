@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   emptyRelationshipProfile,
@@ -21,6 +21,7 @@ export class RelationshipProfileStore {
     this.encrypt = encrypt;
     this.decrypt = decrypt;
     this.now = now;
+    this.mutationQueue = Promise.resolve();
   }
 
   async load(scope) {
@@ -44,36 +45,42 @@ export class RelationshipProfileStore {
     }), expectedRevision);
   }
 
-  async reset(scope) {
-    const key = profileOwnerKey(scope);
-    const store = await this.readStore();
-    const records = store.records.filter((item) => item.key !== key);
-    if (records.length === 0) await rm(this.filePath, { force: true });
-    else await this.writeStore({ version: STORE_VERSION, records });
-    return emptyRelationshipProfile({ now: this.now });
+  async reset(scope, { expectedRevision = null } = {}) {
+    return this.mutate(scope, (profile) => emptyRelationshipProfile({
+      now: this.now,
+      revision: profile.revision
+    }), expectedRevision);
   }
 
   async mutate(scope, mutate, expectedRevision) {
-    const key = profileOwnerKey(scope);
-    const store = await this.readStore();
-    const existing = store.records.find((item) => item.key === key);
-    const current = existing
-      ? normalizeRelationshipProfile(existing.profile, { now: this.now })
-      : emptyRelationshipProfile({ now: this.now });
-    if (expectedRevision != null && Number(expectedRevision) !== current.revision) {
-      throw new Error(
-        `stale collaboration profile revision: expected ${expectedRevision}, found ${current.revision}`
-      );
-    }
-    const next = mutate(current);
-    next.revision = current.revision + 1;
-    const record = { key, profile: next };
-    const records = [
-      record,
-      ...store.records.filter((item) => item.key !== key)
-    ].slice(0, MAX_RECORDS);
-    await this.writeStore({ version: STORE_VERSION, records });
-    return next;
+    return this.enqueueMutation(async () => {
+      const key = profileOwnerKey(scope);
+      const store = await this.readStore();
+      const existing = store.records.find((item) => item.key === key);
+      const current = existing
+        ? normalizeRelationshipProfile(existing.profile, { now: this.now })
+        : emptyRelationshipProfile({ now: this.now });
+      if (expectedRevision != null && Number(expectedRevision) !== current.revision) {
+        throw new Error(
+          `stale collaboration profile revision: expected ${expectedRevision}, found ${current.revision}`
+        );
+      }
+      const next = mutate(current);
+      next.revision = current.revision + 1;
+      const record = { key, profile: next };
+      const records = [
+        record,
+        ...store.records.filter((item) => item.key !== key)
+      ].slice(0, MAX_RECORDS);
+      await this.writeStore({ version: STORE_VERSION, records });
+      return next;
+    });
+  }
+
+  enqueueMutation(work) {
+    const run = this.mutationQueue.then(work, work);
+    this.mutationQueue = run.then(() => undefined, () => undefined);
+    return run;
   }
 
   async readStore() {

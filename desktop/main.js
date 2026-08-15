@@ -450,8 +450,8 @@ function registerIpc() {
   ipcMain.handle("desktop:clear-relationship-preference", (_event, input) =>
     controller.clearRelationshipPreference(input)
   );
-  ipcMain.handle("desktop:reset-relationship-profile", () =>
-    controller.resetRelationshipProfile()
+  ipcMain.handle("desktop:reset-relationship-profile", (_event, input) =>
+    controller.resetRelationshipProfile(input)
   );
   ipcMain.handle("desktop:create-project", (_event, input) => controller.createProject(input));
   ipcMain.handle("desktop:update-project", (_event, input) =>
