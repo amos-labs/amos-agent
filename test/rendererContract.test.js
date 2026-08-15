@@ -223,11 +223,18 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(preload, /desktop:propose-consultative-update/);
   assert.match(preload, /desktop:reject-consultative-assertion/);
   assert.match(preload, /desktop:reopen-consultative-assertion/);
+  assert.match(preload, /desktop:set-relationship-preference/);
+  assert.match(preload, /desktop:reset-relationship-profile/);
   assert.match(main, /controller\.confirmConsultativeAssertion\(input\)/);
   assert.match(main, /controller\.correctConsultativeAssertion\(input\)/);
   assert.match(main, /controller\.proposeConsultativeUpdate\(input\)/);
   assert.match(main, /controller\.rejectConsultativeAssertion\(input\)/);
   assert.match(main, /controller\.reopenConsultativeAssertion\(input\)/);
+  assert.match(main, /controller\.setRelationshipPreference\(input\)/);
+  assert.match(main, /controller\.resetRelationshipProfile\(input\)/);
+  assert.match(remoteState, /this\.mcp\.callTool\("get_collaboration_profile"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("update_collaboration_profile"/);
+  assert.match(remoteState, /this\.mcp\.callTool\("reset_collaboration_profile"/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);
   assert.match(remoteState, /active \? "resume_automation" : "pause_automation"/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automation_grants"/);

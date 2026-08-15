@@ -7,6 +7,10 @@ import {
   verifyCompanyCacheGrant
 } from "./companyCache.js";
 import { createAbortError, linkAbortSignal } from "../util/abort.js";
+import {
+  emptyRelationshipProfile,
+  normalizeRelationshipProfile
+} from "./relationshipProfile.js";
 import { normalizeSharedContinuityManifest } from "./sessionContinuity.js";
 import {
   emptyAutomationTemplateCatalog,
@@ -378,6 +382,57 @@ export class DesktopRemoteStateClient {
           stale: false,
           manifest: null
         };
+      }
+      throw error;
+    }
+  }
+
+  async getCollaborationProfile({ signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("get_collaboration_profile", {}, { signal });
+      return normalizeCollaborationProfileResponse(
+        parseMcpJson(result, "AMOS collaboration profile")
+      );
+    } catch (error) {
+      if (isUnknownTool(error, "get_collaboration_profile")) {
+        return unsupportedCollaborationProfile();
+      }
+      throw error;
+    }
+  }
+
+  async updateCollaborationProfile(input, { signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("update_collaboration_profile", {
+        expected_revision: Number(input?.expected_revision),
+        profile: {
+          explicitPreferences: Array.isArray(input?.profile?.explicitPreferences)
+            ? input.profile.explicitPreferences
+            : []
+        }
+      }, { signal });
+      return normalizeCollaborationProfileResponse(
+        parseMcpJson(result, "AMOS collaboration profile update")
+      );
+    } catch (error) {
+      if (isUnknownTool(error, "update_collaboration_profile")) {
+        throw new Error("This AMOS company does not yet store collaboration preferences");
+      }
+      throw error;
+    }
+  }
+
+  async resetCollaborationProfile({ expectedRevision = 0, signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("reset_collaboration_profile", {
+        expected_revision: Number(expectedRevision)
+      }, { signal });
+      return normalizeCollaborationProfileResponse(
+        parseMcpJson(result, "AMOS collaboration profile reset")
+      );
+    } catch (error) {
+      if (isUnknownTool(error, "reset_collaboration_profile")) {
+        throw new Error("This AMOS company does not yet store collaboration preferences");
       }
       throw error;
     }
@@ -1163,6 +1218,29 @@ function normalizeContinuityResponse(value, { tenantId = "" } = {}) {
     updatedAt: manifest.updatedAt,
     stale: value.stale === true,
     manifest
+  };
+}
+
+function unsupportedCollaborationProfile() {
+  return {
+    supported: false,
+    available: false,
+    revision: 0,
+    profile: emptyRelationshipProfile()
+  };
+}
+
+function normalizeCollaborationProfileResponse(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("AMOS collaboration profile returned an invalid response");
+  }
+  const profile = normalizeRelationshipProfile(value.profile);
+  profile.revision = Math.max(0, Number(value.revision ?? profile.revision ?? 0));
+  return {
+    supported: true,
+    available: value.available === true,
+    revision: profile.revision,
+    profile
   };
 }
 

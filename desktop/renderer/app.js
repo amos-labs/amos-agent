@@ -110,7 +110,9 @@ const elements = Object.fromEntries(
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
     "baseUrlInput", "baseUrlHelp", "bedrockAuthField", "bedrockAuthInput",
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
-    "settingsError", "testButton", "systemCard", "approvalModal", "approvalMessage",
+    "settingsError", "collaborationProfileCard", "collaborationProfileFields",
+    "resetCollaborationProfileButton",
+    "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "taskApproveButton", "alwaysApproveButton", "autoApproveFolderButton", "approvalPersistence",
     "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
@@ -256,6 +258,16 @@ function bindActions() {
   elements.promptForm.addEventListener("drop", handleDrop);
   elements.clearButton.addEventListener("click", clearSession);
   elements.settingsForm.addEventListener("submit", saveSettings);
+  elements.resetCollaborationProfileButton.addEventListener("click", async () => {
+    try {
+      state.relationshipProfile = await api.resetRelationshipProfile({
+        expectedRevision: state.relationshipProfile?.profile?.revision ?? 0
+      });
+      renderCollaborationProfile();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  });
   elements.modelInput.addEventListener("change", syncSelectedModelEndpoint);
   elements.baseUrlInput.addEventListener("change", syncSelectedModelEndpoint);
   elements.bedrockAuthInput.addEventListener("change", () =>
@@ -5832,6 +5844,69 @@ function renderSettings() {
     strong(`${state.system.arch.toUpperCase()} · ${state.system.memoryGb} GB memory`),
     text(state.system.localRecommendation)
   );
+  renderCollaborationProfile();
+}
+
+function renderCollaborationProfile() {
+  if (!elements.collaborationProfileFields) return;
+  const catalog = state.relationshipProfile?.catalog || [];
+  const selected = new Map(
+    (state.relationshipProfile?.profile?.explicitPreferences || [])
+      .map((item) => [item.key, item.value])
+  );
+  const labels = {
+    response_structure: "Answer shape",
+    detail: "Level of detail",
+    challenge: "Directness",
+    alternatives: "Recommendations",
+    collaboration: "Work style",
+    initiative: "Initiative"
+  };
+  elements.collaborationProfileFields.replaceChildren();
+  for (const item of catalog) {
+    const field = document.createElement("div");
+    field.className = "field";
+    const label = document.createElement("label");
+    label.setAttribute("for", `collaboration-${item.key}`);
+    label.textContent = labels[item.key] || item.key;
+    const select = document.createElement("select");
+    select.id = `collaboration-${item.key}`;
+    select.dataset.preferenceKey = item.key;
+    const unset = document.createElement("option");
+    unset.value = "";
+    unset.textContent = "Use AMOS default";
+    select.append(unset);
+    for (const value of item.values) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value.replaceAll("_", " ");
+      if (selected.get(item.key) === value) option.selected = true;
+      select.append(option);
+    }
+    if (!selected.has(item.key)) unset.selected = true;
+    select.addEventListener("change", () => saveCollaborationPreference(item.key, select.value));
+    field.append(label, select);
+    elements.collaborationProfileFields.append(field);
+  }
+}
+
+async function saveCollaborationPreference(key, value) {
+  try {
+    const result = value
+      ? await api.setRelationshipPreference({
+          key,
+          value,
+          expectedRevision: state.relationshipProfile?.profile?.revision ?? 0
+        })
+      : await api.clearRelationshipPreference({
+          key,
+          expectedRevision: state.relationshipProfile?.profile?.revision ?? 0
+        });
+    state.relationshipProfile = result;
+    renderCollaborationProfile();
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 function offlineCatalogBadge(model) {

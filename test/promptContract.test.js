@@ -82,6 +82,7 @@ test("consultative doctrine is not a questionnaire, regex router, or second mode
   assert.doesNotMatch(prompts, /services · trades · e-commerce/);
   assert.doesNotMatch(prompts, /ask what kind of business they run/i);
   assert.match(prompts, /Do not implement this as a fixed question list/);
+  assert.match(prompts, /Explicit collaboration preferences change presentation only/);
   assert.match(prompts, /or a second model call to classify personality or the next move/);
   assert.doesNotMatch(prompts, /from ["'].*workflows\.js["']/);
   assert.doesNotMatch(prompts, /selectWorkflow|phrase\/regex/);
