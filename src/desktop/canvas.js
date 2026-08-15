@@ -14,7 +14,18 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "browser",
   "link",
   "sources",
-  "decision"
+  "decision",
+  "operating_plan"
+]);
+export const CANVAS_UNCERTAINTY_KINDS = Object.freeze([
+  "none",
+  "estimated",
+  "partial",
+  "unknown",
+  "confirmed",
+  "observed",
+  "inferred",
+  "conflicting"
 ]);
 export const CANVAS_STATE_KINDS = Object.freeze([
   "loading",
@@ -38,6 +49,25 @@ const MAX_DOCUMENT_DIAGNOSTICS = 20;
 const MAX_DOCUMENT_PREVIEW_PAGES = 12;
 const MAX_SPREADSHEET_SHEETS = 32;
 const MAX_SPREADSHEET_CHECKS = 300;
+const MAX_PLAN_SECTIONS = 7;
+const MAX_PLAN_ITEMS = 64;
+const MAX_PLAN_ACTIONS = 4;
+const PLAN_ACTIONS = new Set(["confirm", "correct", "reject", "reopen"]);
+const PLAN_STATUSES = new Set([
+  "active",
+  "paused",
+  "operating",
+  "completed",
+  "abandoned"
+]);
+const ASSERTION_STATUSES = new Set([
+  "confirmed",
+  "observed",
+  "inferred",
+  "conflicting",
+  "unknown",
+  "superseded"
+]);
 const SOURCE_KINDS = new Set(["live", "cached", "private", "local"]);
 const DECISION_KINDS = new Set(["approval", "receipt"]);
 const DECISION_STATUSES = new Set([
@@ -530,6 +560,17 @@ function normalizeBlock(input, index, canvasSource) {
     };
   }
 
+  if (type === "operating_plan") {
+    const sections = array(block.sections || [], `blocks[${index}].sections`, MAX_PLAN_SECTIONS);
+    return {
+      ...common,
+      status: enumValue(block.status || "active", [...PLAN_STATUSES], `blocks[${index}].status`),
+      sections: sections.map((section, sectionIndex) =>
+        normalizeOperatingPlanSection(section, `blocks[${index}].sections[${sectionIndex}]`)
+      )
+    };
+  }
+
   const details = array(block.details || [], `blocks[${index}].details`, MAX_DECISION_DETAILS);
   return {
     ...common,
@@ -547,6 +588,53 @@ function normalizeBlock(input, index, canvasSource) {
       return {
         label: text(value.label, `blocks[${index}].details[${detailIndex}].label`, 120),
         value: primitive(value.value, `blocks[${index}].details[${detailIndex}].value`)
+      };
+    })
+  };
+}
+
+function normalizeOperatingPlanSection(input, path) {
+  const section = object(input, `${path} must be an object`);
+  const items = array(section.items || [], `${path}.items`, MAX_PLAN_ITEMS);
+  if (items.length === 0) throw new Error(`${path}.items cannot be empty`);
+  return {
+    id: text(section.id, `${path}.id`, 40),
+    title: text(section.title, `${path}.title`, 80),
+    items: items.map((item, itemIndex) => {
+      const value = object(item, `${path}.items[${itemIndex}] must be an object`);
+      const actions = array(
+        value.actions || [],
+        `${path}.items[${itemIndex}].actions`,
+        MAX_PLAN_ACTIONS
+      ).map((action, actionIndex) => enumValue(
+        action,
+        [...PLAN_ACTIONS],
+        `${path}.items[${itemIndex}].actions[${actionIndex}]`
+      ));
+      return {
+        id: text(value.id, `${path}.items[${itemIndex}].id`, 64),
+        kind: optionalText(value.kind, `${path}.items[${itemIndex}].kind`, 40) || "assumption",
+        statement: text(value.statement, `${path}.items[${itemIndex}].statement`, 600),
+        status: enumValue(
+          value.status || "inferred",
+          [...ASSERTION_STATUSES],
+          `${path}.items[${itemIndex}].status`
+        ),
+        source: optionalText(value.source, `${path}.items[${itemIndex}].source`, 40),
+        confidence: value.confidence == null ? null : boundedConfidence(
+          value.confidence,
+          `${path}.items[${itemIndex}].confidence`
+        ),
+        sourceEventId: optionalText(
+          value.sourceEventId || value.source_event_id,
+          `${path}.items[${itemIndex}].sourceEventId`,
+          160
+        ),
+        observedAt: optionalIsoDate(
+          value.observedAt || value.observed_at,
+          `${path}.items[${itemIndex}].observedAt`
+        ),
+        actions
       };
     })
   };
@@ -635,7 +723,7 @@ function normalizeBlockProvenance(input, canvasSource, path) {
     ),
     uncertainty: enumValue(
       value.uncertainty || "none",
-      ["none", "estimated", "partial", "unknown"],
+      [...CANVAS_UNCERTAINTY_KINDS],
       `${path}.uncertainty`
     ),
     receiptId: optionalText(value.receipt_id || value.receiptId, `${path}.receipt_id`, 120),
@@ -781,6 +869,14 @@ function text(value, path, limit) {
 function optionalText(value, path, limit) {
   if (value === undefined || value === null || value === "") return "";
   return text(value, path, limit);
+}
+
+function boundedConfidence(value, path) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > 1) {
+    throw new Error(`${path} must be a number between 0 and 1`);
+  }
+  return number;
 }
 
 function boundedInteger(value, path, minimum, maximum) {

@@ -9,6 +9,7 @@ import {
   continuityScope,
   SessionContinuityStore
 } from "../src/desktop/sessionContinuity.js";
+import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -487,6 +488,217 @@ test("propose then confirm survives a later completed turn", async () => {
     restored.consultativeState?.objective?.status || restored.manifest?.consultativeState?.objective?.status,
     "confirmed"
   );
+});
+
+test("consultative mutations project an operating-plan canvas and honor reject/reopen", async () => {
+  const store = await continuityStore();
+  const events = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-consultative-canvas",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit(channel, payload) {
+      events.push({ channel, payload });
+    }
+  });
+  controller.identity = identity();
+  controller.sendRemoteState = async () => {};
+  controller.captureSharedConsultativeState = async (_settings, record) => ({
+    supported: true,
+    available: true,
+    revision: record.revision,
+    manifest: record.manifest
+  });
+  controller.workingContinuity = { revision: 0, available: false };
+
+  const proposed = await controller.proposeConsultativeUpdate({
+    objective: { statement: "Stop duplicate books", confidence: 0.8 },
+    assertions: [{
+      kind: "system",
+      statement: "QBO owns the ledger",
+      confidence: 0.7
+    }]
+  });
+  const plan = controller.canvases.list().find((canvas) =>
+    canvas.blocks.some((block) => block.type === "operating_plan")
+  );
+  assert.ok(plan);
+  assert.equal(plan.title, "Operating plan");
+  assert.ok(events.some((event) => event.channel === "canvas:changed"));
+  const objectiveId = proposed.consultativeState.objective.id;
+  const confirmed = await controller.confirmConsultativeAssertion({ assertionId: objectiveId });
+  assert.equal(confirmed.consultativeState.objective.status, "confirmed");
+  const confirmedItem = controller.canvases.active().blocks[0].sections
+    .flatMap((section) => section.items)
+    .find((item) => item.id === objectiveId);
+  assert.equal(confirmedItem.status, "confirmed");
+  assert.deepEqual(confirmedItem.actions, ["correct", "reopen"]);
+
+  const rejected = await controller.rejectConsultativeAssertion({
+    assertionId: proposed.consultativeState.currentState.systems[0].id
+  });
+  assert.equal(rejected.consultativeState.currentState.systems[0].status, "superseded");
+  const reopened = await controller.reopenConsultativeAssertion({
+    assertionId: objectiveId
+  });
+  assert.equal(reopened.consultativeState.objective.status, "inferred");
+  assert.equal(reopened.consultativeState.objective.source, "user");
+});
+
+test("openTask applies newer shared continuity before canvas actions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-controller-shared-open-"));
+  const settings = settingsStore();
+  const currentSettings = await settings.read();
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+  const store = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8"),
+    now: () => new Date("2026-08-14T12:00:00.000Z")
+  });
+  const taskId = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+  const owner = taskOwnerScope({
+    identity: identity(),
+    boundary: "online",
+    workspace: currentSettings.workspace
+  });
+  await tasks.create(owner, {
+    id: taskId,
+    remoteId: taskId,
+    contextKey: "task:consultative",
+    title: "Invoice path",
+    objective: "Inspect Stripe and QBO",
+    workspaceMode: "context_only"
+  });
+  const localScope = continuityScope({
+    identity: identity(),
+    boundary: "online",
+    workspace: currentSettings.workspace,
+    contextKey: "task:consultative"
+  });
+  await store.appendTurn(localScope, {
+    eventId: "turn:local",
+    objective: "Inspect Stripe and QBO",
+    answer: "Local stale snapshot",
+    consultativeState: {
+      objective: {
+        id: "obj-local",
+        kind: "objective",
+        statement: "Stale local books",
+        status: "inferred",
+        source: "inference",
+        sourceEventId: "turn:local",
+        observedAt: "2026-08-14T12:00:00.000Z",
+        confidence: 0.7
+      }
+    }
+  });
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    sessionContinuityStore: store,
+    taskStore: tasks,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.sendRemoteState = async () => {};
+  let captured = null;
+  controller.captureSharedConsultativeState = async (_settings, record) => {
+    captured = record;
+    return {
+      supported: true,
+      available: true,
+      revision: 6,
+      manifest: record.manifest
+    };
+  };
+  controller.personalRemote = async () => ({
+    resumeTask: async () => ({
+      task: { id: taskId },
+      continuity: {
+        supported: true,
+        available: true,
+        revision: 5,
+        manifest: {
+          format: "amos.continuity_manifest",
+          version: 1,
+          revision: 5,
+          scope: {
+            boundary: "online",
+            tenantId: "tenant-1",
+            contextKey: "task:consultative",
+            workspaceHint: "workspace"
+          },
+          updatedAt: "2026-08-14T13:00:00.000Z",
+          transitions: [{
+            at: "2026-08-14T13:00:00.000Z",
+            status: "completed",
+            objective: "Inspect Stripe and QBO",
+            outcome: "Newer shared snapshot"
+          }],
+          consultativeState: {
+            schemaVersion: 1,
+            status: "active",
+            objective: {
+              id: "obj-shared",
+              kind: "objective",
+              statement: "Newer shared books",
+              status: "inferred",
+              source: "inference",
+              sourceEventId: "turn:shared",
+              observedAt: "2026-08-14T13:00:00.000Z",
+              confidence: 0.8
+            },
+            currentState: {
+              systems: [{
+                id: "sys-shared",
+                kind: "system",
+                statement: "Stripe is cash authority",
+                status: "inferred",
+                source: "inference",
+                sourceEventId: "turn:shared",
+                observedAt: "2026-08-14T13:00:00.000Z",
+                confidence: 0.7
+              }]
+            }
+          },
+          safeguards: {
+            orientationOnly: true,
+            requiresFreshAuthority: true,
+            replayAllowed: false,
+            clientReported: true,
+            credentialsIncluded: false,
+            companyMemory: false
+          }
+        }
+      },
+      events: [],
+      children: []
+    })
+  });
+
+  await controller.openTask(taskId);
+  const plan = controller.canvases.list().find((canvas) =>
+    canvas.blocks.some((block) => block.type === "operating_plan")
+  );
+  const statements = plan.blocks[0].sections.flatMap((section) =>
+    section.items.map((item) => item.statement)
+  );
+  assert.ok(statements.includes("Newer shared books"));
+  assert.ok(statements.includes("Stripe is cash authority"));
+  assert.equal(statements.includes("Stale local books"), false);
+
+  const confirmed = await controller.confirmConsultativeAssertion({ assertionId: "obj-shared" });
+  assert.equal(confirmed.consultativeState.objective.statement, "Newer shared books");
+  assert.equal(confirmed.consultativeState.currentState.systems[0].id, "sys-shared");
+  assert.equal(captured.consultativeState.currentState.systems[0].statement, "Stripe is cash authority");
+  assert.equal(captured.consultativeState.objective.status, "confirmed");
 });
 
 test("desktop automatically offers completed online state to the shared continuity lane", async () => {

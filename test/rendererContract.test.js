@@ -221,9 +221,13 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(preload, /desktop:confirm-consultative-assertion/);
   assert.match(preload, /desktop:correct-consultative-assertion/);
   assert.match(preload, /desktop:propose-consultative-update/);
+  assert.match(preload, /desktop:reject-consultative-assertion/);
+  assert.match(preload, /desktop:reopen-consultative-assertion/);
   assert.match(main, /controller\.confirmConsultativeAssertion\(input\)/);
   assert.match(main, /controller\.correctConsultativeAssertion\(input\)/);
   assert.match(main, /controller\.proposeConsultativeUpdate\(input\)/);
+  assert.match(main, /controller\.rejectConsultativeAssertion\(input\)/);
+  assert.match(main, /controller\.reopenConsultativeAssertion\(input\)/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automations"/);
   assert.match(remoteState, /active \? "resume_automation" : "pause_automation"/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_automation_grants"/);
@@ -516,6 +520,11 @@ test("canvas code and previews stay typed, inert, and outside the privileged ren
     readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
   ]);
+  assert.match(javascript, /function renderCanvasOperatingPlan[\s\S]*?function applyOperatingPlanAction/);
+  assert.match(javascript, /api\.confirmConsultativeAssertion\(\{ assertionId: item\.id \}\)/);
+  assert.match(javascript, /api\.rejectConsultativeAssertion\(\{ assertionId: item\.id \}\)/);
+  assert.match(javascript, /api\.reopenConsultativeAssertion\(\{ assertionId: item\.id \}\)/);
+  assert.doesNotMatch(javascript, /renderCanvasOperatingPlan[\s\S]{0,4000}innerHTML/);
   assert.match(javascript, /function renderCanvasCode[\s\S]*?code\.textContent = block\.content/);
   assert.match(javascript, /function renderCanvasLink[\s\S]*?api\.openExternal\(block\.url\)/);
   assert.doesNotMatch(javascript, /renderCanvasLink[\s\S]{0,900}createElement\("iframe"\)/);

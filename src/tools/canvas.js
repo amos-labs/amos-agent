@@ -42,6 +42,8 @@ export function createCanvasTool({ present }) {
       }
     },
     handler: async (args) => {
+      assertNoOperatingPlanBlocks(args.blocks);
+      assertModelFacingProvenance(args.blocks);
       const canvas = await present(args);
       return {
         ok: true,
@@ -188,6 +190,8 @@ export function createCanvasUpdateTool({ update }) {
       }
     },
     handler: async (args) => {
+      assertNoOperatingPlanBlocks(args.blocks);
+      assertModelFacingProvenance(args.blocks);
       const canvas = await update(args.canvas_id, args);
       return {
         ok: true,
@@ -388,4 +392,24 @@ function provenanceSchema() {
       }
     }
   };
+}
+
+const MODEL_FACING_UNCERTAINTY = new Set(["none", "estimated", "partial", "unknown"]);
+
+function assertNoOperatingPlanBlocks(blocks) {
+  const items = Array.isArray(blocks) ? blocks : [];
+  if (items.some((block) => block?.type === "operating_plan")) {
+    throw new Error("operating_plan blocks are compiled by Desktop from consultative state");
+  }
+}
+
+function assertModelFacingProvenance(blocks) {
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    const uncertainty = block?.provenance?.uncertainty;
+    if (uncertainty && !MODEL_FACING_UNCERTAINTY.has(uncertainty)) {
+      throw new Error(
+        "Canvas provenance uncertainty must be none, estimated, partial, or unknown"
+      );
+    }
+  }
 }

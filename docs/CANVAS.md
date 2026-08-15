@@ -79,9 +79,19 @@ Every canvas carries:
 
 Every block inherits or overrides bounded provenance: source kind and label,
 tenant, observation and staleness timestamps, uncertainty, approval/receipt
-IDs, and source references. The renderer keeps local/private results visually
-distinct from live company data and shows honest empty, partial, stale, error,
-and permission-limited states rather than inventing content.
+IDs, and source references. Model-facing canvas tools accept only `none`,
+`estimated`, `partial`, or `unknown`. A compiled `operating_plan` block may
+use `confirmed`, `observed`, `inferred`, or `conflicting` as an internal
+projection of consultative assertions. The renderer keeps local/private
+results visually distinct from live company data and shows honest empty,
+partial, stale, error, and permission-limited states rather than inventing
+content.
+
+An `operating_plan` block is compiled by Desktop from the active Task's
+consultative state. It is a projection, not a second source of truth. The
+model proposes consultative updates; it cannot author `operating_plan` blocks
+or mark assertions confirmed. Confirm, correct, reject, and reopen are
+explicit application operations on the sidecar.
 
 Canvas history is session-only in 0.6.0. Desktop does not silently create an
 offline company-data cache. Cross-session caching requires current AMOS

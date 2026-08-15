@@ -1102,7 +1102,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .icon-button:hover { border-color: var(--blue); color: var(--ink); }
 .canvas-sidecar .canvas-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-bottom: 0; }
-.canvas-sidecar .canvas-decision-block { grid-column: 1 / -1; }
+.canvas-sidecar .canvas-decision-block,
+.canvas-sidecar .canvas-operating-plan-block { grid-column: 1 / -1; }
 .automation-setup-surface {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
@@ -2541,6 +2542,43 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .canvas-decision-block dt { color: var(--muted-2); }
 .canvas-decision-block dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
 .canvas-decision-block .button { font-size: 9px; }
+.canvas-operating-plan-block { grid-column: span 2; }
+.canvas-plan-lane,
+.canvas-plan-status,
+.canvas-plan-kind,
+.canvas-plan-confidence {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.canvas-plan-lane { color: var(--muted-2); }
+.canvas-plan-section { margin-top: 16px; }
+.canvas-plan-section h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.canvas-plan-section ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.canvas-plan-item {
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--line);
+}
+.canvas-plan-item-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.canvas-plan-status.confirmed { color: var(--green); }
+.canvas-plan-status.observed { color: var(--blue-2); }
+.canvas-plan-status.inferred { color: var(--warning); }
+.canvas-plan-status.conflicting,
+.canvas-plan-status.unknown { color: #ff9c86; }
+.canvas-plan-status.superseded { color: var(--muted-2); }
+.canvas-plan-kind,
+.canvas-plan-confidence { color: var(--muted-2); }
+.canvas-plan-item p { margin: 7px 0 0; color: var(--ink); font-size: 12px; line-height: 1.5; }
+.canvas-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.canvas-plan-actions .button { font-size: 9px; }
 
 .memory-badge { background: rgba(109,147,255,.22); color: var(--blue-2); }
 .memory-heading { display: flex; max-width: 1240px; align-items: flex-end; justify-content: space-between; gap: 42px; }
@@ -3243,5 +3281,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .automation-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
   .canvas-source-bar { align-items: flex-start; flex-wrap: wrap; }
   .canvas-blocks { grid-template-columns: 1fr; }
-  .canvas-decision-block { grid-column: 1; }
+  .canvas-decision-block,
+  .canvas-operating-plan-block { grid-column: 1; }
 }

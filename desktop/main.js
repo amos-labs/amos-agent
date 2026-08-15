@@ -437,6 +437,12 @@ function registerIpc() {
   ipcMain.handle("desktop:propose-consultative-update", (_event, input) =>
     controller.proposeConsultativeUpdate(input)
   );
+  ipcMain.handle("desktop:reject-consultative-assertion", (_event, input) =>
+    controller.rejectConsultativeAssertion(input)
+  );
+  ipcMain.handle("desktop:reopen-consultative-assertion", (_event, input) =>
+    controller.reopenConsultativeAssertion(input)
+  );
   ipcMain.handle("desktop:create-project", (_event, input) => controller.createProject(input));
   ipcMain.handle("desktop:update-project", (_event, input) =>
     controller.updateProjectResource(input?.id, input?.changes)

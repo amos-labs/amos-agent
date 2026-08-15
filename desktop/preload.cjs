@@ -101,6 +101,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:correct-consultative-assertion", input),
   proposeConsultativeUpdate: (input) =>
     ipcRenderer.invoke("desktop:propose-consultative-update", input),
+  rejectConsultativeAssertion: (input) =>
+    ipcRenderer.invoke("desktop:reject-consultative-assertion", input),
+  reopenConsultativeAssertion: (input) =>
+    ipcRenderer.invoke("desktop:reopen-consultative-assertion", input),
   createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
   updateProject: (id, changes) =>
     ipcRenderer.invoke("desktop:update-project", { id, changes }),

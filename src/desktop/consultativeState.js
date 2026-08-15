@@ -203,6 +203,9 @@ export function forkConsultativeState(
   });
 }
 
+export const OPERATING_PLAN_BLOCK_ID = "operating-plan";
+export const OPERATING_PLAN_CANVAS_TITLE = "Operating plan";
+
 export function confirmConsultativeAssertion(state, assertionId, { now = () => new Date() } = {}) {
   const current = normalizeConsultativeState(state, { allowConfirmed: true, now });
   if (!current) throw new Error("There is no consultative state to confirm");
@@ -246,6 +249,168 @@ export function correctConsultativeAssertion(
   if (!found) throw new Error("That consultative assertion is no longer in this task");
   current.updatedAt = isoNow(now);
   return current;
+}
+
+export function rejectConsultativeAssertion(state, assertionId, { now = () => new Date() } = {}) {
+  const current = normalizeConsultativeState(state, { allowConfirmed: true, now });
+  if (!current) throw new Error("There is no consultative state to reject");
+  const found = mutateAssertion(current, assertionId, (assertion) => ({
+    ...assertion,
+    status: "superseded",
+    source: "application",
+    confirmedAt: ""
+  }));
+  if (!found) throw new Error("That consultative assertion is no longer in this task");
+  current.updatedAt = isoNow(now);
+  return current;
+}
+
+export function reopenConsultativeAssertion(state, assertionId, { now = () => new Date() } = {}) {
+  const current = normalizeConsultativeState(state, { allowConfirmed: true, now });
+  if (!current) throw new Error("There is no consultative state to reopen");
+  const found = mutateAssertion(current, assertionId, (assertion) => ({
+    ...assertion,
+    status: assertion.confidence == null ? "unknown" : "inferred",
+    source: "user",
+    confirmedAt: ""
+  }));
+  if (!found) throw new Error("That consultative assertion is no longer in this task");
+  current.updatedAt = isoNow(now);
+  return current;
+}
+
+export function consultativeStateHasOperatingPlan(state) {
+  if (!state?.objective?.statement) return false;
+  if (state.recommendation || state.intervention) return true;
+  const lists = [
+    state.successMeasures,
+    state.evidence,
+    state.assumptions,
+    state.materialUnknowns,
+    state.candidateMoves,
+    state.outcomes,
+    ...Object.values(state.currentState || {})
+  ];
+  return lists.some((items) => Array.isArray(items) && items.length > 0);
+}
+
+export function compileOperatingPlanBlock(state, { now = () => new Date() } = {}) {
+  const current = state
+    ? normalizeConsultativeState(state, { allowConfirmed: true, now })
+    : null;
+  if (!consultativeStateHasOperatingPlan(current)) return null;
+  const sections = [
+    section("outcome", "Desired outcome", [
+      current.objective,
+      ...(current.successMeasures || [])
+    ]),
+    section("understanding", "Current understanding", [
+      ...(current.currentState?.people || []),
+      ...(current.currentState?.systems || []),
+      ...(current.currentState?.workflowSteps || []),
+      ...(current.currentState?.handoffs || []),
+      ...(current.currentState?.exceptions || []),
+      ...(current.currentState?.controls || [])
+    ]),
+    section("evidence", "Evidence and uncertainty", [
+      ...(current.evidence || []),
+      ...(current.assumptions || []),
+      ...(current.materialUnknowns || [])
+    ]),
+    section(
+      "opportunities",
+      "Opportunities",
+      [...(current.candidateMoves || [])].sort((left, right) => (
+        Number(right.confidence ?? 0) - Number(left.confidence ?? 0)
+      ))
+    ),
+    section("recommendation", "Recommendation", [current.recommendation]),
+    section("intervention", "Chosen intervention", [current.intervention]),
+    section("outcomes", "Observed outcomes", current.outcomes)
+  ].filter(Boolean);
+  const items = sections.flatMap((entry) => entry.items);
+  return {
+    id: OPERATING_PLAN_BLOCK_ID,
+    type: "operating_plan",
+    title: OPERATING_PLAN_CANVAS_TITLE,
+    status: current.status,
+    sections,
+    provenance: {
+      sourceKind: "local",
+      sourceLabel: "Task consultative state",
+      observedAt: current.updatedAt || isoNow(now),
+      uncertainty: planUncertainty(items)
+    }
+  };
+}
+
+export function compileOperatingPlanCanvas(state, { now = () => new Date() } = {}) {
+  const block = compileOperatingPlanBlock(state, { now });
+  if (!block) return null;
+  const observedAt = block.provenance.observedAt;
+  return {
+    version: "1",
+    title: OPERATING_PLAN_CANVAS_TITLE,
+    subtitle: state.objective?.statement || "A living projection of this task's consultative state.",
+    generated_at: observedAt,
+    state: { kind: "ready" },
+    source: {
+      kind: "local",
+      label: "Task consultative state",
+      refreshed_at: observedAt,
+      references: []
+    },
+    blocks: [block]
+  };
+}
+
+function section(id, title, values) {
+  const items = (Array.isArray(values) ? values : [])
+    .filter(Boolean)
+    .map(planItem);
+  if (items.length === 0) return null;
+  return { id, title, items };
+}
+
+function planItem(assertion) {
+  return {
+    id: assertion.id,
+    kind: assertion.kind,
+    statement: assertion.statement,
+    status: assertion.status,
+    source: assertion.source,
+    confidence: assertion.confidence,
+    sourceEventId: assertion.sourceEventId,
+    observedAt: assertion.observedAt,
+    actions: planActions(assertion.status)
+  };
+}
+
+function planActions(status) {
+  if (status === "superseded") return ["reopen"];
+  if (status === "confirmed") return ["correct", "reopen"];
+  return ["confirm", "correct", "reject"];
+}
+
+function planUncertainty(items) {
+  const ranks = {
+    conflicting: 5,
+    unknown: 4,
+    inferred: 3,
+    observed: 2,
+    confirmed: 1,
+    superseded: 1
+  };
+  let best = "none";
+  let score = 0;
+  for (const item of items) {
+    const next = ranks[item.status] || 0;
+    if (next > score) {
+      score = next;
+      best = item.status === "confirmed" || item.status === "superseded" ? "none" : item.status;
+    }
+  }
+  return best;
 }
 
 export function proposeConsultativeState(
