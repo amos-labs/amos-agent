@@ -28,6 +28,7 @@ import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
 import { SavedViewStore } from "../src/desktop/savedViewStore.js";
 import { SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
+import { RelationshipProfileStore } from "../src/desktop/relationshipProfileStore.js";
 import { DesktopTaskStore } from "../src/desktop/taskStore.js";
 import { DecisionKeyStore } from "../src/desktop/decisionKeyStore.js";
 import { BrowserRecipeStore } from "../src/desktop/browserRecipeStore.js";
@@ -443,6 +444,15 @@ function registerIpc() {
   ipcMain.handle("desktop:reopen-consultative-assertion", (_event, input) =>
     controller.reopenConsultativeAssertion(input)
   );
+  ipcMain.handle("desktop:set-relationship-preference", (_event, input) =>
+    controller.setRelationshipPreference(input)
+  );
+  ipcMain.handle("desktop:clear-relationship-preference", (_event, input) =>
+    controller.clearRelationshipPreference(input)
+  );
+  ipcMain.handle("desktop:reset-relationship-profile", () =>
+    controller.resetRelationshipProfile()
+  );
   ipcMain.handle("desktop:create-project", (_event, input) => controller.createProject(input));
   ipcMain.handle("desktop:update-project", (_event, input) =>
     controller.updateProjectResource(input?.id, input?.changes)
@@ -701,6 +711,11 @@ app.whenReady().then(async () => {
     encrypt,
     decrypt
   });
+  const relationshipProfileStore = new RelationshipProfileStore({
+    filePath: join(app.getPath("userData"), "relationship-profile.json"),
+    encrypt,
+    decrypt
+  });
   const taskStore = new DesktopTaskStore({
     filePath: join(app.getPath("userData"), "tasks.json"),
     encrypt,
@@ -762,6 +777,7 @@ app.whenReady().then(async () => {
     localReceiptStore,
     savedViewStore,
     sessionContinuityStore,
+    relationshipProfileStore,
     taskStore,
     decisionKeyStore,
     accountStore,

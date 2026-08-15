@@ -67,6 +67,11 @@ import {
   buildSessionContinuityPrompt,
   continuityScope
 } from "./sessionContinuity.js";
+import {
+  compileRelationshipProfile,
+  profileCatalog
+} from "./relationshipProfile.js";
+import { profileOwnerScope } from "./relationshipProfileStore.js";
 import { taskOwnerScope } from "./taskStore.js";
 import { DesktopRunManager, DesktopRunSupervisor } from "./runManager.js";
 import {
@@ -123,6 +128,7 @@ export class DesktopController {
     localReceiptStore = null,
     savedViewStore = null,
     sessionContinuityStore = null,
+    relationshipProfileStore = null,
     taskStore = null,
     decisionKeyStore = null,
     accountStore = null,
@@ -181,6 +187,7 @@ export class DesktopController {
     this.localReceiptStore = localReceiptStore;
     this.savedViewStore = savedViewStore;
     this.sessionContinuityStore = sessionContinuityStore;
+    this.relationshipProfileStore = relationshipProfileStore;
     this.taskStore = taskStore;
     this.decisionKeyStore = decisionKeyStore;
     this.accountStore = accountStore;
@@ -328,6 +335,7 @@ export class DesktopController {
       },
       accounts,
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
+      relationshipProfile: await this.relationshipProfileState(settings),
       activeContextKey: this.activeContextKey || "active",
       activeTaskRecordId: this.activeTaskRecordId,
       remoteStatus: { ...this.remoteStatus },
@@ -4163,7 +4171,7 @@ export class DesktopController {
             ? PERSONAL_SYSTEM_PROMPT
             : credentials?.demo
               ? DEMO_SYSTEM_PROMPT
-              : SYSTEM_PROMPT, settings, config)}${contextOnly
+              : SYSTEM_PROMPT, settings, config)}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly
           ? "\n\nThis task is context-only. No local workspace is granted, and local shell, file, code, Git, and document-generation tools are unavailable."
           : ""}`,
         extraTools,
@@ -4393,6 +4401,77 @@ export class DesktopController {
         dirty: fallback?.dirty === true
       };
     }
+  }
+
+  relationshipProfileScope(settings = null) {
+    if (!this.relationshipProfileStore) return null;
+    try {
+      return profileOwnerScope({
+        identity: this.identity,
+        boundary: settings?.operatingMode || "personal"
+      });
+    } catch {
+      return profileOwnerScope({ boundary: "personal" });
+    }
+  }
+
+  async relationshipProfileState(settings = null) {
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.relationshipProfileScope(currentSettings);
+    const profile = scope && this.relationshipProfileStore
+      ? await this.relationshipProfileStore.load(scope)
+      : null;
+    return {
+      catalog: profileCatalog(),
+      profile
+    };
+  }
+
+  async compiledRelationshipProfilePrompt(settings = null) {
+    const state = await this.relationshipProfileState(settings);
+    const compiled = compileRelationshipProfile(state.profile);
+    return compiled ? `\n\n${compiled}` : "";
+  }
+
+  async setRelationshipPreference({ key, value, expectedRevision = null } = {}) {
+    if (!this.relationshipProfileStore) {
+      throw new Error("Collaboration preferences require encrypted local storage");
+    }
+    const settings = await this.settingsStore.read();
+    const scope = this.relationshipProfileScope(settings);
+    if (!scope) throw new Error("Collaboration preferences are unavailable in this session");
+    const profile = await this.relationshipProfileStore.setPreference(scope, key, value, {
+      expectedRevision
+    });
+    this.runtime = null;
+    await this.sendRemoteState();
+    return { profile, catalog: profileCatalog() };
+  }
+
+  async clearRelationshipPreference({ key, expectedRevision = null } = {}) {
+    if (!this.relationshipProfileStore) {
+      throw new Error("Collaboration preferences require encrypted local storage");
+    }
+    const settings = await this.settingsStore.read();
+    const scope = this.relationshipProfileScope(settings);
+    const profile = await this.relationshipProfileStore.clearPreference(scope, key, {
+      expectedRevision
+    });
+    this.runtime = null;
+    await this.sendRemoteState();
+    return { profile, catalog: profileCatalog() };
+  }
+
+  async resetRelationshipProfile() {
+    if (!this.relationshipProfileStore) {
+      throw new Error("Collaboration preferences require encrypted local storage");
+    }
+    const settings = await this.settingsStore.read();
+    const scope = this.relationshipProfileScope(settings);
+    const profile = await this.relationshipProfileStore.reset(scope);
+    this.runtime = null;
+    await this.sendRemoteState();
+    return { profile, catalog: profileCatalog() };
   }
 
   async sessionContinuityState(settings = null) {
@@ -4853,6 +4932,7 @@ export class DesktopController {
         ? await this.accountStore.list()
         : { currentAccountId: this.identity ? "legacy" : "", accounts: [] },
       workingContinuity: publicWorkingContinuity(this.workingContinuity),
+      relationshipProfile: await this.relationshipProfileState(taskSettings),
       activeContextKey: this.activeContextKey || "active",
       activeTaskRecordId: this.activeTaskRecordId,
       remoteStatus: { ...this.remoteStatus },

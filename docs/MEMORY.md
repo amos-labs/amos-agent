@@ -38,6 +38,12 @@ The private store lives in the application's user-data directory and is
 protected with operating-system-backed `safeStorage` (Keychain on macOS and
 DPAPI on Windows).
 
+Collaboration preferences are a separate structured user-private record, not
+attachment memory and not company documents. They are keyed to the signed-in
+user and tenant in company mode, or to the local owner in personal/offline
+mode. They do not survive a reset, do not infer personality, and cannot
+weaken approvals or evidence.
+
 - File and content metadata are inside encrypted envelopes.
 - The plaintext envelope contains only the opaque item ID and ciphertext.
 - The store is written atomically with owner-only permissions.

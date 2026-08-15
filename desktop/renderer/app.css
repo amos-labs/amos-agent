@@ -2580,6 +2580,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .canvas-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .canvas-plan-actions .button { font-size: 9px; }
 
+.collaboration-profile-card {
+  margin: 18px 0 8px;
+  padding: 16px 16px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.collaboration-profile-card h2 { margin: 6px 0 8px; font-size: 16px; }
+.collaboration-profile-card > p { margin: 0 0 14px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.collaboration-profile-fields { display: grid; gap: 12px; }
+.collaboration-profile-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
 .memory-badge { background: rgba(109,147,255,.22); color: var(--blue-2); }
 .memory-heading { display: flex; max-width: 1240px; align-items: flex-end; justify-content: space-between; gap: 42px; }
 .memory-heading > div:first-child { max-width: 760px; }

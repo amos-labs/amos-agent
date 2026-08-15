@@ -105,6 +105,12 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:reject-consultative-assertion", input),
   reopenConsultativeAssertion: (input) =>
     ipcRenderer.invoke("desktop:reopen-consultative-assertion", input),
+  setRelationshipPreference: (input) =>
+    ipcRenderer.invoke("desktop:set-relationship-preference", input),
+  clearRelationshipPreference: (input) =>
+    ipcRenderer.invoke("desktop:clear-relationship-preference", input),
+  resetRelationshipProfile: () =>
+    ipcRenderer.invoke("desktop:reset-relationship-profile"),
   createProject: (input) => ipcRenderer.invoke("desktop:create-project", input),
   updateProject: (id, changes) =>
     ipcRenderer.invoke("desktop:update-project", { id, changes }),
