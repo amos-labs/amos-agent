@@ -54,9 +54,13 @@ import {
   reconcileTaskCheckpoint
 } from "./taskCheckpoint.js";
 import {
+  compileOperatingPlanCanvas,
   confirmConsultativeAssertion,
   correctConsultativeAssertion,
-  proposeConsultativeState
+  OPERATING_PLAN_BLOCK_ID,
+  proposeConsultativeState,
+  rejectConsultativeAssertion,
+  reopenConsultativeAssertion
 } from "./consultativeState.js";
 import {
   compileContinuityContext,
@@ -2912,6 +2916,8 @@ export class DesktopController {
       fresh_identity_required: true,
       fresh_policy_required: true
     });
+    const continuity = await this.sessionContinuityState(settings).catch(() => null);
+    this.syncOperatingPlanCanvas(continuity?.consultativeState || null);
     this.send("canvas:changed", this.canvases.state());
     await this.sendRemoteState();
     return {
@@ -4427,6 +4433,10 @@ export class DesktopController {
       await this.sessionContinuityStore.applySharedManifest(scope, manifest).catch(() => {});
     }
     const restored = runtimeState.runtime.loop.restoreContinuity(prompt);
+    const consultative = useShared
+      ? sharedManifest?.consultativeState
+      : record?.consultativeState;
+    this.syncOperatingPlanCanvas(consultative || null);
     return restored ? (useShared ? { source: "shared", manifest } : record) : null;
   }
 
@@ -4467,6 +4477,20 @@ export class DesktopController {
         now: () => new Date(),
         sourceEventId
       }),
+      { origin: "user_gesture", requireExisting: true }
+    );
+  }
+
+  async rejectConsultativeAssertion({ assertionId } = {}) {
+    return this.applyConsultativeMutation(
+      (state) => rejectConsultativeAssertion(state, assertionId, { now: () => new Date() }),
+      { origin: "user_gesture", requireExisting: true }
+    );
+  }
+
+  async reopenConsultativeAssertion({ assertionId } = {}) {
+    return this.applyConsultativeMutation(
+      (state) => reopenConsultativeAssertion(state, assertionId, { now: () => new Date() }),
       { origin: "user_gesture", requireExisting: true }
     );
   }
@@ -4529,8 +4553,44 @@ export class DesktopController {
         await this.captureSharedConsultativeState(settings, record, { origin });
       }
     }
+    this.syncOperatingPlanCanvas(record.consultativeState);
     await this.sendRemoteState();
     return record;
+  }
+
+  syncOperatingPlanCanvas(state) {
+    const spec = compileOperatingPlanCanvas(state);
+    const existing = this.canvases.list().find((canvas) =>
+      canvas.blocks.some((block) => (
+        block.type === "operating_plan" && block.id === OPERATING_PLAN_BLOCK_ID
+      ))
+    );
+    if (!spec) {
+      if (!existing) return null;
+      if (existing.blocks.length <= 1) this.canvases.remove(existing.id);
+      else this.canvases.update(existing.id, { removeBlockIds: [OPERATING_PLAN_BLOCK_ID] });
+      this.send("canvas:changed", this.canvases.state());
+      this.snapshotActiveTask().catch(() => {});
+      return null;
+    }
+    const canvas = existing
+      ? this.canvases.update(existing.id, {
+          title: spec.title,
+          subtitle: spec.subtitle,
+          generated_at: spec.generated_at,
+          source: spec.source,
+          upsertBlocks: spec.blocks
+        })
+      : this.canvases.present(spec);
+    this.record("canvas", `${existing ? "Updated" : "Presented"} ${canvas.title}`, {
+      canvasId: canvas.id,
+      blockCount: canvas.blocks.length,
+      state: canvas.state.kind,
+      source: canvas.source.label
+    });
+    this.send("canvas:changed", this.canvases.state());
+    this.snapshotActiveTask().catch(() => {});
+    return canvas;
   }
 
   async rehydrateSharedContinuity(settings) {

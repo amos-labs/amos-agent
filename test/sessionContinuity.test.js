@@ -12,8 +12,12 @@ import {
   SessionContinuityStore
 } from "../src/desktop/sessionContinuity.js";
 import {
+  compileOperatingPlanCanvas,
   confirmConsultativeAssertion,
-  correctConsultativeAssertion
+  consultativeStateHasOperatingPlan,
+  correctConsultativeAssertion,
+  rejectConsultativeAssertion,
+  reopenConsultativeAssertion
 } from "../src/desktop/consultativeState.js";
 
 function codec() {
@@ -438,6 +442,44 @@ test("task forks filter consultative assertions by the selected milestone", asyn
     contextScope: "everything"
   });
   assert.equal(everything.consultativeState.currentState.systems[0].id, "sys-1");
+});
+
+test("typed reject and reopen change consultative assertions without a chat turn", () => {
+  const now = () => new Date("2026-08-15T12:00:00.000Z");
+  const rejected = rejectConsultativeAssertion(consultativeObjective("inferred"), "obj-1", { now });
+  assert.equal(rejected.objective.status, "superseded");
+  assert.equal(rejected.objective.source, "application");
+  assert.equal(rejected.objective.confirmedAt, "");
+
+  const reopened = reopenConsultativeAssertion(rejected, "obj-1", { now });
+  assert.equal(reopened.objective.status, "inferred");
+  assert.equal(reopened.objective.source, "user");
+  assert.equal(reopened.objective.confirmedAt, "");
+});
+
+test("operating-plan canvas compiles only when consultative state has useful structure", () => {
+  const thin = {
+    schemaVersion: 1,
+    status: "active",
+    objective: consultativeObjective("inferred").objective
+  };
+  assert.equal(consultativeStateHasOperatingPlan(thin), false);
+  assert.equal(compileOperatingPlanCanvas(thin), null);
+
+  const rich = consultativeObjective("inferred");
+  assert.equal(consultativeStateHasOperatingPlan(rich), true);
+  const canvas = compileOperatingPlanCanvas(rich);
+  assert.equal(canvas.blocks[0].type, "operating_plan");
+  assert.equal(canvas.blocks[0].id, "operating-plan");
+  assert.equal(canvas.source.kind, "local");
+  const objective = canvas.blocks[0].sections
+    .flatMap((section) => section.items)
+    .find((item) => item.id === "obj-1");
+  assert.deepEqual(objective.actions, ["confirm", "correct", "reject"]);
+  const system = canvas.blocks[0].sections
+    .flatMap((section) => section.items)
+    .find((item) => item.id === "sys-1");
+  assert.equal(system.kind, "system");
 });
 
 test("shared v1 continuity still hydrates when consultative state is absent", () => {

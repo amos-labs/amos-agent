@@ -3697,6 +3697,7 @@ function renderCanvasBlock(block) {
   else if (block.type === "browser") card = renderCanvasBrowser(block);
   else if (block.type === "link") card = renderCanvasLink(block);
   else if (block.type === "sources") card = renderCanvasSources(block);
+  else if (block.type === "operating_plan") card = renderCanvasOperatingPlan(block);
   else card = renderCanvasDecision(block);
   card.classList.add(`canvas-source-${block.provenance?.sourceKind || "live"}`);
   renderCanvasProvenance(card, block.provenance);
@@ -4403,6 +4404,95 @@ function renderCanvasSources(block) {
   }
   card.append(list);
   return card;
+}
+
+function renderCanvasOperatingPlan(block) {
+  const card = canvasCard(block, "canvas-operating-plan-block");
+  const lane = document.createElement("span");
+  lane.className = `canvas-plan-lane ${block.status || "active"}`;
+  lane.textContent = block.status || "active";
+  card.append(lane);
+  for (const section of block.sections || []) {
+    const region = document.createElement("section");
+    region.className = "canvas-plan-section";
+    const heading = document.createElement("h3");
+    heading.textContent = section.title;
+    region.append(heading);
+    const list = document.createElement("ul");
+    for (const item of section.items || []) {
+      list.append(renderOperatingPlanItem(item));
+    }
+    region.append(list);
+    card.append(region);
+  }
+  return card;
+}
+
+function renderOperatingPlanItem(item) {
+  const row = document.createElement("li");
+  row.className = `canvas-plan-item status-${item.status}`;
+  const meta = document.createElement("div");
+  meta.className = "canvas-plan-item-meta";
+  const status = document.createElement("span");
+  status.className = `canvas-plan-status ${item.status}`;
+  status.textContent = item.status;
+  const kind = document.createElement("span");
+  kind.className = "canvas-plan-kind";
+  kind.textContent = item.kind;
+  meta.append(status, kind);
+  if (item.status === "inferred" && item.confidence != null) {
+    const confidence = document.createElement("span");
+    confidence.className = "canvas-plan-confidence";
+    confidence.textContent = `${Math.round(Number(item.confidence) * 100)}%`;
+    meta.append(confidence);
+  }
+  const statement = document.createElement("p");
+  statement.textContent = item.statement;
+  row.append(meta, statement);
+  const actions = Array.isArray(item.actions) ? item.actions : [];
+  if (actions.length > 0) {
+    const controls = document.createElement("div");
+    controls.className = "canvas-plan-actions";
+    for (const action of actions) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = action === "confirm" ? "button primary" : "button ghost";
+      button.textContent = planActionLabel(action);
+      button.addEventListener("click", () => applyOperatingPlanAction(action, item, button));
+      controls.append(button);
+    }
+    row.append(controls);
+  }
+  return row;
+}
+
+function planActionLabel(action) {
+  if (action === "confirm") return "Confirm";
+  if (action === "correct") return "Correct";
+  if (action === "reject") return "Reject";
+  if (action === "reopen") return "Reopen";
+  return action;
+}
+
+async function applyOperatingPlanAction(action, item, button) {
+  button.disabled = true;
+  try {
+    if (action === "confirm") {
+      await api.confirmConsultativeAssertion({ assertionId: item.id });
+    } else if (action === "correct") {
+      const statement = window.prompt("Correct this understanding", item.statement);
+      if (!statement || statement.trim() === item.statement) return;
+      await api.correctConsultativeAssertion({ assertionId: item.id, statement });
+    } else if (action === "reject") {
+      await api.rejectConsultativeAssertion({ assertionId: item.id });
+    } else if (action === "reopen") {
+      await api.reopenConsultativeAssertion({ assertionId: item.id });
+    }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderCanvasDecision(block) {

@@ -132,6 +132,23 @@ test("canvas contract normalizes every safe block type", () => {
         summary: "Increase the winning campaign.",
         pending_id: "pending-1",
         details: [{ label: "Daily budget", value: 20 }]
+      },
+      {
+        type: "operating_plan",
+        status: "active",
+        provenance: { uncertainty: "inferred" },
+        sections: [{
+          id: "outcome",
+          title: "Desired outcome",
+          items: [{
+            id: "obj-1",
+            kind: "objective",
+            statement: "Stop duplicate books",
+            status: "inferred",
+            confidence: 0.7,
+            actions: ["confirm", "correct", "reject"]
+          }]
+        }]
       }
     ]
   });
@@ -151,6 +168,8 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.blocks[7].takeoverActive, true);
   assert.equal(canvas.blocks[8].url, "http://127.0.0.1:3000/preview");
   assert.equal(canvas.blocks[10].pendingId, "pending-1");
+  assert.equal(canvas.blocks[11].sections[0].items[0].id, "obj-1");
+  assert.equal(canvas.blocks[11].provenance.uncertainty, "inferred");
 });
 
 test("canvas contract rejects arbitrary block types and unbounded tables", () => {
@@ -416,6 +435,34 @@ test("company and incremental canvas tools expose narrow deterministic contracts
   assert.equal(updated.state, "partial");
   assert.equal(JSON.stringify(company.parameters).includes("$ref"), false);
   assert.equal(JSON.stringify(update.parameters).includes("$ref"), false);
+});
+
+test("model canvas tools cannot author operating_plan blocks", async () => {
+  const present = createCanvasTool({
+    present: () => ({ id: "canvas-1", title: "View", blocks: [] })
+  });
+  const update = createCanvasUpdateTool({
+    update: () => ({ id: "canvas-1", revision: 2, state: { kind: "ready" }, blocks: [] })
+  });
+  const payload = {
+    version: "1",
+    title: "Invented plan",
+    source: { kind: "local", label: "model", refreshed_at: timestamp, references: [] },
+    blocks: [{
+      type: "operating_plan",
+      sections: [{
+        id: "outcome",
+        title: "Desired outcome",
+        items: [{ id: "obj-1", statement: "Invented", status: "confirmed", actions: ["confirm"] }]
+      }]
+    }]
+  };
+  await assert.rejects(() => present.handler(payload), /compiled by Desktop/);
+  await assert.rejects(
+    () => update.handler({ canvas_id: "canvas-1", blocks: payload.blocks }),
+    /compiled by Desktop/
+  );
+  assert.equal(JSON.stringify(present.parameters).includes("operating_plan"), false);
 });
 
 test("semantic work-surface intent is language-neutral and carries no business authority", async () => {

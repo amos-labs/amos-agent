@@ -489,6 +489,62 @@ test("propose then confirm survives a later completed turn", async () => {
   );
 });
 
+test("consultative mutations project an operating-plan canvas and honor reject/reopen", async () => {
+  const store = await continuityStore();
+  const events = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-consultative-canvas",
+    settingsStore: settingsStore(),
+    sessionContinuityStore: store,
+    openBrowser: async () => {},
+    emit(channel, payload) {
+      events.push({ channel, payload });
+    }
+  });
+  controller.identity = identity();
+  controller.sendRemoteState = async () => {};
+  controller.captureSharedConsultativeState = async (_settings, record) => ({
+    supported: true,
+    available: true,
+    revision: record.revision,
+    manifest: record.manifest
+  });
+  controller.workingContinuity = { revision: 0, available: false };
+
+  const proposed = await controller.proposeConsultativeUpdate({
+    objective: { statement: "Stop duplicate books", confidence: 0.8 },
+    assertions: [{
+      kind: "system",
+      statement: "QBO owns the ledger",
+      confidence: 0.7
+    }]
+  });
+  const plan = controller.canvases.list().find((canvas) =>
+    canvas.blocks.some((block) => block.type === "operating_plan")
+  );
+  assert.ok(plan);
+  assert.equal(plan.title, "Operating plan");
+  assert.ok(events.some((event) => event.channel === "canvas:changed"));
+  const objectiveId = proposed.consultativeState.objective.id;
+  const confirmed = await controller.confirmConsultativeAssertion({ assertionId: objectiveId });
+  assert.equal(confirmed.consultativeState.objective.status, "confirmed");
+  const confirmedItem = controller.canvases.active().blocks[0].sections
+    .flatMap((section) => section.items)
+    .find((item) => item.id === objectiveId);
+  assert.equal(confirmedItem.status, "confirmed");
+  assert.deepEqual(confirmedItem.actions, ["correct", "reopen"]);
+
+  const rejected = await controller.rejectConsultativeAssertion({
+    assertionId: proposed.consultativeState.currentState.systems[0].id
+  });
+  assert.equal(rejected.consultativeState.currentState.systems[0].status, "superseded");
+  const reopened = await controller.reopenConsultativeAssertion({
+    assertionId: objectiveId
+  });
+  assert.equal(reopened.consultativeState.objective.status, "inferred");
+  assert.equal(reopened.consultativeState.objective.source, "user");
+});
+
 test("desktop automatically offers completed online state to the shared continuity lane", async () => {
   const store = await continuityStore();
   const controller = new DesktopController({
