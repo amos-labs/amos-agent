@@ -939,6 +939,49 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .conversation.has-history .composer textarea { height: 62px; min-height: 62px; padding-block: 12px; }
 .composer textarea::placeholder { color: var(--muted-2); }
+.task-role-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 13px 0;
+}
+.task-role-button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.task-role-button.active {
+  border-color: var(--blue);
+  color: var(--blue-2);
+  background: rgba(109,147,255,.1);
+}
+.task-usage-line {
+  margin: 0 16px 10px;
+  color: var(--muted-2);
+  font-size: 10px;
+}
+.intelligence-roles-field .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.role-selects {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.role-selects label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--muted);
+}
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 9px 8px 13px; border-top: 1px solid var(--line); }
 .composer-tools { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .composer-actions { display: flex; align-items: center; gap: 9px; }

@@ -17,6 +17,7 @@ identity or authority.
 | OpenAI | OpenAI cloud | OpenAI API key | Native Responses streaming, tools, and stateless reasoning continuation |
 | Anthropic | Anthropic cloud | Anthropic API key | Native Messages streaming, tools, and signed thinking continuation |
 | Moonshot/Kimi | Moonshot cloud | Moonshot API key | Named OpenAI-compatible provider profile |
+| xAI / Grok | xAI cloud | xAI API key | Named OpenAI-compatible Grok profile for coding and long agents |
 | Ollama | User computer | Usually none | Supported local development/offline work |
 | llama.cpp | User computer | Usually none | Direct GGUF/local serving |
 
@@ -141,13 +142,28 @@ agent contract. OpenAI's encrypted reasoning output items and Anthropic's
 signed thinking blocks are preserved between tool turns while remaining hidden
 from user-visible streaming.
 
-Moonshot/Kimi remains a named compatible provider profile:
+Moonshot/Kimi remains a named compatible provider profile. The catalog includes
+Kimi K3 plus the cheaper K2.7 Code and K2.6 models:
 
 ```dotenv
 AMOS_MODEL_PROVIDER=kimi
 MOONSHOT_API_KEY=...
 AMOS_MODEL=kimi-k3
 ```
+
+xAI / Grok is a named compatible provider at `https://api.x.ai/v1`:
+
+```dotenv
+AMOS_MODEL_PROVIDER=xai
+XAI_API_KEY=...
+AMOS_MODEL=grok-4.6
+```
+
+Desktop can store more than one provider credential and pair them. The usual
+coding pair is Kimi K3 as planner and checker with Grok 4.6 as the implementer.
+Each role uses the key stored for that provider. Local Qwen remains the
+on-device inspect and draft layer; the AMOS Local catalog is moving from Qwen
+3.6 to Qwen 3.8 independently of this pairing.
 
 Provider keys remain local and encrypted in Desktop. They are removed from
 child-process environments and never become AMOS connector credentials.

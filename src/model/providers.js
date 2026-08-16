@@ -34,11 +34,35 @@ const PROVIDERS = {
     defaultBaseUrl: "https://api.moonshot.ai/v1",
     defaultModel: "kimi-k3",
     models: [
-      { id: "kimi-k3", label: "Kimi K3" }
+      { id: "kimi-k3", label: "Kimi K3", supportedReasoningEfforts: ["low", "high", "max"], defaultReasoningEffort: "max" },
+      { id: "kimi-k2.7-code", label: "Kimi K2.7 Code", supportedReasoningEfforts: ["low", "high", "max"], defaultReasoningEffort: "high" },
+      { id: "kimi-k2.7-code-highspeed", label: "Kimi K2.7 Code HighSpeed", supportedReasoningEfforts: ["low", "high", "max"], defaultReasoningEffort: "high" },
+      { id: "kimi-k2.6", label: "Kimi K2.6", supportedReasoningEfforts: ["low", "high", "max"], defaultReasoningEffort: "high" }
     ],
     apiKeyEnv: ["MOONSHOT_API_KEY", "KIMI_API_KEY"],
     apiKeyRequired: true,
-    supportedReasoningEfforts: ["max"],
+    supportedReasoningEfforts: ["low", "high", "max"],
+    defaultReasoningEffort: "max",
+    capabilities: { tools: true, vision: true, reasoning: true }
+  },
+  xai: {
+    id: "xai",
+    displayName: "xAI / Grok",
+    description: "Use your own xAI API key and choose a Grok model directly.",
+    deployment: "cloud",
+    protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
+    defaultBaseUrl: "https://api.x.ai/v1",
+    defaultModel: "grok-4.6",
+    models: [
+      { id: "grok-4.6", label: "Grok 4.6", supportedReasoningEfforts: ["low", "medium", "high", "xhigh"], defaultReasoningEffort: "high" },
+      { id: "grok-4.5", label: "Grok 4.5", supportedReasoningEfforts: ["low", "medium", "high", "xhigh"], defaultReasoningEffort: "high" },
+      { id: "grok-4.3", label: "Grok 4.3", supportedReasoningEfforts: ["low", "medium", "high"], defaultReasoningEffort: "high" },
+      { id: "grok-build-0.1", label: "Grok Build 0.1", supportedReasoningEfforts: ["low", "medium", "high"], defaultReasoningEffort: "medium" }
+    ],
+    apiKeyEnv: ["XAI_API_KEY", "GROK_API_KEY"],
+    apiKeyRequired: true,
+    supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+    defaultReasoningEffort: "high",
     capabilities: { tools: true, vision: true, reasoning: true }
   },
   "amos-hosted": {
@@ -141,7 +165,8 @@ const PROVIDERS = {
     defaultModel: "claude-sonnet-5",
     models: [
       { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
-      { id: "claude-opus-5", label: "Claude Opus 5" }
+      { id: "claude-opus-5", label: "Claude Opus 5" },
+      { id: "claude-fable-5", label: "Claude Fable 5" }
     ],
     apiKeyEnv: ["ANTHROPIC_API_KEY"],
     apiKeyRequired: true,
@@ -179,7 +204,10 @@ export function resolveModelConfig(env = process.env) {
 
   const requestedModel = hosted
     ? "auto"
-    : env.AMOS_MODEL || (provider.id === "kimi" ? env.KIMI_MODEL : "") || provider.defaultModel;
+    : env.AMOS_MODEL ||
+      (provider.id === "kimi" ? env.KIMI_MODEL : "") ||
+      (provider.id === "xai" ? env.XAI_MODEL || env.GROK_MODEL : "") ||
+      provider.defaultModel;
   const modelProfile = resolveProviderModel(provider, requestedModel);
   const model = modelProfile?.id || requestedModel;
   const authMode = provider.id === "bedrock"
@@ -189,6 +217,8 @@ export function resolveModelConfig(env = process.env) {
     ? ""
     : env.AMOS_MODEL_REASONING_EFFORT ||
       (provider.id === "kimi" ? env.KIMI_REASONING_EFFORT : "") ||
+      modelProfile?.defaultReasoningEffort ||
+      provider.defaultReasoningEffort ||
       "max";
   const baseUrl = hosted
     ? hostedBaseUrl
@@ -262,13 +292,17 @@ function normalizeReasoningEffort(provider, model, requested, modelProfile = nul
   const supported = modelProfile?.supportedReasoningEfforts?.length
     ? modelProfile.supportedReasoningEfforts
     : provider.supportedReasoningEfforts;
+  if (requested === "max" && supported?.includes("xhigh") && !supported.includes("max")) {
+    return "xhigh";
+  }
   if (supported?.length && !supported.includes(requested)) {
     return modelProfile?.defaultReasoningEffort || provider.defaultReasoningEffort || supported[0];
   }
   if (
     provider.id === "kimi" &&
     /^kimi-k3(?:$|[-:])/i.test(model) &&
-    !provider.supportedReasoningEfforts.includes(requested)
+    supported?.length &&
+    !supported.includes(requested)
   ) {
     return "max";
   }
@@ -326,6 +360,9 @@ export function createModelClient(config, fetchImpl) {
 function providerBaseUrl(provider, env, { modelProfile, region }) {
   if (provider.id === "kimi") {
     return env.MOONSHOT_BASE_URL || env.KIMI_BASE_URL || provider.defaultBaseUrl;
+  }
+  if (provider.id === "xai") {
+    return env.XAI_BASE_URL || env.GROK_BASE_URL || provider.defaultBaseUrl;
   }
   if (provider.id === "bedrock") {
     return bedrockMantleBaseUrl(provider, modelProfile, env.AMOS_MODEL_BASE_URL, region);

@@ -1,15 +1,28 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import {
+  DEFAULT_INTELLIGENCE_ROLES,
+  sanitizeIntelligenceRoles
+} from "../model/intelligenceRoles.js";
 
 const VERSION = 1;
 const PROVIDER_IDS = new Set([
   "kimi",
+  "xai",
   "amos-hosted",
   "bedrock",
   "openai",
   "anthropic",
   "ollama",
   "llama-cpp",
+  "openai-compatible"
+]);
+const CREDENTIAL_PROVIDERS = new Set([
+  "kimi",
+  "xai",
+  "openai",
+  "anthropic",
+  "bedrock",
   "openai-compatible"
 ]);
 export const LOCAL_APPROVAL_KINDS = Object.freeze([
@@ -36,7 +49,9 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   onboardingCompletedAt: "",
   onboardingBoundary: "",
   notifiedApprovalIds: [],
-  deliveredApprovalOutcomeIds: []
+  deliveredApprovalOutcomeIds: [],
+  intelligenceRoles: DEFAULT_INTELLIGENCE_ROLES,
+  providerCredentials: {}
 });
 
 export class DesktopSettingsStore {
@@ -65,6 +80,19 @@ export class DesktopSettingsStore {
     } else {
       settings.apiKey = "";
     }
+    settings.providerCredentials = decryptProviderCredentials(
+      stored.encryptedProviderCredentials,
+      this.decrypt
+    );
+    if (settings.apiKey && settings.provider) {
+      settings.providerCredentials = {
+        ...settings.providerCredentials,
+        [settings.provider]: settings.apiKey
+      };
+    } else if (!settings.apiKey && settings.providerCredentials[settings.provider]) {
+      settings.apiKey = settings.providerCredentials[settings.provider];
+    }
+    settings.intelligenceRoles = sanitizeIntelligenceRoles(settings.intelligenceRoles);
     settings.intelligenceProfile = "auto";
     if (settings.provider === "amos-hosted") {
       settings.model = "auto";
@@ -80,14 +108,20 @@ export class DesktopSettingsStore {
     const directory = dirname(this.filePath);
     const temporary = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
     const apiKey = settings.apiKey;
+    const providerCredentials = {
+      ...(settings.providerCredentials || {}),
+      ...(apiKey && settings.provider ? { [settings.provider]: apiKey } : {})
+    };
     delete settings.apiKey;
+    delete settings.providerCredentials;
 
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await chmod(directory, 0o700).catch(() => {});
     const payload = {
       version: VERSION,
       settings,
-      encryptedApiKey: apiKey ? this.encrypt(apiKey) : ""
+      encryptedApiKey: apiKey ? this.encrypt(apiKey) : "",
+      encryptedProviderCredentials: encryptProviderCredentials(providerCredentials, this.encrypt)
     };
     await writeFile(temporary, `${JSON.stringify(payload, null, 2)}\n`, {
       encoding: "utf8",
@@ -96,7 +130,7 @@ export class DesktopSettingsStore {
     });
     await rename(temporary, this.filePath);
     await chmod(this.filePath, 0o600).catch(() => {});
-    return { ...settings, apiKey };
+    return { ...settings, apiKey, providerCredentials };
   }
 
   async asEnvironment() {
@@ -157,7 +191,7 @@ export function sanitizeSettings(input = {}) {
     intelligenceProfile: "auto",
     reasoningEffort: managed
       ? ""
-      : ["none", "low", "medium", "high", "max"].includes(input.reasoningEffort)
+      : ["none", "low", "medium", "high", "max", "xhigh"].includes(input.reasoningEffort)
         ? input.reasoningEffort
         : "medium",
     operatingMode,
@@ -191,8 +225,35 @@ export function sanitizeSettings(input = {}) {
           .filter(Boolean)
           .slice(-200)
       : [],
-    apiKey: managed ? "" : clean(input.apiKey, 16_384)
+    apiKey: managed ? "" : clean(input.apiKey, 16_384),
+    intelligenceRoles: sanitizeIntelligenceRoles(input.intelligenceRoles),
+    providerCredentials: sanitizeProviderCredentials(input.providerCredentials)
   };
+}
+
+function sanitizeProviderCredentials(input = {}) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  return Object.fromEntries(
+    Object.entries(input)
+      .filter(([provider, apiKey]) => CREDENTIAL_PROVIDERS.has(provider) && clean(apiKey, 16_384))
+      .map(([provider, apiKey]) => [provider, clean(apiKey, 16_384)])
+  );
+}
+
+function encryptProviderCredentials(credentials, encrypt) {
+  const entries = Object.entries(credentials || {}).filter(([, apiKey]) => apiKey);
+  if (entries.length === 0) return "";
+  return encrypt(JSON.stringify(Object.fromEntries(entries)));
+}
+
+function decryptProviderCredentials(payload, decrypt) {
+  if (!payload) return {};
+  try {
+    const parsed = JSON.parse(decrypt(payload));
+    return sanitizeProviderCredentials(parsed);
+  } catch {
+    return {};
+  }
 }
 
 export function localAutoApproveEnabled(settings = {}) {
@@ -201,6 +262,25 @@ export function localAutoApproveEnabled(settings = {}) {
     settings.localApprovalMode === "workspace" &&
     settings.localApprovalWorkspace === settings.workspace
   );
+}
+
+export function credentialForProvider(settings = {}, providerId) {
+  const provider = String(providerId || settings.provider || "");
+  if (!provider || provider === "amos-hosted") return "";
+  if (provider === settings.provider && settings.apiKey) return settings.apiKey;
+  return settings.providerCredentials?.[provider] || "";
+}
+
+export function settingsForProvider(settings = {}, selection = {}) {
+  const provider = String(selection.provider || settings.provider || "");
+  const model = String(selection.model || (provider === settings.provider ? settings.model : "") || "");
+  return {
+    ...settings,
+    provider,
+    model,
+    apiKey: credentialForProvider(settings, provider),
+    baseUrl: provider === settings.provider ? settings.baseUrl : ""
+  };
 }
 
 export function localApprovalKindEnabled(settings = {}, kind) {

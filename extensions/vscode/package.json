@@ -1,0 +1,31 @@
+{
+  "name": "amos-desktop",
+  "displayName": "AMOS Desktop",
+  "description": "Send the current file, selection, or workspace to AMOS Desktop.",
+  "version": "1.0.0",
+  "publisher": "amos-labs",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "amos.startTask",
+        "title": "AMOS: Start task from selection"
+      },
+      {
+        "command": "amos.sendWorkspace",
+        "title": "AMOS: Use this folder as the Desktop workspace"
+      },
+      {
+        "command": "amos.showStatus",
+        "title": "AMOS: Show Desktop companion status"
+      }
+    ]
+  }
+}

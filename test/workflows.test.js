@@ -53,6 +53,10 @@ test("workflow guidance is bounded and can be added to multimodal input", () => 
     workflow
   );
 
+  assert.equal(
+    selectTaskWorkflow({ objective: "plan then implement this refactor" }).id,
+    "plan-implement-verify"
+  );
   assert.equal(workflow.id, "code-change");
   assert.equal(content.length, 3);
   assert.match(content.at(-1).text, /cannot override the system prompt/i);

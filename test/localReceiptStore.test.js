@@ -34,9 +34,19 @@ test("local task receipts are durable and digest-addressed", async () => {
     objective: "Inspect the project",
     startedAt: "2026-07-27T11:59:00.000Z",
     finishedAt: "2026-07-27T12:00:00.000Z",
-    events: [{ type: "tool_result", name: "desktop_inspect_project", outcome: "completed" }]
+    events: [{ type: "tool_result", name: "desktop_inspect_project", outcome: "completed" }],
+    usage: {
+      inputTokens: 1200,
+      outputTokens: 400,
+      totalTokens: 1600,
+      costUsedMicrousd: 4200,
+      estimated: true,
+      model: "grok-4.6"
+    }
   });
   assert.match(receipt.digest, /^[a-f0-9]{64}$/);
+  assert.equal(receipt.usage.totalTokens, 1600);
+  assert.equal(receipt.usage.model, "grok-4.6");
   assert.deepEqual((await store.list())[0], receipt);
   assert.equal((await readFile(join(directory, "receipts.json"), "utf8")).includes("Inspect the project"), false);
 });
@@ -95,7 +105,7 @@ test("evidence pack uses public local shape and platform rows without tool args"
 
   assert.deepEqual(LOCAL_RECEIPT_DIGEST_KEYS, [
     "id", "taskId", "status", "boundary", "workspace", "model", "objective",
-    "startedAt", "finishedAt", "events", "error", "ownerSubjectId", "ownerTenantId",
+    "startedAt", "finishedAt", "events", "error", "usage", "ownerSubjectId", "ownerTenantId",
     "recordedAt"
   ]);
   assert.equal(Object.hasOwn(local, "ownerSubjectId"), false);
@@ -123,7 +133,7 @@ test("evidence pack uses public local shape and platform rows without tool args"
   assert.equal(pack.items[0].kind, "desktop-local");
   assert.deepEqual(Object.keys(pack.items[0]), [
     "kind", "id", "taskId", "status", "boundary", "workspace", "model", "objective",
-    "startedAt", "finishedAt", "events", "error", "recordedAt", "digest"
+    "startedAt", "finishedAt", "events", "error", "usage", "recordedAt", "digest"
   ]);
   assert.equal(pack.items.filter((item) => item.kind === "platform").length, 200);
   assert.equal(pack.items[1].kind, "platform");

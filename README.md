@@ -126,7 +126,7 @@ Supported profiles include:
 - **OpenAI** — native Responses API with streaming, tools, and reasoning continuation
 - **Anthropic** — native Messages API with streaming, tools, and signed thinking continuation
 - **Compatible endpoint** — a customer-controlled HTTPS endpoint
-- **Provider API** — including the Moonshot/Kimi API
+- **Provider API** — including the Moonshot/Kimi API and the xAI/Grok API
 - **AMOS Local** — a bundled, managed local runtime with hardware-aware models
 - **Compatible local runtime** — an explicitly customer-managed Ollama or llama.cpp endpoint
 

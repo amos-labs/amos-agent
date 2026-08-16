@@ -242,6 +242,7 @@
                   </summary>
                   <div id="liveEvents" class="live-events" aria-live="polite"></div>
                   <p id="deploymentSummary" class="activity-boundary">Configure a model to see its deployment boundary.</p>
+                  <p id="taskUsageLine" class="task-usage-line hidden"></p>
                 </details>
                 <section id="approvalModal" class="approval-modal inline-approval hidden" role="region" aria-live="polite" aria-label="Local approval needed">
                   <span class="eyebrow warning">LOCAL APPROVAL NEEDED</span>
@@ -265,6 +266,11 @@
               </div>
 
               <form id="promptForm" class="composer">
+                <div id="taskRoleBar" class="task-role-bar hidden" role="group" aria-label="Intelligence role">
+                  <button id="plannerRoleButton" class="task-role-button" type="button" data-role="planner">Plan</button>
+                  <button id="implementerRoleButton" class="task-role-button" type="button" data-role="implementer">Build</button>
+                  <button id="checkerRoleButton" class="task-role-button" type="button" data-role="checker">Check</button>
+                </div>
                 <div id="attachmentList" class="attachment-list hidden" aria-live="polite"></div>
                 <textarea
                   id="promptInput"
@@ -819,6 +825,27 @@
                 </select>
                 <small>SigV4 uses an AWS profile, SSO session, environment credentials, or attached IAM role in the Desktop main process. Credentials never enter chat or the renderer.</small>
               </div>
+              <div id="intelligenceRolesField" class="field intelligence-roles-field hidden">
+                <label class="checkbox-label" for="intelligenceRolesEnabled">
+                  <input id="intelligenceRolesEnabled" type="checkbox">
+                  Pair a planner, builder, and checker
+                </label>
+                <small>Kimi is a strong planner and checker. Grok 4.6 is the usual builder. Each role uses the credential stored for that provider.</small>
+                <div class="role-selects">
+                  <label>
+                    Planner
+                    <select id="plannerRoleInput"></select>
+                  </label>
+                  <label>
+                    Builder
+                    <select id="implementerRoleInput"></select>
+                  </label>
+                  <label>
+                    Checker
+                    <select id="checkerRoleInput"></select>
+                  </label>
+                </div>
+              </div>
               <div class="field">
                 <label for="apiKeyInput">Provider credential</label>
                 <input id="apiKeyInput" name="apiKey" type="password" autocomplete="new-password" placeholder="Protected by this operating system">
@@ -830,6 +857,7 @@
                   <select id="reasoningInput" name="reasoningEffort">
                     <option value="medium">Balanced (recommended)</option>
                     <option value="max">Maximum</option>
+                    <option value="xhigh">Extra high</option>
                     <option value="high">High</option>
                     <option value="low">Low</option>
                     <option value="none">None</option>

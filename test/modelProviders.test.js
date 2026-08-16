@@ -26,7 +26,15 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   );
   assert.deepEqual(
     providers.find((provider) => provider.id === "anthropic").models.map((model) => model.id),
-    ["claude-sonnet-5", "claude-opus-5"]
+    ["claude-sonnet-5", "claude-opus-5", "claude-fable-5"]
+  );
+  assert.deepEqual(
+    providers.find((provider) => provider.id === "xai").models.map((model) => model.id),
+    ["grok-4.6", "grok-4.5", "grok-4.3", "grok-build-0.1"]
+  );
+  assert.deepEqual(
+    providers.find((provider) => provider.id === "kimi").models.map((model) => model.id),
+    ["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"]
   );
   const bedrock = providers.find((provider) => provider.id === "bedrock");
   assert.deepEqual(
@@ -79,6 +87,16 @@ test("native providers resolve their protocol, current default, endpoint, and cr
   assert.equal(anthropic.routingOwner, INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER);
   assert.equal(anthropic.routingMode, "pinned");
   assert.equal(anthropic.localRouterMode, "disabled");
+
+  const grok = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "xai",
+    XAI_API_KEY: "xai-key"
+  });
+  assert.equal(grok.protocol, "openai-chat-completions");
+  assert.equal(grok.baseUrl, "https://api.x.ai/v1");
+  assert.equal(grok.model, "grok-4.6");
+  assert.equal(grok.apiKey, "xai-key");
+  assert.equal(grok.reasoningEffort, "high");
 });
 
 test("model factory selects the protocol adapter and rejects unknown protocols", () => {

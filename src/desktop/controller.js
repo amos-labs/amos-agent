@@ -6,12 +6,27 @@ import { loadConfig, validateConfig } from "../config.js";
 import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
-import { listModelProviders } from "../model/providers.js";
+import { createModelClient, listModelProviders } from "../model/providers.js";
 import {
   isAmosDesktopRoutingConfig,
   LocalIntelligenceRouter
 } from "../model/intelligenceRouter.js";
+import {
+  accumulateUsage,
+  estimateUsageCost
+} from "../model/modelPricing.js";
+import {
+  defaultRoleForWorkflow,
+  normalizeIntelligenceRole,
+  roleGuidance,
+  roleOptionsFromProviders,
+  roleSelection,
+  sanitizeIntelligenceRoles
+} from "../model/intelligenceRoles.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
+import { createSubagentTools } from "../tools/subagents.js";
+import { execFile as execFileCallback } from "node:child_process";
+import { promisify } from "node:util";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
 import { AttachmentManager } from "./attachments.js";
 import {
@@ -110,13 +125,16 @@ import {
 import {
   LOCAL_APPROVAL_KINDS,
   localApprovalKindEnabled,
+  credentialForProvider,
   localAutoApproveEnabled,
-  sanitizeSettings
+  sanitizeSettings,
+  settingsForProvider
 } from "./settingsStore.js";
 import { createAbortError, isAbortError } from "../util/abort.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 import { selectTaskWorkflow } from "../workflows.js";
 
+const execFile = promisify(execFileCallback);
 const NEW_CONVERSATION_TITLE = "New conversation";
 const NEW_CONVERSATION_OBJECTIVE = "Start a new conversation with AMOS.";
 
@@ -358,6 +376,9 @@ export class DesktopController {
       remoteStatus: { ...this.remoteStatus },
       provider: publicProvider(config.model),
       providers: listModelProviders(),
+      roleOptions: roleOptionsFromProviders(listModelProviders()),
+      intelligenceRole: this.activeTask?.intelligenceRole ||
+        (settings.intelligenceRoles?.enabled ? "implementer" : null),
       settings: redactSettings(settings),
       system,
       mode: operatingMode(settings, config),
@@ -383,7 +404,10 @@ export class DesktopController {
             startedAt: this.activeTask.startedAt,
             phase: this.activeTask.phase,
             summary: this.activeTask.summary,
-            objective: this.activeTask.objective
+            objective: this.activeTask.objective,
+            intelligenceRole: this.activeTask.intelligenceRole || null,
+            intelligence: this.activeTask.intelligence || null,
+            usage: this.activeTask.usage || null
           }
         : null,
       activeRuns: this.runManager.active()
@@ -398,6 +422,20 @@ export class DesktopController {
       apiKey: settings.apiKey === undefined ? current.apiKey : settings.apiKey
     });
     if (intelligenceSettingsRequested(settings)) {
+      if (!candidate.apiKey) {
+        candidate = sanitizeSettings({
+          ...candidate,
+          apiKey: credentialForProvider(current, candidate.provider)
+        });
+      }
+      candidate = sanitizeSettings({
+        ...candidate,
+        providerCredentials: {
+          ...current.providerCredentials,
+          ...candidate.providerCredentials,
+          ...(candidate.apiKey ? { [candidate.provider]: candidate.apiKey } : {})
+        }
+      });
       const config = this.configFrom(candidate);
       const missing = validateConfig(config);
       if (missing.length > 0) {
@@ -1883,15 +1921,22 @@ export class DesktopController {
   }
 
   async run(input) {
-    const settings = await this.settingsStore.read();
-    await this.ensureActiveConversation(conversationObjectiveFromInput(input), settings);
-    const taskRecordId = String(this.activeTaskRecordId || this.activeContextKey || "active");
+    const stored = await this.settingsStore.read();
+    const settings = input?.settings
+      ? { ...stored, ...input.settings, apiKey: input.settings.apiKey || stored.apiKey }
+      : stored;
+    if (input?.select !== false) {
+      await this.ensureActiveConversation(conversationObjectiveFromInput(input), settings);
+    }
+    const taskRecordId = String(
+      input?.taskRecordId || this.activeTaskRecordId || this.activeContextKey || "active"
+    );
     if (this.runManager.findByTask(taskRecordId)) {
       throw new Error("This task is already running. Add direction to steer it, or open another task.");
     }
     const scope = this.taskScope(settings);
-    const task = this.taskStore && scope && this.activeTaskRecordId
-      ? await this.taskStore.get(scope, this.activeTaskRecordId)
+    const task = this.taskStore && scope && (input?.taskRecordId || this.activeTaskRecordId)
+      ? await this.taskStore.get(scope, input?.taskRecordId || this.activeTaskRecordId)
       : null;
     const taskId = randomUUID();
     const approvals = new DesktopApprovalBridge({
@@ -1915,9 +1960,11 @@ export class DesktopController {
     const launched = this.runManager.launch({
       id: taskId,
       taskRecordId,
+      parentTaskId: input?.parentTaskId || task?.parentTaskId || "",
       remoteTaskId: task?.remoteId || (isUuid(task?.id) ? task.id : ""),
       projectId: task?.projectId || "",
-      contextKey: this.activeContextKey || "active",
+      contextKey: task?.contextKey || this.activeContextKey || "active",
+      select: input?.select !== false,
       settings: structuredClone(settings),
       runtime: this.runtime,
       activity: this.activity,
@@ -1933,7 +1980,11 @@ export class DesktopController {
       pendingAutomationActivations: this.pendingAutomationActivations,
       approvals,
       browserRecipeRecorder: this.browserRecipeRecorder
-    }, async () => this.executeRun(input, taskId));
+    }, async () => {
+      if (input?.taskRecordId) this.activeTaskRecordId = input.taskRecordId;
+      if (task?.contextKey) this.activeContextKey = task.contextKey;
+      return this.executeRun(input, taskId);
+    });
     this.resetShellSurfaceAfterLaunch(launched.lane);
     this.send("desktop-runs:changed", this.runManager.active());
     try {
@@ -1988,7 +2039,11 @@ export class DesktopController {
       acceptingSteering: true,
       receiptEvents: [],
       continuityArtifacts: [],
-      continuityAllowed: false
+      continuityAllowed: false,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsedMicrousd: 0, models: [] },
+      intelligenceRole: input?.role || null,
+      intelligence: null,
+      children: []
     };
     this.send("agent:status", {
       running: true,
@@ -2018,6 +2073,23 @@ export class DesktopController {
     const receiptEvents = this.activeTask.receiptEvents;
     try {
       await this.startRunSupervision(settings, abortController);
+      const pairing = sanitizeIntelligenceRoles(settings.intelligenceRoles);
+      const previewWorkflow = selectTaskWorkflow({ objective: prompt });
+      const role = normalizeIntelligenceRole(
+        this.activeTask.intelligenceRole ||
+          input?.role ||
+          defaultRoleForWorkflow(previewWorkflow, pairing),
+        "implementer"
+      );
+      if (pairing.enabled || input?.role) {
+        const applied = await this.applyIntelligenceRole(role, {
+          settings,
+          announce: false,
+          resetRuntime: true
+        });
+        this.activeTask.intelligenceRole = applied.role;
+        this.activeTask.intelligence = applied.intelligence;
+      }
       const { config, runtime } = await this.getRuntime({
         requireAmos: company,
         boundary
@@ -2058,12 +2130,15 @@ export class DesktopController {
       const attachmentsById = new Map(
         this.attachments.list().map((attachment) => [attachment.id, attachment])
       );
-      const workflow = selectTaskWorkflow({
+      let workflow = selectTaskWorkflow({
         objective: prompt,
         attachmentNames: references
           .map((reference) => attachmentsById.get(reference?.id)?.name)
           .filter(Boolean)
       });
+      if (pairing.enabled && workflow.id === "code-change") {
+        workflow = selectTaskWorkflow({ objective: `plan then implement ${prompt}` });
+      }
       this.record("user", prompt);
       const answer = await runtime.loop.run(modelContent, {
         signal: abortController.signal,
@@ -2080,7 +2155,7 @@ export class DesktopController {
           return queued;
         },
         onEvent: (event) => {
-          const safeEvent = sanitizeAgentEvent(event);
+          const safeEvent = this.annotateUsageEvent(event, this.activeTask);
           this.runManager.current()?.supervisor?.observe(safeEvent);
           this.send("agent:event", safeEvent);
           if (safeEvent.type !== "assistant_delta") {
@@ -2110,7 +2185,8 @@ export class DesktopController {
         settings,
         prompt,
         startedAt: this.activeTask.startedAt,
-        receiptEvents
+        receiptEvents,
+        usage: this.activeTask.usage
       });
       let continuityRecord = null;
       if (this.activeTask.continuityAllowed) {
@@ -2165,7 +2241,8 @@ export class DesktopController {
         prompt,
         startedAt: this.activeTask?.startedAt,
         receiptEvents,
-        error: error.message
+        error: error.message,
+        usage: this.activeTask?.usage
       });
       if (this.taskStore && this.activeTaskRecordId) {
         const scope = this.taskScope(settings);
@@ -3242,14 +3319,17 @@ export class DesktopController {
     const name = String(input.name || "").trim().slice(0, 160);
     const objective = String(input.objective || "").trim().slice(0, 6_000);
     const sourceEventId = String(
-      input.sourceEventId || forkCapability.latestMilestoneId || ""
+      input.sourceEventId ||
+        forkCapability.latestMilestoneId ||
+        parent.contextKey ||
+        `task:${parent.id}`
     ).trim().slice(0, 160);
     const contextScope = String(input.contextScope || "from_here");
     const workspaceMode = String(input.workspaceMode || "same_directory");
     const selectedArtifacts = Array.isArray(input.selectedArtifacts)
       ? input.selectedArtifacts.map((item) => String(item).slice(0, 1_024)).slice(0, 40)
       : [];
-    if (!name || !objective || !sourceEventId) {
+    if (!name || !objective || (!sourceEventId && input.select !== false)) {
       throw new Error("A task fork needs a name, objective, and source milestone");
     }
     if (!parentContinuity?.turns?.some((turn) => turn.id === sourceEventId)) {
@@ -3348,6 +3428,9 @@ export class DesktopController {
       workspace_mode: workspaceMode,
       replay_allowed: false
     });
+    if (input.select === false) {
+      return { task: child, continuity, forkManifest: child.forkManifest, opened: false };
+    }
     const opened = await this.openTask(child.id);
     return { ...opened, task: child, continuity, forkManifest: child.forkManifest };
   }
@@ -3613,7 +3696,8 @@ export class DesktopController {
     prompt,
     startedAt,
     receiptEvents,
-    error = null
+    error = null,
+    usage = null
   }) {
     if (!this.localReceiptStore) return null;
     try {
@@ -3622,12 +3706,15 @@ export class DesktopController {
         status,
         boundary,
         workspace: basename(settings.workspace || homedir()),
-        model: continuityModelIdentity(settings),
+        model: this.activeTask?.intelligence
+          ? `${this.activeTask.intelligence.provider}:${this.activeTask.intelligence.model}`
+          : continuityModelIdentity(settings),
         objective: prompt,
         startedAt,
         finishedAt: new Date().toISOString(),
         events: receiptEvents,
-        error
+        error,
+        usage
       }, privateMemoryScope(this.identity));
       this.record("proof", `Local task receipt ${receipt.digest.slice(0, 12)} · ${status}`, {
         receipt_id: receipt.id,
@@ -4076,7 +4163,7 @@ export class DesktopController {
 
   async getRuntime({ requireAmos, offline = false, boundary = null }) {
     const requestedBoundary = boundary || (offline ? "offline" : "online");
-    const settings = await this.settingsStore.read();
+    const settings = this.runManager.current()?.settings || await this.settingsStore.read();
     const contextOnly = await this.activeTaskIsContextOnly(settings);
     if (
       this.runtime?.boundary === requestedBoundary &&
@@ -4134,6 +4221,16 @@ export class DesktopController {
         propose: (input) => this.proposeConsultativeUpdate(input)
       })
     ];
+    if (!contextOnly) {
+      extraTools.push(...createSubagentTools({
+        handoff: (input) => this.switchTaskIntelligence(input),
+        spawn: this.runManager.current()?.parentTaskId
+          ? null
+          : (input) => this.spawnSubagent(input),
+        list: () => this.listSubagents(),
+        collect: (input) => this.collectSubagent(input)
+      }));
+    }
     if (!isOffline && this.browserRuntime) {
       const browserScope = desktopBrowserScope({
         identity: this.identity,
@@ -4935,6 +5032,283 @@ export class DesktopController {
     ]);
   }
 
+  annotateUsageEvent(event, task) {
+    if (event?.type !== "usage") return sanitizeAgentEvent(event);
+    const model = task?.intelligence?.model ||
+      this.runManager.current()?.settings?.model ||
+      "";
+    const estimated = estimateUsageCost({
+      model,
+      inputTokens: event.inputTokens,
+      outputTokens: event.outputTokens,
+      cachedInputTokens: event.cachedInputTokens
+    });
+    const costUsedMicrousd = Number(event.costUsedMicrousd) > 0
+      ? Number(event.costUsedMicrousd)
+      : estimated.costUsedMicrousd;
+    const usageEvent = sanitizeAgentEvent({
+      ...event,
+      model,
+      costUsedMicrousd,
+      estimated: Number(event.costUsedMicrousd) > 0 ? false : estimated.estimated
+    });
+    if (task) task.usage = accumulateUsage(task.usage, usageEvent);
+    return usageEvent;
+  }
+
+  async applyIntelligenceRole(role, { settings = null, announce = true, resetRuntime = false } = {}) {
+    const current = settings || this.runManager.current()?.settings || await this.settingsStore.read();
+    const pairing = sanitizeIntelligenceRoles(current.intelligenceRoles);
+    const normalized = normalizeIntelligenceRole(role, pairing.enabled ? "implementer" : "implementer");
+    const selection = pairing.enabled
+      ? roleSelection(pairing, normalized)
+      : { provider: current.provider, model: current.model };
+    const resolved = settingsForProvider(current, selection);
+    if (resolved.provider !== current.provider && !resolved.baseUrl) {
+      const provider = listModelProviders().find((item) => item.id === resolved.provider);
+      resolved.baseUrl = provider?.defaultBaseUrl || "";
+    }
+    const missing = validateConfig(this.configFrom(resolved));
+    if (missing.length > 0) {
+      throw new Error(`Save a ${selection.provider} credential before using the ${normalized} role`);
+    }
+    const lane = this.runManager.current();
+    if (lane) lane.settings = resolved;
+    if (resetRuntime && this.runtime) this.resetRuntime();
+    const intelligence = {
+      role: normalized,
+      provider: resolved.provider,
+      model: resolved.model
+    };
+    if (this.activeTask) {
+      this.activeTask.intelligenceRole = normalized;
+      this.activeTask.intelligence = intelligence;
+    }
+    if (announce) {
+      this.record("task", `Intelligence role ${normalized}: ${resolved.provider} · ${resolved.model}`);
+    }
+    return { role: normalized, intelligence, settings: resolved };
+  }
+
+  async switchTaskIntelligence(input = {}) {
+    const role = normalizeIntelligenceRole(input.role, "");
+    if (!role) throw new Error("Choose planner, implementer, or checker");
+    const applied = await this.applyIntelligenceRole(role, {
+      announce: true,
+      resetRuntime: false
+    });
+    const config = this.configFrom(applied.settings);
+    const runtime = this.runtime?.runtime;
+    if (runtime?.loop) {
+      const modelClient = createModelClient({
+        ...config.model,
+        getAccessToken: config.model.usesAmosIdentity
+          ? async () => config.amos.apiKey || config.model.apiKey
+          : null
+      });
+      runtime.modelClient = modelClient;
+      runtime.loop.modelClient = modelClient;
+      runtime.loop.config = config;
+      this.runtime.config = config;
+      const summary = String(input.summary || "").trim();
+      runtime.loop.messages.push({
+        role: "user",
+        content: [
+          `<amos_role_handoff role="${applied.role}">`,
+          roleGuidance(applied.role),
+          summary ? `Handoff brief: ${summary}` : "",
+          "</amos_role_handoff>"
+        ].filter(Boolean).join("\n")
+      });
+    }
+    this.send("agent:event", {
+      type: "intelligence",
+      role: applied.role,
+      provider: applied.intelligence.provider,
+      model: applied.intelligence.model,
+      summary: "Switched intelligence role"
+    });
+    return {
+      ok: true,
+      role: applied.role,
+      provider: applied.intelligence.provider,
+      model: applied.intelligence.model,
+      instruction: roleGuidance(applied.role)
+    };
+  }
+
+  async spawnSubagent(input = {}) {
+    const parentLane = this.runManager.current();
+    if (parentLane?.parentTaskId) {
+      throw new Error("Child tasks cannot spawn further children");
+    }
+    const children = this.activeTask?.children || [];
+    if (children.length >= 4) {
+      throw new Error("AMOS Desktop can run up to 4 child tasks from one parent");
+    }
+    const settings = parentLane?.settings || await this.settingsStore.read();
+    const parentId = this.activeTaskRecordId;
+    if (!parentId) throw new Error("Start a parent task before spawning a child");
+    const pairing = sanitizeIntelligenceRoles(settings.intelligenceRoles);
+    const role = normalizeIntelligenceRole(input.role, "implementer");
+    const selection = pairing.enabled
+      ? roleSelection(pairing, role)
+      : { provider: settings.provider, model: settings.model };
+    const childSettings = settingsForProvider(settings, selection);
+    if (!childSettings.baseUrl) {
+      childSettings.baseUrl = listModelProviders().find((item) => item.id === childSettings.provider)?.defaultBaseUrl ||
+        settings.baseUrl;
+    }
+    const forked = await this.forkTaskResource({
+      taskId: parentId,
+      name: String(input.name || input.objective || "Child task").slice(0, 160),
+      objective: String(input.objective || "").trim().slice(0, 6_000),
+      workspaceMode: input.workspaceMode === "same_directory" ? "same_directory" : "new_worktree",
+      contextScope: "from_here",
+      select: false
+    });
+    if (forked.task?.workspace?.localPath) {
+      childSettings.workspace = forked.task.workspace.localPath;
+    }
+    const child = {
+      taskId: forked.task.id,
+      name: forked.task.title,
+      objective: forked.task.objective,
+      role,
+      workspaceMode: forked.task.workspaceMode,
+      workspace: forked.task.workspace?.localPath || "",
+      status: "starting"
+    };
+    if (this.activeTask) this.activeTask.children = [...children, child];
+    this.run({
+      text: [
+        roleGuidance(role),
+        "",
+        String(input.objective || "").trim()
+      ].join("\n"),
+      taskRecordId: forked.task.id,
+      parentTaskId: parentId,
+      role,
+      settings: childSettings,
+      select: false
+    }).catch((error) => {
+      child.status = "failed";
+      child.error = error.message;
+      this.record("task", `Child task failed: ${error.message}`, { child_task_id: forked.task.id });
+    });
+    this.record("task", `Spawned child ${forked.task.title}`, {
+      parent_task_id: parentId,
+      child_task_id: forked.task.id,
+      workspace_mode: forked.task.workspaceMode,
+      role
+    });
+    return {
+      ok: true,
+      task_id: forked.task.id,
+      name: forked.task.title,
+      role,
+      workspace_mode: forked.task.workspaceMode,
+      workspace: portableTaskWorkspace(forked.task.workspace),
+      warning: forked.task.workspace?.warning || ""
+    };
+  }
+
+  listSubagents() {
+    const children = this.activeTask?.children || [];
+    return {
+      children: children.map((child) => {
+        const lane = this.runManager.findByTask(child.taskId);
+        return {
+          ...child,
+          status: lane?.status || child.status,
+          phase: lane?.phase || "",
+          summary: lane?.summary || ""
+        };
+      })
+    };
+  }
+
+  async collectSubagent(input = {}) {
+    const taskId = String(input.taskId || "").trim();
+    if (!taskId) throw new Error("A child task id is required");
+    const listed = this.listSubagents().children.find((child) => child.taskId === taskId);
+    const lane = this.runManager.findByTask(taskId);
+    const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    const scope = this.taskScope(settings);
+    const task = scope && this.taskStore ? await this.taskStore.get(scope, taskId) : null;
+    const workspace = listed?.workspace || task?.workspace?.localPath || "";
+    let diff = "";
+    if (workspace) {
+      try {
+        const result = await execFile("git", ["-C", workspace, "diff", "--stat"], {
+          timeout: 15_000,
+          maxBuffer: 256 * 1024,
+          windowsHide: true
+        });
+        diff = String(result.stdout || "").trim().slice(0, 4_000);
+      } catch (error) {
+        diff = String(error.stderr || error.message || "").slice(0, 400);
+      }
+    }
+    return {
+      ok: true,
+      task_id: taskId,
+      status: lane?.status || task?.status || listed?.status || "unknown",
+      phase: lane?.phase || "",
+      summary: lane?.summary || task?.objective || "",
+      workspace,
+      diff,
+      running: Boolean(lane)
+    };
+  }
+
+  async companionStatus() {
+    const settings = await this.settingsStore.read();
+    return {
+      connected: Boolean(this.identity),
+      boundary: settings.operatingMode,
+      workspace: settings.workspace || "",
+      provider: settings.provider,
+      model: settings.model,
+      intelligenceRoles: sanitizeIntelligenceRoles(settings.intelligenceRoles),
+      activeTaskId: this.activeTaskRecordId,
+      running: Boolean(this.activeTask),
+      role: this.activeTask?.intelligenceRole || null
+    };
+  }
+
+  async companionStartTask(input = {}) {
+    const settings = await this.settingsStore.read();
+    const workspace = String(input.workspace || "").trim();
+    if (workspace && workspace !== settings.workspace) {
+      await this.settingsStore.write({ ...settings, workspace });
+    }
+    const selection = String(input.selection || "").trim();
+    const files = Array.isArray(input.files) ? input.files.filter(Boolean).slice(0, 20) : [];
+    const objective = [
+      String(input.objective || input.text || "").trim(),
+      selection ? `\n\n<editor_selection>\n${selection.slice(0, 16_000)}\n</editor_selection>` : "",
+      files.length > 0 ? `\n\nEditor files: ${files.join(", ")}` : ""
+    ].join("");
+    if (!objective.trim()) throw new Error("The companion task needs an objective");
+    const result = await this.run({ text: objective });
+    return {
+      ok: true,
+      taskId: result.taskId,
+      taskRecordId: result.taskRecordId,
+      answer: result.answer
+    };
+  }
+
+  async companionSetWorkspace(input = {}) {
+    const settings = await this.settingsStore.read();
+    const workspace = String(input.path || input.workspace || "").trim();
+    if (!workspace) throw new Error("Choose a workspace folder");
+    const saved = await this.settingsStore.write({ ...settings, workspace });
+    this.record("settings", `Companion set the local workspace to ${basename(workspace)}`);
+    return { ok: true, workspace: saved.workspace };
+  }
+
   configFrom(settings) {
     const env = {
       ...process.env,
@@ -5422,10 +5796,14 @@ function publicCapsuleSummary(summary) {
 }
 
 function redactSettings(settings) {
+  const credentials = settings.providerCredentials || {};
   const redacted = {
     ...settings,
     apiKey: "",
-    hasApiKey: Boolean(settings.apiKey)
+    hasApiKey: Boolean(settings.apiKey),
+    providerCredentials: {},
+    storedCredentialProviders: Object.keys(credentials).filter((provider) => credentials[provider]),
+    intelligenceRoles: sanitizeIntelligenceRoles(settings.intelligenceRoles)
   };
   delete redacted.notifiedApprovalIds;
   delete redacted.deliveredApprovalOutcomeIds;
@@ -5520,8 +5898,9 @@ function runtimeSettingsChanged(previous, next) {
     "reasoningEffort",
     "operatingMode",
     "workspace",
-    "amosMcpUrl"
-  ].some((key) => previous[key] !== next[key]);
+    "amosMcpUrl",
+    "intelligenceRoles"
+  ].some((key) => JSON.stringify(previous[key]) !== JSON.stringify(next[key]));
 }
 
 function intelligenceSettingsRequested(input = {}) {
@@ -5533,7 +5912,8 @@ function intelligenceSettingsRequested(input = {}) {
     "bedrockAuthMode",
     "intelligenceProfile",
     "reasoningEffort",
-    "operatingMode"
+    "operatingMode",
+    "intelligenceRoles"
   ].some((key) => Object.hasOwn(input, key));
 }
 
@@ -5571,7 +5951,10 @@ ${settings?.operatingMode === "offline"
     ? ""
     : "- For generated HTML/CSS/JavaScript apps, use desktop_preview_app to serve and inspect the workspace output. Do not start an unmanaged background web server or ask browser_open to open localhost or a file URL."}
 - Local approval policy: ${desktopLocalApprovalDescription(settings)}
-- This local policy never approves AMOS company operations, external-system writes, or governed decisions.`;
+- This local policy never approves AMOS company operations, external-system writes, or governed decisions.
+${settings?.intelligenceRoles?.enabled
+    ? "- Intelligence pairing is on. Plan with the planner, implement with the builder, and review with the checker. Use desktop_handoff_role to switch without losing the conversation. Use desktop_spawn_subagent for isolated Git worktrees. Children cannot spawn children or widen company authority."
+    : ""}`;
 }
 
 function desktopLocalApprovalDescription(settings) {
@@ -5706,6 +6089,28 @@ function sanitizeAgentEvent(event) {
   }
   if (event.type === "tool_error") {
     return { type: event.type, name: event.name, error: event.error };
+  }
+  if (event.type === "usage") {
+    return {
+      type: "usage",
+      turn: Number(event.turn || 0),
+      inputTokens: Number(event.inputTokens || 0),
+      outputTokens: Number(event.outputTokens || 0),
+      cachedInputTokens: Number(event.cachedInputTokens || 0),
+      totalTokens: Number(event.totalTokens || 0),
+      costUsedMicrousd: Number(event.costUsedMicrousd || 0),
+      estimated: event.estimated === true,
+      model: event.model ? String(event.model).slice(0, 256) : null
+    };
+  }
+  if (event.type === "intelligence") {
+    return {
+      type: "intelligence",
+      role: String(event.role || "").slice(0, 32),
+      provider: String(event.provider || "").slice(0, 64),
+      model: String(event.model || "").slice(0, 256),
+      summary: String(event.summary || "").slice(0, 500)
+    };
   }
   return {
     type: event.type,

@@ -140,6 +140,7 @@ function normalizeReceipt(input) {
         }))
       : [],
     error: input.error ? String(input.error).slice(0, 1_000) : null,
+    usage: normalizeUsage(input.usage),
     ownerSubjectId: clean(input.ownerSubjectId, 256),
     ownerTenantId: clean(input.ownerTenantId, 256),
     recordedAt: String(input.recordedAt),
@@ -182,6 +183,7 @@ export const LOCAL_RECEIPT_DIGEST_KEYS = Object.freeze([
   "finishedAt",
   "events",
   "error",
+  "usage",
   "ownerSubjectId",
   "ownerTenantId",
   "recordedAt"
@@ -199,6 +201,7 @@ export const LOCAL_RECEIPT_PUBLIC_KEYS = Object.freeze([
   "finishedAt",
   "events",
   "error",
+  "usage",
   "recordedAt",
   "digest"
 ]);
@@ -272,6 +275,7 @@ export function toDesktopLocalItem(receipt) {
     finishedAt: String(receipt.finishedAt || ""),
     events: normalizePublicEvents(receipt.events),
     error: receipt.error == null || receipt.error === "" ? null : String(receipt.error),
+    usage: receipt.usage || null,
     recordedAt: String(receipt.recordedAt || ""),
     digest: String(receipt.digest || "")
   };
@@ -371,6 +375,7 @@ export function replayLocalReceiptDigest(item, {
     finishedAt: String(item.finishedAt || ""),
     events: normalizePublicEvents(item.events),
     error: item.error == null || item.error === "" ? null : String(item.error),
+    usage: item.usage || null,
     ownerSubjectId: String(ownerSubjectId || ""),
     ownerTenantId: String(ownerTenantId || ""),
     recordedAt: String(item.recordedAt || "")
@@ -658,6 +663,30 @@ function isIsoInstant(value) {
   if (typeof value !== "string" || !value.trim()) return false;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed);
+}
+
+function normalizeUsage(input) {
+  if (!input || typeof input !== "object") return null;
+  const usage = {
+    inputTokens: boundedCount(input.inputTokens),
+    outputTokens: boundedCount(input.outputTokens),
+    cachedInputTokens: boundedCount(input.cachedInputTokens),
+    totalTokens: boundedCount(input.totalTokens),
+    costUsedMicrousd: boundedCount(input.costUsedMicrousd),
+    estimated: input.estimated === true,
+    models: Array.isArray(input.models)
+      ? input.models.map((item) => String(item || "").slice(0, 256)).filter(Boolean).slice(0, 12)
+      : []
+  };
+  if (input.model) usage.model = String(input.model).slice(0, 256);
+  if (usage.totalTokens === 0 && usage.costUsedMicrousd === 0 && !usage.model) return null;
+  return usage;
+}
+
+function boundedCount(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.min(Math.trunc(parsed), 100_000_000);
 }
 
 function clean(value, limit) {
