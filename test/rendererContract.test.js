@@ -122,9 +122,17 @@ test("intelligence settings stay independent from workspace selection and are na
   assert.match(preload, /"desktop:navigate"/);
   assert.match(main, /label: "Intelligence & Settings…"/);
   assert.match(main, /accelerator: "CommandOrControl\+,"/);
+  assert.match(main, /label: "Choose Intelligence…"/);
+  assert.match(main, /label: "Memory & Context…"/);
   assert.match(main, /label: "Choose Workspace…"/);
+  assert.match(main, /label: `AMOS Desktop v\$\{app\.getVersion\(\)\}`/);
+  assert.match(main, /label: "Check for Updates…"/);
   assert.match(main, /navigateFromApplicationMenu\("settings"\)/);
+  assert.match(main, /navigateFromApplicationMenu\("memory"\)/);
   assert.match(main, /navigateFromApplicationMenu\("choose-workspace"\)/);
+  assert.match(main, /navigateFromApplicationMenu\("check-updates"\)/);
+  assert.match(html, /id="accountVersion"/);
+  assert.match(html, /id="accountUpdateButton"[^>]*>Check for updates</);
 });
 
 test("routine approval review stays inside Desktop", async () => {

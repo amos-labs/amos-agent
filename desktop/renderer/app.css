@@ -360,10 +360,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .account-settings-link small { margin-top: 3px; color: var(--muted-2); font-size: 9px; line-height: 1.4; }
 .account-menu-actions { align-items: stretch; gap: 8px; }
 .account-menu-actions .button { flex: 1; padding-inline: 11px; }
+.account-privacy { color: var(--muted-2); font-size: 10px; line-height: 1.55; }
 .account-update-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .account-update-row span { color: var(--muted-2); font-size: 11px; }
 .account-update-row .text-button { color: var(--blue-2); font-size: 11px; }
-.account-privacy { color: var(--muted-2); font-size: 10px; line-height: 1.55; }
 .status-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 4px rgba(255,202,105,.08); }
 .status-dot.connected, .status-dot.green { background: var(--green); box-shadow: 0 0 0 4px rgba(59,213,143,.08); }
 

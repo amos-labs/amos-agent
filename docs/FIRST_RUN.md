@@ -113,7 +113,10 @@ or saving intelligence keeps the person in **Intelligence & Settings** until
 they explicitly return to setup; it never opens or requires the workspace
 picker. Intelligence can be changed later from the account menu or the native
 **AMOS Desktop → Intelligence & Settings…** menu (`Cmd+,` on macOS). The native
-**File → Choose Workspace…** action remains a separate choice.
+**File** menu also exposes **Choose Intelligence…**, **Memory & Context…**, and
+the separate **Choose Workspace…** action. The installed version and
+**Check for Updates…** are available in both the native **Help** menu and the
+account switcher.
 
 ### Privacy-safe activation measurement
 

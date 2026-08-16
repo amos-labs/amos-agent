@@ -522,8 +522,12 @@ function bindEvents() {
   api.on("desktop:navigate", (navigation) => {
     if (navigation?.destination === "settings") {
       openIntelligenceSettings();
+    } else if (navigation?.destination === "memory") {
+      showView("memory");
     } else if (navigation?.destination === "choose-workspace") {
       chooseWorkspace();
+    } else if (navigation?.destination === "check-updates") {
+      handleAccountUpdate();
     }
   });
   api.on("approval:requested", (approval) => {
@@ -5364,12 +5368,14 @@ async function switchAccount(accountId) {
 }
 
 async function handleAccountUpdate() {
-  if (["available", "downloaded"].includes(updateState?.status)) {
-    await handleUpdate();
-    return;
-  }
+  toast("Checking for AMOS Desktop updates…");
   try {
-    await api.checkForUpdates();
+    const next = await api.checkForUpdates();
+    if (next) updateState = next;
+    renderUpdate();
+    if (!["available", "downloading", "downloaded", "installing"].includes(updateState?.status)) {
+      toast(updateState?.message || "AMOS Desktop is up to date.");
+    }
   } catch (error) {
     toast(error.message, true);
   }

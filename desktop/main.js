@@ -159,6 +159,15 @@ function installApplicationMenu() {
       label: "File",
       submenu: [
         {
+          label: "Choose Intelligence…",
+          click: () => navigateFromApplicationMenu("settings")
+        },
+        {
+          label: "Memory & Context…",
+          click: () => navigateFromApplicationMenu("memory")
+        },
+        { type: "separator" },
+        {
           label: "Choose Workspace…",
           accelerator: "CommandOrControl+Shift+O",
           click: () => navigateFromApplicationMenu("choose-workspace")
@@ -195,6 +204,15 @@ function installApplicationMenu() {
     {
       label: "Help",
       submenu: [
+        {
+          label: `AMOS Desktop v${app.getVersion()}`,
+          enabled: false
+        },
+        {
+          label: "Check for Updates…",
+          click: () => navigateFromApplicationMenu("check-updates")
+        },
+        { type: "separator" },
         {
           label: "AMOS Labs",
           click: () => shell.openExternal("https://www.amoslabs.com")
