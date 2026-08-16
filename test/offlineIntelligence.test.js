@@ -94,7 +94,7 @@ test("hardware assessment recommends a bounded curated profile", () => {
 
 test("curated model manifest is release-signed and content-addressed", () => {
   const manifest = releaseSignedManifest();
-  assert.equal(manifest.version, 6);
+  assert.equal(manifest.version, 7);
   assert.equal(manifest.trust, "release-signed");
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
@@ -125,6 +125,7 @@ test("curated model manifest is release-signed and content-addressed", () => {
   assert.equal(capable.primary, true);
   assert.equal(capable.qualification.status, "conditional");
   assert.equal(qwen36.deprecated, true);
+  assert.equal(qwen36.retired, true);
   assert.equal(qwen36.replacedBy, QWEN38_MODEL_ID);
   assert.equal(qwen38.replaces, "qwen3.6:27b-q4_K_M");
   assert.equal(qwen38.qualification.status, "qualified");
@@ -147,6 +148,8 @@ test("curated model manifest is release-signed and content-addressed", () => {
     }]
   );
   assert.equal(visionMax.experimental, true);
+  assert.equal(visionMax.retired, true);
+  assert.equal(visionMax.replacedBy, QWEN38_MODEL_ID);
   assert.equal(visionMax.qualification.status, "experimental");
 });
 
@@ -305,6 +308,47 @@ test("Ollama manager installs Qwen 3.8 from the release-pinned Hugging Face mani
   assert.equal(model.installed, true);
   assert.equal(model.integrity.status, "verified");
   assert.equal(model.integrity.actualDigest, QWEN38_MANIFEST_DIGEST);
+});
+
+test("Qwen 3.8 replaces Qwen 3.6 while existing legacy installs remain removable", async () => {
+  let legacyInstalled = true;
+  let removedModel = null;
+  const manager = new OllamaModelManager({
+    fetchImpl: async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      if (path === "/api/tags") {
+        return jsonResponse({
+          models: legacyInstalled
+            ? [{
+                name: "qwen3.6:27b-q4_K_M",
+                size: 17_000_000_000,
+                digest: "a50eda8ed977ab48a12431878896b27ffd5cef552c17af3317d9623b939a7f1e"
+              }]
+            : []
+        });
+      }
+      if (path === "/api/delete" && options.method === "DELETE") {
+        removedModel = JSON.parse(options.body).model;
+        legacyInstalled = false;
+        return jsonResponse({});
+      }
+      return new Response("not found", { status: 404 });
+    }
+  });
+
+  const installed = await manager.refresh();
+  const legacy = installed.models.find((model) => model.id === "qwen3.6:27b-q4_K_M");
+  assert.equal(legacy.installed, true);
+  assert.equal(legacy.retired, true);
+  await assert.rejects(
+    () => manager.install("qwen3.6:27b-q4_K_M"),
+    /replaced by AMOS Local · Vision \(Qwen 3\.8\)/
+  );
+
+  const removed = await manager.remove("qwen3.6:27b-q4_K_M");
+  assert.equal(removedModel, "qwen3.6:27b-q4_K_M");
+  assert.equal(removed.models.some((model) => model.id.startsWith("qwen3.6:")), false);
 });
 
 test("Ollama manager surfaces streamed pull errors and release digest mismatches", async () => {

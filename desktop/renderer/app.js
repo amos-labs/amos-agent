@@ -6005,6 +6005,9 @@ async function saveCollaborationPreference(key, value) {
 }
 
 function offlineCatalogBadge(model) {
+  if (model.retired) {
+    return { className: "retired", label: "Retired — replace with Qwen 3.8" };
+  }
   if (model.experimental || model.qualification?.status === "experimental") {
     return { className: "experimental", label: "Experimental" };
   }

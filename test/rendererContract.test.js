@@ -573,7 +573,7 @@ test("canvas code and previews stay typed, inert, and outside the privileged ren
   assert.match(main, /clipboard\.writeText\(copy\)/);
 });
 
-test("offline model cards badge unmeasured, conditional, and experimental profiles", async () => {
+test("offline model cards badge unmeasured, conditional, experimental, and retired profiles", async () => {
   const [javascript, css] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
@@ -586,9 +586,11 @@ test("offline model cards badge unmeasured, conditional, and experimental profil
   assert.match(javascript, /Unmeasured — not for governed work/);
   assert.match(javascript, /label: "Experimental"/);
   assert.match(javascript, /label: "Conditional"/);
+  assert.match(javascript, /Retired — replace with Qwen 3\.8/);
   assert.match(javascript, /offlineCatalogFailures\(model\)/);
   assert.match(javascript, /model\.capabilityContract\?\.failures/);
   assert.match(css, /\.offline-model-labels \.unmeasured \{ color: var\(--coral\); \}/);
+  assert.match(css, /\.offline-model-labels \.retired \{ color: var\(--coral\); \}/);
   assert.match(
     css,
     /\.offline-model-labels \.conditional,\s*\.offline-model-labels \.experimental \{ color: var\(--warning\); \}/
@@ -639,8 +641,8 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /<strong>Northwind demo<\/strong>/);
   assert.match(onboarding, /<strong>My company<\/strong>/);
   assert.match(onboarding, /Run locally or bring your own model key/);
-  assert.match(onboarding, /Qwen 3\.6 27B/);
-  assert.match(onboarding, /OpenAI · Claude · Kimi · custom endpoints/);
+  assert.match(onboarding, /Qwen 3\.8 27B/);
+  assert.match(onboarding, /OpenAI · Claude · Kimi · compatible endpoints/);
   assert.match(html, /Choose AMOS Local, OpenAI, Anthropic \(Claude\), Kimi, or any OpenAI-compatible endpoint/);
   assert.match(javascript, /personalNeedsIntelligence/);
   assert.match(javascript, /Choose a local profile or your own key/);

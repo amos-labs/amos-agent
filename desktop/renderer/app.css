@@ -3092,6 +3092,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .offline-model-labels span { color: var(--blue-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
 .offline-model-labels .installed { color: var(--green); }
 .offline-model-labels .unmeasured { color: var(--coral); }
+.offline-model-labels .retired { color: var(--coral); }
 .offline-model-labels .conditional,
 .offline-model-labels .experimental { color: var(--warning); }
 .offline-model-card h3 { margin: 14px 0 6px; font-size: 15px; }
