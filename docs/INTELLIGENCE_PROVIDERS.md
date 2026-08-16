@@ -200,8 +200,15 @@ extended by model output. The first profiles are:
 - `qwen3:4b` as an installable, unmeasured compact profile (not recommended);
 - `qwen3:8b` as an installable, unmeasured balanced profile (not recommended);
 - `gpt-oss:20b` as the measured primary interactive profile (recommended at 24 GB+, attemptable at the 16 GB minimum);
-- `qwen3.6:27b-q4_K_M` as the secondary image-capable profile; and
+- `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` as the qualified, release-pinned image-capable successor (recommended at 32 GB+);
+- `qwen3.6:27b-q4_K_M` as the retained legacy image-capable profile; and
 - `qwen3.6:27b-q8_0` as an optional experimental multimodal profile.
+
+The Qwen 3.8 entry pins its Hugging Face revision, Ollama manifest digest,
+model digest, and multimodal-projector digest. AMOS verifies the installed
+manifest identity before activation and surfaces streamed download failures.
+The official `ggml-org` artifact works with bundled Ollama 0.32.5, so no custom
+Ollama build is shipped or maintained.
 
 The recommendation leaves memory headroom for Desktop and normal applications;
 it is not a claim that the local model matches managed frontier intelligence.

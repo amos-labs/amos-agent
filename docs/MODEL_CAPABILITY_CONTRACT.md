@@ -134,8 +134,9 @@ instead of guessing a fallback.
 
 ## Current local contracts
 
-Offline catalog version 5 embeds release-signed contracts for GPT-OSS 20B and
-the two measured Qwen 3.6 27B quantizations. Their July 2026 evidence grants
+Offline catalog version 6 embeds release-signed contracts for GPT-OSS 20B,
+Qwen 3.8 27B Q4_K_M, and the two measured Qwen 3.6 27B quantizations. The July
+2026 GPT-OSS and Qwen 3.6 evidence grants
 observe, draft, and propose behavior. It withholds:
 
 - `approval-state-integrity`, because pending approval was narrated as
@@ -143,6 +144,15 @@ observe, draft, and propose behavior. It withholds:
 - `verified-code-optimization`, because hidden code tests failed;
 - qualified `vision`, because the text-heavy screenshot extraction test
   failed.
+
+The pinned Qwen 3.8 build passed the complete 23-point suite in three
+repetitions on 2026-08-16. Its qualified contract grants the measured text,
+tool, governance, basic and optimization-code capabilities, including
+`approval-state-integrity`, plus progressive autonomy through `execute`.
+Execution remains subject to AMOS policy, explicit authority, approval where
+required, deterministic verification, and structured receipts. A separate
+onboarding-screenshot smoke passed, but the contract continues to withhold the
+`vision` modality until a repeated versioned vision suite exists.
 
 The Qwen 4B and 8B catalog entries remain installable but are unmeasured
 (`primary: false`, no capability contract). Hardware assessment will not

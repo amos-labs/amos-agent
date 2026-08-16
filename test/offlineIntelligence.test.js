@@ -12,6 +12,9 @@ import {
   INTELLIGENCE_ROUTER_MODEL
 } from "../src/model/intelligenceRouter.js";
 
+const QWEN38_MODEL_ID = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M";
+const QWEN38_MANIFEST_DIGEST = "75312a6ba4358b341346c0291b4f4ee1bf1eb0e3e5b35413f3790d12e67a1b4c";
+
 test("hardware assessment recommends a bounded curated profile", () => {
   const compact = assessHardware({
     platform: "darwin",
@@ -75,7 +78,7 @@ test("hardware assessment recommends a bounded curated profile", () => {
   });
   assert.equal(professional.localTier, "professional");
   assert.equal(professional.recommendedModelId, "gpt-oss:20b");
-  assert.equal(professional.recommendedVisionModelId, "qwen3.6:27b-q4_K_M");
+  assert.equal(professional.recommendedVisionModelId, QWEN38_MODEL_ID);
 
   const professionalMax = assessHardware({
     platform: "darwin",
@@ -86,12 +89,12 @@ test("hardware assessment recommends a bounded curated profile", () => {
   });
   assert.equal(professionalMax.localTier, "professional-max");
   assert.equal(professionalMax.recommendedModelId, "gpt-oss:20b");
-  assert.equal(professionalMax.recommendedVisionModelId, "qwen3.6:27b-q4_K_M");
+  assert.equal(professionalMax.recommendedVisionModelId, QWEN38_MODEL_ID);
 });
 
 test("curated model manifest is release-signed and content-addressed", () => {
   const manifest = releaseSignedManifest();
-  assert.equal(manifest.version, 5);
+  assert.equal(manifest.version, 6);
   assert.equal(manifest.trust, "release-signed");
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
@@ -101,12 +104,15 @@ test("curated model manifest is release-signed and content-addressed", () => {
       "qwen3:8b",
       "gpt-oss:20b",
       "qwen3.6:27b-q4_K_M",
+      QWEN38_MODEL_ID,
       "qwen3.6:27b-q8_0"
     ]
   );
   const compact = manifest.models.find((model) => model.id === "qwen3:4b");
   const balanced = manifest.models.find((model) => model.id === "qwen3:8b");
   const capable = manifest.models.find((model) => model.id === "gpt-oss:20b");
+  const qwen36 = manifest.models.find((model) => model.id === "qwen3.6:27b-q4_K_M");
+  const qwen38 = manifest.models.find((model) => model.id === QWEN38_MODEL_ID);
   const visionMax = manifest.models.find((model) => model.id === "qwen3.6:27b-q8_0");
   assert.equal(compact.primary, false);
   assert.equal(balanced.primary, false);
@@ -118,6 +124,28 @@ test("curated model manifest is release-signed and content-addressed", () => {
   assert.equal(balanced.capabilityContract, undefined);
   assert.equal(capable.primary, true);
   assert.equal(capable.qualification.status, "conditional");
+  assert.equal(qwen36.deprecated, true);
+  assert.equal(qwen36.replacedBy, QWEN38_MODEL_ID);
+  assert.equal(qwen38.replaces, "qwen3.6:27b-q4_K_M");
+  assert.equal(qwen38.qualification.status, "qualified");
+  assert.equal(qwen38.qualification.score, 23);
+  assert.equal(qwen38.qualification.maximum, 23);
+  assert.equal(qwen38.qualification.repetitions, 3);
+  assert.equal(qwen38.qualification.visionSmoke.passed, true);
+  assert.equal(qwen38.source.revision, "0669b98607d47046c7c2b3f801011d54a08cfccf");
+  assert.equal(qwen38.source.ollamaManifestDigest, QWEN38_MANIFEST_DIGEST);
+  assert.deepEqual(
+    qwen38.source.artifacts.map(({ role, sha256, size }) => ({ role, sha256, size })),
+    [{
+      role: "model",
+      sha256: "31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34",
+      size: 18_973_870_432
+    }, {
+      role: "projector",
+      sha256: "2e968a6af97ce35d8971890b257b9b7edabf20ad91450501fa53162a19ee33eb",
+      size: 629_247_008
+    }]
+  );
   assert.equal(visionMax.experimental, true);
   assert.equal(visionMax.qualification.status, "experimental");
 });
@@ -125,15 +153,32 @@ test("curated model manifest is release-signed and content-addressed", () => {
 test("release-signed local contracts expose qualified grants instead of marketing claims", () => {
   const manifest = releaseSignedManifest();
   const gptOss = manifest.models.find((model) => model.id === "gpt-oss:20b");
-  const vision = manifest.models.find((model) => model.id === "qwen3.6:27b-q4_K_M");
+  const legacyVision = manifest.models.find((model) => model.id === "qwen3.6:27b-q4_K_M");
+  const vision = manifest.models.find((model) => model.id === QWEN38_MODEL_ID);
   assert.equal(gptOss.capabilityContract.status, "conditional");
   assert.deepEqual(gptOss.capabilityContract.grants.autonomy, ["observe", "draft", "propose"]);
   assert.equal(
     gptOss.capabilityContract.grants.capabilities.includes("approval-state-integrity"),
     false
   );
+  assert.ok(legacyVision.capabilities.includes("vision"));
+  assert.equal(legacyVision.capabilityContract.grants.modalities.includes("vision"), false);
   assert.ok(vision.capabilities.includes("vision"));
   assert.equal(vision.capabilityContract.grants.modalities.includes("vision"), false);
+  assert.equal(vision.capabilityContract.status, "qualified");
+  assert.deepEqual(
+    vision.capabilityContract.grants.autonomy,
+    ["observe", "draft", "propose", "execute"]
+  );
+  assert.equal(
+    vision.capabilityContract.grants.capabilities.includes("approval-state-integrity"),
+    true
+  );
+  assert.equal(
+    vision.capabilityContract.grants.capabilities.includes("verified-code-optimization"),
+    true
+  );
+  assert.deepEqual(vision.capabilityContract.failures, []);
 
   const executionRoute = routeModelStep({
     requirements: { autonomy: "execute" },
@@ -141,12 +186,7 @@ test("release-signed local contracts expose qualified grants instead of marketin
       .filter((model) => model.capabilityContract)
       .map((model) => model.capabilityContract)
   });
-  assert.equal(executionRoute.selected, null);
-  assert.ok(executionRoute.rejected.every((item) =>
-    item.reasons.some((reason) =>
-      ["autonomy-not-qualified", "status-not-allowed"].includes(reason.code)
-    )
-  ));
+  assert.equal(executionRoute.selected.contract.id, `local:ollama:${QWEN38_MODEL_ID}`);
 });
 
 test("offline registry omits all AMOS and public-web tools", () => {
@@ -229,6 +269,94 @@ test("Ollama manager probes, installs, reports progress, and removes curated mod
   const removed = await manager.remove("qwen3:4b", system);
   assert.equal(removed.models.find((model) => model.id === "qwen3:4b").installed, false);
   await assert.rejects(() => manager.install("not-curated:latest"), /release-signed catalog/);
+});
+
+test("Ollama manager installs Qwen 3.8 from the release-pinned Hugging Face manifest", async () => {
+  let installed = false;
+  let pullInput = null;
+  const manager = new OllamaModelManager({
+    fetchImpl: async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      if (path === "/api/tags") {
+        return jsonResponse({
+          models: installed
+            ? [{
+                name: QWEN38_MODEL_ID,
+                size: 19_603_117_919,
+                digest: `sha256:${QWEN38_MANIFEST_DIGEST}`
+              }]
+            : []
+        });
+      }
+      if (path === "/api/pull" && options.method === "POST") {
+        pullInput = JSON.parse(options.body);
+        installed = true;
+        return new Response(`${JSON.stringify({ status: "success" })}\n`);
+      }
+      return new Response("not found", { status: 404 });
+    }
+  });
+
+  await manager.refresh();
+  const state = await manager.install(QWEN38_MODEL_ID);
+  assert.deepEqual(pullInput, { model: QWEN38_MODEL_ID, stream: true });
+  const model = state.models.find((item) => item.id === QWEN38_MODEL_ID);
+  assert.equal(model.installed, true);
+  assert.equal(model.integrity.status, "verified");
+  assert.equal(model.integrity.actualDigest, QWEN38_MANIFEST_DIGEST);
+});
+
+test("Ollama manager surfaces streamed pull errors and release digest mismatches", async () => {
+  let installedDigest = null;
+  const manager = new OllamaModelManager({
+    fetchImpl: async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      if (path === "/api/tags") {
+        return jsonResponse({
+          models: installedDigest
+            ? [{ name: QWEN38_MODEL_ID, size: 1, digest: installedDigest }]
+            : []
+        });
+      }
+      if (path === "/api/pull" && options.method === "POST") {
+        installedDigest = `sha256:${"0".repeat(64)}`;
+        return new Response(`${JSON.stringify({ status: "success" })}\n`);
+      }
+      return new Response("not found", { status: 404 });
+    }
+  });
+
+  await manager.refresh();
+  await assert.rejects(
+    () => manager.install(QWEN38_MODEL_ID),
+    /release-signed manifest digest/
+  );
+  const mismatch = manager.state().models.find((item) => item.id === QWEN38_MODEL_ID);
+  assert.equal(mismatch.installed, false);
+  assert.equal(mismatch.integrity.status, "mismatch");
+
+  const streamed = new OllamaModelManager({
+    fetchImpl: async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      if (path === "/api/tags") return jsonResponse({ models: [] });
+      if (path === "/api/pull" && options.method === "POST") {
+        return new Response(`${JSON.stringify({ error: "projector translation failed" })}\n`);
+      }
+      return new Response("not found", { status: 404 });
+    }
+  });
+  await streamed.refresh();
+  await assert.rejects(
+    () => streamed.install(QWEN38_MODEL_ID),
+    /projector translation failed/
+  );
+  await assert.rejects(
+    () => streamed.install(QWEN38_MODEL_ID),
+    /projector translation failed/
+  );
 });
 
 test("Ollama manager reports an unavailable runtime without leaking the request", async () => {
