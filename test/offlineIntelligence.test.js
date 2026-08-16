@@ -77,8 +77,12 @@ test("hardware assessment recommends a bounded curated profile", () => {
     freeMemoryGb: 20
   });
   assert.equal(professional.localTier, "professional");
-  assert.equal(professional.recommendedModelId, "gpt-oss:20b");
+  assert.equal(professional.recommendedModelId, QWEN38_MODEL_ID);
   assert.equal(professional.recommendedVisionModelId, QWEN38_MODEL_ID);
+  assert.equal(
+    professional.localRecommendation,
+    "AMOS Local · Capable is the recommended offline profile for this computer and handles image tasks."
+  );
 
   const professionalMax = assessHardware({
     platform: "darwin",
@@ -88,13 +92,13 @@ test("hardware assessment recommends a bounded curated profile", () => {
     freeMemoryGb: 48
   });
   assert.equal(professionalMax.localTier, "professional-max");
-  assert.equal(professionalMax.recommendedModelId, "gpt-oss:20b");
+  assert.equal(professionalMax.recommendedModelId, QWEN38_MODEL_ID);
   assert.equal(professionalMax.recommendedVisionModelId, QWEN38_MODEL_ID);
 });
 
 test("curated model manifest is release-signed and content-addressed", () => {
   const manifest = releaseSignedManifest();
-  assert.equal(manifest.version, 8);
+  assert.equal(manifest.version, 9);
   assert.equal(manifest.trust, "release-signed");
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
@@ -123,8 +127,11 @@ test("curated model manifest is release-signed and content-addressed", () => {
   assert.equal(compact.capabilityContract, undefined);
   assert.equal(balanced.capabilityContract, undefined);
   assert.equal(capable.primary, true);
+  assert.equal(capable.name, "AMOS Local · Fast");
   assert.equal(capable.modelDisplayName, "GPT-OSS 20B");
   assert.equal(qwen38.modelDisplayName, "Qwen3.8 27B · Q4_K_M");
+  assert.equal(qwen38.name, "AMOS Local · Capable");
+  assert.equal(qwen38.primary, true);
   assert.equal(capable.qualification.status, "conditional");
   assert.equal(qwen36.deprecated, true);
   assert.equal(qwen36.retired, true);
@@ -345,7 +352,7 @@ test("Qwen 3.8 replaces Qwen 3.6 while existing legacy installs remain removable
   assert.equal(legacy.retired, true);
   await assert.rejects(
     () => manager.install("qwen3.6:27b-q4_K_M"),
-    /replaced by AMOS Local · Vision \(Qwen 3\.8\)/
+    /replaced by AMOS Local · Capable \(Qwen 3\.8\)/
   );
 
   const removed = await manager.remove("qwen3.6:27b-q4_K_M");

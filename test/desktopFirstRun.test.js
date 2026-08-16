@@ -225,7 +225,7 @@ test("selecting an installed model atomically switches provider, model, and boun
   });
   const offlineState = {
     runtime: { available: true },
-    manifest: { version: 8, trust: "release-signed", digest: "test" },
+    manifest: { version: 9, trust: "release-signed", digest: "test" },
     models: [{ id: "gpt-oss:20b", modelDisplayName: "GPT-OSS 20B", installed: true }]
   };
   const controller = new DesktopController({
