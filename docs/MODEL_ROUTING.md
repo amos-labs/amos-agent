@@ -81,8 +81,10 @@ The routing sequence is:
 
 1. Compile exact runtime facts: modalities, attachment shape, context budget,
    available/active tools, phase, privacy boundary, and current authority.
-2. Ask the tiny Router to add workflow, skill, capability, novelty,
-   consequence, and verification requirements.
+2. Ask the tiny Router for the minimum intelligence class and, only when an
+   active workflow consumer exists and the installed artifact is explicitly
+   qualified for the workflow contract, one primary workflow from the signed
+   Desktop catalog.
 3. Merge those outputs into an open-ended envelope of namespaced tokens.
 4. Filter signed model capability contracts and tenant policy deterministically.
 5. Rank eligible candidates by measured successful-outcome cost, latency, and
@@ -136,8 +138,44 @@ mode records only fixed-cardinality agreement metrics without logging task
 text, and Desktop keeps any task-level correlation inside its encrypted local
 receipt.
 
-This local classification path is owned only by official AMOS Desktop requests
-using the managed `amos-hosted` profile. Direct Claude/Anthropic, OpenAI/Codex,
+Workflow classification defines a second, conditional field on that same local
+request. Desktop does not request or permit the field when neither coding-role
+orchestration nor progressive tool loading consumes it, or when the installed
+artifact has not passed the workflow gate. When requested, the grammar is
+generated from the bounded built-in workflow catalog; arbitrary model-created
+workflow names are rejected. The result may preload its smallest mapped
+Desktop toolkit, but it never grants authority or changes policy.
+
+The August 16 development evaluation showed that adding the field by prompting
+the existing class-only 0.8B artifact is not safe: 34.62% class accuracy,
+30.77% workflow accuracy, and 11.54% joint accuracy across 26 cases. Its
+manifest therefore records `workflow_classifier.qualified: false`. Desktop
+keeps the proven class-only request unchanged and uses the neutral workflow;
+the compact activation tool remains available for explicit progressive tool
+loading. It does not silently replace the classifier with semantic regexes.
+Only a retrained artifact that clears the versioned gate can activate learned
+workflow selection.
+
+Planner/builder/checker is not a workflow class. The Router returns the coding
+workflow; when and only when the user enables coding roles, deterministic
+Desktop configuration starts with the planner and adds the collaboration
+toolkit. The Desktop controller then enforces typed `plan_ready`,
+`implementation_ready`, `approved`, `repair_required`, or `no_code_change`
+transitions. It never uses regex or free-form model text to decide whether a
+stage was completed. Disabling the setting removes that orchestration without
+asking the model to infer a different label.
+
+Run `npm run evaluate:router-workflows` with Desktop's managed Ollama runtime
+available to measure class, workflow, and joint accuracy against the held-out
+fixture. The command fails the qualification gate below 85% class, 85%
+workflow, or 80% joint accuracy; infrastructure failures are reported
+separately and are not treated as a model score.
+
+This local intelligence-class envelope path is owned only by official AMOS
+Desktop requests using the managed `amos-hosted` profile. Workflow selection
+may still be consumed locally for Desktop tool loading or an enabled coding
+role, but that result is never injected into a provider-controlled request.
+Direct Claude/Anthropic, OpenAI/Codex,
 Bedrock, Kimi, local-model, and compatible-endpoint profiles are pinned to the
 provider the user or administrator selected. The client factory removes any
 injected Desktop classifier from those profiles, and their adapters never send
@@ -177,6 +215,35 @@ Escalation should pass an information-dense evidence package from the
 [context compiler](CONTEXT_COMPILER.md), not replay the full private transcript.
 The handoff records sources, assumptions, unresolved questions, and the reason
 for escalation.
+
+AMOS Desktop now exposes this as an opt-in advanced policy. It is disabled by
+default, so existing paying customers continue through the exact proven AMOS
+Hosted automatic route. Enabling it does not replace the classifier with a
+second learned router: the tiny local Router always returns `routine`,
+`balanced`, `deep`, or `frontier` and may return a constrained workflow only
+when an active subsystem consumes it. A deterministic settings policy maps the
+class to one of four execution recipes:
+
+- `managed`: send the already-classified step to AMOS Hosted;
+- `local`: use the selected qualified local model, then the selected frontier
+  and AMOS Hosted as ordered fallbacks;
+- `frontier`: use the selected frontier model with AMOS Hosted as fallback; or
+- `local-review`: let local intelligence perform tool turns and produce the
+  final draft, then ask the frontier model for a tool-free review.
+
+The default opt-in mapping is Routine → Local, Balanced → Local, Deep → Local
+plus Frontier review, and Frontier → Frontier. Users can change the mapping
+without an application release. A signed capability contract still excludes a
+local model when its modality, tool-use grant, or measured context ceiling does
+not fit the step. A missing model, unhealthy endpoint, failed request, or
+failed reviewer follows the explicit fallback edges; it never widens authority.
+
+The classifier runs once. When a hybrid recipe reaches AMOS Hosted, Desktop
+passes the validated class envelope to the hosted client so the platform does
+not pay for or wait on a duplicate classification. If the local Router itself
+fails, Desktop omits that envelope and AMOS Hosted performs its normal
+classifier fallback. Each selection, exclusion, fallback, reviewer, and
+per-model usage total is recorded in Desktop events and receipts.
 
 ## Escalation triggers
 
@@ -237,5 +304,6 @@ an unreviewed label source.
 6. **Implemented for Router shadow:** integrate step-level local classification
    and private encrypted comparison receipts.
 7. Add user correction, consent-aware export, and a sealed qualification gate.
-8. Add hybrid local-first workflows with compact managed review.
+8. **Implemented as an opt-in Desktop policy:** hybrid local-first recipes with
+   explicit frontier review and AMOS Hosted terminal fallback.
 9. Learn tenant-specific recommendations from verified receipts and outcomes.

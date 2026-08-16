@@ -3,16 +3,20 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   intelligenceRoutingEnvelope,
+  intelligenceRouterFormat,
   intelligenceRouterPayload,
   INTELLIGENCE_ROUTER_ARTIFACT,
   INTELLIGENCE_ROUTER_CONTRACT,
   INTELLIGENCE_ROUTER_FORMAT,
   INTELLIGENCE_ROUTER_MODEL,
   INTELLIGENCE_ROUTER_PROMPT,
+  INTELLIGENCE_ROUTER_WORKFLOW_QUALIFIED,
   LocalIntelligenceRouter,
   normalizeIntelligenceRouterRolloutMode,
+  parseIntelligenceRouterDecision,
   parseIntelligenceRouterOutput
 } from "../src/model/intelligenceRouter.js";
+import { taskWorkflowCatalog } from "../src/workflows.js";
 import { signedTextSha256 } from "../src/model/signedText.js";
 
 test("local router uses the narrow 0.8B class-only contract", async () => {
@@ -42,10 +46,61 @@ test("local router uses the narrow 0.8B class-only contract", async () => {
   assert.equal(result.artifactSha256, INTELLIGENCE_ROUTER_ARTIFACT.gguf_sha256);
 });
 
+test("workflow output is requested only when an active consumer supplies a catalog", async () => {
+  const requests = [];
+  const workflows = taskWorkflowCatalog();
+  const router = new LocalIntelligenceRouter({
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      requests.push(body);
+      return new Response(JSON.stringify({
+        message: {
+          content: requests.length === 1
+            ? '{"minimum_class":"balanced"}'
+            : '{"minimum_class":"deep","workflow":"spreadsheet-model"}'
+        }
+      }));
+    }
+  });
+
+  const classOnly = await router.classify({
+    messages: [{ role: "user", content: "Hello" }]
+  });
+  const withWorkflow = await router.classify({
+    messages: [{ role: "user", content: "Build an ARR forecast" }],
+    workflows
+  });
+
+  assert.equal(classOnly.workflow, null);
+  assert.deepEqual(Object.keys(requests[0].format.properties), ["minimum_class"]);
+  assert.equal(withWorkflow.workflow, "spreadsheet-model");
+  assert.deepEqual(
+    Object.keys(requests[1].format.properties),
+    ["minimum_class", "workflow"]
+  );
+  assert.match(requests[1].messages[0].content, /spreadsheet-model \[data\]/);
+  assert.equal(requests[1].options.num_predict, 48);
+  assert.deepEqual(
+    parseIntelligenceRouterDecision(
+      '{"minimum_class":"deep","workflow":"spreadsheet-model"}',
+      workflows
+    ),
+    { minimumClass: "deep", workflow: "spreadsheet-model" }
+  );
+  assert.deepEqual(
+    intelligenceRouterFormat([]),
+    INTELLIGENCE_ROUTER_FORMAT
+  );
+});
+
 test("local router release pins the champion artifact and conservative prompt", () => {
   assert.equal(INTELLIGENCE_ROUTER_MODEL, "amos-router:0.8b-pilot003-v2");
   assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.qualified, false);
   assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.default_rollout_mode, "active");
+  assert.equal(INTELLIGENCE_ROUTER_WORKFLOW_QUALIFIED, false);
+  assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.workflow_classifier.class_accuracy, 0.3462);
+  assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.workflow_classifier.workflow_accuracy, 0.3077);
+  assert.equal(INTELLIGENCE_ROUTER_ARTIFACT.workflow_classifier.joint_accuracy, 0.1154);
   const prompt = readFileSync(
     new URL("../src/model/intelligence-router-v1.txt", import.meta.url),
     "utf8"
@@ -76,6 +131,10 @@ test("router rollout defaults local-primary and the platform envelope stays boun
     verification: "high",
     classifier_contract: INTELLIGENCE_ROUTER_CONTRACT
   });
+  assert.equal(
+    intelligenceRoutingEnvelope({ minimumClass: "deep", workflow: "code-change" }).workflow,
+    "code-change"
+  );
 });
 
 test("router payload is bounded and excludes system and tool content", () => {
@@ -103,5 +162,12 @@ test("router output rejects extra fields and unknown classes", () => {
   assert.throws(
     () => parseIntelligenceRouterOutput('{"minimum_class":"extreme"}'),
     /invalid class/
+  );
+  assert.throws(
+    () => parseIntelligenceRouterDecision(
+      '{"minimum_class":"balanced","workflow":"not-real"}',
+      taskWorkflowCatalog()
+    ),
+    /invalid workflow/
   );
 });

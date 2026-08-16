@@ -74,6 +74,9 @@ test("OpenAI-compatible streaming emits text deltas and assembles tool calls", a
       arguments: "{\"engine\":\"company\"}"
     }
   }]);
+  assert.equal(result.usage.model, "test-model");
+  assert.ok(result.usage.latency_ms >= 0);
+  assert.ok(result.usage.time_to_first_output_ms >= 0);
 });
 
 test("OpenAI-compatible streaming aborts the actual request", async () => {
@@ -99,6 +102,32 @@ test("OpenAI-compatible streaming aborts the actual request", async () => {
   });
 });
 
+test("OpenAI-compatible streaming timeout measures inactivity rather than total active time", async () => {
+  const encoder = new TextEncoder();
+  const fetchImpl = async () => new Response(new ReadableStream({
+    start(controller) {
+      setTimeout(() => {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"still "}}]}\n\n'));
+      }, 35);
+      setTimeout(() => {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"working"}}]}\n\n'));
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+        controller.close();
+      }, 70);
+    }
+  }), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" }
+  });
+  const streamingClient = client(fetchImpl);
+  streamingClient.config.requestTimeoutMs = 50;
+  const result = await streamingClient.chat({
+    messages: [{ role: "user", content: "do a longer job" }],
+    onDelta: () => {}
+  });
+  assert.equal(result.message.content, "still working");
+});
+
 test("streaming request remains compatible with endpoints that return one JSON response", async () => {
   const fetchImpl = async () =>
     new Response(JSON.stringify({
@@ -115,4 +144,24 @@ test("streaming request remains compatible with endpoints that return one JSON r
   });
   assert.equal(result.message.content, "One response");
   assert.deepEqual(deltas, ["One response"]);
+  assert.equal(result.usage.model, "test-model");
+  assert.ok(result.usage.time_to_first_output_ms >= 0);
+});
+
+test("OpenAI-compatible responses retain native local timing diagnostics", async () => {
+  const result = await client(async () => new Response(JSON.stringify({
+    choices: [{ message: { role: "assistant", content: "Done" } }],
+    usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+    load_duration: 1_500_000_000,
+    prompt_eval_duration: 500_000_000,
+    eval_duration: 2_000_000_000
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  })).chat({ messages: [{ role: "user", content: "hello" }] });
+
+  assert.equal(result.usage.load_ms, 1_500);
+  assert.equal(result.usage.prompt_eval_ms, 500);
+  assert.equal(result.usage.generation_ms, 2_000);
+  assert.equal(result.usage.model, "test-model");
 });

@@ -89,6 +89,7 @@ const EXACT_TOOLKITS = new Map([
   ["web_search", "research"],
   ["desktop_begin_automation_setup", "automation"],
   ["desktop_handoff_role", "collaboration"],
+  ["desktop_report_coding_stage", "collaboration"],
   ["desktop_spawn_subagent", "collaboration"],
   ["desktop_list_subagents", "collaboration"],
   ["desktop_collect_subagent", "collaboration"],

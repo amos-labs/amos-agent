@@ -501,6 +501,10 @@ export class OllamaModelManager {
       error: null
     };
     this.routerPreparation = null;
+    this.performance = {
+      lastPreload: null,
+      loadedModels: []
+    };
   }
 
   state(system = null) {
@@ -515,6 +519,7 @@ export class OllamaModelManager {
       },
       runtime: { ...this.runtime },
       router: { ...this.router },
+      performance: structuredClone(this.performance),
       system,
       models: manifest.models
         .filter((model) => model.retired !== true || installedByName.has(model.id))
@@ -653,6 +658,52 @@ export class OllamaModelManager {
       body: JSON.stringify({ model: model.id })
     });
     return this.refresh(system);
+  }
+
+  async preload(modelId, { keepAlive = "30m", system = null } = {}) {
+    const model = curatedModel(modelId);
+    if (!this.runtime.available) await this.requireRuntime();
+    if (!this.installed.some((item) => item.name === model.id)) {
+      throw new Error("Download this model before preloading it");
+    }
+    const startedAt = performance.now();
+    const payload = await this.request("/api/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: model.id,
+        prompt: "",
+        stream: false,
+        keep_alive: keepAlive
+      }),
+      timeoutMs: 5 * 60_000
+    });
+    this.performance.lastPreload = {
+      model: model.id,
+      observedAt: new Date().toISOString(),
+      elapsedMs: Math.round(performance.now() - startedAt),
+      loadMs: nanosecondsToMilliseconds(payload?.load_duration),
+      totalMs: nanosecondsToMilliseconds(payload?.total_duration),
+      keepAlive
+    };
+    await this.refreshLoadedModels();
+    this.publish(system);
+    return structuredClone(this.performance.lastPreload);
+  }
+
+  async refreshLoadedModels() {
+    const payload = await this.request("/api/ps");
+    this.performance.loadedModels = (Array.isArray(payload?.models) ? payload.models : [])
+      .slice(0, 8)
+      .map((model) => ({
+        model: clean(model?.name || model?.model, 256),
+        sizeBytes: boundedNumber(model?.size, 0, Number.MAX_SAFE_INTEGER),
+        sizeVramBytes: boundedNumber(model?.size_vram, 0, Number.MAX_SAFE_INTEGER),
+        contextLength: boundedNumber(model?.context_length, 0, 1_048_576),
+        expiresAt: clean(model?.expires_at, 80) || null
+      }))
+      .filter((model) => model.model);
+    return structuredClone(this.performance.loadedModels);
   }
 
   async requireRuntime() {
@@ -857,6 +908,11 @@ function boundedNumber(value, minimum, maximum) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return minimum;
   return Math.min(maximum, Math.max(minimum, parsed));
+}
+
+function nanosecondsToMilliseconds(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed / 1_000_000) : null;
 }
 
 function clean(value, maximum) {

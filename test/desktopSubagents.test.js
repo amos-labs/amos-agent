@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DesktopController } from "../src/desktop/controller.js";
 import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
+import { CodingLifecycle } from "../src/model/codingLifecycle.js";
 
 function codec() {
   return {
@@ -95,4 +96,22 @@ test("companion workspace changes go through saveSettings so the runtime is inva
   assert.equal(result.workspace, next);
   assert.equal(settings.workspace, next);
   assert.equal(controller.runtime, null);
+});
+
+test("coding stages cannot complete while spawned child work is uncollected", async () => {
+  const { controller } = await harness();
+  controller.activeTask.codingLifecycle = new CodingLifecycle();
+  controller.activeTask.children = [{
+    taskId: "child-1",
+    name: "Builder child",
+    status: "completed",
+    collectedAt: null
+  }];
+
+  assert.throws(
+    () => controller.assertCodingChildrenCollected(),
+    /Collect every spawned child/
+  );
+  controller.activeTask.children[0].collectedAt = new Date().toISOString();
+  assert.doesNotThrow(() => controller.assertCodingChildrenCollected());
 });

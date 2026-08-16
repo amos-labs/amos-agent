@@ -114,8 +114,10 @@ export class AgentLoop {
       signal = null,
       takeSteering = () => [],
       workflow: selectedWorkflow = null,
+      routingDecision = null,
       presentationIntent = null,
-      canvasActive = false
+      canvasActive = false,
+      completionGate = null
     } = {}
   ) {
     throwIfAborted(signal);
@@ -134,6 +136,7 @@ export class AgentLoop {
     }
     const workflow = selectedWorkflow || this.workflowSelector({ objective: userContent });
     this.lastWorkflow = workflow;
+    const workflowToolkitActivations = this.activateWorkflowToolkits(workflow);
     onEvent({
       type: "workflow",
       id: workflow.id,
@@ -141,6 +144,9 @@ export class AgentLoop {
       source: workflow.source,
       title: workflow.title,
       summary: workflow.summary,
+      family: workflow.family || "general",
+      toolkits: workflow.toolkits || [],
+      toolkitActivations: workflowToolkitActivations,
       skills: workflow.skills.map((skill) => skill.name),
       steps: workflow.steps,
       doneWhen: workflow.doneWhen
@@ -168,6 +174,12 @@ export class AgentLoop {
       let previousToolFingerprint = null;
       let repeatedToolCycles = 0;
       let consecutiveToolErrorCycles = 0;
+      let completedToolActions = 0;
+      let failedToolActions = 0;
+      let rejectedCompletions = 0;
+      let pendingRoutingDecision = routingDecision?.minimumClass
+        ? routingDecision
+        : null;
 
       while (true) {
         throwIfAborted(signal);
@@ -192,17 +204,38 @@ export class AgentLoop {
         const messages = this.prepareMessagesForModel(tools);
         const contextReceipt = this.captureContextReceipt({ messages, tools, turn });
         onEvent({ type: "context_compiled", ...contextReceipt });
-        const response = await this.modelClient.chat({
-          messages,
-          tools,
-          signal,
-          onRoutingDecision: (decision) => {
-            onEvent({ type: "routing", turn, ...decision });
-          },
-          onDelta: (delta, text) => {
-            onEvent({ type: "assistant_delta", turn, delta, text });
+        let partialResponse = "";
+        let response;
+        try {
+          response = await this.modelClient.chat({
+            messages,
+            tools,
+            signal,
+            preclassifiedRouting: pendingRoutingDecision,
+            onRoutingDecision: (decision) => {
+              onEvent({ type: "routing", turn, ...decision });
+            },
+            onDelta: (delta, text) => {
+              partialResponse = String(text || partialResponse);
+              onEvent({ type: "assistant_delta", turn, delta, text });
+            }
+          });
+        } catch (error) {
+          if (isModelTimeout(error) && completedToolActions > 0) {
+            error.code = "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS";
+            error.completedToolActions = completedToolActions;
+            error.failedToolActions = failedToolActions;
+            error.partialResponse = partialResponse;
+            onEvent({
+              type: "phase",
+              phase: "interrupted",
+              turn,
+              summary: `The model stopped responding after ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}; completed work remains intact`
+            });
           }
-        });
+          throw error;
+        }
+        pendingRoutingDecision = null;
 
         onEvent(usageEventFromResponse(response.usage, turn));
 
@@ -219,6 +252,42 @@ export class AgentLoop {
             consecutiveToolErrorCycles = 0;
             turn += 1;
             continue;
+          }
+          if (typeof completionGate === "function") {
+            const completion = await completionGate({
+              answer: assistantMessage.content || "",
+              turn
+            });
+            if (completion?.allow === false) {
+              rejectedCompletions += 1;
+              onEvent({
+                type: "coding_lifecycle",
+                phase: "stage_result_required",
+                turn,
+                summary: String(
+                  completion?.summary || "A structured coding-stage result is required before completion"
+                ).slice(0, 4_000),
+                state: completion?.state || null
+              });
+              if (rejectedCompletions >= 2) {
+                const error = new Error(
+                  "The current coding role ended twice without reporting its required structured stage result"
+                );
+                error.code = "AMOS_CODING_LIFECYCLE_INCOMPLETE";
+                error.lifecycleState = completion?.state || null;
+                throw error;
+              }
+              this.messages.push({
+                role: "user",
+                content: String(completion?.message || [
+                  "<amos_coding_stage_required>",
+                  "Report the current coding stage through desktop_report_coding_stage before ending.",
+                  "</amos_coding_stage_required>"
+                ].join("\n"))
+              });
+              turn += 1;
+              continue;
+            }
           }
           onEvent({ type: "phase", phase: "completed", turn, summary: "Task completed" });
           return assistantMessage.content || "";
@@ -279,6 +348,9 @@ export class AgentLoop {
             onEvent({ type: "tool_error", name, error: error.message });
           }
 
+          if (failed) failedToolActions += 1;
+          else completedToolActions += 1;
+
           if (!failed && this.onToolResult) {
             try {
               const reference = await this.onToolResult({ name, args, result, failed });
@@ -310,6 +382,12 @@ export class AgentLoop {
 
         if (modelEvidence.length > 0) this.appendEphemeralModelEvidence(modelEvidence);
 
+        if (outcomes.some((outcome) =>
+          !outcome.failed && ["desktop_report_coding_stage", "desktop_handoff_role"].includes(outcome.name)
+        )) {
+          rejectedCompletions = 0;
+        }
+
         const steeringAfterTools = this.applySteering(takeSteering, onEvent, turn);
         if (steeringAfterTools > 0) {
           previousToolFingerprint = null;
@@ -339,6 +417,19 @@ export class AgentLoop {
     } finally {
       this.activeTaskMessage = null;
     }
+  }
+
+  activateWorkflowToolkits(workflow) {
+    const activations = [];
+    for (const toolkit of Array.isArray(workflow?.toolkits) ? workflow.toolkits : []) {
+      const result = this.registry.activateToolkit(toolkit, { mode: "add" });
+      activations.push({
+        toolkit,
+        ok: result?.ok === true,
+        error: result?.ok === true ? null : String(result?.error || "Toolkit activation failed")
+      });
+    }
+    return activations;
   }
 
   applySteering(takeSteering, onEvent, turn) {
@@ -644,6 +735,12 @@ export class AgentLoop {
   }
 }
 
+function isModelTimeout(error) {
+  return /request timed out|stopped responding|response timed out/i.test(
+    String(error?.message || "")
+  );
+}
+
 function usageEventFromResponse(usage, turn) {
   const inputTokens = Number(
     usage?.input_tokens ?? usage?.prompt_tokens ?? 0
@@ -660,6 +757,36 @@ function usageEventFromResponse(usage, turn) {
   return {
     type: "usage",
     turn,
+    model: String(usage?.model || "").slice(0, 256),
+    modelUsage: (Array.isArray(usage?.model_usage) ? usage.model_usage : [])
+      .slice(0, 8)
+      .map((item) => ({
+        model: String(item?.model || "").slice(0, 256),
+        inputTokens: Number(item?.input_tokens ?? item?.prompt_tokens ?? 0),
+        outputTokens: Number(item?.output_tokens ?? item?.completion_tokens ?? 0),
+        cachedInputTokens: Number(
+          item?.cache_read_input_tokens ??
+          item?.input_tokens_details?.cached_tokens ??
+          item?.prompt_tokens_details?.cached_tokens ??
+          0
+        ),
+        totalTokens: Number(item?.total_tokens || 0),
+        costUsedMicrousd: Number(item?.cost_used_microusd || 0),
+        latencyMs: Math.max(0, Number(item?.latency_ms || 0)),
+        timeToFirstOutputMs: item?.time_to_first_output_ms == null
+          ? null
+          : Math.max(0, Number(item.time_to_first_output_ms)),
+        generationTokensPerSecond: item?.generation_tokens_per_second == null
+          ? null
+          : Math.max(0, Number(item.generation_tokens_per_second)),
+        loadMs: item?.load_ms == null ? null : Math.max(0, Number(item.load_ms)),
+        promptEvalMs: item?.prompt_eval_ms == null
+          ? null
+          : Math.max(0, Number(item.prompt_eval_ms)),
+        generationMs: item?.generation_ms == null
+          ? null
+          : Math.max(0, Number(item.generation_ms))
+      })),
     inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
     outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
     cachedInputTokens: Number.isFinite(cachedInputTokens) ? cachedInputTokens : 0,
@@ -668,7 +795,21 @@ function usageEventFromResponse(usage, turn) {
         ((Number.isFinite(inputTokens) ? inputTokens : 0) +
           (Number.isFinite(outputTokens) ? outputTokens : 0))
     ),
-    costUsedMicrousd: Number(usage?.cost_used_microusd || usage?.raw?.cost_used_microusd || 0)
+    costUsedMicrousd: Number(usage?.cost_used_microusd || usage?.raw?.cost_used_microusd || 0),
+    latencyMs: Math.max(0, Number(usage?.latency_ms || 0)),
+    timeToFirstOutputMs: usage?.time_to_first_output_ms == null
+      ? null
+      : Math.max(0, Number(usage.time_to_first_output_ms)),
+    generationTokensPerSecond: usage?.generation_tokens_per_second == null
+      ? null
+      : Math.max(0, Number(usage.generation_tokens_per_second)),
+    loadMs: usage?.load_ms == null ? null : Math.max(0, Number(usage.load_ms)),
+    promptEvalMs: usage?.prompt_eval_ms == null
+      ? null
+      : Math.max(0, Number(usage.prompt_eval_ms)),
+    generationMs: usage?.generation_ms == null
+      ? null
+      : Math.max(0, Number(usage.generation_ms))
   };
 }
 

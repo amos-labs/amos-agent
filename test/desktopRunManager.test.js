@@ -142,6 +142,44 @@ test("DesktopRunSupervisor recovers after a transient report failure and honors 
   await supervisor.report("running");
   assert.equal(attempt, 2);
   assert.equal(abortController.signal.aborted, true);
+  assert.equal(supervisor.stopReason, "run_stop_requested");
+});
+
+test("DesktopRunSupervisor preserves an exact Platform budget stop reason", async () => {
+  const abortController = new AbortController();
+  const supervisor = new DesktopRunSupervisor({
+    abortController,
+    reportThrottleMs: 0,
+    setIntervalImpl: () => ({ unref() {} }),
+    clearIntervalImpl: () => {},
+    remote: {
+      async startTaskRun() {
+        return {
+          accepted: true,
+          continue: true,
+          run: { id: "platform-run", sequence: 0, status: "running" }
+        };
+      },
+      async reportTaskRun(input) {
+        return {
+          accepted: true,
+          continue: false,
+          reason: "wall_time_budget_exhausted",
+          run: {
+            id: "platform-run",
+            sequence: input.sequence,
+            status: "interrupted",
+            stopReason: "wall_time_budget_exhausted"
+          }
+        };
+      }
+    }
+  });
+
+  await supervisor.admit({});
+  await supervisor.report("running");
+  assert.equal(supervisor.stopReason, "wall_time_budget_exhausted");
+  assert.equal(abortController.signal.reason, "wall_time_budget_exhausted");
 });
 
 test("four Desktop workers run concurrently under two independent Project limits", async () => {

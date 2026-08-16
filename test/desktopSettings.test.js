@@ -22,6 +22,45 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.telemetryEnabled, null);
   assert.equal(DEFAULT_DESKTOP_SETTINGS.onboardingCompletedAt, "");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.onboardingBoundary, "");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.hybridRouting.enabled, false);
+});
+
+test("hybrid model recipes are explicit, bounded, and survive unrelated writes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-hybrid-routing-"));
+  const path = join(directory, "settings.json");
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => value,
+    decrypt: (value) => value
+  });
+  const hybridRouting = {
+    enabled: true,
+    localModel: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
+    frontier: { provider: "kimi", model: "kimi-k3" },
+    strategies: {
+      routine: "local",
+      balanced: "local",
+      deep: "local-review",
+      frontier: "frontier"
+    }
+  };
+
+  await store.write({ ...DEFAULT_DESKTOP_SETTINGS, hybridRouting });
+  await store.write({ ...(await store.read()), appearance: "dark" });
+  const saved = await store.read();
+
+  assert.deepEqual(saved.hybridRouting, hybridRouting);
+  assert.equal(saved.appearance, "dark");
+  const invalid = sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    hybridRouting: {
+      enabled: true,
+      frontier: { provider: "not-a-provider", model: "anything" },
+      strategies: { routine: "regex" }
+    }
+  });
+  assert.deepEqual(invalid.hybridRouting.frontier, { provider: "amos-hosted", model: "auto" });
+  assert.equal(invalid.hybridRouting.strategies.routine, "local");
 });
 
 test("desktop telemetry preference survives an unrelated settings write", async () => {

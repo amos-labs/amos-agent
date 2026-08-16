@@ -2,7 +2,8 @@ export function createSubagentTools({
   spawn,
   list,
   collect,
-  handoff
+  handoff,
+  reportStage
 } = {}) {
   return [
     {
@@ -33,6 +34,49 @@ export function createSubagentTools({
         return handoff({
           role: args.role,
           summary: args.summary
+        });
+      }
+    },
+    {
+      name: "desktop_report_coding_stage",
+      source: "local",
+      description:
+        "Report the structured result of the current controller-owned coding stage. The controller, not model prose, decides the next planner, implementer, checker, repair, or terminal state.",
+      parameters: {
+        type: "object",
+        properties: {
+          outcome: {
+            type: "string",
+            enum: [
+              "plan_ready",
+              "implementation_ready",
+              "approved",
+              "repair_required",
+              "no_code_change"
+            ],
+            description: "Structured outcome allowed for the current coding role."
+          },
+          summary: {
+            type: "string",
+            description: "Concrete plan, implementation result, approval, or repair brief."
+          },
+          evidence: {
+            type: "array",
+            items: { type: "string" },
+            description: "Tests, diff observations, or other bounded evidence supporting this outcome."
+          }
+        },
+        required: ["outcome", "summary"],
+        additionalProperties: false
+      },
+      async handler(args) {
+        if (typeof reportStage !== "function") {
+          throw new Error("The deterministic coding lifecycle is unavailable in this session");
+        }
+        return reportStage({
+          outcome: args.outcome,
+          summary: args.summary,
+          evidence: args.evidence
         });
       }
     },

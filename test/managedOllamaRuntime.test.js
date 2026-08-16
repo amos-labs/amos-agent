@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import {
   AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH,
+  AMOS_LOCAL_DEFAULT_KEEP_ALIVE,
   AMOS_LOCAL_HOST,
   AMOS_LOCAL_MAX_CONTEXT_LENGTH,
   contextLength,
@@ -70,6 +71,11 @@ test("AMOS launches the bundled runtime on a private loopback endpoint", async (
     "/Users/test/Library/Application Support/AMOS Desktop/local-intelligence/ollama/models"
   );
   assert.equal(calls[0].options.env.OLLAMA_NO_CLOUD, "1");
+  assert.equal(calls[0].options.env.OLLAMA_KEEP_ALIVE, AMOS_LOCAL_DEFAULT_KEEP_ALIVE);
+  assert.equal(calls[0].options.env.OLLAMA_FLASH_ATTENTION, "1");
+  assert.equal(calls[0].options.env.OLLAMA_KV_CACHE_TYPE, "q8_0");
+  assert.equal(calls[0].options.env.OLLAMA_NUM_PARALLEL, "1");
+  assert.equal(calls[0].options.env.OLLAMA_MAX_LOADED_MODELS, "2");
   assert.equal(
     calls[0].options.env.OLLAMA_CONTEXT_LENGTH,
     String(AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH)
@@ -91,8 +97,8 @@ test("AMOS Local chooses an adaptive context and accepts bounded explicit overri
   const environments = [
     [{ AMOS_LOCAL_CONTEXT_LENGTH: "65536" }, 16, "65536"],
     [{ AMOS_LOCAL_CONTEXT_LENGTH: "262144" }, 64, String(AMOS_LOCAL_MAX_CONTEXT_LENGTH)],
-    [{ AMOS_LOCAL_CONTEXT_LENGTH: "not-a-number" }, 64, "131072"],
-    [{}, 32, "65536"],
+    [{ AMOS_LOCAL_CONTEXT_LENGTH: "not-a-number" }, 64, "32768"],
+    [{}, 32, "32768"],
     [{}, 8, "16384"]
   ];
 
@@ -123,10 +129,41 @@ test("AMOS Local chooses an adaptive context and accepts bounded explicit overri
 test("context selection preserves a safe default while exposing the qualified ceiling", () => {
   assert.equal(contextLength("", 8 * 1024 ** 3), 16_384);
   assert.equal(contextLength("", 16 * 1024 ** 3), AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH);
-  assert.equal(contextLength("", 32 * 1024 ** 3), 65_536);
-  assert.equal(contextLength("", 64 * 1024 ** 3), 131_072);
+  assert.equal(contextLength("", 32 * 1024 ** 3), 32_768);
+  assert.equal(contextLength("", 64 * 1024 ** 3), AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH);
+  assert.equal(contextLength("", 128 * 1024 ** 3), 65_536);
   assert.equal(contextLength("262144", 64 * 1024 ** 3), AMOS_LOCAL_MAX_CONTEXT_LENGTH);
-  assert.equal(contextLength("262145", 64 * 1024 ** 3), 131_072);
+  assert.equal(contextLength("262145", 64 * 1024 ** 3), AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH);
+});
+
+test("local performance settings accept bounded operator overrides", async () => {
+  const child = new EventEmitter();
+  const calls = [];
+  const runtime = new ManagedOllamaRuntime({
+    platform: "darwin",
+    arch: "arm64",
+    resourcesPath: "/resources",
+    userDataPath: "/user-data",
+    environment: {
+      AMOS_LOCAL_KEEP_ALIVE: "-1",
+      AMOS_LOCAL_FLASH_ATTENTION: "false",
+      AMOS_LOCAL_KV_CACHE_TYPE: "q4_0",
+      AMOS_LOCAL_NUM_PARALLEL: "3",
+      AMOS_LOCAL_MAX_LOADED_MODELS: "99"
+    },
+    existsImpl: () => true,
+    mkdirImpl: async () => {},
+    spawnImpl: (binary, args, options) => {
+      calls.push({ binary, args, options });
+      return child;
+    }
+  });
+  await runtime.start();
+  assert.equal(calls[0].options.env.OLLAMA_KEEP_ALIVE, "-1");
+  assert.equal(calls[0].options.env.OLLAMA_FLASH_ATTENTION, "0");
+  assert.equal(calls[0].options.env.OLLAMA_KV_CACHE_TYPE, "q4_0");
+  assert.equal(calls[0].options.env.OLLAMA_NUM_PARALLEL, "3");
+  assert.equal(calls[0].options.env.OLLAMA_MAX_LOADED_MODELS, "8");
 });
 
 test("a missing runtime fails closed without spawning a system command", async () => {

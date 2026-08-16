@@ -2,6 +2,7 @@ export const INTELLIGENCE_ROLES = Object.freeze(["planner", "implementer", "chec
 
 export const DEFAULT_INTELLIGENCE_ROLES = Object.freeze({
   enabled: false,
+  scope: "coding",
   planner: Object.freeze({ provider: "kimi", model: "kimi-k3" }),
   implementer: Object.freeze({ provider: "xai", model: "grok-4.6" }),
   checker: Object.freeze({ provider: "kimi", model: "kimi-k3" })
@@ -13,18 +14,18 @@ const ROLE_PROMPTS = Object.freeze({
     "Inspect, search, and produce a concrete implementation plan.",
     "Do not edit files, apply patches, or run mutating shell commands unless the user explicitly asks you to implement now.",
     "Name the files, checks, risks, and the smallest coherent change.",
-    "When the plan is ready, stop or hand off to the implementer."
+    "When the plan is ready, call desktop_report_coding_stage with plan_ready, or no_code_change when evidence shows no patch is needed."
   ].join(" "),
   implementer: [
     "You are the implementer for this task.",
     "Follow the current plan. Inspect before editing, prefer small apply_patch changes, run the relevant checks, and inspect git_diff before claiming completion.",
     "Do not expand the plan into unrelated refactors.",
-    "When the change is verified, stop or hand off to the checker."
+    "When the implementation and its checks are ready for independent review, call desktop_report_coding_stage with implementation_ready."
   ].join(" "),
   checker: [
     "You are the checker for this task.",
     "Review the current diff, tests, and remaining risk. Do not implement a new design unless you find a blocking defect.",
-    "If the work is sound, say what was verified. If it is not, name the exact repair and hand off to the implementer."
+    "Call desktop_report_coding_stage with approved only when the evidence supports completion, repair_required when a concrete repair is needed, or no_code_change when the verified result needs no patch."
   ].join(" ")
 });
 
@@ -34,6 +35,7 @@ export function sanitizeIntelligenceRoles(input = {}, { allowDisabled = true } =
   if (!enabled && allowDisabled) {
     return {
       enabled: false,
+      scope: sanitizeScope(source.scope),
       planner: sanitizeRoleSelection(source.planner, DEFAULT_INTELLIGENCE_ROLES.planner),
       implementer: sanitizeRoleSelection(source.implementer, DEFAULT_INTELLIGENCE_ROLES.implementer),
       checker: sanitizeRoleSelection(source.checker, DEFAULT_INTELLIGENCE_ROLES.checker)
@@ -41,6 +43,7 @@ export function sanitizeIntelligenceRoles(input = {}, { allowDisabled = true } =
   }
   return {
     enabled,
+    scope: sanitizeScope(source.scope),
     planner: sanitizeRoleSelection(source.planner, DEFAULT_INTELLIGENCE_ROLES.planner),
     implementer: sanitizeRoleSelection(source.implementer, DEFAULT_INTELLIGENCE_ROLES.implementer),
     checker: sanitizeRoleSelection(source.checker, DEFAULT_INTELLIGENCE_ROLES.checker)
@@ -65,6 +68,7 @@ export function defaultRoleForWorkflow(workflow, roles = {}) {
   if (id === "code-change" || id === "github-issue-diagnosis" || id === "plan-implement-verify") {
     return "planner";
   }
+  if (pairing.scope === "coding") return null;
   return "implementer";
 }
 
@@ -118,4 +122,8 @@ function sanitizeRoleSelection(input, fallback) {
 
 function clean(value, max) {
   return String(value || "").trim().slice(0, max);
+}
+
+function sanitizeScope(value) {
+  return value === "all" ? "all" : "coding";
 }

@@ -1,0 +1,32 @@
+{
+  "schema": "amos.router-workflow-eval",
+  "version": 1,
+  "cases": [
+    { "id": "greeting", "task": "Hello, good morning!", "minimum_class": "routine", "workflow": "outcome-execution" },
+    { "id": "format-list", "task": "Alphabetize these five customer names.", "minimum_class": "routine", "workflow": "outcome-execution" },
+    { "id": "ordinary-email", "task": "Draft a concise follow-up email after our sales call.", "minimum_class": "balanced", "workflow": "outcome-execution" },
+    { "id": "spreadsheet-forecast", "task": "Build a 24-month ARR forecast with base, upside, and downside scenarios and preserve our current $2.2M baseline.", "minimum_class": "deep", "workflow": "spreadsheet-model" },
+    { "id": "spreadsheet-cleanup", "task": "Create an XLSX that cleans these rows and totals each department.", "minimum_class": "balanced", "workflow": "spreadsheet-model" },
+    { "id": "issue-root-cause", "task": "Diagnose why this GitHub PR started failing only on Windows and determine whether the release pin is stale.", "minimum_class": "deep", "workflow": "github-issue-diagnosis" },
+    { "id": "issue-summary", "task": "Review this GitHub issue and summarize the reproducible symptom and next check.", "minimum_class": "balanced", "workflow": "github-issue-diagnosis" },
+    { "id": "code-change", "task": "Update the settings screen so Test intelligence shows a visible success result, then run the existing tests.", "minimum_class": "balanced", "workflow": "code-change" },
+    { "id": "code-refactor", "task": "Refactor the model adapter to share retry logic without changing provider behavior.", "minimum_class": "deep", "workflow": "code-change" },
+    { "id": "explicit-pair", "task": "Plan the implementation, hand it to the builder, then have the checker review the diff and tests.", "minimum_class": "balanced", "workflow": "code-change" },
+    { "id": "document-review", "task": "Review the attached MSA, identify renewal and termination terms, and separate quoted obligations from your inference.", "minimum_class": "balanced", "workflow": "document-analysis" },
+    { "id": "document-conflict", "task": "Compare these three policy documents, reconcile conflicting definitions, and identify which interpretation remains unsupported.", "minimum_class": "deep", "workflow": "document-analysis" },
+    { "id": "current-research", "task": "Research the current Windows code-signing requirements using primary sources and give me a sourced recommendation.", "minimum_class": "balanced", "workflow": "research-brief" },
+    { "id": "competitive-research", "task": "Do a deep competitive analysis of the current agent desktop market and distinguish sourced facts from strategic inference.", "minimum_class": "deep", "workflow": "research-brief" },
+    { "id": "company-question", "task": "What is happening with conversion across our locations, and which current company evidence supports the answer?", "minimum_class": "deep", "workflow": "company-decision" },
+    { "id": "company-status", "task": "Give me a concise status of our active customer implementations from current company data.", "minimum_class": "balanced", "workflow": "company-decision" },
+    { "id": "governed-update", "task": "Update the customer record after showing me the exact change and preserve the approval receipt.", "minimum_class": "balanced", "workflow": "governed-company-action" },
+    { "id": "governed-delete", "task": "Delete the duplicate production campaign only after confirming scope, authority, and a recoverable plan.", "minimum_class": "deep", "workflow": "governed-company-action" },
+    { "id": "mixed-deliverable", "task": "Research the market assumptions, then make the final deliverable a scenario-driven Excel pricing model.", "minimum_class": "deep", "workflow": "spreadsheet-model" },
+    { "id": "incidental-code", "task": "Explain in plain language what our engineers changed in app.js; do not modify anything.", "minimum_class": "balanced", "workflow": "document-analysis" },
+    { "id": "incidental-spreadsheet", "task": "Send an approved customer email telling them the spreadsheet is ready.", "minimum_class": "balanced", "workflow": "governed-company-action" },
+    { "id": "architecture", "task": "Design a constrained multi-tenant automation architecture with idempotency, replay, approval, and regional failure tradeoffs.", "minimum_class": "deep", "workflow": "outcome-execution" },
+    { "id": "open-math", "task": "Develop and formally prove a new general method for resolving an open mathematics conjecture.", "minimum_class": "frontier", "workflow": "outcome-execution" },
+    { "id": "translation", "task": "Translate this paragraph into Portuguese without changing its formatting.", "minimum_class": "routine", "workflow": "outcome-execution" },
+    { "id": "integration-mapping", "task": "Connect Stripe invoices to QBO, map the customer and tax fields, make creation idempotent, and define repair handling.", "minimum_class": "deep", "workflow": "automation-integration" },
+    { "id": "browser-form", "task": "Open the vendor portal, fill in the renewal form, show me the final submission, and wait before sending it.", "minimum_class": "balanced", "workflow": "browser-operation" }
+  ]
+}

@@ -112,11 +112,14 @@ const elements = Object.fromEntries(
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
     "managedProfileField", "advancedInfrastructureDetails",
+    "hybridRoutingEnabled", "hybridRoutingControls", "hybridLocalModelInput",
+    "hybridFrontierInput", "hybridRoutineStrategyInput", "hybridBalancedStrategyInput",
+    "hybridDeepStrategyInput", "hybridFrontierStrategyInput", "hybridRoutingStatus",
     "managedConnectionCallout", "managedConnectButton",
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
     "baseUrlInput", "baseUrlHelp", "bedrockAuthField", "bedrockAuthInput",
-    "intelligenceRolesField", "intelligenceRolesEnabled", "plannerRoleInput",
+    "intelligenceRolesField", "intelligenceRolesEnabled", "intelligenceRoleControls", "plannerRoleInput",
     "implementerRoleInput", "checkerRoleInput",
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "taskRoleBar", "plannerRoleButton", "implementerRoleButton", "checkerRoleButton",
@@ -289,10 +292,9 @@ function bindActions() {
   });
   elements.modelInput.addEventListener("change", syncSelectedModelEndpoint);
   elements.intelligenceRolesEnabled.addEventListener("change", () => {
-    elements.plannerRoleInput.disabled = !elements.intelligenceRolesEnabled.checked;
-    elements.implementerRoleInput.disabled = !elements.intelligenceRolesEnabled.checked;
-    elements.checkerRoleInput.disabled = !elements.intelligenceRolesEnabled.checked;
+    renderIntelligenceRoleControls();
   });
+  elements.hybridRoutingEnabled.addEventListener("change", renderHybridRoutingControls);
   for (const button of [elements.plannerRoleButton, elements.implementerRoleButton, elements.checkerRoleButton]) {
     button.addEventListener("click", () => switchIntelligenceRole(button.dataset.role));
   }
@@ -440,6 +442,12 @@ function bindEvents() {
         intelligence: { provider: event.provider, model: event.model, role: event.role }
       };
       renderTaskRoles();
+    }
+    if (event.type === "coding_lifecycle") {
+      state.activeTask = {
+        ...(state.activeTask || {}),
+        codingLifecycle: event.state || null
+      };
     }
     renderLiveEvent(event);
   });
@@ -6221,6 +6229,7 @@ function renderSettings() {
     : (providerDefaults[selectedProvider]?.credential || "Provider credential");
   renderProviderFields(settings.model);
   renderIntelligenceRoles();
+  renderHybridRouting();
   const personalNeedsIntelligence = Boolean(
     state.mode?.personal && !state.connected && !state.configured
   );
@@ -6323,7 +6332,7 @@ function offlineCatalogFailures(model) {
 function renderIntelligenceRoles() {
   const pairing = state.settings.intelligenceRoles || {};
   const options = state.roleOptions || [];
-  elements.intelligenceRolesField.classList.toggle("hidden", selectedProvider === "amos-hosted");
+  elements.intelligenceRolesField.classList.toggle("hidden", selectedProvider !== "amos-hosted");
   elements.intelligenceRolesEnabled.checked = pairing.enabled === true;
   for (const [select, key] of [
     [elements.plannerRoleInput, "planner"],
@@ -6341,16 +6350,147 @@ function renderIntelligenceRoles() {
       if (option.value === selected) item.selected = true;
       select.append(item);
     }
-    select.disabled = !pairing.enabled;
+  }
+  renderIntelligenceRoleControls();
+}
+
+function renderIntelligenceRoleControls() {
+  const enabled = selectedProvider === "amos-hosted" && elements.intelligenceRolesEnabled.checked;
+  elements.intelligenceRoleControls.classList.toggle("hidden", !enabled);
+  for (const select of [
+    elements.plannerRoleInput,
+    elements.implementerRoleInput,
+    elements.checkerRoleInput
+  ]) {
+    select.disabled = !enabled;
   }
 }
 
 function collectIntelligenceRoles() {
   return {
-    enabled: elements.intelligenceRolesEnabled.checked,
+    enabled: selectedProvider === "amos-hosted" && elements.intelligenceRolesEnabled.checked,
+    scope: "coding",
     planner: decodeRoleValue(elements.plannerRoleInput.value),
     implementer: decodeRoleValue(elements.implementerRoleInput.value),
     checker: decodeRoleValue(elements.checkerRoleInput.value)
+  };
+}
+
+const hybridStrategyOptions = [
+  ["managed", "AMOS automatic"],
+  ["local", "Local primary · frontier then AMOS fallback"],
+  ["frontier", "Frontier primary · AMOS fallback"],
+  ["local-review", "Local draft + frontier review"]
+];
+
+function renderHybridRouting() {
+  const policy = state.settings.hybridRouting || {};
+  elements.hybridRoutingEnabled.checked = selectedProvider === "amos-hosted" && policy.enabled === true;
+
+  const installed = (state.offline?.models || []).filter((model) =>
+    model.installed === true &&
+    model.retired !== true &&
+    ["qualified", "conditional"].includes(model.capabilityContract?.status)
+  );
+  elements.hybridLocalModelInput.replaceChildren();
+  const automatic = document.createElement("option");
+  automatic.value = "";
+  automatic.textContent = installed.length > 0
+    ? "Automatic · best qualified model installed"
+    : "Automatic · install a qualified local model below";
+  elements.hybridLocalModelInput.append(automatic);
+  for (const model of installed) {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = `${model.modelDisplayName || model.id} · ${model.capabilityContract.status}`;
+    elements.hybridLocalModelInput.append(option);
+  }
+  elements.hybridLocalModelInput.value = installed.some((model) => model.id === policy.localModel)
+    ? policy.localModel
+    : "";
+
+  elements.hybridFrontierInput.replaceChildren();
+  const hosted = document.createElement("option");
+  hosted.value = "amos-hosted:auto";
+  hosted.textContent = "AMOS Intelligence · automatic";
+  elements.hybridFrontierInput.append(hosted);
+  const cloudProviders = new Set(
+    (state.providers || [])
+      .filter((provider) => !["local", "amos"].includes(provider.deployment))
+      .map((provider) => provider.id)
+  );
+  for (const option of state.roleOptions || []) {
+    if (!cloudProviders.has(option.provider)) continue;
+    const item = document.createElement("option");
+    item.value = option.value;
+    const stored = state.settings.storedCredentialProviders?.includes(option.provider);
+    item.textContent = `${option.label}${stored ? " · ready" : " · credential needed"}`;
+    elements.hybridFrontierInput.append(item);
+  }
+  const frontierValue = `${policy.frontier?.provider || "amos-hosted"}:${policy.frontier?.model || "auto"}`;
+  elements.hybridFrontierInput.value = [...elements.hybridFrontierInput.options]
+    .some((option) => option.value === frontierValue)
+      ? frontierValue
+      : "amos-hosted:auto";
+
+  const defaults = {
+    routine: "local",
+    balanced: "local",
+    deep: "local-review",
+    frontier: "frontier"
+  };
+  for (const [select, minimumClass] of [
+    [elements.hybridRoutineStrategyInput, "routine"],
+    [elements.hybridBalancedStrategyInput, "balanced"],
+    [elements.hybridDeepStrategyInput, "deep"],
+    [elements.hybridFrontierStrategyInput, "frontier"]
+  ]) {
+    select.replaceChildren();
+    for (const [value, label] of hybridStrategyOptions) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      select.append(option);
+    }
+    select.value = policy.strategies?.[minimumClass] || defaults[minimumClass];
+  }
+  renderHybridRoutingControls();
+}
+
+function renderHybridRoutingControls() {
+  const enabled = selectedProvider === "amos-hosted" && elements.hybridRoutingEnabled.checked;
+  for (const control of elements.hybridRoutingControls.querySelectorAll("select")) {
+    control.disabled = !enabled;
+  }
+  elements.hybridRoutingControls.classList.toggle("disabled", !enabled);
+  const installed = state.offline?.runtime?.available === true &&
+    (state.offline?.models || []).some((model) =>
+    model.installed === true &&
+    model.retired !== true &&
+    ["qualified", "conditional"].includes(model.capabilityContract?.status)
+    );
+  elements.hybridRoutingStatus.textContent = enabled
+    ? installed
+      ? "Hybrid routing is opt-in. Every failure returns to AMOS Hosted; routes are recorded in receipts."
+      : "No qualified local model is installed yet. Until one is available, recipes fall through to your frontier and AMOS Hosted."
+    : "AMOS Hosted automatic routing remains the active, known-good path.";
+}
+
+function collectHybridRouting() {
+  const [frontierProvider, ...frontierModelParts] = elements.hybridFrontierInput.value.split(":");
+  return {
+    enabled: selectedProvider === "amos-hosted" && elements.hybridRoutingEnabled.checked,
+    localModel: elements.hybridLocalModelInput.value,
+    frontier: {
+      provider: frontierProvider || "amos-hosted",
+      model: frontierModelParts.join(":") || "auto"
+    },
+    strategies: {
+      routine: elements.hybridRoutineStrategyInput.value,
+      balanced: elements.hybridBalancedStrategyInput.value,
+      deep: elements.hybridDeepStrategyInput.value,
+      frontier: elements.hybridFrontierStrategyInput.value
+    }
   };
 }
 
@@ -6562,6 +6702,7 @@ function renderOfflineModels() {
     card.append(actions);
     elements.offlineModelList.append(card);
   }
+  renderHybridRouting();
 }
 
 function selectProvider(providerId) {
@@ -6577,6 +6718,7 @@ function selectProvider(providerId) {
   renderProviderSelection();
   elements.apiKeyHelp.textContent = defaults.credential || "Provider credential";
   renderProviderFields(defaults.model || "");
+  renderHybridRouting();
 }
 
 function renderProviderFields(modelValue = "") {
@@ -6990,6 +7132,7 @@ async function persistSettings() {
       : "auto",
     intelligenceProfile: "auto",
     intelligenceRoles: collectIntelligenceRoles(),
+    hybridRouting: collectHybridRouting(),
     reasoningEffort: managed
       ? ""
       : elements.reasoningInput.value,
@@ -7328,6 +7471,9 @@ async function runTask(event) {
     streamingMessage = null;
     clearTransientTaskMessages();
     addMessage("assistant", result.answer, { eventId: result.taskEventId });
+    if (result.interrupted) {
+      toast("The model timed out after making progress. Completed work is intact; continue here to verify and finish the remainder.", true);
+    }
     renderGovernedUiActions();
     state.activity = result.activity;
     state.canvases = result.canvases || state.canvases;
@@ -7858,11 +8004,13 @@ function renderLiveEvent(event) {
   }
   captureGovernedUiActions(event);
   const card = document.createElement("div");
-  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}`;
+  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}${event.type === "coding_lifecycle" ? " coding-lifecycle" : ""}`;
   const title = document.createElement("strong");
   title.textContent =
     event.type === "workflow"
       ? `◇ ${event.title}`
+      : event.type === "coding_lifecycle"
+      ? `↻ Coding · ${humanizeTool(event.state?.role || event.phase || "workflow")}`
       : event.type === "phase"
       ? `◌ ${event.phase}`
       : event.type === "tool_start"
@@ -7874,6 +8022,8 @@ function renderLiveEvent(event) {
   detail.textContent =
     event.type === "workflow"
       ? `${event.steps?.join(" → ") || event.summary}${event.doneWhen ? ` · Done when: ${event.doneWhen}` : ""}`
+      : event.type === "coding_lifecycle"
+      ? event.summary
       : event.type === "phase"
       ? event.summary
       : event.type === "tool_error"
