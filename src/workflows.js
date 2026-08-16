@@ -1,4 +1,4 @@
-const WORKFLOW_VERSION = 1;
+const WORKFLOW_VERSION = 2;
 
 export const BUILT_IN_SKILLS = Object.freeze([
   {
@@ -58,6 +58,8 @@ const SKILLS = new Map(BUILT_IN_SKILLS.map((skill) => [skill.id, skill]));
 const RECIPES = Object.freeze([
   {
     id: "spreadsheet-model",
+    family: "data",
+    toolkits: ["calculations", "spreadsheets"],
     title: "Build and verify the spreadsheet",
     summary: "Turn confirmed assumptions into a native, formula-driven XLSX with deterministic checks and an immediate visual preview.",
     skills: ["spreadsheet-modeling", "evidence-collection", "verification"],
@@ -82,6 +84,8 @@ const RECIPES = Object.freeze([
   },
   {
     id: "github-issue-diagnosis",
+    family: "coding",
+    toolkits: ["workspace", "research"],
     title: "Diagnose the GitHub issue",
     summary: "Trace the report to current evidence, configuration, and source before recommending a fix.",
     skills: [
@@ -114,6 +118,9 @@ const RECIPES = Object.freeze([
   },
   {
     id: "plan-implement-verify",
+    classifier: false,
+    family: "coding",
+    toolkits: ["workspace", "collaboration"],
     title: "Plan, implement, and check the change",
     summary: "Produce a plan, implement only that plan, then review the diff and checks.",
     skills: ["code-investigation", "safe-implementation", "verification"],
@@ -141,6 +148,8 @@ const RECIPES = Object.freeze([
   },
   {
     id: "code-change",
+    family: "coding",
+    toolkits: ["workspace"],
     title: "Inspect, change, and verify the code",
     summary: "Understand the relevant path, make the smallest safe change, and prove it works.",
     skills: ["code-investigation", "safe-implementation", "verification"],
@@ -169,6 +178,8 @@ const RECIPES = Object.freeze([
   },
   {
     id: "document-analysis",
+    family: "documents",
+    toolkits: ["documents"],
     title: "Analyze the supplied material",
     summary: "Extract the important facts, compare them carefully, and retain source boundaries.",
     skills: ["document-synthesis", "evidence-collection", "verification"],
@@ -193,6 +204,8 @@ const RECIPES = Object.freeze([
   },
   {
     id: "research-brief",
+    family: "research",
+    toolkits: ["research"],
     title: "Research and synthesize the answer",
     summary: "Collect current primary evidence, compare it, and turn it into a decision-ready brief.",
     skills: ["research-synthesis", "evidence-collection", "verification"],
@@ -215,7 +228,59 @@ const RECIPES = Object.freeze([
     ]
   },
   {
+    id: "automation-integration",
+    family: "automation-integration",
+    toolkits: ["automation"],
+    title: "Design and build the integration",
+    summary: "Understand the source, target, trigger, mappings, failure behavior, and ownership before opening the governed automation builder.",
+    skills: ["company-context", "governed-execution", "verification"],
+    steps: [
+      "Clarify the business outcome and inspect the connected systems and current process.",
+      "Define source and target records, field mappings, trigger or schedule, idempotency, and exception ownership.",
+      "Open the governed automation setup surface with the confirmed design rather than collecting credentials in chat.",
+      "Simulate and verify the mapping before activation, then preserve run history and repair evidence."
+    ],
+    doneWhen: "The integration is specified, verified, and either safely activated or blocked on one precise missing dependency.",
+    phrases: [
+      "build an integration",
+      "integrate",
+      "sync these systems",
+      "field mapping",
+      "webhook",
+      "scheduled automation",
+      "triggered automation",
+      "every time an invoice",
+      "move this data"
+    ]
+  },
+  {
+    id: "browser-operation",
+    family: "browser-computer-use",
+    toolkits: ["browser"],
+    title: "Operate the website safely",
+    summary: "Use semantic browser controls for an interactive website task and introduce visual fallback or a deterministic recipe only when needed.",
+    skills: ["evidence-collection", "governed-execution", "verification"],
+    steps: [
+      "Open and inspect the intended site in the isolated browser session.",
+      "Use semantic controls and preserve the user's authenticated session without moving credentials into chat.",
+      "Preview consequential submissions or writes and respect current approval requirements.",
+      "Verify the resulting page state and save a deterministic recipe only when repetition is intended."
+    ],
+    doneWhen: "The requested browser outcome is verified or stopped with the exact page state and next action.",
+    phrases: [
+      "open the website",
+      "use the browser",
+      "fill out this form",
+      "click through",
+      "log into",
+      "browser automation",
+      "computer use"
+    ]
+  },
+  {
     id: "governed-company-action",
+    family: "governed-action",
+    toolkits: [],
     title: "Prepare and govern the company action",
     summary: "Ground the requested outcome, use the permitted engine, and preserve approval and proof.",
     skills: ["company-context", "governed-execution", "verification"],
@@ -240,6 +305,8 @@ const RECIPES = Object.freeze([
   },
   {
     id: "company-decision",
+    family: "company-analysis",
+    toolkits: [],
     title: "Ground the company decision",
     summary: "Read across current company context and turn evidence into a decision-ready answer.",
     skills: ["company-context", "evidence-collection", "verification"],
@@ -265,6 +332,8 @@ const RECIPES = Object.freeze([
 
 const DEFAULT_RECIPE = Object.freeze({
   id: "outcome-execution",
+  family: "general",
+  toolkits: [],
   title: "Resolve the requested outcome",
   summary: "Establish the necessary evidence, perform only supported work, and verify the result.",
   skills: ["evidence-collection", "verification"],
@@ -287,6 +356,29 @@ export function selectTaskWorkflow({ objective, attachmentNames = [] } = {}) {
   })).sort((left, right) => right.score - left.score);
   const recipe = scored[0]?.score > 0 ? scored[0].recipe : DEFAULT_RECIPE;
   return publicWorkflow(recipe);
+}
+
+export function taskWorkflowCatalog() {
+  return [...RECIPES, DEFAULT_RECIPE].filter((recipe) => recipe.classifier !== false).map((recipe) => ({
+    id: recipe.id,
+    family: recipe.family,
+    summary: recipe.summary,
+    toolkits: [...(recipe.toolkits || [])]
+  }));
+}
+
+export function withWorkflowToolkits(workflow, toolkits = []) {
+  if (!workflow) return workflow;
+  return {
+    ...workflow,
+    toolkits: [...new Set([...(workflow.toolkits || []), ...toolkits])]
+  };
+}
+
+export function taskWorkflowFromId(id) {
+  const requested = String(id || "").trim();
+  const recipe = [...RECIPES, DEFAULT_RECIPE].find((item) => item.id === requested);
+  return recipe ? publicWorkflow(recipe) : null;
 }
 
 export function applyWorkflowToModelContent(content, workflow) {
@@ -328,6 +420,8 @@ function publicWorkflow(recipe) {
     id: recipe.id,
     version: WORKFLOW_VERSION,
     source: "built-in",
+    family: recipe.family || "general",
+    toolkits: [...(recipe.toolkits || [])],
     title: recipe.title,
     summary: recipe.summary,
     skills: recipe.skills.map((id) => {

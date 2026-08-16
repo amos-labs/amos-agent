@@ -60,6 +60,24 @@ remain available under Desktop's advanced intelligence disclosure. Connecting
 AMOS only migrates the legacy unconfigured Kimi default; it does not overwrite
 a working user-selected infrastructure configuration.
 
+Paying users can also opt into **Prefer my local and frontier models**. The
+switch is off by default and therefore cannot change the standard AMOS Hosted
+path during an upgrade. When enabled, the signed local Router classifies each
+step once and Desktop applies user-visible recipes: use a qualified installed
+model locally, a selected BYOK frontier such as Kimi, both as local draft plus
+frontier review, or the standard managed route. AMOS Hosted remains the final
+availability fallback. The local model must satisfy its release-signed
+capability contract; merely being installed does not make it eligible.
+
+This hybrid policy is orthogonal to the optional coding-only
+planner/builder/checker roles. A class recipe describes how one model step is
+executed; a coding role describes the job an agent lane is performing. The
+coding trio is inactive for non-coding workflows. Automatic workflow-role
+selection remains gated off until the installed Router artifact passes the
+joint workflow evaluation; Desktop does not use phrase or regex inference as a
+substitute. Neither feature changes AMOS tools, policy, approvals, or proof
+requirements.
+
 ## Amazon Bedrock
 
 Bedrock supports customer-controlled or AMOS-controlled AWS inference through
@@ -164,6 +182,13 @@ XAI_API_KEY=...
 AMOS_MODEL=grok-4.6
 ```
 
+Direct Grok coding turns use an 11-minute inactivity window by default, and
+each streamed response chunk renews that window. A timeout after completed
+tool work is treated as a recoverable interruption: Desktop retains the files,
+receipts, partial response, and continuation context without automatically
+replaying an action. Operators can override the bounded default with
+`XAI_REQUEST_TIMEOUT_MS` or `GROK_REQUEST_TIMEOUT_MS`.
+
 Desktop can store more than one provider credential and pair them. The usual
 coding pair is Kimi K3 as planner and checker with Grok 4.6 as the implementer.
 Each role uses the key stored for that provider. Local Qwen remains the
@@ -240,11 +265,23 @@ It also follows the measured
 [local capability contract](LOCAL_MODEL_QUALIFICATION.md), so a 64 GB system
 does not automatically prefer the largest model it can load.
 
-AMOS selects 16K, 32K, 64K, or 128K default context from the machine's total
+AMOS selects a 16K, 32K, or 64K interactive context from the machine's total
 memory rather than blindly inheriting an upstream model's largest advertised
-window. Set `AMOS_LOCAL_CONTEXT_LENGTH` to an explicit value from 4096 through
-262144 when a controlled deployment needs more context and has measured the
-model-specific memory cost.
+window. A 64 GB computer defaults to the measured 32K working window instead
+of paying the KV-cache and prompt-ingestion cost of 64K or 262K on every task;
+96 GB and larger machines default to 64K. Set `AMOS_LOCAL_CONTEXT_LENGTH` to an
+explicit value from 4096 through 262144 when a controlled deployment needs more
+context and has measured the model-specific memory cost.
+
+The managed runtime also defaults to a 30-minute model residency window, Flash
+Attention, `q8_0` KV cache, one parallel generation, and space for two loaded
+models so Qwen and the tiny Router can stay resident together. These defaults
+can be bounded through `AMOS_LOCAL_KEEP_ALIVE`,
+`AMOS_LOCAL_FLASH_ATTENTION`, `AMOS_LOCAL_KV_CACHE_TYPE`,
+`AMOS_LOCAL_NUM_PARALLEL`, and `AMOS_LOCAL_MAX_LOADED_MODELS`. Activating a
+local model preloads it through Ollama's native API and records load duration,
+residency, VRAM allocation, context length, request latency, first-output
+latency, and generation-rate diagnostics without recording prompts.
 Developers can set `AMOS_OLLAMA_BINARY` to test an explicit runtime binary;
 production builds fail closed when their packaged runtime component is absent.
 

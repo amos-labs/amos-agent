@@ -95,6 +95,13 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   assert.match(html, /AMOS company subscription required/);
   assert.match(html, /AMOS Local and BYOK require no AMOS subscription/);
   assert.match(html, /id="managedProfileField" class="amos-routing-card hidden"/);
+  assert.match(html, /id="hybridRoutingEnabled" type="checkbox"/);
+  assert.match(html, /Off keeps the proven AMOS Hosted automatic path exactly as-is/);
+  assert.match(html, /The tiny local router only classifies the step/);
+  assert.match(html, /Use specialized models for coding/);
+  assert.match(html, /Non-coding work stays on its normal route/);
+  assert.match(html, /id="intelligenceRoleControls" class="role-selects hidden"/);
+  assert.match(javascript, /hybridRouting: collectHybridRouting\(\)/);
   assert.match(html, /id="advancedInfrastructureDetails"/);
   assert.match(html, /Advanced intelligence infrastructure/);
   assert.doesNotMatch(html, /Efficient —|Balanced —|Deep —|Frontier —/);
@@ -476,6 +483,7 @@ test("Operator is chat-first with collapsible navigation and inline governed pro
   assert.doesNotMatch(heading, /id="clearButton"/);
   assert.match(javascript, /function beginInlineActivity\(\)/);
   assert.match(javascript, /finishInlineActivity\(\)/);
+  assert.match(javascript, /The model timed out after making progress\. Completed work is intact/);
   assert.match(javascript, /function toggleSidebar\(\)[\s\S]*?setSidebarCollapsed/);
   assert.match(javascript, /elements\.app\.classList\.toggle\("nav-collapsed", collapsed\)/);
   assert.match(

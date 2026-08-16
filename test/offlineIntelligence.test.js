@@ -335,6 +335,61 @@ test("Ollama manager installs Qwen 3.8 from the release-pinned Hugging Face mani
   assert.equal(model.integrity.actualDigest, QWEN38_MANIFEST_DIGEST);
 });
 
+test("Ollama manager preloads a selected model and exposes native residency metrics", async () => {
+  let generateInput = null;
+  const manager = new OllamaModelManager({
+    fetchImpl: async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      if (path === "/api/tags") {
+        return jsonResponse({
+          models: [{
+            name: QWEN38_MODEL_ID,
+            size: 19_603_117_919,
+            digest: `sha256:${QWEN38_MANIFEST_DIGEST}`
+          }]
+        });
+      }
+      if (path === "/api/generate" && options.method === "POST") {
+        generateInput = JSON.parse(options.body);
+        return jsonResponse({
+          load_duration: 2_500_000_000,
+          total_duration: 2_750_000_000
+        });
+      }
+      if (path === "/api/ps") {
+        return jsonResponse({
+          models: [{
+            name: QWEN38_MODEL_ID,
+            size: 19_603_117_919,
+            size_vram: 19_603_117_919,
+            context_length: 65_536,
+            expires_at: "2026-08-16T12:30:00.000Z"
+          }]
+        });
+      }
+      return new Response("not found", { status: 404 });
+    }
+  });
+
+  await manager.refresh();
+  const preload = await manager.preload(QWEN38_MODEL_ID);
+  assert.deepEqual(generateInput, {
+    model: QWEN38_MODEL_ID,
+    prompt: "",
+    stream: false,
+    keep_alive: "30m"
+  });
+  assert.equal(preload.loadMs, 2_500);
+  assert.equal(preload.totalMs, 2_750);
+  const performanceState = manager.state().performance;
+  assert.equal(performanceState.loadedModels[0].contextLength, 65_536);
+  assert.equal(
+    performanceState.loadedModels[0].sizeBytes,
+    performanceState.loadedModels[0].sizeVramBytes
+  );
+});
+
 test("Qwen 3.8 replaces Qwen 3.6 while existing legacy installs remain removable", async () => {
   let legacyInstalled = true;
   let removedModel = null;

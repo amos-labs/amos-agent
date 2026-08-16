@@ -4,6 +4,9 @@ import {
   applyWorkflowToModelContent,
   BUILT_IN_SKILLS,
   selectTaskWorkflow,
+  taskWorkflowCatalog,
+  taskWorkflowFromId,
+  withWorkflowToolkits,
   workflowGuidance
 } from "../src/workflows.js";
 
@@ -73,4 +76,23 @@ test("unmatched work receives a general evidence-and-verification workflow", () 
     workflow.skills.map((skill) => skill.id),
     ["evidence-collection", "verification"]
   );
+});
+
+test("the classifier catalog maps workflows to bounded initial toolkits", () => {
+  const catalog = taskWorkflowCatalog();
+  assert.deepEqual(
+    catalog.find((workflow) => workflow.id === "spreadsheet-model")?.toolkits,
+    ["calculations", "spreadsheets"]
+  );
+  assert.deepEqual(
+    taskWorkflowFromId("code-change")?.toolkits,
+    ["workspace"]
+  );
+  assert.equal(taskWorkflowFromId("unknown"), null);
+  assert.equal(catalog.some((workflow) => workflow.id === "plan-implement-verify"), false);
+  assert.deepEqual(
+    withWorkflowToolkits(taskWorkflowFromId("code-change"), ["collaboration"]).toolkits,
+    ["workspace", "collaboration"]
+  );
+  assert.equal(new Set(catalog.map((workflow) => workflow.id)).size, catalog.length);
 });

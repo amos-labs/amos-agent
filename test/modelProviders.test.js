@@ -107,6 +107,22 @@ test("native providers resolve their protocol, current default, endpoint, and cr
   assert.equal(grok.model, "grok-4.6");
   assert.equal(grok.apiKey, "xai-key");
   assert.equal(grok.reasoningEffort, "high");
+  assert.equal(grok.requestTimeoutMs, 660_000);
+});
+
+test("xAI long-turn timeout remains explicitly configurable and bounded", () => {
+  const configured = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "xai",
+    XAI_API_KEY: "xai-key",
+    XAI_REQUEST_TIMEOUT_MS: "720000"
+  });
+  const bounded = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "xai",
+    XAI_API_KEY: "xai-key",
+    GROK_REQUEST_TIMEOUT_MS: "1200000"
+  });
+  assert.equal(configured.requestTimeoutMs, 720_000);
+  assert.equal(bounded.requestTimeoutMs, 900_000);
 });
 
 test("model factory selects the protocol adapter and rejects unknown protocols", () => {
@@ -460,6 +476,63 @@ test("automatic routing sends a local decision in shadow mode without exposing p
   assert.equal(events[1].hostedClass, "routine");
   assert.equal(events[1].agreement, false);
   assert.doesNotMatch(JSON.stringify(events), /private customer task/);
+});
+
+test("hybrid routing can pass one trusted classifier result into AMOS Hosted", async () => {
+  let body;
+  let classifierCalls = 0;
+  const client = new OpenAICompatibleClient({
+    provider: "amos-hosted",
+    protocol: "openai-chat-completions",
+    baseUrl: "https://app.amoslabs.com/v1",
+    model: "auto",
+    usesAmosIdentity: true,
+    routingOwner: INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP,
+    routingMode: "automatic",
+    localRouterMode: "active",
+    requestTimeoutMs: 1_000,
+    capabilities: {},
+    intelligenceRouter: {
+      classify: async () => {
+        classifierCalls += 1;
+        return { minimumClass: "routine" };
+      }
+    }
+  }, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonModelResponse("ready");
+  });
+
+  await client.chat({
+    messages: [{ role: "user", content: "hello" }],
+    preclassifiedRouting: { minimumClass: "deep", source: "amos-router" }
+  });
+
+  assert.equal(classifierCalls, 0);
+  assert.equal(body.amos_routing.minimum_class, "deep");
+});
+
+test("provider-controlled clients ignore an attempted preclassified AMOS route", async () => {
+  let body;
+  const client = createModelClient({
+    provider: "openai-compatible",
+    protocol: "openai-chat-completions",
+    baseUrl: "https://gateway.example/v1",
+    model: "controlled-model",
+    requestTimeoutMs: 1_000,
+    capabilities: {}
+  }, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonModelResponse("ready");
+  });
+
+  await client.chat({
+    messages: [{ role: "user", content: "hello" }],
+    preclassifiedRouting: { minimumClass: "frontier", source: "untrusted" }
+  });
+
+  assert.equal(body.amos_routing, undefined);
+  assert.equal(body.amos_routing_shadow, undefined);
 });
 
 test("local-primary routing controls the envelope and local failures fall back to hosted", async () => {

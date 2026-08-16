@@ -16,7 +16,9 @@ test("the default pair is Kimi as planner/checker and Grok as builder", () => {
   assert.equal(roles.implementer.provider, "xai");
   assert.equal(roles.implementer.model, "grok-4.6");
   assert.equal(roles.checker.model, "kimi-k3");
+  assert.equal(roles.scope, "coding");
   assert.equal(defaultRoleForWorkflow({ id: "code-change" }, roles), "planner");
+  assert.equal(defaultRoleForWorkflow({ id: "research-brief" }, roles), null);
   assert.match(roleGuidance("planner"), /Do not edit files/);
   assert.match(roleGuidance("checker"), /Do not implement a new design/);
 });

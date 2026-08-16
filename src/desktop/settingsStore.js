@@ -4,6 +4,10 @@ import {
   DEFAULT_INTELLIGENCE_ROLES,
   sanitizeIntelligenceRoles
 } from "../model/intelligenceRoles.js";
+import {
+  DEFAULT_HYBRID_ROUTING,
+  sanitizeHybridRouting
+} from "../model/hybridRouting.js";
 
 const VERSION = 1;
 const PROVIDER_IDS = new Set([
@@ -51,6 +55,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   notifiedApprovalIds: [],
   deliveredApprovalOutcomeIds: [],
   intelligenceRoles: DEFAULT_INTELLIGENCE_ROLES,
+  hybridRouting: DEFAULT_HYBRID_ROUTING,
   providerCredentials: {}
 });
 
@@ -93,6 +98,7 @@ export class DesktopSettingsStore {
       settings.apiKey = settings.providerCredentials[settings.provider];
     }
     settings.intelligenceRoles = sanitizeIntelligenceRoles(settings.intelligenceRoles);
+    settings.hybridRouting = sanitizeHybridRouting(settings.hybridRouting);
     settings.intelligenceProfile = "auto";
     if (settings.provider === "amos-hosted") {
       settings.model = "auto";
@@ -227,6 +233,7 @@ export function sanitizeSettings(input = {}) {
       : [],
     apiKey: managed ? "" : clean(input.apiKey, 16_384),
     intelligenceRoles: sanitizeIntelligenceRoles(input.intelligenceRoles),
+    hybridRouting: sanitizeHybridRouting(input.hybridRouting),
     providerCredentials: sanitizeProviderCredentials(input.providerCredentials)
   };
 }

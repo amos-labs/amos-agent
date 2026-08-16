@@ -2,6 +2,7 @@ export const INTELLIGENCE_ROLES = Object.freeze(["planner", "implementer", "chec
 
 export const DEFAULT_INTELLIGENCE_ROLES = Object.freeze({
   enabled: false,
+  scope: "coding",
   planner: Object.freeze({ provider: "kimi", model: "kimi-k3" }),
   implementer: Object.freeze({ provider: "xai", model: "grok-4.6" }),
   checker: Object.freeze({ provider: "kimi", model: "kimi-k3" })
@@ -34,6 +35,7 @@ export function sanitizeIntelligenceRoles(input = {}, { allowDisabled = true } =
   if (!enabled && allowDisabled) {
     return {
       enabled: false,
+      scope: sanitizeScope(source.scope),
       planner: sanitizeRoleSelection(source.planner, DEFAULT_INTELLIGENCE_ROLES.planner),
       implementer: sanitizeRoleSelection(source.implementer, DEFAULT_INTELLIGENCE_ROLES.implementer),
       checker: sanitizeRoleSelection(source.checker, DEFAULT_INTELLIGENCE_ROLES.checker)
@@ -41,6 +43,7 @@ export function sanitizeIntelligenceRoles(input = {}, { allowDisabled = true } =
   }
   return {
     enabled,
+    scope: sanitizeScope(source.scope),
     planner: sanitizeRoleSelection(source.planner, DEFAULT_INTELLIGENCE_ROLES.planner),
     implementer: sanitizeRoleSelection(source.implementer, DEFAULT_INTELLIGENCE_ROLES.implementer),
     checker: sanitizeRoleSelection(source.checker, DEFAULT_INTELLIGENCE_ROLES.checker)
@@ -65,6 +68,7 @@ export function defaultRoleForWorkflow(workflow, roles = {}) {
   if (id === "code-change" || id === "github-issue-diagnosis" || id === "plan-implement-verify") {
     return "planner";
   }
+  if (pairing.scope === "coding") return null;
   return "implementer";
 }
 
@@ -118,4 +122,8 @@ function sanitizeRoleSelection(input, fallback) {
 
 function clean(value, max) {
   return String(value || "").trim().slice(0, max);
+}
+
+function sanitizeScope(value) {
+  return value === "all" ? "all" : "coding";
 }

@@ -1,6 +1,7 @@
 import { AgentLoop } from "./agentLoop.js";
 import { createModelClient } from "./model/providers.js";
 import { isAmosDesktopRoutingConfig } from "./model/intelligenceRouter.js";
+import { HybridRoutingClient } from "./model/hybridRouting.js";
 import { AmosMcpClient } from "./mcp/amosMcpClient.js";
 import { createAmosTools } from "./tools/amos.js";
 import { createBashTool } from "./tools/bash.js";
@@ -54,7 +55,8 @@ export function createRuntime({
   spreadsheetPresenter = null,
   systemPrompt,
   onToolResult = null,
-  intelligenceRouter = null
+  intelligenceRouter = null,
+  hybridRouting = null
 }) {
   const registry = createRegistry({
     extraTools,
@@ -81,7 +83,26 @@ export function createRuntime({
       ? intelligenceRouter
       : null
   };
-  const modelClient = createModelClient(modelConfig, fetchImpl);
+  const managedClient = createModelClient(modelConfig, fetchImpl);
+  const modelClient = hybridRouting?.enabled
+    ? new HybridRoutingClient({
+        router: hybridRouting.router,
+        policy: hybridRouting.policy,
+        managed: {
+          client: managedClient,
+          provider: modelConfig.provider,
+          model: modelConfig.model
+        },
+        local: hybridRouting.local,
+        frontier: hybridRouting.frontier?.provider === modelConfig.provider
+          ? {
+              client: managedClient,
+              provider: modelConfig.provider,
+              model: modelConfig.model
+            }
+          : hybridRouting.frontier
+      })
+    : managedClient;
   const amosClient = new AmosMcpClient(
     {
       url: config.amos.mcpUrl,

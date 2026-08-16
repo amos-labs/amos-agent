@@ -1074,12 +1074,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   color: var(--muted-2);
   font-size: 10px;
 }
-.intelligence-roles-field .checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
 .role-selects {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1093,6 +1087,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   font-size: 10px;
   color: var(--muted);
 }
+.role-selects select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: 0;
+  padding: 9px 10px;
+  background: var(--field);
+  color: var(--ink);
+}
+.role-selects select:focus { border-color: var(--blue); }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 9px 8px 13px; border-top: 1px solid var(--line); }
 .composer-tools { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .composer-actions { display: flex; align-items: center; gap: 9px; }
@@ -3284,6 +3289,44 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .amos-routing-card h2 { margin: 12px 0 9px; font-size: 24px; }
 .amos-routing-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
 .amos-routing-card ul { margin: 18px 0 0; padding-left: 18px; color: var(--muted-2); font-size: 9px; line-height: 1.7; }
+.hybrid-routing-card {
+  margin-top: 20px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-softer);
+}
+.hybrid-routing-toggle { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.hybrid-routing-toggle input { margin-top: 2px; }
+.hybrid-routing-toggle strong,
+.hybrid-routing-toggle small { display: block; }
+.hybrid-routing-toggle strong { color: var(--ink); font-size: 11px; }
+.hybrid-routing-toggle small { margin-top: 3px; color: var(--muted-2); font-size: 8px; line-height: 1.45; }
+.hybrid-routing-controls { display: grid; gap: 10px; margin-top: 13px; }
+.hybrid-routing-controls.disabled { opacity: .55; }
+.hybrid-routing-controls > label,
+.hybrid-recipe-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 8px; }
+.hybrid-routing-controls select { width: 100%; min-width: 0; }
+.hybrid-routing-recipes > summary { color: var(--muted); cursor: pointer; font-size: 9px; font-weight: 750; }
+.hybrid-routing-recipes > p { margin: 8px 0 !important; font-size: 8px !important; }
+.hybrid-recipe-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.hybrid-routing-status { color: var(--muted-2); font-size: 8px; line-height: 1.5; }
+.coding-routing-card {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-softer);
+}
+.coding-routing-toggle { display: flex; align-items: flex-start; gap: 9px; cursor: pointer; }
+.coding-routing-toggle input { width: auto; flex: 0 0 auto; margin: 2px 0 0; }
+.coding-routing-toggle strong,
+.coding-routing-toggle small { display: block; }
+.coding-routing-toggle strong { color: var(--ink); font-size: 11px; }
+.coding-routing-toggle small,
+.coding-routing-status { margin-top: 3px; color: var(--muted-2); font-size: 8px; line-height: 1.45; }
+.coding-routing-card > .role-selects { margin-top: 13px; }
+.coding-routing-card > .coding-routing-status { display: block; margin-top: 10px; }
 .intelligence-advanced { margin-top: 16px; }
 .intelligence-advanced > summary { color: var(--muted); cursor: pointer; font-size: 10px; font-weight: 700; }
 .intelligence-advanced > p { margin: 9px 0 13px; color: var(--muted-2); font-size: 9px; line-height: 1.5; }

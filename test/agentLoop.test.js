@@ -712,6 +712,54 @@ test("productive work continues beyond the former eight-cycle limit", async () =
   assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
 
+test("a model timeout after completed tools exposes recoverable progress", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "write_part",
+    async handler() {
+      return { ok: true, path: "finished.txt" };
+    }
+  });
+  let turn = 0;
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ onDelta }) {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "write-1",
+                function: { name: "write_part", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        onDelta("Partial", "Partial result");
+        throw new Error("xAI / Grok request timed out");
+      }
+    }
+  });
+
+  await assert.rejects(
+    loop.run("build it", { onEvent: (event) => events.push(event) }),
+    (error) => {
+      assert.equal(error.code, "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS");
+      assert.equal(error.completedToolActions, 1);
+      assert.equal(error.partialResponse, "Partial result");
+      return true;
+    }
+  );
+  assert.ok(events.some((event) => event.type === "phase" && event.phase === "interrupted"));
+});
+
 test("completed task history stays below the provider message ceiling", async () => {
   const observedLengths = [];
   const loop = new AgentLoop({

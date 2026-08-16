@@ -8,9 +8,14 @@ import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
 import { createModelClient, listModelProviders } from "../model/providers.js";
 import {
+  INTELLIGENCE_ROUTER_WORKFLOW_QUALIFIED,
   isAmosDesktopRoutingConfig,
   LocalIntelligenceRouter
 } from "../model/intelligenceRouter.js";
+import {
+  hybridRoutingEnabled,
+  sanitizeHybridRouting
+} from "../model/hybridRouting.js";
 import {
   accumulateUsage,
   estimateUsageCost
@@ -134,7 +139,11 @@ import {
 } from "./settingsStore.js";
 import { createAbortError, isAbortError } from "../util/abort.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
-import { selectTaskWorkflow } from "../workflows.js";
+import {
+  taskWorkflowCatalog,
+  taskWorkflowFromId,
+  withWorkflowToolkits
+} from "../workflows.js";
 
 const execFile = promisify(execFileCallback);
 const NEW_CONVERSATION_TITLE = "New conversation";
@@ -379,8 +388,7 @@ export class DesktopController {
       provider: publicProvider(config.model),
       providers: listModelProviders(),
       roleOptions: roleOptionsFromProviders(listModelProviders()),
-      intelligenceRole: this.activeTask?.intelligenceRole ||
-        (settings.intelligenceRoles?.enabled ? "implementer" : null),
+      intelligenceRole: this.activeTask?.intelligenceRole || null,
       settings: redactSettings(settings),
       system,
       mode: operatingMode(settings, config),
@@ -448,6 +456,7 @@ export class DesktopController {
         model: config.model.model,
         baseUrl: config.model.baseUrl
       });
+      validateHybridRoutingSettings(candidate, (resolved) => this.configFrom(resolved));
     }
     if (
       this.runManager.nonTerminal().length > 0 &&
@@ -456,6 +465,32 @@ export class DesktopController {
       throw new Error("Finish or stop running tasks before changing shared Desktop runtime settings");
     }
     const saved = await this.settingsStore.write(candidate);
+    if (
+      saved.hybridRouting?.enabled === true &&
+      JSON.stringify(current.hybridRouting) !== JSON.stringify(saved.hybridRouting)
+    ) {
+      const offline = await this.offlineManager?.refresh?.(systemProfile()).catch(() => null);
+      const selected = saved.hybridRouting.localModel
+        ? offline?.models?.find((model) => model.id === saved.hybridRouting.localModel)
+        : (offline?.models || [])
+            .filter((model) =>
+              model.installed === true &&
+              model.retired !== true &&
+              ["qualified", "conditional"].includes(model.capabilityContract?.status)
+            )
+            .sort((left, right) =>
+              Number(right.recommendationPriority || 0) -
+              Number(left.recommendationPriority || 0)
+            )[0];
+      if (selected?.installed) {
+        await this.offlineManager.preload?.(selected.id, { system: systemProfile() }).catch((error) => {
+          this.record(
+            "model",
+            `Hybrid routing saved; ${selected.id} will cold-load on first use: ${error.message}`
+          );
+        });
+      }
+    }
     if (runtimeSettingsChanged(current, saved)) {
       this.resetRuntime();
       if (intelligenceSettingsChanged(current, saved)) {
@@ -547,6 +582,12 @@ export class DesktopController {
       baseUrl: this.offlineManager.openAiBaseUrl(),
       apiKey: "",
       operatingMode
+    });
+    await this.offlineManager.preload?.(modelId, { system: systemProfile() }).catch((error) => {
+      this.record(
+        "model",
+        `Activated ${modelId}; background preload was unavailable: ${error.message}`
+      );
     });
     this.resetRuntime();
     this.record(
@@ -2100,14 +2141,29 @@ export class DesktopController {
     try {
       await this.startRunSupervision(settings, abortController);
       const pairing = sanitizeIntelligenceRoles(settings.intelligenceRoles);
-      const previewWorkflow = selectTaskWorkflow({ objective: prompt });
+      const attachmentNames = references
+        .map((reference) => this.attachments.list().find((item) => item.id === reference?.id)?.name)
+        .filter(Boolean);
+      const routingDecision = await this.classifyTaskRouting({
+        settings,
+        boundary,
+        prompt,
+        attachmentNames,
+        pairing,
+        signal: abortController.signal
+      });
+      const classifiedWorkflow = taskWorkflowFromId(routingDecision?.workflow) ||
+        taskWorkflowFromId("outcome-execution");
+      const previewWorkflow = pairing.enabled && classifiedWorkflow?.family === "coding"
+        ? withWorkflowToolkits(classifiedWorkflow, ["collaboration"])
+        : classifiedWorkflow;
       const role = normalizeIntelligenceRole(
         this.activeTask.intelligenceRole ||
           input?.role ||
           defaultRoleForWorkflow(previewWorkflow, pairing),
-        "implementer"
+        ""
       );
-      if (pairing.enabled || input?.role) {
+      if (role && (pairing.enabled || input?.role)) {
         const applied = await this.applyIntelligenceRole(role, {
           settings,
           announce: false,
@@ -2163,19 +2219,12 @@ export class DesktopController {
           maxOutputTokens: config.model.maxCompletionTokens
         }
       );
-      let workflow = selectTaskWorkflow({
-        objective: prompt,
-        attachmentNames: references
-          .map((reference) => attachmentsById.get(reference?.id)?.name)
-          .filter(Boolean)
-      });
-      if (pairing.enabled && workflow.id === "code-change") {
-        workflow = selectTaskWorkflow({ objective: `plan then implement ${prompt}` });
-      }
+      const workflow = previewWorkflow;
       this.record("user", prompt);
       const answer = await runtime.loop.run(modelContent, {
         signal: abortController.signal,
         workflow,
+        routingDecision,
         presentationIntent: prompt,
         canvasActive: Boolean(this.canvases.state().activeCanvasId),
         takeSteering: () => {
@@ -2261,6 +2310,88 @@ export class DesktopController {
       };
     } catch (error) {
       const canceled = isAbortError(error) || abortController.signal.aborted;
+      if (!canceled && error?.code === "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS") {
+        const completedToolActions = Math.max(0, Number(error.completedToolActions || 0));
+        const recordedSteps = receiptEvents.length;
+        const recoveredPartial = String(error.partialResponse || "").trim();
+        const recoveryNote = [
+          `xAI / Grok stopped responding after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
+          "The completed work and files remain intact; AMOS did not replay or roll back any action.",
+          "Continue in this conversation and ask AMOS to inspect the current workspace, verify what completed, and finish only the remaining work."
+        ].join(" ");
+        const answer = recoveredPartial
+          ? `[Partial response recovered before the timeout]\n\n${recoveredPartial}\n\n${recoveryNote}`
+          : recoveryNote;
+        await this.finishRunSupervision("interrupted", recoveryNote);
+        if (this.activeTask?.checkpointed) {
+          await this.queueCheckpointUpdate(taskId, {
+            status: "interrupted",
+            phase: "interrupted",
+            summary: recoveryNote,
+            partialResponse: recoveredPartial
+          }).catch(() => {});
+          await this.sendTaskCheckpoints();
+        }
+        this.record("assistant", answer, {
+          interrupted: true,
+          provider: "xai",
+          completed_tool_actions: completedToolActions,
+          recorded_steps: recordedSteps
+        });
+        const localReceipt = await this.recordLocalReceipt({
+          taskId,
+          status: "interrupted",
+          boundary,
+          settings,
+          prompt,
+          startedAt: this.activeTask?.startedAt,
+          receiptEvents,
+          error: error.message,
+          usage: this.activeTask?.usage
+        });
+        let continuityRecord = null;
+        if (this.activeTask?.continuityAllowed) {
+          continuityRecord = await this.saveSessionContinuity({
+            settings,
+            boundary,
+            objective: prompt,
+            answer,
+            artifacts: this.activeTask.continuityArtifacts,
+            receipt: localReceipt
+          }).catch((continuityError) => {
+            this.record("continuity", `Could not save interrupted session continuity: ${continuityError.message}`);
+            return null;
+          });
+        }
+        await this.snapshotActiveTask(settings).catch(() => {});
+        await this.recordChildOutcome({
+          status: "interrupted",
+          answer,
+          settings,
+          error: error.message
+        });
+        return {
+          answer,
+          interrupted: true,
+          recovery: {
+            reason: "model_timeout_after_progress",
+            provider: "xai",
+            completedToolActions,
+            recordedSteps,
+            replayed: false
+          },
+          taskId,
+          taskEventId: continuityRecord?.turns?.at(-1)?.id || `run:${taskId}`,
+          activity: this.activity.slice(-100),
+          attachments: this.attachments.list(),
+          ...this.canvases.state(),
+          memory: [],
+          privateMemory: this.privateMemoryStore
+            ? await this.privateMemoryStore.list(privateMemoryScope(this.identity))
+            : [],
+          offlineProposals: await this.offlineProposalState()
+        };
+      }
       await this.finishRunSupervision(canceled ? "cancelled" : "failed", error.message);
       if (this.activeTask?.checkpointed) {
         await this.queueCheckpointUpdate(taskId, {
@@ -4270,6 +4401,11 @@ export class DesktopController {
         );
       }
     }
+    const hybridRouting = this.buildHybridRoutingRuntime({
+      settings,
+      boundary: requestedBoundary,
+      router: intelligenceRouter
+    });
     const extraTools = [
       createWorkSurfaceRequestTool(),
       createCanvasTool({
@@ -4416,6 +4552,7 @@ export class DesktopController {
         artifactPresenter: (input) => this.presentDocumentArtifact(input),
         spreadsheetPresenter: (input) => this.presentSpreadsheetArtifact(input),
         intelligenceRouter,
+        hybridRouting,
         systemPrompt: `${desktopSystemPrompt(isOffline
           ? OFFLINE_SYSTEM_PROMPT
           : isPersonal
@@ -4434,6 +4571,137 @@ export class DesktopController {
     };
     await this.hydrateSessionContinuity(settings, requestedBoundary, this.runtime);
     return this.runtime;
+  }
+
+  async classifyTaskRouting({
+    settings,
+    boundary,
+    prompt,
+    attachmentNames = [],
+    pairing,
+    signal = null
+  }) {
+    const config = this.configFrom(settings);
+    const needsMinimumClass = boundary === "online" &&
+      isAmosDesktopRoutingConfig(config.model) &&
+      config.model.localRouterMode !== "disabled";
+    const needsWorkflow = INTELLIGENCE_ROUTER_WORKFLOW_QUALIFIED && Boolean(
+      pairing?.enabled || config.agent?.progressiveTools !== false
+    );
+    if (!needsMinimumClass && !needsWorkflow) return null;
+    try {
+      const routerState = await this.offlineManager?.ensureRouter?.();
+      if (!routerState?.ready) return null;
+      const router = new LocalIntelligenceRouter({
+        baseUrl: this.offlineManager.baseUrl
+      });
+      const attachmentContext = attachmentNames.length > 0
+        ? `\n\nAttached files: ${attachmentNames.join(", ")}`
+        : "";
+      return await router.classify({
+        messages: [{ role: "user", content: `${prompt}${attachmentContext}` }],
+        phase: "plan",
+        signal,
+        workflows: needsWorkflow ? taskWorkflowCatalog() : []
+      });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      this.record(
+        "routing",
+        "AMOS Local Router could not classify the task; using the neutral workflow fallback",
+        { reason: localRouterFailureCode(error) }
+      );
+      return null;
+    }
+  }
+
+  buildHybridRoutingRuntime({ settings, boundary, router }) {
+    if (boundary !== "online" || !hybridRoutingEnabled(settings)) return null;
+    const policy = sanitizeHybridRouting(settings.hybridRouting);
+    const offline = this.offlineManager?.state?.(systemProfile()) || null;
+    const installedModels = (offline?.models || []).filter((model) =>
+      model.installed === true &&
+      model.retired !== true &&
+      ["qualified", "conditional"].includes(model.capabilityContract?.status)
+    );
+    const requestedLocal = policy.localModel
+      ? installedModels.find((model) => model.id === policy.localModel) || null
+      : installedModels.sort((left, right) =>
+          (right.recommendationPriority || 0) - (left.recommendationPriority || 0) ||
+          Number(right.capabilityContract?.performance?.passRate || 0) -
+            Number(left.capabilityContract?.performance?.passRate || 0)
+        )[0] || null;
+
+    let local = {
+      provider: "ollama",
+      model: policy.localModel || "",
+      client: null,
+      contract: null,
+      unavailableReason: policy.localModel
+        ? "selected_local_model_unavailable"
+        : "qualified_local_model_unavailable"
+    };
+    if (requestedLocal && offline?.runtime?.available === true && this.offlineManager?.openAiBaseUrl) {
+      const localSettings = settingsForProvider(settings, {
+        provider: "ollama",
+        model: requestedLocal.id
+      });
+      localSettings.baseUrl = this.offlineManager.openAiBaseUrl();
+      localSettings.operatingMode = "online";
+      const localConfig = this.configFrom(localSettings).model;
+      const contract = structuredClone(requestedLocal.capabilityContract);
+      const runtimeContext = Number(offline.runtime.contextLength || 0);
+      if (runtimeContext > 0) {
+        contract.limits.contextTokens = Math.min(
+          Number(contract.limits.contextTokens || runtimeContext),
+          runtimeContext
+        );
+      }
+      local = {
+        provider: "ollama",
+        model: requestedLocal.id,
+        client: createModelClient(localConfig),
+        contract,
+        unavailableReason: null
+      };
+    } else if (requestedLocal && offline?.runtime?.available !== true) {
+      local.unavailableReason = "local_runtime_unavailable";
+    }
+
+    let frontier = {
+      provider: policy.frontier.provider,
+      model: policy.frontier.model,
+      client: null,
+      unavailableReason: "frontier_model_unavailable"
+    };
+    if (policy.frontier.provider === "amos-hosted") {
+      frontier = { provider: "amos-hosted", model: "auto", client: null };
+    } else {
+      const provider = listModelProviders().find((item) => item.id === policy.frontier.provider);
+      const selectedModel = policy.frontier.model || provider?.defaultModel || "";
+      const frontierSettings = settingsForProvider(settings, {
+        provider: policy.frontier.provider,
+        model: selectedModel
+      });
+      if (!frontierSettings.baseUrl) frontierSettings.baseUrl = provider?.defaultBaseUrl || "";
+      const frontierConfig = this.configFrom(frontierSettings);
+      if (validateConfig(frontierConfig).length === 0) {
+        frontier = {
+          provider: policy.frontier.provider,
+          model: frontierConfig.model.model,
+          client: createModelClient(frontierConfig.model),
+          unavailableReason: null
+        };
+      }
+    }
+
+    return {
+      enabled: true,
+      router,
+      policy,
+      local,
+      frontier
+    };
   }
 
   sessionContinuityScope(settings, boundary = settings?.operatingMode) {
@@ -5101,7 +5369,23 @@ export class DesktopController {
 
   annotateUsageEvent(event, task) {
     if (event?.type !== "usage") return sanitizeAgentEvent(event);
-    const model = task?.intelligence?.model ||
+    const modelUsage = (Array.isArray(event.modelUsage) ? event.modelUsage : [])
+      .map((item) => {
+        const estimate = estimateUsageCost({
+          model: item.model,
+          inputTokens: item.inputTokens,
+          outputTokens: item.outputTokens,
+          cachedInputTokens: item.cachedInputTokens
+        });
+        return {
+          ...item,
+          costUsedMicrousd: Number(item.costUsedMicrousd) > 0
+            ? Number(item.costUsedMicrousd)
+            : estimate.costUsedMicrousd,
+          estimated: Number(item.costUsedMicrousd) > 0 ? false : estimate.estimated
+        };
+      });
+    const model = event.model || modelUsage.at(-1)?.model || task?.intelligence?.model ||
       this.runManager.current()?.settings?.model ||
       "";
     const estimated = estimateUsageCost({
@@ -5112,12 +5396,20 @@ export class DesktopController {
     });
     const costUsedMicrousd = Number(event.costUsedMicrousd) > 0
       ? Number(event.costUsedMicrousd)
-      : estimated.costUsedMicrousd;
+      : modelUsage.length > 0
+        ? modelUsage.reduce((sum, item) => sum + Number(item.costUsedMicrousd || 0), 0)
+        : estimated.costUsedMicrousd;
     const usageEvent = sanitizeAgentEvent({
       ...event,
       model,
+      models: modelUsage.map((item) => item.model),
+      modelUsage,
       costUsedMicrousd,
-      estimated: Number(event.costUsedMicrousd) > 0 ? false : estimated.estimated
+      estimated: Number(event.costUsedMicrousd) > 0
+        ? false
+        : modelUsage.length > 0
+          ? modelUsage.some((item) => item.estimated)
+          : estimated.estimated
     });
     if (task) task.usage = accumulateUsage(task.usage, usageEvent);
     return usageEvent;
@@ -5344,7 +5636,11 @@ export class DesktopController {
     const scope = this.taskScope(settings);
     if (this.taskStore && scope) {
       await this.taskStore.update(scope, taskId, {
-        status: status === "completed" ? "completed" : status === "cancelled" ? "interrupted" : "failed",
+        status: status === "completed"
+          ? "completed"
+          : ["cancelled", "interrupted"].includes(status)
+            ? "interrupted"
+            : "failed",
         outcome
       }).catch(() => {});
     }
@@ -6001,7 +6297,8 @@ function runtimeSettingsChanged(previous, next) {
     "operatingMode",
     "workspace",
     "amosMcpUrl",
-    "intelligenceRoles"
+    "intelligenceRoles",
+    "hybridRouting"
   ].some((key) => JSON.stringify(previous[key]) !== JSON.stringify(next[key]));
 }
 
@@ -6015,7 +6312,8 @@ function intelligenceSettingsRequested(input = {}) {
     "intelligenceProfile",
     "reasoningEffort",
     "operatingMode",
-    "intelligenceRoles"
+    "intelligenceRoles",
+    "hybridRouting"
   ].some((key) => Object.hasOwn(input, key));
 }
 
@@ -6037,8 +6335,28 @@ function intelligenceSettingsChanged(previous, next) {
     "bedrockAuthMode",
     "intelligenceProfile",
     "reasoningEffort",
-    "operatingMode"
-  ].some((key) => previous[key] !== next[key]);
+    "operatingMode",
+    "hybridRouting"
+  ].some((key) => JSON.stringify(previous[key]) !== JSON.stringify(next[key]));
+}
+
+function validateHybridRoutingSettings(settings, configFrom) {
+  const policy = sanitizeHybridRouting(settings.hybridRouting);
+  if (!policy.enabled) return;
+  if (settings.provider !== "amos-hosted" || settings.operatingMode !== "online") {
+    throw new Error("Hybrid routing is available only with AMOS Intelligence in online company mode");
+  }
+  if (policy.frontier.provider === "amos-hosted") return;
+  const provider = listModelProviders().find((item) => item.id === policy.frontier.provider);
+  const resolved = settingsForProvider(settings, {
+    provider: policy.frontier.provider,
+    model: policy.frontier.model || provider?.defaultModel || ""
+  });
+  if (!resolved.baseUrl) resolved.baseUrl = provider?.defaultBaseUrl || "";
+  const missing = validateConfig(configFrom(resolved));
+  if (missing.length > 0) {
+    throw new Error(`Finish ${provider?.displayName || policy.frontier.provider} setup before using it as the hybrid frontier`);
+  }
 }
 
 export function desktopSystemPrompt(basePrompt, settings, config) {
@@ -6055,7 +6373,7 @@ ${settings?.operatingMode === "offline"
 - Local approval policy: ${desktopLocalApprovalDescription(settings)}
 - This local policy never approves AMOS company operations, external-system writes, or governed decisions.
 ${settings?.intelligenceRoles?.enabled
-    ? "- Intelligence pairing is on. Plan with the planner, implement with the builder, and review with the checker. Use desktop_handoff_role to switch without losing the conversation. Use desktop_spawn_subagent for isolated Git worktrees. Children cannot spawn children or widen company authority."
+    ? "- Coding-role pairing is on for coding workflows only. Plan with the planner, implement with the builder, and review with the checker. Non-coding work stays on its normal intelligence route. Use desktop_handoff_role to switch without losing the conversation. Use desktop_spawn_subagent for isolated Git worktrees. Children cannot spawn children or widen company authority."
     : ""}`;
 }
 
@@ -6153,6 +6471,19 @@ function sanitizeAgentEvent(event) {
       source: String(event.source || "built-in").slice(0, 80),
       title: String(event.title || "Resolve the requested outcome").slice(0, 160),
       summary: String(event.summary || "Plan the work and verify the result.").slice(0, 500),
+      family: String(event.family || "general").slice(0, 80),
+      toolkits: (Array.isArray(event.toolkits) ? event.toolkits : [])
+        .slice(0, 12)
+        .map((toolkit) => String(toolkit).slice(0, 80)),
+      toolkitActivations: (Array.isArray(event.toolkitActivations)
+        ? event.toolkitActivations
+        : [])
+        .slice(0, 12)
+        .map((activation) => ({
+          toolkit: String(activation?.toolkit || "").slice(0, 80),
+          ok: activation?.ok === true,
+          error: activation?.error ? String(activation.error).slice(0, 300) : null
+        })),
       skills: (Array.isArray(event.skills) ? event.skills : [])
         .slice(0, 12)
         .map((skill) => String(skill).slice(0, 120)),
@@ -6172,6 +6503,7 @@ function sanitizeAgentEvent(event) {
       minimumClass: event.minimumClass
         ? String(event.minimumClass).slice(0, 32)
         : null,
+      workflow: event.workflow ? String(event.workflow).slice(0, 80) : null,
       hostedClass: event.hostedClass ? String(event.hostedClass).slice(0, 32) : null,
       agreement: typeof event.agreement === "boolean" ? event.agreement : null,
       model: event.model ? String(event.model).slice(0, 160) : null,
@@ -6181,6 +6513,12 @@ function sanitizeAgentEvent(event) {
         : null,
       latencyMs: Math.max(0, Number(event.latencyMs || 0)),
       phase: String(event.phase || "plan").slice(0, 32),
+      strategy: event.strategy ? String(event.strategy).slice(0, 32) : null,
+      stage: event.stage ? String(event.stage).slice(0, 32) : null,
+      selectedProvider: event.selectedProvider
+        ? String(event.selectedProvider).slice(0, 64)
+        : null,
+      selectedModel: event.selectedModel ? String(event.selectedModel).slice(0, 256) : null,
       messageCount: Math.max(0, Number(event.messageCount || 0)),
       toolCount: Math.max(0, Number(event.toolCount || 0)),
       reason: event.reason ? String(event.reason).slice(0, 160) : null
@@ -6220,9 +6558,51 @@ function sanitizeAgentEvent(event) {
       outputTokens: Number(event.outputTokens || 0),
       cachedInputTokens: Number(event.cachedInputTokens || 0),
       totalTokens: Number(event.totalTokens || 0),
+      latencyMs: Math.max(0, Number(event.latencyMs || 0)),
+      timeToFirstOutputMs: event.timeToFirstOutputMs == null
+        ? null
+        : Math.max(0, Number(event.timeToFirstOutputMs)),
+      generationTokensPerSecond: event.generationTokensPerSecond == null
+        ? null
+        : Math.max(0, Number(event.generationTokensPerSecond)),
+      loadMs: event.loadMs == null ? null : Math.max(0, Number(event.loadMs)),
+      promptEvalMs: event.promptEvalMs == null
+        ? null
+        : Math.max(0, Number(event.promptEvalMs)),
+      generationMs: event.generationMs == null
+        ? null
+        : Math.max(0, Number(event.generationMs)),
       costUsedMicrousd: Number(event.costUsedMicrousd || 0),
       estimated: event.estimated === true,
-      model: event.model ? String(event.model).slice(0, 256) : null
+      model: event.model ? String(event.model).slice(0, 256) : null,
+      models: (Array.isArray(event.models) ? event.models : [])
+        .slice(0, 12)
+        .map((model) => String(model).slice(0, 256)),
+      modelUsage: (Array.isArray(event.modelUsage) ? event.modelUsage : [])
+        .slice(0, 8)
+        .map((item) => ({
+          model: String(item.model || "").slice(0, 256),
+          inputTokens: Number(item.inputTokens || 0),
+          outputTokens: Number(item.outputTokens || 0),
+          cachedInputTokens: Number(item.cachedInputTokens || 0),
+          totalTokens: Number(item.totalTokens || 0),
+          costUsedMicrousd: Number(item.costUsedMicrousd || 0),
+          latencyMs: Math.max(0, Number(item.latencyMs || 0)),
+          timeToFirstOutputMs: item.timeToFirstOutputMs == null
+            ? null
+            : Math.max(0, Number(item.timeToFirstOutputMs)),
+          generationTokensPerSecond: item.generationTokensPerSecond == null
+            ? null
+            : Math.max(0, Number(item.generationTokensPerSecond)),
+          loadMs: item.loadMs == null ? null : Math.max(0, Number(item.loadMs)),
+          promptEvalMs: item.promptEvalMs == null
+            ? null
+            : Math.max(0, Number(item.promptEvalMs)),
+          generationMs: item.generationMs == null
+            ? null
+            : Math.max(0, Number(item.generationMs)),
+          estimated: item.estimated === true
+        }))
     };
   }
   if (event.type === "intelligence") {
@@ -6362,7 +6742,7 @@ function receiptEvent(event) {
     return {
       type: "routing",
       name: event.minimumClass || event.reason || "hosted_fallback",
-      outcome: `${event.rolloutMode}:${event.status}${comparison}`
+      outcome: `${event.rolloutMode}:${event.status}${comparison}${event.strategy ? `:${event.strategy}` : ""}${event.selectedProvider ? `:${event.selectedProvider}/${event.selectedModel || "auto"}` : ""}`
     };
   }
   if (event.type === "tool_start") {
@@ -6395,6 +6775,13 @@ function toolEventSummary(event) {
   if (event.type === "routing") {
     if (event.hostedClass) {
       return `Local ${event.minimumClass || "invalid"} vs hosted ${event.hostedClass}: ${event.agreement ? "agreement" : "disagreement"}`;
+    }
+    if (event.rolloutMode === "hybrid" && event.selectedProvider) {
+      const target = `${event.selectedProvider} · ${event.selectedModel || "automatic"}`;
+      if (event.status === "reviewed") return `Frontier review completed with ${target}`;
+      if (event.status === "selected") return `${event.stage === "review" ? "Reviewing" : "Running"} ${event.minimumClass || "step"} with ${target}`;
+      if (event.status === "ineligible") return `${target} was not eligible; using the next approved route`;
+      return `${target} failed; using the next approved route`;
     }
     return event.minimumClass
       ? `Local routing classified this step as ${event.minimumClass} (${event.rolloutMode})`

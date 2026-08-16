@@ -81,7 +81,11 @@ export function accumulateUsage(current = {}, event = {}) {
     costUsedMicrousd: boundedTokens(current.costUsedMicrousd) +
       boundedTokens(event.costUsedMicrousd),
     estimated: current.estimated === true || event.estimated === true,
-    models: uniqueModels(current.models, event.model)
+    models: uniqueModels(
+      current.models,
+      event.model,
+      ...(Array.isArray(event.models) ? event.models : [])
+    )
   };
   if (event.model) next.model = String(event.model).slice(0, 256);
   return next;
@@ -114,9 +118,11 @@ function boundedTokens(value) {
   return Math.min(Math.trunc(parsed), 100_000_000);
 }
 
-function uniqueModels(existing, next) {
+function uniqueModels(existing, ...next) {
   const models = [...(Array.isArray(existing) ? existing : [])];
-  const model = String(next || "").trim().slice(0, 256);
-  if (model && !models.includes(model)) models.push(model);
+  for (const value of next) {
+    const model = String(value || "").trim().slice(0, 256);
+    if (model && !models.includes(model)) models.push(model);
+  }
   return models.slice(0, 12);
 }

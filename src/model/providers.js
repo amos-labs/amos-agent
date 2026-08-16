@@ -17,6 +17,11 @@ import {
 const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
 const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 120_000;
+// Frontier reasoning and coding turns can remain productive for several
+// minutes, especially after a large tool batch. Direct providers need the
+// same long-turn allowance as AMOS Hosted rather than the interactive-chat
+// default used by smaller endpoints.
+const LONG_RUNNING_MODEL_REQUEST_TIMEOUT_MS = 660_000;
 // Hosted tasks routinely span many governed tool cycles before a final model
 // synthesis. Keep the client outside the platform's 10-minute request window
 // so the server can return a precise outcome instead of losing a race with the
@@ -53,6 +58,7 @@ const PROVIDERS = {
     protocol: MODEL_PROTOCOLS.OPENAI_CHAT_COMPLETIONS,
     defaultBaseUrl: "https://api.x.ai/v1",
     defaultModel: "grok-4.6",
+    defaultRequestTimeoutMs: LONG_RUNNING_MODEL_REQUEST_TIMEOUT_MS,
     models: [
       { id: "grok-4.6", label: "Grok 4.6", supportedReasoningEfforts: ["low", "medium", "high", "xhigh"], defaultReasoningEffort: "high" },
       { id: "grok-4.5", label: "Grok 4.5", supportedReasoningEfforts: ["low", "medium", "high"], defaultReasoningEffort: "high" },
@@ -271,8 +277,11 @@ export function resolveModelConfig(env = process.env) {
     ),
     requestTimeoutMs: boundedInt(
       env.AMOS_MODEL_REQUEST_TIMEOUT_MS ||
-        (provider.id === "kimi" ? env.KIMI_REQUEST_TIMEOUT_MS : ""),
-      hosted ? HOSTED_MODEL_REQUEST_TIMEOUT_MS : DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
+        (provider.id === "kimi" ? env.KIMI_REQUEST_TIMEOUT_MS : "") ||
+        (provider.id === "xai" ? env.XAI_REQUEST_TIMEOUT_MS || env.GROK_REQUEST_TIMEOUT_MS : ""),
+      hosted
+        ? HOSTED_MODEL_REQUEST_TIMEOUT_MS
+        : provider.defaultRequestTimeoutMs || DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
       1_000,
       MAX_MODEL_REQUEST_TIMEOUT_MS
     ),

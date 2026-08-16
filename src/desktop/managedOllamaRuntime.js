@@ -8,6 +8,7 @@ import { OLLAMA_RUNTIME_RELEASE, ollamaRuntimeAsset } from "./ollamaRuntimeManif
 export const AMOS_LOCAL_HOST = "127.0.0.1:11435";
 export const AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH = 32_768;
 export const AMOS_LOCAL_MAX_CONTEXT_LENGTH = 262_144;
+export const AMOS_LOCAL_DEFAULT_KEEP_ALIVE = "30m";
 const MODEL_CREATE_TIMEOUT_MS = 5 * 60_000;
 
 export class ManagedOllamaRuntime {
@@ -85,6 +86,7 @@ export class ManagedOllamaRuntime {
         this.environment.AMOS_LOCAL_CONTEXT_LENGTH,
         this.totalMemoryBytes
       ),
+      performance: runtimePerformanceSettings(this.environment),
       error: this.error || (
         supported
           ? installed
@@ -236,6 +238,24 @@ export class ManagedOllamaRuntime {
       OLLAMA_CONTEXT_LENGTH: String(
         contextLength(this.environment.AMOS_LOCAL_CONTEXT_LENGTH, this.totalMemoryBytes)
       ),
+      OLLAMA_KEEP_ALIVE: keepAlive(this.environment.AMOS_LOCAL_KEEP_ALIVE),
+      OLLAMA_FLASH_ATTENTION: booleanEnvironment(
+        this.environment.AMOS_LOCAL_FLASH_ATTENTION,
+        true
+      ) ? "1" : "0",
+      OLLAMA_KV_CACHE_TYPE: kvCacheType(this.environment.AMOS_LOCAL_KV_CACHE_TYPE),
+      OLLAMA_NUM_PARALLEL: String(positiveInteger(
+        this.environment.AMOS_LOCAL_NUM_PARALLEL,
+        1,
+        1,
+        8
+      )),
+      OLLAMA_MAX_LOADED_MODELS: String(positiveInteger(
+        this.environment.AMOS_LOCAL_MAX_LOADED_MODELS,
+        2,
+        1,
+        8
+      )),
       HOME: this.runtimeHomePath,
       ...(this.platform === "win32" ? { USERPROFILE: this.runtimeHomePath } : {})
     };
@@ -277,8 +297,41 @@ export function contextLength(value, totalMemoryBytes = 0) {
     return parsed;
   }
   const memoryGb = Math.max(0, Number(totalMemoryBytes) || 0) / 1024 ** 3;
-  if (memoryGb >= 64) return 131_072;
-  if (memoryGb >= 32) return 65_536;
+  if (memoryGb >= 96) return 65_536;
+  if (memoryGb >= 24) return AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH;
   if (memoryGb >= 16) return AMOS_LOCAL_DEFAULT_CONTEXT_LENGTH;
   return 16_384;
+}
+
+function runtimePerformanceSettings(environment = {}) {
+  return {
+    keepAlive: keepAlive(environment.AMOS_LOCAL_KEEP_ALIVE),
+    flashAttention: booleanEnvironment(environment.AMOS_LOCAL_FLASH_ATTENTION, true),
+    kvCacheType: kvCacheType(environment.AMOS_LOCAL_KV_CACHE_TYPE),
+    parallelRequests: positiveInteger(environment.AMOS_LOCAL_NUM_PARALLEL, 1, 1, 8),
+    maxLoadedModels: positiveInteger(environment.AMOS_LOCAL_MAX_LOADED_MODELS, 2, 1, 8)
+  };
+}
+
+function keepAlive(value) {
+  const requested = String(value || "").trim().toLowerCase();
+  return /^(?:-1|0|\d+(?:ms|s|m|h))$/.test(requested)
+    ? requested
+    : AMOS_LOCAL_DEFAULT_KEEP_ALIVE;
+}
+
+function kvCacheType(value) {
+  const requested = String(value || "").trim().toLowerCase();
+  return ["f16", "q8_0", "q4_0"].includes(requested) ? requested : "q8_0";
+}
+
+function booleanEnvironment(value, fallback) {
+  if (value == null || value === "") return fallback;
+  return !["0", "false", "no", "off"].includes(String(value).trim().toLowerCase());
+}
+
+function positiveInteger(value, fallback, minimum, maximum) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, parsed));
 }

@@ -805,6 +805,60 @@
                   <li>Difficult or consequential steps escalate automatically.</li>
                   <li>Underlying routes remain available in diagnostics and receipts.</li>
                 </ul>
+                <section class="hybrid-routing-card" aria-labelledby="hybridRoutingTitle">
+                  <label class="hybrid-routing-toggle" for="hybridRoutingEnabled">
+                    <input id="hybridRoutingEnabled" type="checkbox">
+                    <span>
+                      <strong id="hybridRoutingTitle">Prefer my local and frontier models</strong>
+                      <small>Optional. Off keeps the proven AMOS Hosted automatic path exactly as-is.</small>
+                    </span>
+                  </label>
+                  <div id="hybridRoutingControls" class="hybrid-routing-controls">
+                    <label>
+                      Qualified local model
+                      <select id="hybridLocalModelInput"></select>
+                    </label>
+                    <label>
+                      Frontier model
+                      <select id="hybridFrontierInput"></select>
+                    </label>
+                    <details class="hybrid-routing-recipes">
+                      <summary>Class recipes</summary>
+                      <p>The tiny local router only classifies the step. These deterministic recipes choose how it runs.</p>
+                      <div class="hybrid-recipe-grid">
+                        <label>Routine<select id="hybridRoutineStrategyInput"></select></label>
+                        <label>Balanced<select id="hybridBalancedStrategyInput"></select></label>
+                        <label>Deep<select id="hybridDeepStrategyInput"></select></label>
+                        <label>Frontier<select id="hybridFrontierStrategyInput"></select></label>
+                      </div>
+                    </details>
+                    <small id="hybridRoutingStatus" class="hybrid-routing-status"></small>
+                  </div>
+                </section>
+                <section id="intelligenceRolesField" class="coding-routing-card" aria-labelledby="codingRoutingTitle">
+                  <label class="coding-routing-toggle" for="intelligenceRolesEnabled">
+                    <input id="intelligenceRolesEnabled" type="checkbox">
+                    <span>
+                      <strong id="codingRoutingTitle">Use specialized models for coding</strong>
+                      <small>Optional. Plan and check with Kimi; build with Grok. Non-coding work stays on its normal route.</small>
+                    </span>
+                  </label>
+                  <div id="intelligenceRoleControls" class="role-selects hidden">
+                    <label>
+                      Planner
+                      <select id="plannerRoleInput"></select>
+                    </label>
+                    <label>
+                      Builder
+                      <select id="implementerRoleInput"></select>
+                    </label>
+                    <label>
+                      Checker
+                      <select id="checkerRoleInput"></select>
+                    </label>
+                  </div>
+                  <small class="coding-routing-status">Each role uses the encrypted credential stored for that provider. You can still switch roles manually inside a coding conversation.</small>
+                </section>
               </div>
               <details id="advancedInfrastructureDetails" class="intelligence-advanced">
                 <summary>Advanced intelligence infrastructure</summary>
@@ -872,27 +926,6 @@
                   <option value="api-key">Amazon Bedrock API key</option>
                 </select>
                 <small>SigV4 uses an AWS profile, SSO session, environment credentials, or attached IAM role in the Desktop main process. Credentials never enter chat or the renderer.</small>
-              </div>
-              <div id="intelligenceRolesField" class="field intelligence-roles-field hidden">
-                <label class="checkbox-label" for="intelligenceRolesEnabled">
-                  <input id="intelligenceRolesEnabled" type="checkbox">
-                  Pair a planner, builder, and checker
-                </label>
-                <small>Kimi is a strong planner and checker. Grok 4.6 is the usual builder. Each role uses the credential stored for that provider.</small>
-                <div class="role-selects">
-                  <label>
-                    Planner
-                    <select id="plannerRoleInput"></select>
-                  </label>
-                  <label>
-                    Builder
-                    <select id="implementerRoleInput"></select>
-                  </label>
-                  <label>
-                    Checker
-                    <select id="checkerRoleInput"></select>
-                  </label>
-                </div>
               </div>
               <div class="field">
                 <label for="apiKeyInput">Provider credential</label>

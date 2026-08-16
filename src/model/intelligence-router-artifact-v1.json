@@ -13,6 +13,14 @@
   "prompt_sha256": "f3a46c1f188511705d4de29d121cac158adf6b57f578f22e88ad76bccc05555e",
   "development_accuracy": 0.9,
   "untuned_2b_development_accuracy": 0.85,
+  "workflow_classifier": {
+    "contract": "amos-workflow-router:2026-08-16",
+    "qualified": false,
+    "eval_version": 1,
+    "class_accuracy": 0.3462,
+    "workflow_accuracy": 0.3077,
+    "joint_accuracy": 0.1154
+  },
   "qualified": false,
   "default_rollout_mode": "active"
 }
