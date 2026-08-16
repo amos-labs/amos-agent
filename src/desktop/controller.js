@@ -289,6 +289,19 @@ export class DesktopController {
         onboardingBoundary: ""
       });
     }
+    if (
+      !demoExpired &&
+      !settings.onboardingCompletedAt &&
+      Boolean(settings.workspace) &&
+      configured &&
+      (useOAuth || ["personal", "offline"].includes(settings.operatingMode))
+    ) {
+      settings = await this.settingsStore.write({
+        ...settings,
+        onboardingBoundary: useOAuth ? "company" : "personal",
+        onboardingCompletedAt: new Date().toISOString()
+      });
+    }
     const demo = credentials?.demo
       ? {
           tenantId: credentials.tenant_id,
@@ -1528,6 +1541,61 @@ export class DesktopController {
       opened: true,
       provider: providerKey,
       expiresIn: link.expiresIn
+    };
+  }
+
+  async disconnectConnection(connectionId) {
+    const id = String(connectionId || "").trim();
+    const connection = (this.connectionsCatalog?.connections || []).find(
+      (item) => item.id === id && item.status === "connected"
+    );
+    if (!connection) {
+      throw new Error("AMOS blocked a disconnect request for an unknown connection");
+    }
+    if (!connection.usable) {
+      throw new Error("This identity cannot disconnect that connection");
+    }
+
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "disconnecting this business system");
+    const result = await remote.disconnectConnection(id);
+    const [connectionsResult, approvalsResult] = await Promise.allSettled([
+      remote.connectionsCatalog(),
+      remote.approvals()
+    ]);
+    if (connectionsResult.status === "fulfilled") {
+      this.connectionsCatalog = connectionsResult.value;
+    } else if (result?.deleted === true) {
+      this.connectionsCatalog = {
+        ...this.connectionsCatalog,
+        connections: (this.connectionsCatalog?.connections || []).filter(
+          (item) => item.id !== id
+        )
+      };
+    }
+    if (approvalsResult.status === "fulfilled") {
+      this.approvalsAvailable = approvalsResult.value.available;
+      this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
+      this.companyApprovals = approvalsResult.value.pending_operations;
+    }
+    const pendingApprovalId = result?.pending_id || result?.pendingId ||
+      result?.pending_operation?.id || result?.pendingOperation?.id || null;
+    this.record(
+      "connection",
+      pendingApprovalId
+        ? `Requested governed disconnect for ${connection.displayName}`
+        : `Disconnected ${connection.displayName} through AMOS Platform`,
+      {
+        connection_id: id,
+        provider: connection.provider,
+        pending_approval: Boolean(pendingApprovalId)
+      }
+    );
+    await this.sendRemoteState();
+    return {
+      result,
+      connectionsCatalog: structuredClone(this.connectionsCatalog),
+      approvals: structuredClone(this.companyApprovals)
     };
   }
 

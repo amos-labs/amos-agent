@@ -145,9 +145,13 @@ test("background remote refresh projects live Connections into the renderer", as
 });
 
 test("Connections HTML contains no customer or provider-specific catalog truth", async () => {
-  const [javascript, html] = await Promise.all([
+  const [javascript, html, preload, main, controller, remoteState] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8")
   ]);
 
   assert.doesNotMatch(html, /Neighborly/i);
@@ -166,6 +170,13 @@ test("Connections HTML contains no customer or provider-specific catalog truth",
   );
   assert.match(javascript, /api\.connectProvider\(provider\.provider\)/);
   assert.match(javascript, /api\.connectSecretProvider\(connectionSetupProvider\.provider/);
+  assert.match(javascript, /api\.disconnectConnection\(connection\.id\)/);
+  assert.match(javascript, /remove its vaulted credential/);
+  assert.match(preload, /desktop:disconnect-connection/);
+  assert.match(main, /controller\.disconnectConnection\(connectionId\)/);
+  assert.match(controller, /item\.id === id && item\.status === "connected"/);
+  assert.match(controller, /if \(!connection\.usable\)/);
+  assert.match(remoteState, /this\.mcp\.callTool\([\s\S]*?"delete_connection"/);
 });
 
 test("Automations replace Memory in primary navigation and launch isolated governed task lanes", async () => {
@@ -337,6 +348,8 @@ test("Projects expose bounded parallel coordination and one supervised activity 
   assert.match(html, /never grants execution authority or replaces proof receipts/);
   assert.match(html, /id="projectParallelInput"[^>]*max="32"/);
   assert.match(javascript, /function renderProjects\(\)/);
+  assert.match(javascript, /function projectConversationList\(conversations\)/);
+  assert.match(javascript, /task\.projectId === project\.id/);
   assert.match(javascript, /api\.assignTaskProject\(/);
   assert.match(javascript, /api\.cancelSupervisedRun\(/);
   assert.match(javascript, /The worker must acknowledge it at the next heartbeat/);
@@ -351,6 +364,12 @@ test("Projects expose bounded parallel coordination and one supervised activity 
   assert.match(remoteState, /this\.mcp\.callTool\("start_task_run"/);
   assert.match(remoteState, /this\.mcp\.callTool\("report_task_run"/);
   assert.match(css, /\.project-workspace\s*\{[\s\S]*?grid-template-columns/);
+  assert.match(css, /\.project-conversations\s*\{/);
+  const activityCenterContract = javascript.match(
+    /function renderActivityCenter\(projects, inbox\)([\s\S]*?)function activityRunCard/
+  )?.[1] || "";
+  assert.doesNotMatch(activityCenterContract, /taskCheckpoints|taskCheckpointCard/);
+  assert.doesNotMatch(javascript, /All Projects & Conversations/);
   assert.doesNotMatch(html, /Neighborly rollout|Build KPI scorecard/);
 });
 
@@ -619,8 +638,10 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /id="demoModeButton" class="start-mode-card featured"/);
   assert.match(onboarding, /<strong>Northwind demo<\/strong>/);
   assert.match(onboarding, /<strong>My company<\/strong>/);
-  assert.match(onboarding, /Your model, this computer/);
-  assert.match(html, /Choose a local profile or your own key\. AMOS Intelligence needs a sign-in — use Northwind or My company\./);
+  assert.match(onboarding, /Run locally or bring your own model key/);
+  assert.match(onboarding, /Qwen 3\.6 27B/);
+  assert.match(onboarding, /OpenAI · Claude · Kimi · custom endpoints/);
+  assert.match(html, /Choose AMOS Local, OpenAI, Anthropic \(Claude\), Kimi, or any OpenAI-compatible endpoint/);
   assert.match(javascript, /personalNeedsIntelligence/);
   assert.match(javascript, /Choose a local profile or your own key/);
   assert.match(
@@ -664,4 +685,6 @@ test("first-run funnel events fire only after telemetry opt-in", async () => {
   assert.match(javascript, /desktop:set-telemetry-preference|setTelemetryPreference\(\{ enabled \}\)/);
   assert.match(javascript, /telemetryConsent\.classList\.toggle\("hidden", !pending\)/);
   assert.match(javascript, /operatorView\.prepend\(elements\.telemetryConsent\)/);
+  assert.match(javascript, /find broken flows and improve Desktop faster/);
+  assert.match(javascript, /never send prompts, responses, files, company data, credentials, or tokens/i);
 });

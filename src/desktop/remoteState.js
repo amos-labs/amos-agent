@@ -695,6 +695,15 @@ export class DesktopRemoteStateClient {
     };
   }
 
+  async disconnectConnection(connectionId, { signal = null } = {}) {
+    const result = await this.mcp.callTool(
+      "delete_connection",
+      { connection_id: requiredUuid(connectionId, "Connection") },
+      { signal }
+    );
+    return parseMcpJson(result, "AMOS connection disconnect");
+  }
+
   async connectionProviderCatalog({ signal = null } = {}) {
     try {
       const result = await this.mcp.callTool("list_connection_catalog", {}, { signal });

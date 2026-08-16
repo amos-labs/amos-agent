@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
   switchCompany: (tenantId) => ipcRenderer.invoke("desktop:switch-company", tenantId),
   connectProvider: (provider) => ipcRenderer.invoke("desktop:connect-provider", provider),
+  disconnectConnection: (connectionId) =>
+    ipcRenderer.invoke("desktop:disconnect-connection", connectionId),
   connectSecretProvider: (provider, input) =>
     ipcRenderer.invoke("desktop:connect-secret-provider", { provider, input }),
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),

@@ -1028,6 +1028,41 @@ test("Desktop asks AMOS Platform for a hosted connection link", async () => {
   assert.equal(link.expiresIn, 600);
 });
 
+test("Desktop disconnects one exact Platform connection by UUID", async () => {
+  const requests = [];
+  const connectionId = "55555555-5555-4555-8555-555555555555";
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({ deleted: true, connection_id: connectionId })
+          }]
+        }
+      });
+    }
+  );
+
+  const result = await client.disconnectConnection(connectionId);
+  assert.equal(result.deleted, true);
+  assert.equal(requests[0].params.name, "delete_connection");
+  assert.deepEqual(requests[0].params.arguments, { connection_id: connectionId });
+  await assert.rejects(
+    () => client.disconnectConnection("not-a-connection-id"),
+    /Connection id is invalid/
+  );
+  assert.equal(requests.length, 1);
+});
+
 test("Desktop sends a one-time credential directly to the Platform connection verb", async () => {
   const requests = [];
   const client = new DesktopRemoteStateClient(

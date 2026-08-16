@@ -210,6 +210,26 @@ test("first-run personal local/BYO walks to cancelTask and a local receipt", asy
   assert.equal(requests.some((event) => event.event_type === "desktop_first_launch"), false);
 });
 
+test("a ready existing workspace is not sent back through first-run after upgrading", async () => {
+  const { controller, workspace } = await firstRunHarness({ telemetryEnabled: null });
+  await controller.settingsStore.write({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    operatingMode: "personal",
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    apiKey: "sk-existing-install",
+    workspace,
+    onboardingBoundary: "personal",
+    onboardingCompletedAt: ""
+  });
+
+  const ready = await controller.state();
+  assert.equal(ready.configured, true);
+  assert.equal(ready.settings.telemetryEnabled, null);
+  assert.equal(ready.settings.onboardingBoundary, "personal");
+  assert.match(ready.settings.onboardingCompletedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
 test("telemetryEnabled unset queues first-run milestones and flushes them after opt-in", async (t) => {
   const { controller, workspace, requests, startedPromise, telemetry } = await firstRunHarness({
     telemetryEnabled: null
