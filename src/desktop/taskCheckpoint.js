@@ -63,6 +63,7 @@ export class TaskCheckpointStore {
     replacesId = null,
     objective,
     source,
+    conversation = null,
     attachmentNames = [],
     mode = "online"
   }) {
@@ -76,6 +77,7 @@ export class TaskCheckpointStore {
       objective,
       attachmentNames,
       source,
+      conversation,
       progress: {
         phase: "starting",
         summary: "Preparing the task",
@@ -320,6 +322,7 @@ function normalizeCheckpoint(value) {
     objective: cleanRequired(value?.objective, MAX_OBJECTIVE_CHARS, "task objective"),
     attachmentNames: cleanArray(value?.attachmentNames, 20, 255),
     source,
+    conversation: normalizeConversation(value?.conversation),
     progress: {
       phase: cleanText(progress.phase || status, 80),
       summary: cleanText(progress.summary || "Task interrupted", 600),
@@ -331,6 +334,14 @@ function normalizeCheckpoint(value) {
     createdAt: cleanTimestamp(value?.createdAt),
     updatedAt: cleanTimestamp(value?.updatedAt)
   };
+}
+
+function normalizeConversation(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const taskRecordId = cleanIdentifier(value.taskRecordId, 128);
+  const contextKey = cleanIdentifier(value.contextKey, 128);
+  if (!taskRecordId && !contextKey) return null;
+  return { taskRecordId, contextKey };
 }
 
 function normalizeSource(value) {
@@ -411,6 +422,15 @@ function cleanRequired(value, maxLength, label) {
 
 function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
+}
+
+function cleanIdentifier(value, maxLength) {
+  const result = cleanText(value, maxLength);
+  if (!result) return "";
+  if (!/^[A-Za-z0-9._:-]+$/.test(result)) {
+    throw new Error("Task checkpoint has an invalid conversation identifier");
+  }
+  return result;
 }
 
 function cleanTimestamp(value) {

@@ -70,6 +70,42 @@ export class DesktopTaskStore {
     return task ? publicTask(task) : null;
   }
 
+  async selected(scope) {
+    const owner = normalizeOwner(scope);
+    const store = await this.readStore();
+    const candidates = store.tasks.filter((task) => (
+      sameOwner(task.owner, owner) && !task.archivedAt
+    ));
+    if (candidates.length === 0) return null;
+    const explicitlySelected = candidates.filter((task) => task.selectedAt);
+    const ranked = explicitlySelected.length > 0 ? explicitlySelected : candidates;
+    ranked.sort((left, right) => {
+      const leftTime = left.selectedAt || left.updatedAt;
+      const rightTime = right.selectedAt || right.updatedAt;
+      return rightTime.localeCompare(leftTime) || right.updatedAt.localeCompare(left.updatedAt) ||
+        left.id.localeCompare(right.id);
+    });
+    return publicTask(ranked[0]);
+  }
+
+  async select(scope, id) {
+    const owner = normalizeOwner(scope);
+    const taskId = cleanRequired(id, 128, "task id");
+    const store = await this.readStore();
+    const index = store.tasks.findIndex((item) => (
+      item.id === taskId && sameOwner(item.owner, owner)
+    ));
+    if (index < 0 || store.tasks[index].archivedAt) {
+      throw new Error("That AMOS task is not available to this account");
+    }
+    store.tasks[index] = normalizeTask({
+      ...store.tasks[index],
+      selectedAt: this.now().toISOString()
+    });
+    await this.writeStore(store);
+    return publicTask(store.tasks[index]);
+  }
+
   async create(scope, input = {}) {
     const owner = normalizeOwner(scope);
     const store = await this.readStore();
@@ -250,6 +286,7 @@ function normalizeTask(value) {
     canvasState: normalizeCanvasState(value?.canvasState),
     outcome: normalizeTaskOutcome(value?.outcome),
     owner: normalizeOwner(value?.owner),
+    selectedAt: optionalTimestamp(value?.selectedAt),
     createdAt: normalizeTimestamp(value?.createdAt),
     updatedAt: normalizeTimestamp(value?.updatedAt)
   };

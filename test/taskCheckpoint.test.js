@@ -54,6 +54,10 @@ test("task checkpoints are encrypted and running work becomes interrupted after 
   await store.start({
     objective: "Prepare the launch plan",
     attachmentNames: ["brief.pdf"],
+    conversation: {
+      taskRecordId: "conversation-1",
+      contextKey: "task:conversation-1"
+    },
     source: onlineTaskSource({ identity: identity(), snapshot: snapshot() })
   });
   const raw = await readFile(join(root, "tasks.json"), "utf8");
@@ -62,6 +66,10 @@ test("task checkpoints are encrypted and running work becomes interrupted after 
   const [recovered] = await store.initialize();
   assert.equal(recovered.status, "interrupted");
   assert.equal(recovered.progress.phase, "interrupted");
+  assert.deepEqual(recovered.conversation, {
+    taskRecordId: "conversation-1",
+    contextKey: "task:conversation-1"
+  });
 });
 
 test("resuming revalidates identity, company drift, and pending approvals without replay", async () => {

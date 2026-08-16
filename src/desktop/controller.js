@@ -298,6 +298,9 @@ export class DesktopController {
 
   async state() {
     let settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    await this.restoreSelectedConversation(settings).catch((error) => {
+      this.record("task", `Could not restore the selected conversation: ${error.message}`);
+    });
     await this.backfillActiveConversation(settings).catch((error) => {
       this.record("task", `Could not index the current conversation: ${error.message}`);
     });
@@ -779,11 +782,80 @@ export class DesktopController {
       replay_allowed: false
     });
     await this.sendTaskCheckpoints();
+    const recovery = await this.openTaskCheckpointConversation(saved, settings);
     return {
       checkpoint: saved,
       prompt: buildTaskResumePrompt(saved),
       executionStarted: false,
-      taskCheckpoints: await this.taskCheckpointState()
+      taskCheckpoints: await this.taskCheckpointState(),
+      state: recovery?.opened?.state || null,
+      task: recovery?.opened?.task || null,
+      conversationRecovery: recovery
+        ? {
+            isolated: recovery.isolated,
+            legacyResolved: recovery.legacyResolved,
+            taskRecordId: recovery.opened.task.id,
+            contextKey: recovery.opened.task.contextKey
+          }
+        : null
+    };
+  }
+
+  async openTaskCheckpointConversation(checkpoint, settings) {
+    if (!this.taskStore) return null;
+    const scope = this.taskScope(settings);
+    if (!scope) return null;
+    const locator = checkpoint.conversation || {};
+    let task = locator.taskRecordId
+      ? await this.taskStore.get(scope, locator.taskRecordId)
+      : null;
+    if (!task && locator.contextKey) {
+      task = await this.taskStore.findByContext(scope, locator.contextKey);
+    }
+
+    let legacyResolved = false;
+    if (!task && this.sessionContinuityStore) {
+      const ownerScope = this.sessionContinuityScope(settings, settings.operatingMode);
+      const records = ownerScope
+        ? await this.sessionContinuityStore.listForOwner(ownerScope)
+        : [];
+      const contextKeys = records
+        .filter((record) => record.turns.some((turn) => turn.taskId === checkpoint.id))
+        .map((record) => record.contextKey);
+      if (contextKeys.length === 1) {
+        task = await this.taskStore.findByContext(scope, contextKeys[0]);
+        legacyResolved = Boolean(task);
+      }
+    }
+
+    if (!task) {
+      const exactMatches = (await this.taskStore.list(scope)).filter((candidate) => (
+        candidate.objective === checkpoint.objective
+      ));
+      if (exactMatches.length === 1) {
+        [task] = exactMatches;
+        legacyResolved = true;
+      }
+    }
+
+    let isolated = false;
+    if (!task) {
+      const contextKey = `recovery:${checkpoint.id}`;
+      task = await this.taskStore.findByContext(scope, contextKey);
+      if (!task) {
+        task = await this.materializeConversation(checkpoint.objective, settings, { contextKey });
+      }
+      isolated = true;
+    }
+
+    if (task.archivedAt) {
+      task = await this.taskStore.update(scope, task.id, { archived: false });
+    }
+
+    return {
+      opened: await this.openTask(task.id),
+      isolated,
+      legacyResolved
     };
   }
 
@@ -1356,6 +1428,9 @@ export class DesktopController {
         error: null,
         paused: true
       };
+      await this.restoreSelectedConversation(settings).catch((error) => {
+        this.record("task", `Could not restore the selected conversation: ${error.message}`);
+      });
       await this.sendRemoteState();
       return this.state();
     }
@@ -1513,6 +1588,22 @@ export class DesktopController {
       }
     }
 
+    const continuityContextKey = this.activeContextKey;
+    await this.restoreSelectedConversation(settings).catch((error) => {
+      errors.push(`Could not restore the selected conversation: ${error.message}`);
+    });
+    let selectedContinuityResult = continuityResult;
+    if (this.activeContextKey !== continuityContextKey) {
+      try {
+        selectedContinuityResult = {
+          status: "fulfilled",
+          value: await remote.hydrateContinuity({ contextKey: this.activeContextKey })
+        };
+      } catch (error) {
+        selectedContinuityResult = { status: "rejected", reason: error };
+      }
+    }
+
     if (projectsResult.status === "fulfilled" && projectsResult.value) {
       this.projects = projectsResult.value;
     } else {
@@ -1542,8 +1633,8 @@ export class DesktopController {
       errors.push(companiesResult.reason?.message || "Could not load AMOS companies");
     }
 
-    if (continuityResult.status === "fulfilled") {
-      const continuity = continuityResult.value;
+    if (selectedContinuityResult.status === "fulfilled") {
+      const continuity = selectedContinuityResult.value;
       const tenantMatches =
         !continuity.available ||
         (
@@ -1559,7 +1650,7 @@ export class DesktopController {
     } else {
       this.workingContinuity = null;
       errors.push(
-        continuityResult.reason?.message || "Could not load cross-client working continuity"
+        selectedContinuityResult.reason?.message || "Could not load cross-client working continuity"
       );
     }
 
@@ -3153,6 +3244,20 @@ export class DesktopController {
     });
   }
 
+  async restoreSelectedConversation(settings = null) {
+    if (!this.taskStore || this.activeTaskRecordId) return null;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return null;
+    const selected = await this.taskStore.selected(scope);
+    if (!selected) return null;
+    const persisted = await this.taskStore.select(scope, selected.id);
+    this.activeTaskRecordId = persisted.id;
+    this.activeContextKey = persisted.contextKey;
+    this.canvases.restore(durableCanvasState(persisted.canvasState || {}));
+    return persisted;
+  }
+
   async ensureActiveConversation(objective, settings = null) {
     if (!this.taskStore) return null;
     const currentSettings = settings || await this.settingsStore.read();
@@ -3190,6 +3295,7 @@ export class DesktopController {
       workspaceMode: "same_directory",
       workspace
     });
+    task = await this.taskStore.select(scope, task.id);
     this.activeContextKey = normalizedContextKey;
     this.activeTaskRecordId = id;
     if (settings.operatingMode === "online" && this.identity?.principal_type === "user") {
@@ -3260,6 +3366,7 @@ export class DesktopController {
         workspaceMode,
         workspace
       });
+      task = await this.taskStore.select(scope, task.id);
     }
     if (settings.operatingMode === "online" && this.identity?.principal_type === "user") {
       try {
@@ -3366,6 +3473,7 @@ export class DesktopController {
     }
     this.activeTaskRecordId = task.id;
     this.activeContextKey = task.contextKey;
+    if (this.taskStore) task = await this.taskStore.select(scope, task.id);
     this.resetRuntime();
     this.attachments.clear();
     this.canvasResults.clear();
@@ -4233,6 +4341,10 @@ export class DesktopController {
       objective: prompt,
       attachmentNames: names,
       source: onlineTaskSource({ identity, snapshot }),
+      conversation: {
+        taskRecordId: this.activeTaskRecordId,
+        contextKey: this.activeContextKey
+      },
       mode: "online"
     });
     this.identity = identity;

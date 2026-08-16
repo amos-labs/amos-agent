@@ -51,6 +51,39 @@ test("DesktopTaskStore encrypts and isolates task metadata by account", async ()
   assert.doesNotMatch(await readFile(filePath, "utf8"), /weekly scorecard|private\/workspace/);
 });
 
+test("DesktopTaskStore restores the explicitly selected conversation across restarts", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-task-selection-"));
+  const filePath = join(directory, "tasks.json");
+  const owner = taskOwnerScope({ boundary: "personal", workspace: "/workspace" });
+  const store = new DesktopTaskStore({
+    filePath,
+    ...codec(),
+    now: clock(
+      "2026-08-10T10:00:00.000Z",
+      "2026-08-10T10:01:00.000Z",
+      "2026-08-10T10:02:00.000Z"
+    )
+  });
+  await store.create(owner, {
+    id: "older",
+    title: "Older conversation",
+    objective: "Inspect the older plan"
+  });
+  await store.create(owner, {
+    id: "newer",
+    title: "Newer conversation",
+    objective: "Inspect the newer plan"
+  });
+
+  assert.equal((await store.selected(owner)).id, "newer");
+  await store.select(owner, "older");
+
+  const restarted = new DesktopTaskStore({ filePath, ...codec() });
+  const restored = await restarted.selected(owner);
+  assert.equal(restored.id, "older");
+  assert.equal(restored.selectedAt, "2026-08-10T10:02:00.000Z");
+});
+
 test("DesktopTaskStore manages pin, archive, lineage, and task-bound canvas", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-task-store-"));
   const store = new DesktopTaskStore({
