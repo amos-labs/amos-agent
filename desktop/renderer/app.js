@@ -3883,6 +3883,8 @@ function renderCanvasBlock(block) {
   else if (block.type === "timeseries") card = renderCanvasTimeseries(block);
   else if (block.type === "markdown") card = renderCanvasMarkdown(block);
   else if (block.type === "code") card = renderCanvasCode(block);
+  else if (block.type === "file_tree") card = renderCanvasFileTree(block);
+  else if (block.type === "diff") card = renderCanvasDiff(block);
   else if (block.type === "document") card = renderCanvasDocument(block);
   else if (block.type === "spreadsheet") card = renderCanvasSpreadsheet(block);
   else if (block.type === "browser") card = renderCanvasBrowser(block);
@@ -4112,6 +4114,174 @@ function renderCanvasCode(block) {
   code.textContent = block.content;
   pre.append(code);
   card.append(meta, pre);
+  return card;
+}
+
+function renderCanvasFileTree(block) {
+  const card = canvasCard(block, "canvas-file-tree-block wide");
+  const summary = document.createElement("div");
+  summary.className = "canvas-file-tree-summary";
+  summary.textContent = `${block.rootLabel} · ${block.nodes.length} visible item${block.nodes.length === 1 ? "" : "s"}${block.truncated ? " · bounded view" : ""}`;
+  card.append(summary);
+
+  const tree = document.createElement("div");
+  tree.className = "canvas-file-tree";
+  tree.setAttribute("role", "tree");
+  const collapsed = new Set();
+  const rows = [];
+  const refreshVisibility = () => {
+    for (const row of rows) {
+      const hidden = [...collapsed].some((path) => row.node.path.startsWith(`${path}/`));
+      row.element.classList.toggle("hidden", hidden);
+      if (row.toggle) {
+        row.toggle.textContent = collapsed.has(row.node.path) ? "▸" : "▾";
+        row.toggle.setAttribute("aria-expanded", String(!collapsed.has(row.node.path)));
+      }
+    }
+  };
+  for (const node of block.nodes) {
+    const row = document.createElement("div");
+    row.className = `canvas-file-tree-row ${node.kind}`;
+    row.style.paddingLeft = `${16 + (node.depth * 17)}px`;
+    row.setAttribute("role", "treeitem");
+    row.setAttribute("aria-level", String(node.depth + 1));
+    row.title = node.path;
+    let toggle = null;
+    if (node.kind === "directory") {
+      toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "canvas-tree-toggle";
+      toggle.textContent = "▾";
+      toggle.setAttribute("aria-label", `Collapse ${node.path}`);
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.addEventListener("click", () => {
+        if (collapsed.has(node.path)) collapsed.delete(node.path);
+        else collapsed.add(node.path);
+        toggle.setAttribute(
+          "aria-label",
+          `${collapsed.has(node.path) ? "Expand" : "Collapse"} ${node.path}`
+        );
+        refreshVisibility();
+      });
+      row.append(toggle);
+    } else {
+      const spacer = document.createElement("span");
+      spacer.className = "canvas-tree-spacer";
+      spacer.textContent = "·";
+      row.append(spacer);
+    }
+    const icon = document.createElement("span");
+    icon.className = "canvas-tree-icon";
+    icon.textContent = node.kind === "directory" ? "□" : "–";
+    const name = document.createElement("span");
+    name.className = "canvas-tree-name";
+    name.textContent = node.name;
+    row.append(icon, name);
+    if (node.status !== "none") {
+      const status = document.createElement("span");
+      status.className = `canvas-tree-status ${node.status}`;
+      status.textContent = node.status;
+      row.append(status);
+    }
+    rows.push({ node, element: row, toggle });
+    tree.append(row);
+  }
+  if (block.nodes.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "canvas-file-tree-empty";
+    empty.textContent = "No displayable files are present in this workspace.";
+    tree.append(empty);
+  }
+  card.append(tree);
+  return card;
+}
+
+function renderCanvasDiff(block) {
+  const card = canvasCard(block, "canvas-diff-block wide");
+  const additions = block.files.reduce((total, file) => total + file.additions, 0);
+  const deletions = block.files.reduce((total, file) => total + file.deletions, 0);
+  const summary = document.createElement("div");
+  summary.className = "canvas-diff-summary";
+  const scope = document.createElement("strong");
+  scope.textContent = block.scope === "staged" ? "Staged" : block.scope === "untracked" ? "Untracked" : "Working tree";
+  const files = document.createElement("span");
+  files.textContent = `${block.files.length} file${block.files.length === 1 ? "" : "s"}`;
+  const plus = document.createElement("span");
+  plus.className = "canvas-diff-additions";
+  plus.textContent = `+${additions}`;
+  const minus = document.createElement("span");
+  minus.className = "canvas-diff-deletions";
+  minus.textContent = `−${deletions}`;
+  summary.append(scope, files, plus, minus);
+  if (block.truncated) {
+    const bounded = document.createElement("span");
+    bounded.className = "canvas-diff-bounded";
+    bounded.textContent = "bounded view";
+    summary.append(bounded);
+  }
+  card.append(summary);
+
+  const body = document.createElement("div");
+  body.className = "canvas-diff-files";
+  for (const file of block.files) {
+    const section = document.createElement("section");
+    section.className = "canvas-diff-file";
+    const header = document.createElement("header");
+    const path = document.createElement("strong");
+    path.textContent = file.path;
+    path.title = file.path;
+    const metadata = document.createElement("span");
+    metadata.textContent = `${file.status} · +${file.additions} −${file.deletions}`;
+    header.append(path, metadata);
+    if (file.oldPath && file.oldPath !== file.path) {
+      const previous = document.createElement("small");
+      previous.textContent = `from ${file.oldPath}`;
+      header.append(previous);
+    }
+    section.append(header);
+    if (file.hunks.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "canvas-diff-empty";
+      empty.textContent = file.status === "binary"
+        ? "Binary change — no text diff is rendered."
+        : "No text hunk is available for this change.";
+      section.append(empty);
+    }
+    for (const hunk of file.hunks) {
+      const hunkElement = document.createElement("div");
+      hunkElement.className = "canvas-diff-hunk";
+      const hunkHeader = document.createElement("div");
+      hunkHeader.className = "canvas-diff-hunk-header";
+      hunkHeader.textContent = hunk.header;
+      hunkElement.append(hunkHeader);
+      for (const line of hunk.lines) {
+        const row = document.createElement("div");
+        row.className = `canvas-diff-line ${line.kind}`;
+        const oldNumber = document.createElement("span");
+        oldNumber.className = "canvas-diff-line-number";
+        oldNumber.textContent = line.oldLine ?? "";
+        const newNumber = document.createElement("span");
+        newNumber.className = "canvas-diff-line-number";
+        newNumber.textContent = line.newLine ?? "";
+        const marker = document.createElement("span");
+        marker.className = "canvas-diff-marker";
+        marker.textContent = line.kind === "addition" ? "+" : line.kind === "deletion" ? "−" : " ";
+        const code = document.createElement("code");
+        code.textContent = line.text;
+        row.append(oldNumber, newNumber, marker, code);
+        hunkElement.append(row);
+      }
+      section.append(hunkElement);
+    }
+    body.append(section);
+  }
+  if (block.files.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "canvas-diff-empty";
+    empty.textContent = "No matching changes.";
+    body.append(empty);
+  }
+  card.append(body);
   return card;
 }
 

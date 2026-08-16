@@ -121,7 +121,8 @@ const RECIPES = Object.freeze([
       "Inspect the project and write a concrete plan before editing.",
       "Hand off to the implementer for the smallest reviewable patch.",
       "Run the repository's real checks and inspect git_diff.",
-      "Hand off to the checker to confirm the change or name the exact repair."
+      "Hand off to the checker to confirm the change or name the exact repair.",
+      "Present desktop_present_code_workspace so the user can review the deterministic file tree and final Git diff."
     ],
     doneWhen: "The plan, change, validation evidence, and remaining risk are explicit.",
     patterns: [
@@ -147,7 +148,8 @@ const RECIPES = Object.freeze([
       "Inspect the project and trace the relevant files before editing.",
       "Define the smallest coherent change and preserve unrelated work.",
       "Apply a reviewable patch through the governed local approval path.",
-      "Run the repository's real checks, not a substitute, then inspect git_diff before reporting completion."
+      "Run the repository's real checks, not a substitute, then inspect git_diff before reporting completion.",
+      "Present desktop_present_code_workspace so the user can review the deterministic file tree and final Git diff."
     ],
     doneWhen: "The change, validation evidence, and any remaining risk are explicit.",
     patterns: [

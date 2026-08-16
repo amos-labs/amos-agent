@@ -10,6 +10,8 @@ Chat remains the command surface. The canvas is a presentation surface for:
 - time-series charts;
 - Markdown briefs;
 - inert, syntax-labelled code;
+- expandable workspace file trees with Git status;
+- line-numbered staged, working-tree, and untracked diffs;
 - verified DOCX/PDF document previews;
 - verified XLSX workbook summaries, tables, and charts with direct open actions;
 - safe browser destinations for app, page, and course previews;
@@ -55,6 +57,8 @@ The v1 limits are intentionally bounded:
 - 100 source references; and
 - 20 details per decision card; and
 - 32 sheet names and 300 spreadsheet checks per workbook card;
+- 600 nodes per file-tree block;
+- 100 files and 4,000 lines per diff block; and
 - 50,000 characters per inert code block.
 
 Unknown block types, non-finite numeric values, oversized content, and malformed
@@ -65,6 +69,14 @@ opaque browser session ID, page revision, frame ID, public URL, viewport, and
 bounded observation metadata. The renderer can request only the exact current
 frame attached to a visible browser canvas. It never receives cookies, DOM
 selectors, debugging handles, credentials, or base64 through model context.
+
+The `file_tree` and `diff` blocks are also runtime-owned. The model can request
+`desktop_present_code_workspace` with a change scope, safe path filters, and an
+optional focused file, but it cannot provide the tree or diff payload. Desktop
+reads the selected workspace and Git state directly, excludes credential-like
+files, validates every workspace-relative path, and renders code through
+`textContent`. This makes the coding canvas a review surface for actual local
+state rather than a model-authored account of what changed.
 
 ## Data and authority
 
@@ -122,6 +134,7 @@ upload, persist, or share a canvas.
 - “Turn the latest goal cycle into an operating brief with evidence.”
 - “Show me the generated course and let me open the review.”
 - “Display this code and give me a browser preview.”
+- “Show the project files and final diff in the coding workspace.”
 - “Refresh the company health canvas.”
 
 An explicit user request for a canvas or visual view is honored whenever the

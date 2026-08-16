@@ -116,6 +116,7 @@ import { createBrowserVisualTools } from "../tools/browserVisual.js";
 import { createLocalPreviewTool } from "../tools/localPreview.js";
 import { createAutomationSetupTool } from "../tools/automationSetup.js";
 import { createConsultativeProposalTool } from "../tools/consultativeState.js";
+import { createCodeWorkspaceTool } from "../tools/codeWorkspace.js";
 import {
   DEMO_SYSTEM_PROMPT,
   OFFLINE_SYSTEM_PROMPT,
@@ -4274,6 +4275,9 @@ export class DesktopController {
       })
     ];
     if (!contextOnly) {
+      extraTools.push(createCodeWorkspaceTool({
+        present: (spec) => this.presentCanvas(spec)
+      }));
       extraTools.push(...createSubagentTools({
         handoff: (input) => this.switchTaskIntelligence(input),
         spawn: this.runManager.current()?.parentTaskId

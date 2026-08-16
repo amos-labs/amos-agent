@@ -81,7 +81,11 @@ task-local unless the user explicitly selects **Keep in private memory** or
 ### Typed company canvas
 
 Desktop can safely present bounded AMOS and local results as metrics, filterable
-tables, time-series charts, Markdown briefs, source lists, and decision cards.
+tables, time-series charts, Markdown briefs, source lists, decision cards, and
+a deterministic coding work surface. The coding view reads the selected local
+workspace directly to show an expandable file tree, Git status, line-numbered
+staged and working-tree diffs, untracked text files, and an optional focused
+source file. Models request the view but never author its diff payload.
 The model supplies a versioned data specification rather than HTML or script.
 Every view carries source and freshness metadata, and pending decisions still
 open the existing signed-in AMOS approval flow.
