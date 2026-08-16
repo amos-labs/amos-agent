@@ -13,7 +13,7 @@ test("KimiClient sends K3 reasoning effort and tool definitions", async () => {
       async text() {
         return JSON.stringify({
         choices: [{ message: { role: "assistant", content: "ok" } }],
-        usage: { total_tokens: 1 }
+        usage: { prompt_tokens: 80, completion_tokens: 40, total_tokens: 120 }
         });
       }
     };
@@ -40,4 +40,7 @@ test("KimiClient sends K3 reasoning effort and tool definitions", async () => {
   assert.equal(captured.body.reasoning_effort, "max");
   assert.equal(captured.body.tools[0].function.name, "noop");
   assert.equal(result.message.content, "ok");
+  assert.equal(result.usage.input_tokens, 80);
+  assert.equal(result.usage.output_tokens, 40);
+  assert.equal(result.usage.total_tokens, 120);
 });

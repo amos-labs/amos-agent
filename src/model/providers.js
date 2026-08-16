@@ -55,7 +55,7 @@ const PROVIDERS = {
     defaultModel: "grok-4.6",
     models: [
       { id: "grok-4.6", label: "Grok 4.6", supportedReasoningEfforts: ["low", "medium", "high", "xhigh"], defaultReasoningEffort: "high" },
-      { id: "grok-4.5", label: "Grok 4.5", supportedReasoningEfforts: ["low", "medium", "high", "xhigh"], defaultReasoningEffort: "high" },
+      { id: "grok-4.5", label: "Grok 4.5", supportedReasoningEfforts: ["low", "medium", "high"], defaultReasoningEffort: "high" },
       { id: "grok-4.3", label: "Grok 4.3", supportedReasoningEfforts: ["low", "medium", "high"], defaultReasoningEffort: "high" },
       { id: "grok-build-0.1", label: "Grok Build 0.1", supportedReasoningEfforts: ["low", "medium", "high"], defaultReasoningEffort: "medium" }
     ],

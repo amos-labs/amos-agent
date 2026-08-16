@@ -14,10 +14,10 @@ const RATES = Object.freeze({
   "anthropic.claude-fable-5": rate(10, 50, 1),
   "anthropic.claude-opus-5": rate(5, 25, 0.5),
   "anthropic.claude-sonnet-5": rate(2, 10, 0.2),
-  "grok-4.6": rate(2, 6, 0.5),
-  "grok-4.5": rate(2, 6, 0.3),
-  "grok-4.3": rate(1.25, 2.5, 0.2),
-  "grok-build-0.1": rate(1, 2, 0.2),
+  "grok-4.6": rate(2, 6, 0.5, { longContextAt: 200_000, longContextMultiplier: 2 }),
+  "grok-4.5": rate(2, 6, 0.3, { longContextAt: 200_000, longContextMultiplier: 2 }),
+  "grok-4.3": rate(1.25, 2.5, 0.2, { longContextAt: 200_000, longContextMultiplier: 2 }),
+  "grok-build-0.1": rate(1, 2, 0.2, { longContextAt: 200_000, longContextMultiplier: 2 }),
   "kimi-k3": rate(3, 15, 0.3),
   "kimi-k2.7-code": rate(0.95, 4, 0.19),
   "kimi-k2.7-code-highspeed": rate(1.9, 8, 0.38),
@@ -52,10 +52,13 @@ export function estimateUsageCost({
       estimated: false
     };
   }
+  const multiplier = pricing.longContextAt && input >= pricing.longContextAt
+    ? pricing.longContextMultiplier
+    : 1;
   const costUsedMicrousd = Math.round(
-    uncached * pricing.inputMicrousdPerToken +
+    (uncached * pricing.inputMicrousdPerToken +
       cached * pricing.cachedInputMicrousdPerToken +
-      output * pricing.outputMicrousdPerToken
+      output * pricing.outputMicrousdPerToken) * multiplier
   );
   return {
     model: String(model || ""),
@@ -89,13 +92,15 @@ export function formatUsdMicros(microusd) {
   return `$${(value / MICROUSD_PER_USD).toFixed(value >= 100_000 ? 2 : 4)}`;
 }
 
-function rate(inputUsdPerMillion, outputUsdPerMillion, cachedUsdPerMillion = null) {
+function rate(inputUsdPerMillion, outputUsdPerMillion, cachedUsdPerMillion = null, options = {}) {
   return Object.freeze({
     inputMicrousdPerToken: usdPerMillionToMicrousd(inputUsdPerMillion),
     outputMicrousdPerToken: usdPerMillionToMicrousd(outputUsdPerMillion),
     cachedInputMicrousdPerToken: usdPerMillionToMicrousd(
       cachedUsdPerMillion == null ? inputUsdPerMillion * 0.1 : cachedUsdPerMillion
-    )
+    ),
+    longContextAt: Number(options.longContextAt) || 0,
+    longContextMultiplier: Number(options.longContextMultiplier) || 1
   });
 }
 

@@ -33,6 +33,16 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
     ["grok-4.6", "grok-4.5", "grok-4.3", "grok-build-0.1"]
   );
   assert.deepEqual(
+    providers.find((provider) => provider.id === "xai").models.find((model) => model.id === "grok-4.6")
+      .supportedReasoningEfforts,
+    ["low", "medium", "high", "xhigh"]
+  );
+  assert.deepEqual(
+    providers.find((provider) => provider.id === "xai").models.find((model) => model.id === "grok-4.5")
+      .supportedReasoningEfforts,
+    ["low", "medium", "high"]
+  );
+  assert.deepEqual(
     providers.find((provider) => provider.id === "kimi").models.map((model) => model.id),
     ["kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6"]
   );

@@ -1985,25 +1985,44 @@ export class DesktopController {
       if (task?.contextKey) this.activeContextKey = task.contextKey;
       return this.executeRun(input, taskId);
     });
-    this.resetShellSurfaceAfterLaunch(launched.lane);
+    if (input?.select !== false) {
+      this.resetShellSurfaceAfterLaunch(launched.lane);
+    }
     this.send("desktop-runs:changed", this.runManager.active());
-    try {
-      const result = await launched.promise;
+    const finish = async () => {
+      try {
+        const result = await launched.promise;
+        return {
+          ...result,
+          runId: launched.lane.id,
+          taskRecordId: launched.lane.taskRecordId,
+          contextKey: launched.lane.contextKey
+        };
+      } finally {
+        const selected = this.runManager.selectedRunId === launched.lane.id;
+        if (selected) {
+          this.adoptRunSurface(launched.lane);
+          this.runManager.select(null);
+        }
+        this.runManager.delete(launched.lane.id);
+        this.send("desktop-runs:changed", this.runManager.active());
+      }
+    };
+    if (input?.wait === false) {
+      finish().catch((error) => {
+        this.record("task", `Background task failed: ${error.message}`, {
+          task_id: taskRecordId
+        });
+      });
       return {
-        ...result,
+        started: true,
+        taskId,
         runId: launched.lane.id,
-        taskRecordId: launched.lane.taskRecordId,
+        taskRecordId,
         contextKey: launched.lane.contextKey
       };
-    } finally {
-      const selected = this.runManager.selectedRunId === launched.lane.id;
-      if (selected) {
-        this.adoptRunSurface(launched.lane);
-        this.runManager.select(null);
-      }
-      this.runManager.delete(launched.lane.id);
-      this.send("desktop-runs:changed", this.runManager.active());
     }
+    return finish();
   }
 
   async executeRun(input, taskId = randomUUID()) {
@@ -2207,6 +2226,12 @@ export class DesktopController {
       });
       await this.recordNorthwindValue(settings, receiptEvents);
       await this.finishRunSupervision("completed", answer);
+      await this.recordChildOutcome({
+        status: "completed",
+        answer,
+        settings,
+        error: null
+      });
       return {
         answer,
         taskId,
@@ -2253,6 +2278,12 @@ export class DesktopController {
           }).catch(() => {});
         }
       }
+      await this.recordChildOutcome({
+        status: canceled ? "cancelled" : "failed",
+        answer: "",
+        settings,
+        error: error.message
+      });
       if (canceled) throw createAbortError();
       throw error;
     } finally {
@@ -3296,7 +3327,10 @@ export class DesktopController {
   }
 
   async forkTaskResource(input = {}) {
-    if (this.activeTask) throw new Error("Finish or stop the current run before forking a task");
+    const isolatedChild = input.select === false && input.isolatedChild === true;
+    if (this.activeTask && !isolatedChild) {
+      throw new Error("Finish or stop the current run before forking a task");
+    }
     const settings = await this.settingsStore.read();
     const scope = this.taskScope(settings);
     if (!scope || !this.taskStore) throw new Error("Task storage is unavailable");
@@ -3313,7 +3347,7 @@ export class DesktopController {
       ? await this.sessionContinuityStore.load(parentContinuityScope)
       : null;
     const forkCapability = conversationForkCapability(parent, parentContinuity);
-    if (!forkCapability.canFork) {
+    if (!isolatedChild && !forkCapability.canFork) {
       throw new Error(conversationForkUnavailableMessage(forkCapability.reason));
     }
     const name = String(input.name || "").trim().slice(0, 160);
@@ -3332,7 +3366,10 @@ export class DesktopController {
     if (!name || !objective || (!sourceEventId && input.select !== false)) {
       throw new Error("A task fork needs a name, objective, and source milestone");
     }
-    if (!parentContinuity?.turns?.some((turn) => turn.id === sourceEventId)) {
+    if (
+      !isolatedChild &&
+      !parentContinuity?.turns?.some((turn) => turn.id === sourceEventId)
+    ) {
       throw new Error("The selected conversation milestone is no longer available to fork");
     }
     if (!["everything", "from_here", "selected_artifacts"].includes(contextScope)) {
@@ -3387,7 +3424,12 @@ export class DesktopController {
       contextKey: childContextKey
     });
     let continuity = null;
-    if (this.sessionContinuityStore && parentContinuityScope && childScope) {
+    if (
+      !isolatedChild &&
+      this.sessionContinuityStore &&
+      parentContinuityScope &&
+      childScope
+    ) {
       continuity = await this.sessionContinuityStore.fork(parentContinuityScope, childScope, {
         contextScope,
         sourceEventId,
@@ -5099,37 +5141,43 @@ export class DesktopController {
     });
     const config = this.configFrom(applied.settings);
     const runtime = this.runtime?.runtime;
-    if (runtime?.loop) {
-      const modelClient = createModelClient({
+    const summary = String(input.summary || "").trim();
+    const handoff = {
+      role: applied.role,
+      provider: applied.intelligence.provider,
+      model: applied.intelligence.model,
+      modelClient: createModelClient({
         ...config.model,
         getAccessToken: config.model.usesAmosIdentity
           ? async () => config.amos.apiKey || config.model.apiKey
           : null
-      });
-      runtime.modelClient = modelClient;
-      runtime.loop.modelClient = modelClient;
-      runtime.loop.config = config;
-      this.runtime.config = config;
-      const summary = String(input.summary || "").trim();
-      runtime.loop.messages.push({
-        role: "user",
-        content: [
-          `<amos_role_handoff role="${applied.role}">`,
-          roleGuidance(applied.role),
-          summary ? `Handoff brief: ${summary}` : "",
-          "</amos_role_handoff>"
-        ].filter(Boolean).join("\n")
-      });
+      }),
+      config,
+      message: [
+        `<amos_role_handoff role="${applied.role}">`,
+        roleGuidance(applied.role),
+        summary ? `Handoff brief: ${summary}` : "",
+        "</amos_role_handoff>"
+      ].filter(Boolean).join("\n")
+    };
+    if (runtime?.loop?.activeTaskMessage && typeof runtime.loop.queueHandoff === "function") {
+      runtime.loop.queueHandoff(handoff);
+    } else if (runtime?.loop) {
+      runtime.loop.applyHandoff(handoff);
     }
+    this.runtime.config = config;
     this.send("agent:event", {
       type: "intelligence",
       role: applied.role,
       provider: applied.intelligence.provider,
       model: applied.intelligence.model,
-      summary: "Switched intelligence role"
+      summary: runtime?.loop?.activeTaskMessage
+        ? "Queued intelligence role for the next turn"
+        : "Switched intelligence role"
     });
     return {
       ok: true,
+      queued: Boolean(runtime?.loop?.activeTaskMessage),
       role: applied.role,
       provider: applied.intelligence.provider,
       model: applied.intelligence.model,
@@ -5165,7 +5213,8 @@ export class DesktopController {
       objective: String(input.objective || "").trim().slice(0, 6_000),
       workspaceMode: input.workspaceMode === "same_directory" ? "same_directory" : "new_worktree",
       contextScope: "from_here",
-      select: false
+      select: false,
+      isolatedChild: true
     });
     if (forked.task?.workspace?.localPath) {
       childSettings.workspace = forked.task.workspace.localPath;
@@ -5190,11 +5239,8 @@ export class DesktopController {
       parentTaskId: parentId,
       role,
       settings: childSettings,
-      select: false
-    }).catch((error) => {
-      child.status = "failed";
-      child.error = error.message;
-      this.record("task", `Child task failed: ${error.message}`, { child_task_id: forked.task.id });
+      select: false,
+      wait: false
     });
     this.record("task", `Spawned child ${forked.task.title}`, {
       parent_task_id: parentId,
@@ -5237,29 +5283,58 @@ export class DesktopController {
     const scope = this.taskScope(settings);
     const task = scope && this.taskStore ? await this.taskStore.get(scope, taskId) : null;
     const workspace = listed?.workspace || task?.workspace?.localPath || "";
-    let diff = "";
-    if (workspace) {
-      try {
-        const result = await execFile("git", ["-C", workspace, "diff", "--stat"], {
-          timeout: 15_000,
-          maxBuffer: 256 * 1024,
-          windowsHide: true
-        });
-        diff = String(result.stdout || "").trim().slice(0, 4_000);
-      } catch (error) {
-        diff = String(error.stderr || error.message || "").slice(0, 400);
-      }
-    }
+    const live = workspace ? await inspectChildWorkspace(workspace) : emptyChildWorkspace();
+    const outcome = task?.outcome || listed?.outcome || null;
     return {
       ok: true,
       task_id: taskId,
-      status: lane?.status || task?.status || listed?.status || "unknown",
+      status: outcome?.status || lane?.status || task?.status || listed?.status || "unknown",
       phase: lane?.phase || "",
-      summary: lane?.summary || task?.objective || "",
+      summary: outcome?.summary || lane?.summary || task?.objective || "",
+      answer: outcome?.answer || "",
       workspace,
-      diff,
+      files: live.files.length > 0 ? live.files : outcome?.files || [],
+      diff: live.diff || outcome?.diff || "",
+      usage: outcome?.usage || listed?.usage || null,
       running: Boolean(lane)
     };
+  }
+
+  async recordChildOutcome({ status, answer = "", settings, error = null }) {
+    const lane = this.runManager.current();
+    const taskId = this.activeTaskRecordId || lane?.taskRecordId;
+    if (!taskId) return null;
+    const workspace = this.activeTask?.workspace || settings?.workspace || "";
+    const git = workspace ? await inspectChildWorkspace(workspace) : emptyChildWorkspace();
+    const outcome = {
+      status,
+      summary: String(error || answer || git.stat || status).trim().slice(0, 2_000),
+      answer: String(answer || "").trim().slice(0, 8_000),
+      diff: git.diff,
+      files: git.files,
+      usage: this.activeTask?.usage || null,
+      finishedAt: new Date().toISOString(),
+      error: error ? String(error).slice(0, 1_000) : null
+    };
+    const scope = this.taskScope(settings);
+    if (this.taskStore && scope) {
+      await this.taskStore.update(scope, taskId, {
+        status: status === "completed" ? "completed" : status === "cancelled" ? "interrupted" : "failed",
+        outcome
+      }).catch(() => {});
+    }
+    const parentId = lane?.parentTaskId;
+    if (parentId) {
+      const parentLane = [...this.runManager.runs.values()].find((item) => item.taskRecordId === parentId);
+      const child = parentLane?.activeTask?.children?.find((item) => item.taskId === taskId);
+      if (child) {
+        child.status = status;
+        child.summary = outcome.summary;
+        child.outcome = outcome;
+        child.usage = outcome.usage;
+      }
+    }
+    return outcome;
   }
 
   async companionStatus() {
@@ -5281,7 +5356,7 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const workspace = String(input.workspace || "").trim();
     if (workspace && workspace !== settings.workspace) {
-      await this.settingsStore.write({ ...settings, workspace });
+      await this.saveSettings({ workspace });
     }
     const selection = String(input.selection || "").trim();
     const files = Array.isArray(input.files) ? input.files.filter(Boolean).slice(0, 20) : [];
@@ -5291,22 +5366,21 @@ export class DesktopController {
       files.length > 0 ? `\n\nEditor files: ${files.join(", ")}` : ""
     ].join("");
     if (!objective.trim()) throw new Error("The companion task needs an objective");
-    const result = await this.run({ text: objective });
+    const result = await this.run({ text: objective, wait: false });
     return {
       ok: true,
+      started: true,
       taskId: result.taskId,
-      taskRecordId: result.taskRecordId,
-      answer: result.answer
+      runId: result.runId,
+      taskRecordId: result.taskRecordId
     };
   }
 
   async companionSetWorkspace(input = {}) {
-    const settings = await this.settingsStore.read();
     const workspace = String(input.path || input.workspace || "").trim();
     if (!workspace) throw new Error("Choose a workspace folder");
-    const saved = await this.settingsStore.write({ ...settings, workspace });
-    this.record("settings", `Companion set the local workspace to ${basename(workspace)}`);
-    return { ok: true, workspace: saved.workspace };
+    const saved = await this.saveSettings({ workspace });
+    return { ok: true, workspace: saved.settings?.workspace || workspace };
   }
 
   configFrom(settings) {
@@ -6142,6 +6216,42 @@ function conversationObjectiveFromInput(input) {
       ? "Review the attached material and tell me what is important."
       : NEW_CONVERSATION_OBJECTIVE
   );
+}
+
+function emptyChildWorkspace() {
+  return { files: [], diff: "", stat: "" };
+}
+
+async function inspectChildWorkspace(workspace) {
+  const root = String(workspace || "").trim();
+  if (!root) return emptyChildWorkspace();
+  const run = async (args) => {
+    try {
+      const result = await execFile("git", ["-C", root, ...args], {
+        timeout: 15_000,
+        maxBuffer: 512 * 1024,
+        windowsHide: true
+      });
+      return String(result.stdout || "").trim();
+    } catch (error) {
+      return String(error.stdout || error.stderr || error.message || "").trim();
+    }
+  };
+  const [status, stat, diff] = await Promise.all([
+    run(["status", "--short"]),
+    run(["diff", "--stat"]),
+    run(["diff"])
+  ]);
+  const files = status
+    .split("\n")
+    .map((line) => line.replace(/^.. /, "").trim())
+    .filter(Boolean)
+    .slice(0, 40);
+  return {
+    files,
+    stat: stat.slice(0, 2_000),
+    diff: diff.slice(0, 8_000)
+  };
 }
 
 function conversationForkCapability(task, continuity) {

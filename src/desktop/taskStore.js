@@ -140,6 +140,7 @@ export class DesktopTaskStore {
       ...(Object.hasOwn(changes, "projectId") ? { projectId: changes.projectId } : {}),
       ...(Object.hasOwn(changes, "canvasState") ? { canvasState: changes.canvasState } : {}),
       ...(Object.hasOwn(changes, "workspace") ? { workspace: changes.workspace } : {}),
+      ...(Object.hasOwn(changes, "outcome") ? { outcome: changes.outcome } : {}),
       updatedAt: this.now().toISOString()
     });
     store.tasks[index] = updated;
@@ -247,6 +248,7 @@ function normalizeTask(value) {
     resourceRefs: uniqueStrings(value?.resourceRefs, 40, 1_024),
     forkManifest: normalizeForkManifest(value?.forkManifest),
     canvasState: normalizeCanvasState(value?.canvasState),
+    outcome: normalizeTaskOutcome(value?.outcome),
     owner: normalizeOwner(value?.owner),
     createdAt: normalizeTimestamp(value?.createdAt),
     updatedAt: normalizeTimestamp(value?.updatedAt)
@@ -280,6 +282,25 @@ function normalizeCanvasState(value) {
     });
   const activeCanvasId = cleanText(value.activeCanvasId, 128) || null;
   return { activeCanvasId, canvases };
+}
+
+function normalizeTaskOutcome(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return {
+    status: cleanText(value.status, 32),
+    summary: redact(cleanText(value.summary, 2_000)),
+    answer: redact(cleanText(value.answer, 8_000)),
+    diff: cleanText(value.diff, 8_000),
+    files: uniqueStrings(value.files, 40, 1_024),
+    usage: value.usage && typeof value.usage === "object" ? {
+      inputTokens: Number(value.usage.inputTokens) || 0,
+      outputTokens: Number(value.usage.outputTokens) || 0,
+      totalTokens: Number(value.usage.totalTokens) || 0,
+      costUsedMicrousd: Number(value.usage.costUsedMicrousd) || 0
+    } : null,
+    finishedAt: optionalTimestamp(value.finishedAt),
+    error: cleanText(value.error, 1_000) || null
+  };
 }
 
 function normalizeForkManifest(value) {

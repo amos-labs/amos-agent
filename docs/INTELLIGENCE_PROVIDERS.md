@@ -151,7 +151,12 @@ MOONSHOT_API_KEY=...
 AMOS_MODEL=kimi-k3
 ```
 
-xAI / Grok is a named compatible provider at `https://api.x.ai/v1`:
+xAI / Grok is a named compatible provider at `https://api.x.ai/v1`.
+Grok 4.6 is the current coding flagship (`grok-4.6`, $2/$6 below 200k
+prompt tokens and 2× above; reasoning `low`/`medium`/`high`/`xhigh`).
+Grok 4.5 accepts `low`/`medium`/`high` only. Moonshot's current catalog is
+`kimi-k3`, `kimi-k2.7-code`, `kimi-k2.7-code-highspeed`, and `kimi-k2.6`;
+`kimi-k2.5` is sunsetting for new accounts.
 
 ```dotenv
 AMOS_MODEL_PROVIDER=xai
