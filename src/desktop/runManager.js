@@ -178,6 +178,7 @@ export class DesktopRunSupervisor {
     this.reportQueue = Promise.resolve();
     this.timer = null;
     this.closed = false;
+    this.stopReason = "";
   }
 
   async admit(input) {
@@ -191,7 +192,8 @@ export class DesktopRunSupervisor {
     this.sequence = Number(admitted.run.sequence || 0);
     this.onUpdate(admitted.run);
     if (admitted.continue === false) {
-      this.abortController?.abort();
+      this.stopReason = String(admitted.reason || admitted.run?.stopReason || "run_not_admitted");
+      this.abortController?.abort(this.stopReason);
       return admitted;
     }
     this.timer = this.setIntervalImpl(() => {
@@ -241,7 +243,8 @@ export class DesktopRunSupervisor {
       this.run = result.run;
       this.onUpdate(result.run);
       if (result.continue === false && !isTerminalRunStatus(status)) {
-        this.abortController?.abort();
+        this.stopReason = String(result.reason || result.run?.stopReason || "run_stop_requested");
+        this.abortController?.abort(this.stopReason);
       }
       return result;
     });
@@ -269,6 +272,7 @@ function publicRun(lane, selected = false) {
     phase: String(lane.phase || "").slice(0, 160),
     summary: cleanText(lane.summary, 500),
     objective: cleanText(lane.activeTask?.objective || lane.objective, 6_000),
+    codingLifecycle: lane.activeTask?.codingLifecycle?.state?.() || null,
     startedAt: lane.activeTask?.startedAt || lane.createdAt,
     updatedAt: lane.updatedAt,
     selected

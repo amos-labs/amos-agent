@@ -28,6 +28,11 @@ import {
   roleSelection,
   sanitizeIntelligenceRoles
 } from "../model/intelligenceRoles.js";
+import {
+  CodingLifecycle,
+  codingVerificationPendingNote,
+  isCodingBudgetStopReason
+} from "../model/codingLifecycle.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { createSubagentTools } from "../tools/subagents.js";
 import { execFile as execFileCallback } from "node:child_process";
@@ -417,6 +422,7 @@ export class DesktopController {
             objective: this.activeTask.objective,
             intelligenceRole: this.activeTask.intelligenceRole || null,
             intelligence: this.activeTask.intelligence || null,
+            codingLifecycle: this.activeTask.codingLifecycle?.state() || null,
             usage: this.activeTask.usage || null
           }
         : null,
@@ -2110,6 +2116,7 @@ export class DesktopController {
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsedMicrousd: 0, models: [] },
       intelligenceRole: input?.role || null,
       intelligence: null,
+      codingLifecycle: null,
       children: []
     };
     this.send("agent:status", {
@@ -2172,6 +2179,17 @@ export class DesktopController {
         this.activeTask.intelligenceRole = applied.role;
         this.activeTask.intelligence = applied.intelligence;
       }
+      if (pairing.enabled && previewWorkflow?.family === "coding") {
+        this.activeTask.codingLifecycle = new CodingLifecycle({
+          initialRole: role || "planner"
+        });
+        this.send("agent:event", {
+          type: "coding_lifecycle",
+          phase: "started",
+          summary: "Coding work will not complete until its required plan, build, and check stages finish",
+          state: this.activeTask.codingLifecycle.state()
+        });
+      }
       const { config, runtime } = await this.getRuntime({
         requireAmos: company,
         boundary
@@ -2227,6 +2245,7 @@ export class DesktopController {
         routingDecision,
         presentationIntent: prompt,
         canvasActive: Boolean(this.canvases.state().activeCanvasId),
+        completionGate: () => this.codingLifecycleCompletionGate(),
         takeSteering: () => {
           const active = this.activeTask;
           if (!active || active.id !== taskId || active.steeringQueue.length === 0) return [];
@@ -2298,6 +2317,7 @@ export class DesktopController {
       return {
         answer,
         taskId,
+        codingLifecycle: this.activeTask.codingLifecycle?.state() || null,
         taskEventId: continuityRecord?.turns?.at(-1)?.id || `run:${taskId}`,
         activity: this.activity.slice(-100),
         attachments: this.attachments.list(),
@@ -2310,15 +2330,97 @@ export class DesktopController {
       };
     } catch (error) {
       const canceled = isAbortError(error) || abortController.signal.aborted;
+      const supervisionStopReason = String(
+        this.runManager.current()?.supervisor?.stopReason || abortController.signal.reason || ""
+      );
+      const budgetStopped = isCodingBudgetStopReason(supervisionStopReason);
+      if (budgetStopped) {
+        const lifecycle = this.interruptCodingLifecycle(
+          "budget_exhausted",
+          supervisionStopReason
+        );
+        const recoveryNote = [
+          `AMOS stopped this run because its configured budget was exhausted (${supervisionStopReason}).`,
+          lifecycle.note,
+          "Completed work remains intact and was not replayed. Continue this conversation to resume from the recorded lifecycle stage."
+        ].filter(Boolean).join(" ");
+        await this.finishRunSupervision("interrupted", recoveryNote);
+        if (this.activeTask?.checkpointed) {
+          await this.queueCheckpointUpdate(taskId, {
+            status: "interrupted",
+            phase: "interrupted",
+            summary: recoveryNote
+          }).catch(() => {});
+          await this.sendTaskCheckpoints();
+        }
+        this.record("assistant", recoveryNote, {
+          interrupted: true,
+          reason: "budget_exhausted",
+          stop_reason: supervisionStopReason,
+          coding_lifecycle: lifecycle.state
+        });
+        const localReceipt = await this.recordLocalReceipt({
+          taskId,
+          status: "interrupted",
+          boundary,
+          settings,
+          prompt,
+          startedAt: this.activeTask?.startedAt,
+          receiptEvents,
+          error: supervisionStopReason,
+          usage: this.activeTask?.usage
+        });
+        let continuityRecord = null;
+        if (this.activeTask?.continuityAllowed) {
+          continuityRecord = await this.saveSessionContinuity({
+            settings,
+            boundary,
+            objective: prompt,
+            answer: recoveryNote,
+            artifacts: this.activeTask.continuityArtifacts,
+            receipt: localReceipt
+          }).catch(() => null);
+        }
+        await this.snapshotActiveTask(settings).catch(() => {});
+        await this.recordChildOutcome({
+          status: "interrupted",
+          answer: recoveryNote,
+          settings,
+          error: supervisionStopReason
+        });
+        return {
+          answer: recoveryNote,
+          interrupted: true,
+          codingLifecycle: lifecycle.state,
+          recovery: {
+            reason: "budget_exhausted",
+            stopReason: supervisionStopReason,
+            verificationPending: lifecycle.state?.verification === "pending",
+            replayed: false
+          },
+          taskId,
+          taskEventId: continuityRecord?.turns?.at(-1)?.id || `run:${taskId}`,
+          activity: this.activity.slice(-100),
+          attachments: this.attachments.list(),
+          ...this.canvases.state(),
+          memory: [],
+          privateMemory: this.privateMemoryStore
+            ? await this.privateMemoryStore.list(privateMemoryScope(this.identity))
+            : [],
+          offlineProposals: await this.offlineProposalState()
+        };
+      }
       if (!canceled && error?.code === "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS") {
         const completedToolActions = Math.max(0, Number(error.completedToolActions || 0));
         const recordedSteps = receiptEvents.length;
         const recoveredPartial = String(error.partialResponse || "").trim();
+        const lifecycle = this.interruptCodingLifecycle("provider_failed", error.message);
         const recoveryNote = [
           `xAI / Grok stopped responding after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
           "The completed work and files remain intact; AMOS did not replay or roll back any action.",
+          lifecycle.note,
           "Continue in this conversation and ask AMOS to inspect the current workspace, verify what completed, and finish only the remaining work."
-        ].join(" ");
+        ].filter(Boolean).join(" ");
         const answer = recoveredPartial
           ? `[Partial response recovered before the timeout]\n\n${recoveredPartial}\n\n${recoveryNote}`
           : recoveryNote;
@@ -2378,8 +2480,10 @@ export class DesktopController {
             provider: "xai",
             completedToolActions,
             recordedSteps,
+            verificationPending: lifecycle.state?.verification === "pending",
             replayed: false
           },
+          codingLifecycle: lifecycle.state,
           taskId,
           taskEventId: continuityRecord?.turns?.at(-1)?.id || `run:${taskId}`,
           activity: this.activity.slice(-100),
@@ -2392,14 +2496,19 @@ export class DesktopController {
           offlineProposals: await this.offlineProposalState()
         };
       }
-      await this.finishRunSupervision(canceled ? "cancelled" : "failed", error.message);
+      const lifecycle = this.interruptCodingLifecycle(
+        canceled ? "user_cancelled" : "execution_failed",
+        error.message
+      );
+      const failureSummary = [error.message, lifecycle.note].filter(Boolean).join(" ");
+      await this.finishRunSupervision(canceled ? "cancelled" : "failed", failureSummary);
       if (this.activeTask?.checkpointed) {
         await this.queueCheckpointUpdate(taskId, {
           status: canceled ? "canceled" : "failed",
           phase: canceled ? "canceled" : "failed",
           summary: canceled
             ? "Canceled by the user; review before continuing"
-            : `Stopped safely: ${String(error.message || "unknown error").slice(0, 500)}`
+            : `Stopped safely: ${String(failureSummary || "unknown error").slice(0, 500)}`
         }).catch(() => {});
         await this.sendTaskCheckpoints();
       }
@@ -4426,7 +4535,8 @@ export class DesktopController {
         present: (spec) => this.presentCanvas(spec)
       }));
       extraTools.push(...createSubagentTools({
-        handoff: (input) => this.switchTaskIntelligence(input),
+        handoff: (input) => this.handoffTaskIntelligence(input),
+        reportStage: (input) => this.reportCodingStage(input),
         spawn: this.runManager.current()?.parentTaskId
           ? null
           : (input) => this.spawnSubagent(input),
@@ -5415,6 +5525,77 @@ export class DesktopController {
     return usageEvent;
   }
 
+  codingLifecycleCompletionGate() {
+    const lifecycle = this.activeTask?.codingLifecycle;
+    if (!lifecycle) return { allow: true };
+    return lifecycle.completionGate();
+  }
+
+  assertCodingChildrenCollected() {
+    const pending = (this.activeTask?.children || []).filter((child) => {
+      const lane = this.runManager.findByTask(child.taskId);
+      return Boolean(lane) || !child.collectedAt;
+    });
+    if (pending.length === 0) return;
+    const names = pending.map((child) => child.name || child.taskId).slice(0, 4).join(", ");
+    throw new Error(
+      `Collect every spawned child before completing this coding stage. Still pending: ${names}`
+    );
+  }
+
+  async reportCodingStage(input = {}) {
+    const lifecycle = this.activeTask?.codingLifecycle;
+    if (!lifecycle) {
+      throw new Error("The deterministic coding lifecycle is active only for paired coding workflows");
+    }
+    this.assertCodingChildrenCollected();
+    const transition = lifecycle.report(input);
+    return this.applyCodingLifecycleTransition(transition, input.summary);
+  }
+
+  async handoffTaskIntelligence(input = {}) {
+    const lifecycle = this.activeTask?.codingLifecycle;
+    if (!lifecycle) return this.switchTaskIntelligence(input);
+    this.assertCodingChildrenCollected();
+    const transition = lifecycle.handoff(input);
+    return this.applyCodingLifecycleTransition(transition, input.summary);
+  }
+
+  async applyCodingLifecycleTransition(transition, summary = "") {
+    this.send("agent:event", {
+      type: "coding_lifecycle",
+      phase: transition.status === "completed" ? "completed" : "advanced",
+      summary: transition.status === "completed"
+        ? transition.verification === "verified"
+          ? "Coding change independently checked and approved"
+          : "Coding workflow completed with an explicit no-code-change result"
+        : `Coding workflow advanced to ${transition.nextRole}`,
+      state: transition
+    });
+    if (transition.nextRole) {
+      const switched = await this.switchTaskIntelligence({
+        role: transition.nextRole,
+        summary
+      });
+      return { ...transition, intelligence: switched };
+    }
+    return transition;
+  }
+
+  interruptCodingLifecycle(reason, detail = "") {
+    const lifecycle = this.activeTask?.codingLifecycle;
+    if (!lifecycle) return { state: null, note: "" };
+    const state = lifecycle.interrupt(reason, detail);
+    const note = codingVerificationPendingNote(state, detail);
+    this.send("agent:event", {
+      type: "coding_lifecycle",
+      phase: "interrupted",
+      summary: note || `Coding workflow interrupted during the ${state.role} stage`,
+      state
+    });
+    return { state, note };
+  }
+
   async applyIntelligenceRole(role, { settings = null, announce = true, resetRuntime = false } = {}) {
     const current = settings || this.runManager.current()?.settings || await this.settingsStore.read();
     const pairing = sanitizeIntelligenceRoles(current.intelligenceRoles);
@@ -5543,7 +5724,8 @@ export class DesktopController {
       role,
       workspaceMode: forked.task.workspaceMode,
       workspace: forked.task.workspace?.localPath || "",
-      status: "starting"
+      status: "starting",
+      collectedAt: null
     };
     if (this.activeTask) this.activeTask.children = [...children, child];
     this.run({
@@ -5602,7 +5784,7 @@ export class DesktopController {
     const workspace = listed?.workspace || task?.workspace?.localPath || "";
     const live = workspace ? await inspectChildWorkspace(workspace) : emptyChildWorkspace();
     const outcome = task?.outcome || listed?.outcome || null;
-    return {
+    const result = {
       ok: true,
       task_id: taskId,
       status: outcome?.status || lane?.status || task?.status || listed?.status || "unknown",
@@ -5615,6 +5797,14 @@ export class DesktopController {
       usage: outcome?.usage || listed?.usage || null,
       running: Boolean(lane)
     };
+    if (!result.running) {
+      const child = this.activeTask?.children?.find((item) => item.taskId === taskId);
+      if (child) child.collectedAt = new Date().toISOString();
+      result.collected = true;
+    } else {
+      result.collected = false;
+    }
+    return result;
   }
 
   async recordChildOutcome({ status, answer = "", settings, error = null }) {
@@ -5630,6 +5820,7 @@ export class DesktopController {
       diff: git.diff,
       files: git.files,
       usage: this.activeTask?.usage || null,
+      codingLifecycle: this.activeTask?.codingLifecycle?.state() || null,
       finishedAt: new Date().toISOString(),
       error: error ? String(error).slice(0, 1_000) : null
     };
@@ -6373,7 +6564,7 @@ ${settings?.operatingMode === "offline"
 - Local approval policy: ${desktopLocalApprovalDescription(settings)}
 - This local policy never approves AMOS company operations, external-system writes, or governed decisions.
 ${settings?.intelligenceRoles?.enabled
-    ? "- Coding-role pairing is on for coding workflows only. Plan with the planner, implement with the builder, and review with the checker. Non-coding work stays on its normal intelligence route. Use desktop_handoff_role to switch without losing the conversation. Use desktop_spawn_subagent for isolated Git worktrees. Children cannot spawn children or widen company authority."
+    ? "- Coding-role pairing is on for coding workflows only. AMOS Desktop deterministically requires plan, implementation, independent check, and any necessary repair before completion. Report every stage through desktop_report_coding_stage; do not infer time pressure or silently skip a stage. Non-coding work stays on its normal intelligence route. Use desktop_spawn_subagent for isolated Git worktrees, and collect every spawned child before completing the current stage. Children cannot spawn children or widen company authority."
     : ""}`;
 }
 
@@ -6614,10 +6805,41 @@ function sanitizeAgentEvent(event) {
       summary: String(event.summary || "").slice(0, 500)
     };
   }
+  if (event.type === "coding_lifecycle") {
+    return {
+      type: "coding_lifecycle",
+      phase: String(event.phase || "working").slice(0, 80),
+      turn: Math.max(0, Number(event.turn || 0)),
+      summary: String(event.summary || "Coding workflow updated").slice(0, 500),
+      state: sanitizeCodingLifecycleState(event.state)
+    };
+  }
   return {
     type: event.type,
     name: event.name,
     result: summarizeResult(event.result)
+  };
+}
+
+function sanitizeCodingLifecycleState(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    version: 1,
+    status: String(value.status || "running").slice(0, 32),
+    role: String(value.role || "").slice(0, 32),
+    planReady: value.planReady === true,
+    implementationReady: value.implementationReady === true,
+    verification: String(value.verification || "not_started").slice(0, 32),
+    skipReason: value.skipReason ? String(value.skipReason).slice(0, 64) : null,
+    repairCycles: Math.max(0, Number(value.repairCycles || 0)),
+    history: (Array.isArray(value.history) ? value.history : []).slice(-20).map((entry) => ({
+      sequence: Math.max(0, Number(entry?.sequence || 0)),
+      role: String(entry?.role || "").slice(0, 32),
+      outcome: String(entry?.outcome || "").slice(0, 64),
+      summary: String(entry?.summary || "").slice(0, 500),
+      reason: entry?.reason ? String(entry.reason).slice(0, 64) : null,
+      at: String(entry?.at || "").slice(0, 40)
+    }))
   };
 }
 

@@ -14,18 +14,18 @@ const ROLE_PROMPTS = Object.freeze({
     "Inspect, search, and produce a concrete implementation plan.",
     "Do not edit files, apply patches, or run mutating shell commands unless the user explicitly asks you to implement now.",
     "Name the files, checks, risks, and the smallest coherent change.",
-    "When the plan is ready, stop or hand off to the implementer."
+    "When the plan is ready, call desktop_report_coding_stage with plan_ready, or no_code_change when evidence shows no patch is needed."
   ].join(" "),
   implementer: [
     "You are the implementer for this task.",
     "Follow the current plan. Inspect before editing, prefer small apply_patch changes, run the relevant checks, and inspect git_diff before claiming completion.",
     "Do not expand the plan into unrelated refactors.",
-    "When the change is verified, stop or hand off to the checker."
+    "When the implementation and its checks are ready for independent review, call desktop_report_coding_stage with implementation_ready."
   ].join(" "),
   checker: [
     "You are the checker for this task.",
     "Review the current diff, tests, and remaining risk. Do not implement a new design unless you find a blocking defect.",
-    "If the work is sound, say what was verified. If it is not, name the exact repair and hand off to the implementer."
+    "Call desktop_report_coding_stage with approved only when the evidence supports completion, repair_required when a concrete repair is needed, or no_code_change when the verified result needs no patch."
   ].join(" ")
 });
 

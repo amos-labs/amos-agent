@@ -116,7 +116,8 @@ export class AgentLoop {
       workflow: selectedWorkflow = null,
       routingDecision = null,
       presentationIntent = null,
-      canvasActive = false
+      canvasActive = false,
+      completionGate = null
     } = {}
   ) {
     throwIfAborted(signal);
@@ -175,6 +176,7 @@ export class AgentLoop {
       let consecutiveToolErrorCycles = 0;
       let completedToolActions = 0;
       let failedToolActions = 0;
+      let rejectedCompletions = 0;
       let pendingRoutingDecision = routingDecision?.minimumClass
         ? routingDecision
         : null;
@@ -250,6 +252,42 @@ export class AgentLoop {
             consecutiveToolErrorCycles = 0;
             turn += 1;
             continue;
+          }
+          if (typeof completionGate === "function") {
+            const completion = await completionGate({
+              answer: assistantMessage.content || "",
+              turn
+            });
+            if (completion?.allow === false) {
+              rejectedCompletions += 1;
+              onEvent({
+                type: "coding_lifecycle",
+                phase: "stage_result_required",
+                turn,
+                summary: String(
+                  completion?.summary || "A structured coding-stage result is required before completion"
+                ).slice(0, 4_000),
+                state: completion?.state || null
+              });
+              if (rejectedCompletions >= 2) {
+                const error = new Error(
+                  "The current coding role ended twice without reporting its required structured stage result"
+                );
+                error.code = "AMOS_CODING_LIFECYCLE_INCOMPLETE";
+                error.lifecycleState = completion?.state || null;
+                throw error;
+              }
+              this.messages.push({
+                role: "user",
+                content: String(completion?.message || [
+                  "<amos_coding_stage_required>",
+                  "Report the current coding stage through desktop_report_coding_stage before ending.",
+                  "</amos_coding_stage_required>"
+                ].join("\n"))
+              });
+              turn += 1;
+              continue;
+            }
           }
           onEvent({ type: "phase", phase: "completed", turn, summary: "Task completed" });
           return assistantMessage.content || "";
@@ -343,6 +381,12 @@ export class AgentLoop {
         this.applyHandoff(this.pendingHandoff, onEvent);
 
         if (modelEvidence.length > 0) this.appendEphemeralModelEvidence(modelEvidence);
+
+        if (outcomes.some((outcome) =>
+          !outcome.failed && ["desktop_report_coding_stage", "desktop_handoff_role"].includes(outcome.name)
+        )) {
+          rejectedCompletions = 0;
+        }
 
         const steeringAfterTools = this.applySteering(takeSteering, onEvent, turn);
         if (steeringAfterTools > 0) {

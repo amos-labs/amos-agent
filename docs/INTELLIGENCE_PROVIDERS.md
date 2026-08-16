@@ -191,7 +191,12 @@ replaying an action. Operators can override the bounded default with
 
 Desktop can store more than one provider credential and pair them. The usual
 coding pair is Kimi K3 as planner and checker with Grok 4.6 as the implementer.
-Each role uses the key stored for that provider. Local Qwen remains the
+Each role uses the key stored for that provider. When this pair is enabled,
+Desktop owns the lifecycle rather than trusting model prose: each role reports
+a typed stage result, the checker must explicitly approve or request repair,
+and spawned child work must be collected before the stage advances. Budget or
+provider interruption after implementation leaves a visible verification-
+pending result; the task is not marked complete. Local Qwen remains the
 on-device inspect and draft layer; the AMOS Local catalog is moving from Qwen
 3.6 to Qwen 3.8 independently of this pairing.
 

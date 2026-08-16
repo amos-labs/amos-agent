@@ -1202,6 +1202,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .event-card.workflow { border-color: rgba(59,213,143,.22); background: rgba(59,213,143,.045); }
 .event-card.workflow strong { color: var(--green); white-space: normal; }
 .event-card.workflow span { line-height: 1.5; }
+.event-card.coding-lifecycle { border-color: rgba(59,213,143,.22); background: rgba(59,213,143,.045); }
+.event-card.coding-lifecycle strong { color: var(--green); text-transform: capitalize; }
 .boundary-card { display: flex; gap: 12px; margin: 18px; padding: 15px; border: 1px solid rgba(59,213,143,.18); border-radius: 12px; background: rgba(59,213,143,.04); }
 .boundary-icon { color: var(--green); }
 .boundary-card strong { font-size: 11px; }

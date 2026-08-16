@@ -79,6 +79,121 @@ test("role handoff waits until after the current tool result", async () => {
   assert.equal(seen.length, 2);
 });
 
+test("a completion gate prevents a coding role from silently ending", async () => {
+  const seen = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        seen.push(messages);
+        return {
+          message: {
+            role: "assistant",
+            content: turn === 1 ? "I will skip the checker because time is short." : "Structured stage recorded."
+          }
+        };
+      }
+    }
+  });
+  const answer = await loop.run("implement this", {
+    completionGate: () => turn === 1
+      ? {
+          allow: false,
+          message: "Call desktop_report_coding_stage; checking cannot be skipped.",
+          state: { role: "implementer", status: "running" }
+        }
+      : { allow: true }
+  });
+  assert.equal(answer, "Structured stage recorded.");
+  assert.equal(seen.length, 2);
+  assert.ok(seen[1].some((message) =>
+    String(message.content || "").includes("checking cannot be skipped")
+  ));
+});
+
+test("each coding role gets a fresh structured-result retry after a valid stage transition", async () => {
+  const registry = new ToolRegistry();
+  let role = "planner";
+  let terminal = false;
+  registry.register({
+    name: "desktop_report_coding_stage",
+    handler: async ({ outcome }) => {
+      if (outcome === "plan_ready") role = "implementer";
+      if (outcome === "implementation_ready") role = "checker";
+      if (outcome === "approved") terminal = true;
+      return { ok: true, outcome, role, terminal };
+    }
+  });
+  let turn = 0;
+  const responses = [
+    { role: "assistant", content: "Plan finished without a stage result." },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{
+        id: "stage-plan",
+        function: {
+          name: "desktop_report_coding_stage",
+          arguments: JSON.stringify({ outcome: "plan_ready" })
+        }
+      }]
+    },
+    { role: "assistant", content: "Implementation finished without a stage result." },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{
+        id: "stage-build",
+        function: {
+          name: "desktop_report_coding_stage",
+          arguments: JSON.stringify({ outcome: "implementation_ready" })
+        }
+      }]
+    },
+    { role: "assistant", content: "Check finished without a stage result." },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{
+        id: "stage-check",
+        function: {
+          name: "desktop_report_coding_stage",
+          arguments: JSON.stringify({ outcome: "approved" })
+        }
+      }]
+    },
+    { role: "assistant", content: "Verified and complete." }
+  ];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        return { message: responses[turn++] };
+      }
+    }
+  });
+
+  const answer = await loop.run("plan, implement, and check", {
+    completionGate: () => terminal
+      ? { allow: true }
+      : {
+          allow: false,
+          message: `Report the ${role} stage.`,
+          state: { role, status: "running" }
+        }
+  });
+  assert.equal(answer, "Verified and complete.");
+  assert.equal(turn, 7);
+});
+
 test("malformed tool JSON is returned as an error and never executes", async () => {
   let calls = 0;
   let turn = 0;

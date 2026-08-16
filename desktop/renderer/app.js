@@ -443,6 +443,12 @@ function bindEvents() {
       };
       renderTaskRoles();
     }
+    if (event.type === "coding_lifecycle") {
+      state.activeTask = {
+        ...(state.activeTask || {}),
+        codingLifecycle: event.state || null
+      };
+    }
     renderLiveEvent(event);
   });
   api.on("agent:status", (taskStatus) => {
@@ -7998,11 +8004,13 @@ function renderLiveEvent(event) {
   }
   captureGovernedUiActions(event);
   const card = document.createElement("div");
-  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}`;
+  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}${event.type === "coding_lifecycle" ? " coding-lifecycle" : ""}`;
   const title = document.createElement("strong");
   title.textContent =
     event.type === "workflow"
       ? `◇ ${event.title}`
+      : event.type === "coding_lifecycle"
+      ? `↻ Coding · ${humanizeTool(event.state?.role || event.phase || "workflow")}`
       : event.type === "phase"
       ? `◌ ${event.phase}`
       : event.type === "tool_start"
@@ -8014,6 +8022,8 @@ function renderLiveEvent(event) {
   detail.textContent =
     event.type === "workflow"
       ? `${event.steps?.join(" → ") || event.summary}${event.doneWhen ? ` · Done when: ${event.doneWhen}` : ""}`
+      : event.type === "coding_lifecycle"
+      ? event.summary
       : event.type === "phase"
       ? event.summary
       : event.type === "tool_error"

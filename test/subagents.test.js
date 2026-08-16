@@ -14,7 +14,11 @@ test("subagent tools stay local and do not widen authority", async () => {
       return { ok: true, task_id: "child-1", workspace_mode: input.workspaceMode };
     },
     list: async () => ({ children: [] }),
-    collect: async (input) => ({ ok: true, task_id: input.taskId, running: false })
+    collect: async (input) => ({ ok: true, task_id: input.taskId, running: false }),
+    reportStage: async (input) => {
+      calls.push(["stage", input]);
+      return { ok: true, outcome: input.outcome };
+    }
   }).map((tool) => [tool.name, tool]));
 
   assert.equal(tools.desktop_spawn_subagent.source, "local");
@@ -28,5 +32,14 @@ test("subagent tools stay local and do not widen authority", async () => {
   });
   assert.equal(spawned.workspace_mode, "new_worktree");
   assert.equal((await tools.desktop_collect_subagent.handler({ task_id: "child-1" })).task_id, "child-1");
+  assert.deepEqual(
+    await tools.desktop_report_coding_stage.handler({
+      outcome: "plan_ready",
+      summary: "Plan ready",
+      evidence: ["Inspected the relevant files"]
+    }),
+    { ok: true, outcome: "plan_ready" }
+  );
   assert.deepEqual(calls[1][1].role, "implementer");
+  assert.equal(calls.at(-1)[0], "stage");
 });

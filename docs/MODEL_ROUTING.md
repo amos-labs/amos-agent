@@ -159,8 +159,11 @@ workflow selection.
 Planner/builder/checker is not a workflow class. The Router returns the coding
 workflow; when and only when the user enables coding roles, deterministic
 Desktop configuration starts with the planner and adds the collaboration
-toolkit. Disabling the setting removes that orchestration without asking the
-model to infer a different label.
+toolkit. The Desktop controller then enforces typed `plan_ready`,
+`implementation_ready`, `approved`, `repair_required`, or `no_code_change`
+transitions. It never uses regex or free-form model text to decide whether a
+stage was completed. Disabling the setting removes that orchestration without
+asking the model to infer a different label.
 
 Run `npm run evaluate:router-workflows` with Desktop's managed Ollama runtime
 available to measure class, workflow, and joint accuracy against the held-out
