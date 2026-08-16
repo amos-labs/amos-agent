@@ -194,6 +194,7 @@ test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", (
   assert.equal(config.reasoningEffort, "");
   assert.equal(config.apiKey, "");
   assert.equal(config.maxCompletionTokens, 32_768);
+  assert.equal(config.contextTokens, 131_072);
   assert.equal(config.requestTimeoutMs, 660_000);
   assert.equal(config.localRouterMode, "active");
 });
@@ -210,6 +211,16 @@ test("AMOS Local Router rollout is configurable only for automatic hosted routin
   });
   assert.equal(active.localRouterMode, "active");
   assert.equal(pinned.localRouterMode, "disabled");
+});
+
+test("local model context follows the qualified runtime window", () => {
+  const configured = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "ollama",
+    AMOS_MODEL_CONTEXT_TOKENS: "16384"
+  });
+  const fallback = resolveModelConfig({ AMOS_MODEL_PROVIDER: "ollama" });
+  assert.equal(configured.contextTokens, 16_384);
+  assert.equal(fallback.contextTokens, 32_768);
 });
 
 test("AMOS-hosted long-task limits remain operator configurable and bounded", () => {

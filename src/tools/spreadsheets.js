@@ -41,7 +41,7 @@ const FORMULA_SCHEMA = Object.freeze({
     "For annual/monthly conversions use annual_to_monthly or monthly_to_annual; dividing or multiplying by 12 does not change the declared unit and will fail verification."
   ].join(" "),
   properties: {
-    value: { type: ["string", "number", "boolean"] },
+    value: { description: "A literal string, number, or boolean value." },
     ref: { type: "string" },
     range: { type: "string" },
     op: { type: "string", enum: CALCULATION_OPERATIONS.concat(["if", "eq", "ne", "gt", "gte", "lt", "lte"]) },
@@ -305,7 +305,7 @@ function spreadsheetSchema() {
                 type: "object",
                 properties: {
                   address: { type: "string" },
-                  value: { type: ["string", "number", "boolean", "null"] },
+                  value: { description: "A literal string, number, boolean, or null cell value." },
                   formula: FORMULA_SCHEMA,
                   unit: { type: "string", enum: SPREADSHEET_UNITS },
                   format: { type: "string", enum: SPREADSHEET_CELL_FORMATS },
@@ -373,7 +373,7 @@ function spreadsheetSchema() {
             expected: {
               type: "object",
               properties: {
-                value: { type: ["string", "number", "boolean"] },
+                value: { description: "The expected string, number, or boolean value." },
                 unit: { type: "string", enum: SPREADSHEET_UNITS },
                 ref: cellPointerSchema()
               },

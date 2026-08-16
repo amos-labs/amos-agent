@@ -1,5 +1,5 @@
-import { extractMcpText } from "../mcp/amosMcpClient.js";
-import { sanitizeToolName } from "./registry.js";
+import { extractMcpText, normalizeMcpToolResult } from "../mcp/amosMcpClient.js";
+import { measureToolSurface, sanitizeToolName } from "./registry.js";
 import { sanitizeModelContinuityCapture } from "./consultativeState.js";
 
 export function createAmosTools() {
@@ -34,31 +34,66 @@ export function createAmosTools() {
     {
       name: "amos_load_engine_tools",
       source: "amos",
-      description: "Load one AMOS engine's exact permitted tool schemas, then register local wrappers for them.",
+      description: "Load one AMOS engine's exact permitted tool schemas. If list_engines advertises multiple toolkits, pass the smallest relevant toolkit; Desktop then registers only those wrappers.",
       parameters: {
         type: "object",
         properties: {
-          engine: { type: "string", description: "Engine name, such as company, finance, marketing, connections, repo, governance, core." }
+          engine: { type: "string", description: "Engine name, such as company, finance, marketing, connections, repo, governance, core." },
+          toolkit: { type: "string", description: "Optional toolkit name advertised by amos_list_engines. Required when that engine says requires_toolkit=true." }
         },
         required: ["engine"],
         additionalProperties: false
       },
       async handler(args, context) {
+        const loadArgs = { engine: args.engine };
+        if (typeof args.toolkit === "string" && args.toolkit.trim()) {
+          loadArgs.toolkit = args.toolkit.trim();
+        }
         const result = await context.amosClient.callTool(
           "load_engine_tools",
-          { engine: args.engine },
+          loadArgs,
           { signal: context.signal }
         );
-        const schemas = extractToolSchemas(result);
+        const normalized = normalizeMcpToolResult(result);
+        if (normalized.ok === false) return normalized;
+        const schemas = extractToolSchemas(normalized);
+        if (normalized.requires_toolkit === true) {
+          return {
+            ok: true,
+            engine: args.engine,
+            requires_toolkit: true,
+            available_toolkits: compactToolkitMenu(normalized.toolkits),
+            engine_tool_count: normalized.engine_tool_count,
+            note: normalized.note || "Choose the smallest relevant toolkit and load this engine again."
+          };
+        }
+        const limits = dynamicEngineLimits(context.config);
+        const surface = measureToolSurface(schemas.map(asOpenAiSchema));
+        if (schemas.length > limits.maxTools) {
+          return {
+            ok: false,
+            error: `AMOS engine ${args.engine} returned ${schemas.length} tools; the per-engine limit is ${limits.maxTools}.`
+          };
+        }
+        if (surface.schemaBytes > limits.maxSchemaBytes) {
+          return {
+            ok: false,
+            error: `AMOS engine ${args.engine} returned ${surface.schemaBytes} schema bytes; the per-engine limit is ${limits.maxSchemaBytes}.`
+          };
+        }
         const registered = [];
+        const toolkitSuffix = loadArgs.toolkit ? `:${loadArgs.toolkit}` : "";
+        const engineToolkit = `amos-engine:${args.engine}${toolkitSuffix}`;
 
         for (const schema of schemas) {
           const originalName = schema.name || schema.function?.name;
           if (!originalName) continue;
           const localName = sanitizeToolName(`amos_${args.engine}_${originalName}`);
-          context.registry.register({
+          const wasRegistered = context.registry.register({
             name: localName,
             source: `amos:${args.engine}`,
+            toolkit: engineToolkit,
+            remoteName: originalName,
             description: schema.description || schema.function?.description || `Call AMOS ${args.engine}.${originalName}.`,
             parameters: schema.inputSchema || schema.parameters || schema.function?.parameters || {
               type: "object",
@@ -66,7 +101,7 @@ export function createAmosTools() {
               additionalProperties: true
             },
             async handler(toolArgs, innerContext) {
-              return innerContext.amosClient.callTool(
+              const remoteResult = await innerContext.amosClient.callTool(
                 "call_engine_tool",
                 {
                   engine: args.engine,
@@ -77,15 +112,38 @@ export function createAmosTools() {
                 },
                 { signal: innerContext.signal }
               );
+              return normalizeMcpToolResult(remoteResult);
             }
           });
-          registered.push(localName);
+          if (wasRegistered) registered.push(localName);
         }
 
+        const activation = context.registry.activateToolkit(engineToolkit, {
+          mode: "add",
+          replacePrefix: "amos-engine:"
+        });
+        if (activation.ok === false) {
+          if (!context.registry.isToolkitActive(engineToolkit)) {
+            context.registry.unregisterWhere((tool) => tool.toolkit === engineToolkit);
+          }
+          return activation;
+        }
+        const removedPriorEngineTools = context.registry.unregisterWhere((tool) =>
+          tool.toolkit.startsWith("amos-engine:") && tool.toolkit !== engineToolkit
+        );
+
         return {
-          result,
-          text: extractMcpText(result),
-          registered_dynamic_tools: registered
+          ok: true,
+          engine: args.engine,
+          toolkit: loadArgs.toolkit || null,
+          requires_toolkit: false,
+          tool_count: schemas.length,
+          schema_bytes: surface.schemaBytes,
+          registered_dynamic_tools: registered,
+          already_available_tools: schemas.length - registered.length,
+          active_toolkits: activation.active_toolkits,
+          deactivated_toolkits: activation.deactivated_toolkits,
+          removed_prior_engine_tools: removedPriorEngineTools
         };
       }
     },
@@ -104,7 +162,7 @@ export function createAmosTools() {
         additionalProperties: false
       },
       async handler(args, context) {
-        return context.amosClient.callTool(
+        const result = await context.amosClient.callTool(
           "call_engine_tool",
           {
             engine: args.engine,
@@ -115,9 +173,20 @@ export function createAmosTools() {
           },
           { signal: context.signal }
         );
+        return normalizeMcpToolResult(result);
       }
     }
   ];
+}
+
+function compactToolkitMenu(toolkits) {
+  if (!Array.isArray(toolkits)) return [];
+  return toolkits
+    .filter((toolkit) => toolkit?.unlocked !== false && typeof toolkit?.name === "string")
+    .map((toolkit) => ({
+      name: toolkit.name,
+      available_tools: Number(toolkit.available_tools || 0)
+    }));
 }
 
 function mcpTool(name, description, remoteName, parameters = { type: "object", properties: {}, additionalProperties: false }) {
@@ -132,10 +201,34 @@ function mcpTool(name, description, remoteName, parameters = { type: "object", p
         args,
         { signal: context.signal }
       );
-      return {
-        result,
-        text: extractMcpText(result)
-      };
+      return normalizeMcpToolResult(result);
+    }
+  };
+}
+
+function dynamicEngineLimits(config = {}) {
+  return {
+    maxTools: boundedPositiveInteger(config?.agent?.maxDynamicEngineTools, 64),
+    maxSchemaBytes: boundedPositiveInteger(config?.agent?.maxDynamicEngineSchemaBytes, 131_072)
+  };
+}
+
+function boundedPositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function asOpenAiSchema(schema) {
+  return {
+    type: "function",
+    function: {
+      name: schema.name || schema.function?.name || "",
+      description: schema.description || schema.function?.description || "",
+      parameters: schema.inputSchema || schema.parameters || schema.function?.parameters || {
+        type: "object",
+        properties: {},
+        additionalProperties: true
+      }
     }
   };
 }

@@ -61,7 +61,9 @@ export function compileCapabilityContracts(report, options = {}) {
         runtimeVersion: nullableText(options.runtimeVersion || report.runtime_version),
         quantization: nullableText(options.quantization || result.quantization),
         promptVersion: cleanText(options.promptVersion || "benchmark-default"),
-        toolSchemaVersion: cleanText(options.toolSchemaVersion || "benchmark-embedded")
+        toolSchemaVersion: cleanText(
+          options.toolSchemaVersion || report.tool_schema_version || "benchmark-embedded"
+        )
       },
       evidence: {
         suite: MODEL_CAPABILITY_SUITE.id,

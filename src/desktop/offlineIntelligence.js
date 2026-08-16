@@ -45,19 +45,23 @@ const QWEN38_MODEL_ID = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M";
 const QWEN38_PASSED_CAPABILITIES = Object.freeze([
   ...LOCAL_PASSED_CAPABILITIES,
   "approval-state-integrity",
+  "engine-toolkit-discovery",
   "verified-code-optimization"
 ].sort());
 const QWEN38_PASSED_WORKFLOWS = Object.freeze([
   ...LOCAL_PASSED_WORKFLOWS,
   "approval-aware-action",
-  "optimization-code-generation"
+  "large-tool-surface-selection",
+  "optimization-code-generation",
+  "progressive-engine-discovery",
+  "progressive-tool-activation"
 ].sort());
 
 // This catalog ships inside the signed AMOS Desktop application bundle. Its
 // integrity is therefore covered by the same Developer ID signature and
 // notarization gate as the executable that consumes it.
 export const OFFLINE_MODEL_MANIFEST = Object.freeze({
-  version: 9,
+  version: 11,
   trust: "release-signed",
   runtime: "ollama",
   updatedAt: "2026-08-16T00:00:00.000Z",
@@ -178,9 +182,9 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
         ])
       }),
       qualification: Object.freeze({
-        suite: "amos-local-qualification-v1",
-        score: 23,
-        maximum: 23,
+        suite: "amos-local-qualification-v3",
+        score: 32,
+        maximum: 32,
         repetitions: 3,
         status: "qualified",
         visionSmoke: Object.freeze({
@@ -311,21 +315,25 @@ function qwen38CapabilityContract() {
     contextTokens: 32_768,
     repetitions: Object.freeze([
       Object.freeze({
-        reportDigest: "e7afb08c7d88b65fd9fa3de95b35563a2bd5d3f059e4e309e23983c9b507a907",
-        score: 23,
-        maximum: 23
+        baseReportDigest: "e7afb08c7d88b65fd9fa3de95b35563a2bd5d3f059e4e309e23983c9b507a907",
+        productionReportDigest: "75fa309218f3e66f05734176df66f1d3c9729d412b8c7a72dbff1a6b80ebbca7",
+        score: 32,
+        maximum: 32
       }),
       Object.freeze({
-        reportDigest: "6ee7431fbfcf4f57208ecee4e6f8b08810e1d6ace351664cc4dee951de559371",
-        score: 23,
-        maximum: 23
+        baseReportDigest: "6ee7431fbfcf4f57208ecee4e6f8b08810e1d6ace351664cc4dee951de559371",
+        productionReportDigest: "7afb1e6290f373f3f18159e7c309def2e5565c19692133f5c4b098381c2e8be1",
+        score: 32,
+        maximum: 32
       }),
       Object.freeze({
-        reportDigest: "b7083f69ef3c0b7873bee7b02e8c95862644d50b8dd82f2d9f181eac673b6d8a",
-        score: 23,
-        maximum: 23
+        baseReportDigest: "b7083f69ef3c0b7873bee7b02e8c95862644d50b8dd82f2d9f181eac673b6d8a",
+        productionReportDigest: "826e7e9437ff29b357d6183577abef9c41d7a632c7553c83ddaf5c3721eaf58a",
+        score: 32,
+        maximum: 32
       })
-    ])
+    ]),
+    toolSchemaVersion: "sha256:89bfe8b7e5ef91196ab9655847ec816c4e022ab702d9d1cb8af0233ec633f192"
   };
   return deepFreeze(validateCapabilityContract({
     schema: "amos.model-capability-contract",
@@ -339,16 +347,16 @@ function qwen38CapabilityContract() {
       runtime: "ollama",
       runtimeVersion: "0.32.5",
       quantization: "Q4_K_M",
-      promptVersion: "qwen38-qualification-2026-08-16",
-      toolSchemaVersion: "amos-tool-schema-2026-08-16"
+      promptVersion: "qwen38-production-surface-2026-08-16-v2",
+      toolSchemaVersion: evidenceSummary.toolSchemaVersion
     },
     evidence: {
       suite: "amos-model-capability",
-      suiteVersion: 1,
+      suiteVersion: 3,
       sourceSchema: "amos.release-catalog-qualification-summary",
       sourceVersion: 1,
       reportDigest: digestJson(evidenceSummary),
-      evaluatedAt: "2026-08-16T09:30:00.555Z",
+      evaluatedAt: "2026-08-16T13:45:18.059Z",
       trust: "release-signed",
       repetitions: 3,
       complete: true
@@ -366,11 +374,11 @@ function qwen38CapabilityContract() {
     failures: [],
     limits: { contextTokens: 32_768 },
     performance: {
-      score: 23,
-      maximum: 23,
+      score: 32,
+      maximum: 32,
       passRate: 1,
-      wallSeconds: 246.194883639,
-      tokensPerSecond: 8.702414954,
+      wallSeconds: 285.147,
+      tokensPerSecond: 9.0,
       latencyClass: "standard",
       costClass: "local"
     }

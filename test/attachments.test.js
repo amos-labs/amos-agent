@@ -4,7 +4,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
-import { AttachmentManager } from "../src/desktop/attachments.js";
+import { attachmentTextBudget, AttachmentManager } from "../src/desktop/attachments.js";
 
 test("document attachments become bounded model reference material", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-attachments-"));
@@ -145,4 +145,29 @@ test("private memory can be restored as a task attachment without changing compa
     manager.buildMessageContent("Use this", [{ id: attachment.id }], { vision: false }),
     /Private context/
   );
+});
+
+test("large attachment excerpts follow the selected model context and remain chunk-readable", () => {
+  const manager = new AttachmentManager();
+  const marker = "IMPORTANT-LATER-SECTION";
+  const attachment = manager.addPrivateMemory({
+    id: "large-private",
+    name: "large.txt",
+    mime: "text/plain",
+    kind: "document",
+    text: `${"start ".repeat(40_000)}${marker}${" end".repeat(10_000)}`
+  });
+  const content = manager.buildMessageContent(
+    "Find the important section",
+    [{ id: attachment.id }],
+    { vision: false, contextTokens: 16_384, maxOutputTokens: 4_096 }
+  );
+  assert.ok(content.length < 35_000);
+  assert.match(content, /attachment text truncated/);
+
+  const chunk = manager.readModelChunk(attachment.id, { query: marker, maxChars: 2_000 });
+  assert.equal(chunk.ok, true);
+  assert.match(chunk.content, new RegExp(marker));
+  assert.ok(chunk.offset > 0);
+  assert.ok(attachmentTextBudget({ contextTokens: 16_384, maxOutputTokens: 4_096 }) < 30_000);
 });
