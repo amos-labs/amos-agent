@@ -152,7 +152,8 @@
               <button id="localModeButton" class="start-mode-card" type="button">
                 <span class="start-mode-kicker">NO ACCOUNT REQUIRED</span>
                 <strong>My workspace</strong>
-                <span>Your model, this computer. Local profile or your own key — AMOS Intelligence needs a sign-in.</span>
+                <span>Run locally or bring your own model key. Only AMOS-hosted Intelligence requires a sign-in.</span>
+                <span class="start-mode-options">AMOS Local (including Qwen 3.8 27B) · OpenAI · Claude · Kimi · compatible endpoints</span>
                 <em>Start privately →</em>
               </button>
               <button id="demoModeButton" class="start-mode-card featured" type="button">
@@ -185,16 +186,16 @@
               </div>
             </div>
             <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint hidden">
-              Choose a local profile or your own key. AMOS Intelligence needs a sign-in — use Northwind or My company.
+              Choose AMOS Local, OpenAI, Anthropic (Claude), Kimi, or any OpenAI-compatible endpoint. Only AMOS-hosted Intelligence requires Northwind or My company.
             </p>
             <div id="telemetryConsent" class="local-setup-callout">
               <div>
-                <strong>Anonymous usage events</strong>
-                <span id="telemetryConsentText">AMOS can send an install ID and first-launch events. No tokens, no prompts. Nothing is sent until you choose.</span>
+                <strong>Help make AMOS better</strong>
+                <span id="telemetryConsentText">Share anonymous product signals so we can find broken flows and improve Desktop faster. We never send prompts, responses, files, company data, credentials, or tokens. Change this anytime in Settings.</span>
               </div>
               <div class="offline-actions">
-                <button id="telemetryAllowButton" class="button secondary" type="button">Allow</button>
-                <button id="telemetryDeclineButton" class="button ghost" type="button">Don't send</button>
+                <button id="telemetryAllowButton" class="button primary" type="button">Help improve AMOS</button>
+                <button id="telemetryDeclineButton" class="button ghost" type="button">Not now</button>
               </div>
             </div>
             <button id="enterButton" class="button primary wide" disabled>Enter AMOS Desktop</button>

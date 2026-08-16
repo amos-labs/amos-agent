@@ -163,8 +163,7 @@ contains:
 | Compact | `qwen3:4b` | 2.6 GB | 12 GB | Installable, unmeasured — not recommended for governed work |
 | Balanced | `qwen3:8b` | 5.2 GB | 16 GB | Installable, unmeasured — not recommended for governed work |
 | Capable | `gpt-oss:20b` | 14 GB | 24 GB | Measured primary for interactive text, coding, retrieval, and tool work |
-| Vision | `qwen3.6:27b-q4_K_M` | 17 GB | 32 GB | Secondary multimodal profile for tasks that contain images |
-| Vision Max | `qwen3.6:27b-q8_0` | 30 GB | 64 GB | Experimental higher-precision multimodal profile |
+| Vision | `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` | 19.6 GB | 32 GB | Qualified multimodal, coding, office, and tool-use profile |
 
 On first launch, Desktop starts the included, checksum-verified runtime on an
 AMOS-owned loopback port and disables its cloud features. The user chooses a
@@ -172,6 +171,9 @@ model and selects **Install**; Desktop handles the resumable download,
 activation, lifecycle, and persistent model directory. The model never receives
 AMOS company or public-web tools in local-only mode. A catalog change requires
 a new signed AMOS Desktop release—it cannot be introduced by model output.
+Qwen 3.8 replaces the former Qwen 3.6 profiles. Existing 3.6 installations
+remain visible only so users can switch away from or remove them; new 3.6
+downloads are blocked.
 AMOS selects a default local context from installed memory: 16K below 16 GB,
 32K on 16 GB systems, 64K on 32 GB systems, and 128K on 64 GB systems. Advanced
 users can explicitly raise the bounded limit to 262K on a model and machine

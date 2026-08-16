@@ -309,6 +309,9 @@ function registerIpc() {
   ipcMain.handle("desktop:connect-provider", (_event, provider) =>
     controller.connectProvider(provider)
   );
+  ipcMain.handle("desktop:disconnect-connection", (_event, connectionId) =>
+    controller.disconnectConnection(connectionId)
+  );
   ipcMain.handle("desktop:connect-secret-provider", (_event, payload) =>
     controller.connectSecretProvider(payload?.provider, payload?.input)
   );

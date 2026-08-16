@@ -641,6 +641,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .start-mode-card strong { font-size: 17px; }
 .start-mode-card > span:not(.start-mode-kicker) { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.start-mode-card > .start-mode-options {
+  color: var(--blue-2);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .015em;
+}
 .start-mode-card em { color: var(--ink); font-size: 12px; font-style: normal; font-weight: 800; }
 .setup-readiness {
   display: grid;
@@ -1380,7 +1386,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .connection-provider-card strong { display: block; font-size: 13px; }
 .connection-provider-card p { min-height: 44px; margin: 7px 0 12px; color: var(--muted); font-size: 9px; line-height: 1.55; }
 .connection-provider-card small { color: var(--muted-2); font-size: 8px; line-height: 1.45; }
-.connection-connect-button { margin-top: 12px; width: 100%; }
+.connection-connect-button,
+.connection-disconnect-button { margin-top: 12px; width: 100%; }
 .connection-provider-card.included { border-color: rgba(59,213,143,.24); background: rgba(59,213,143,.035); }
 .connection-provider-card.planned { border-style: dashed; }
 .connection-provider-icon {
@@ -1857,6 +1864,45 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .project-card-heading time,
 .activity-run-heading time { color: var(--muted-2); font-size: 8px; white-space: nowrap; }
 .project-card-instructions { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.project-conversations {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.project-conversations-heading,
+.project-conversation-row,
+.project-conversation-meta,
+.project-conversation-actions {
+  display: flex;
+  align-items: center;
+}
+.project-conversations-heading { justify-content: space-between; gap: 10px; }
+.project-conversations-heading strong { font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+.project-conversations-heading span,
+.project-conversation-meta time { color: var(--muted-2); font-size: 8px; }
+.project-conversation-list { display: grid; gap: 6px; }
+.project-conversation-row {
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+.project-conversation-row > div:first-child { min-width: 0; display: grid; gap: 5px; }
+.project-conversation-row > div:first-child > strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-conversation-meta,
+.project-conversation-actions { gap: 6px; }
+.project-conversation-actions .button.ghost { padding: 6px 8px; font-size: 8px; }
+.project-conversations-empty { margin: 0; color: var(--muted-2); font-size: 8px; }
 .activity-run-card {
   display: grid;
   gap: 11px;
@@ -3046,6 +3092,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .offline-model-labels span { color: var(--blue-2); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
 .offline-model-labels .installed { color: var(--green); }
 .offline-model-labels .unmeasured { color: var(--coral); }
+.offline-model-labels .retired { color: var(--coral); }
 .offline-model-labels .conditional,
 .offline-model-labels .experimental { color: var(--warning); }
 .offline-model-card h3 { margin: 14px 0 6px; font-size: 15px; }

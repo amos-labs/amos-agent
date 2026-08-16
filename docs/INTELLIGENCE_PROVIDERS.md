@@ -200,9 +200,12 @@ extended by model output. The first profiles are:
 - `qwen3:4b` as an installable, unmeasured compact profile (not recommended);
 - `qwen3:8b` as an installable, unmeasured balanced profile (not recommended);
 - `gpt-oss:20b` as the measured primary interactive profile (recommended at 24 GB+, attemptable at the 16 GB minimum);
-- `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` as the qualified, release-pinned image-capable successor (recommended at 32 GB+);
-- `qwen3.6:27b-q4_K_M` as the retained legacy image-capable profile; and
-- `qwen3.6:27b-q8_0` as an optional experimental multimodal profile.
+- `hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` as the qualified, release-pinned image-capable profile (recommended at 32 GB+).
+
+Qwen 3.8 replaces both former Qwen 3.6 profiles for new installations. Catalog
+version 7 retains their signed identities only as retired migration entries:
+they appear when already installed so the user can switch or remove them, but
+AMOS blocks any new Qwen 3.6 download.
 
 The Qwen 3.8 entry pins its Hugging Face revision, Ollama manifest digest,
 model digest, and multimodal-projector digest. AMOS verifies the installed

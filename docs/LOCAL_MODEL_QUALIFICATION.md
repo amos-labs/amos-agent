@@ -140,7 +140,7 @@ change must be requalified before it inherits these contracts.
 
 ## Machine-enforced contracts
 
-Offline catalog version 6 converts these results into release-signed
+Offline catalog version 7 converts these results into release-signed
 [model capability contracts](MODEL_CAPABILITY_CONTRACT.md). The 11/16 aggregate
 score is retained for display, but routing uses the individual grants and
 failures. GPT-OSS 20B and Qwen 3.6 27B therefore qualify for observed text,

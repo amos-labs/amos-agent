@@ -57,7 +57,7 @@ const QWEN38_PASSED_WORKFLOWS = Object.freeze([
 // integrity is therefore covered by the same Developer ID signature and
 // notarization gate as the executable that consumes it.
 export const OFFLINE_MODEL_MANIFEST = Object.freeze({
-  version: 6,
+  version: 7,
   trust: "release-signed",
   runtime: "ollama",
   updatedAt: "2026-08-16T00:00:00.000Z",
@@ -122,6 +122,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
       capabilities: Object.freeze(["text", "vision", "tools", "code", "reasoning"]),
       primary: false,
       deprecated: true,
+      retired: true,
       replacedBy: QWEN38_MODEL_ID,
       recommendationPriority: 10,
       qualification: Object.freeze({
@@ -186,14 +187,17 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "qwen3.6:27b-q8_0",
-      name: "AMOS Local · Vision Max",
-      description: "Optional higher-precision multimodal profile for 64 GB workstations; it is not the default interactive model.",
+      name: "AMOS Local · Vision Max Legacy",
+      description: "Previous high-memory multimodal profile retained only so existing installations can be removed or migrated.",
       approximateSizeBytes: 30_000_000_000,
       minimumMemoryGb: 48,
       recommendedMemoryGb: 64,
       capabilities: Object.freeze(["text", "vision", "tools", "code", "reasoning"]),
       primary: false,
       experimental: true,
+      deprecated: true,
+      retired: true,
+      replacedBy: QWEN38_MODEL_ID,
       qualification: Object.freeze({
         suite: "amos-local-qualification-v1",
         score: 11,
@@ -392,6 +396,7 @@ export function assessHardware({
     : candidates.find((model) => total >= model.minimumMemoryGb) || null;
   const recommendedVision = OFFLINE_MODEL_MANIFEST.models
     .filter((model) =>
+      model.retired !== true &&
       model.capabilities.includes("vision") &&
       ["qualified", "conditional"].includes(model.qualification?.status) &&
       total >= model.recommendedMemoryGb
@@ -493,21 +498,23 @@ export class OllamaModelManager {
       runtime: { ...this.runtime },
       router: { ...this.router },
       system,
-      models: manifest.models.map((model) => {
-        const installation = modelInstallation(model, installedByName.get(model.id));
-        return {
-          ...model,
-          recommended: model.id === system?.recommendedModelId,
-          recommendedFor:
-            model.id === system?.recommendedModelId
-              ? "primary"
-              : model.id === system?.recommendedVisionModelId
-                ? "vision"
-                : null,
-          ...installation,
-          download: this.downloads.get(model.id) || null
-        };
-      })
+      models: manifest.models
+        .filter((model) => model.retired !== true || installedByName.has(model.id))
+        .map((model) => {
+          const installation = modelInstallation(model, installedByName.get(model.id));
+          return {
+            ...model,
+            recommended: model.id === system?.recommendedModelId,
+            recommendedFor:
+              model.id === system?.recommendedModelId
+                ? "primary"
+                : model.id === system?.recommendedVisionModelId
+                  ? "vision"
+                  : null,
+            ...installation,
+            download: this.downloads.get(model.id) || null
+          };
+        })
     };
   }
 
@@ -556,6 +563,9 @@ export class OllamaModelManager {
 
   async install(modelId, system = null) {
     const model = curatedModel(modelId);
+    if (model.retired) {
+      throw new Error(`${model.name} has been replaced by AMOS Local · Vision (Qwen 3.8)`);
+    }
     const currentDownload = this.downloads.get(model.id);
     if (currentDownload && currentDownload.status !== "failed") {
       throw new Error(`${model.name} is already downloading`);

@@ -913,6 +913,16 @@ function renderConnections() {
         ? "Available to this signed-in user through governed platform calls"
         : "Metadata only; this identity cannot use the connection";
       card.append(top, title, detail, boundary);
+      if (connection.usable && connection.id) {
+        const disconnect = document.createElement("button");
+        disconnect.type = "button";
+        disconnect.className = "button danger connection-disconnect-button";
+        disconnect.textContent = "Disconnect";
+        disconnect.addEventListener("click", () =>
+          disconnectConnectedSystem(connection, disconnect)
+        );
+        card.append(disconnect);
+      }
       elements.connectedSystemList.append(card);
     }
   }
@@ -992,6 +1002,27 @@ function renderConnections() {
       }
       elements.availableProviderList.append(card);
     }
+  }
+}
+
+async function disconnectConnectedSystem(connection, button) {
+  const confirmed = window.confirm(
+    `Disconnect ${connection.displayName}?\n\nAMOS will remove its vaulted credential and stop new governed calls through this connection. Existing Automations that depend on it may need attention.`
+  );
+  if (!confirmed) return;
+  setButtonBusy(button, true, "Disconnecting…");
+  try {
+    const response = await api.disconnectConnection(connection.id);
+    state.connectionsCatalog = response.connectionsCatalog || state.connectionsCatalog;
+    state.approvals = response.approvals || state.approvals;
+    renderConnections();
+    renderDecisions();
+    toast(pendingOperationId(response.result)
+      ? `Disconnecting ${connection.displayName} is waiting for governed approval in Decisions.`
+      : `${connection.displayName} disconnected. Its vaulted credential was removed.`);
+  } catch (error) {
+    toast(friendlyError(error), true);
+    if (button.isConnected) setButtonBusy(button, false, "Disconnect");
   }
 }
 
@@ -2467,10 +2498,18 @@ function renderProjects() {
   const library = state.projects || { supported: false, projects: [], inbox: [] };
   const projects = Array.isArray(library.projects) ? library.projects : [];
   const inbox = Array.isArray(library.inbox) ? library.inbox : [];
+  const conversations = Array.isArray(state.tasks?.tasks)
+    ? state.tasks.tasks.filter((task) => task.projectId && !task.archivedAt && !task.archived)
+    : [];
   const query = elements.projectSearchInput.value.trim().toLowerCase();
-  const visibleProjects = projects.filter((project) =>
-    !query || `${project.name}\n${project.instructions}`.toLowerCase().includes(query)
-  );
+  const visibleProjects = projects.filter((project) => {
+    if (!query) return true;
+    if (`${project.name}\n${project.instructions}`.toLowerCase().includes(query)) return true;
+    return conversations.some((task) =>
+      task.projectId === project.id &&
+      `${task.title}\n${task.objective}`.toLowerCase().includes(query)
+    );
+  });
   if (selectedProjectId && !projects.some((project) => project.id === selectedProjectId)) {
     selectedProjectId = "";
   }
@@ -2506,11 +2545,16 @@ function renderProjects() {
   }
 
   elements.projectList.replaceChildren();
-  for (const project of visibleProjects) elements.projectList.append(projectCard(project));
+  for (const project of visibleProjects) {
+    elements.projectList.append(projectCard(
+      project,
+      conversations.filter((task) => task.projectId === project.id)
+    ));
+  }
   renderActivityCenter(projects, inbox);
 }
 
-function projectCard(project) {
+function projectCard(project, conversations) {
   const card = document.createElement("article");
   const selected = project.id === selectedProjectId;
   card.className = `project-card${selected ? " selected" : ""}${project.archived ? " archived" : ""}`;
@@ -2576,8 +2620,65 @@ function projectCard(project) {
   const archive = actionButton(project.archived ? "Restore" : "Archive", "ghost");
   archive.addEventListener("click", () => updateProject(project, { archived: !project.archived }, archive));
   actions.append(view, newTask, edit, pin, pause, archive);
-  card.append(heading, instructions, details, actions);
+  card.append(heading, instructions, details, projectConversationList(conversations), actions);
   return card;
+}
+
+function projectConversationList(conversations) {
+  const section = document.createElement("section");
+  section.className = "project-conversations";
+  const heading = document.createElement("div");
+  heading.className = "project-conversations-heading";
+  const label = document.createElement("strong");
+  label.textContent = "Conversations";
+  const count = document.createElement("span");
+  count.textContent = String(conversations.length);
+  heading.append(label, count);
+  section.append(heading);
+  if (conversations.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "project-conversations-empty";
+    empty.textContent = "No conversations are assigned to this Project yet.";
+    section.append(empty);
+    return section;
+  }
+  const list = document.createElement("div");
+  list.className = "project-conversation-list";
+  for (const task of conversations) {
+    const row = document.createElement("article");
+    row.className = "project-conversation-row";
+    const copy = document.createElement("div");
+    const meta = document.createElement("div");
+    meta.className = "project-conversation-meta";
+    const status = document.createElement("span");
+    status.className = `task-status ${task.status || "active"}`;
+    status.textContent = String(task.status || "active").replaceAll("_", " ").toUpperCase();
+    const updated = document.createElement("time");
+    updated.textContent = task.updatedAt ? relativeTime(task.updatedAt) : "Conversation";
+    meta.append(status, updated);
+    const title = document.createElement("strong");
+    title.textContent = task.title;
+    copy.append(meta, title);
+    const rowActions = document.createElement("div");
+    rowActions.className = "project-conversation-actions";
+    const open = actionButton(task.active ? "Open" : "Continue", "ghost");
+    open.addEventListener("click", () => openManagedTask(task, open));
+    const forkCapability = task.forkCapability || {
+      canFork: false,
+      reason: "no_persisted_milestone"
+    };
+    const fork = actionButton("Fork", "ghost");
+    fork.disabled = !forkCapability.canFork;
+    fork.title = conversationForkCapabilityMessage(forkCapability);
+    fork.addEventListener("click", () =>
+      openTaskForkModal(task, forkCapability.latestMilestoneId)
+    );
+    rowActions.append(open, fork);
+    row.append(copy, rowActions);
+    list.append(row);
+  }
+  section.append(list);
+  return section;
 }
 
 function renderActivityCenter(projects, inbox) {
@@ -2592,15 +2693,9 @@ function renderActivityCenter(projects, inbox) {
     if (filter === "completed") return terminal.has(run.status);
     return true;
   });
-  const recoveries = !selectedProjectId && ["attention", "completed", "all"].includes(filter)
-    ? (state.taskCheckpoints || [])
-    : [];
-  elements.activityCenterScope.textContent = selectedProject?.name || "All Projects & Conversations";
-  elements.activityCenterEmpty.classList.toggle("hidden", visible.length + recoveries.length > 0);
+  elements.activityCenterScope.textContent = selectedProject?.name || "All Projects";
+  elements.activityCenterEmpty.classList.toggle("hidden", visible.length > 0);
   elements.activityCenterList.replaceChildren();
-  for (const checkpoint of recoveries) {
-    elements.activityCenterList.append(taskCheckpointCard(checkpoint));
-  }
   for (const run of visible) elements.activityCenterList.append(activityRunCard(run));
 }
 
@@ -5910,6 +6005,9 @@ async function saveCollaborationPreference(key, value) {
 }
 
 function offlineCatalogBadge(model) {
+  if (model.retired) {
+    return { className: "retired", label: "Retired — replace with Qwen 3.8" };
+  }
   if (model.experimental || model.qualification?.status === "experimental") {
     return { className: "experimental", label: "Experimental" };
   }
@@ -6380,12 +6478,12 @@ async function saveSettings(event) {
 
 function telemetryPreferenceLabel(value) {
   if (value === true) {
-    return "Allowed. Anonymous install and first-launch events only.";
+    return "Thanks — anonymous product signals are helping us improve AMOS. Prompts, responses, files, and company data are never included.";
   }
   if (value === false) {
-    return "Don't send. No usage events leave this computer.";
+    return "Not now. No product usage events leave this computer. You can change this anytime in Settings.";
   }
-  return "AMOS can send an install ID and first-launch events. No tokens, no prompts. Nothing is sent until you choose.";
+  return "Share anonymous product signals so we can find broken flows and improve Desktop faster. We never send prompts, responses, files, company data, credentials, or tokens. Change this anytime in Settings.";
 }
 
 function renderTelemetryPreference() {
@@ -6411,8 +6509,8 @@ async function setTelemetryPreference(enabled) {
     if (state?.settings) state.settings.telemetryEnabled = result.telemetryEnabled;
     renderTelemetryPreference();
     toast(enabled
-      ? "Anonymous usage events allowed."
-      : "Usage events will not be sent.");
+      ? "Thanks — anonymous product signals will help us improve AMOS."
+      : "No product usage events will be sent.");
   } catch (error) {
     toast(error.message, true);
     renderTelemetryPreference();
