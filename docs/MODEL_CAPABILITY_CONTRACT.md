@@ -134,7 +134,7 @@ instead of guessing a fallback.
 
 ## Current local contracts
 
-Offline catalog version 7 embeds release-signed contracts for GPT-OSS 20B,
+Offline catalog version 9 embeds release-signed contracts for GPT-OSS 20B,
 Qwen 3.8 27B Q4_K_M, and the two measured Qwen 3.6 27B quantizations. The July
 2026 GPT-OSS and Qwen 3.6 evidence grants
 observe, draft, and propose behavior. It withholds:

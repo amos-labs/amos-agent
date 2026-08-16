@@ -25,8 +25,8 @@ retrieval, and executable optimization code.
 
 | Model | Local size | Smoke | Hard qualification | Hard throughput | Release interpretation |
 |---|---:|---:|---:|---:|---|
-| Qwen 3.8 27B Q4_K_M | 19.6 GB | 7/7 × 3 | 16/16 × 3 | 8.5–9.0 tok/s | Qualified Qwen 3.6 multimodal successor |
-| GPT-OSS 20B MXFP4 | 13.8 GB | 7/7 | 11/16 | 21.6–25.4 tok/s | Primary interactive text/operator profile |
+| Qwen 3.8 27B Q4_K_M | 19.6 GB | 7/7 × 3 | 16/16 × 3 | 8.5–9.0 tok/s | Qualified primary profile at 32 GB+ |
+| GPT-OSS 20B MXFP4 | 13.8 GB | 7/7 | 11/16 | 21.6–25.4 tok/s | Fast lower-memory primary profile at 24 GB |
 | Qwen 3.6 27B Q4_K_M | 17.4 GB | 7/7 | 11/16 | 4.0 tok/s | Legacy multimodal profile |
 | Qwen 3.6 27B Q8_0 | 30.0 GB | 7/7 | 11/16 | 2.7 tok/s | Experimental; no measured quality gain over Q4 |
 | Mistral Small 3.2 24B Q4_K_M | 15.2 GB | 7/7 | 6/16 | 4.5 tok/s | Not qualified for governed AMOS tool work |
@@ -124,9 +124,10 @@ The runtime defaults are now adaptive:
 
 For the tested 64 GB Mac after the Qwen 3.8 qualification:
 
-1. use GPT-OSS 20B for interactive text, retrieval, drafting, and routine tools;
-2. use Qwen 3.8 Q4 when the task requires image input or its qualified tool and
-   code capabilities materially improve the step;
+1. use Qwen 3.8 Q4 as the primary local profile for text, tools, coding,
+   governed execution, office work, and image input;
+2. retain GPT-OSS 20B as the faster lower-memory option for interactive text,
+   retrieval, drafting, and routine tools;
 3. preprocess text-heavy images with local OCR before model reasoning;
 4. verify code by executing tests and allow bounded repair;
 5. render approval/execution status from structured receipts, not model prose;
@@ -140,7 +141,7 @@ change must be requalified before it inherits these contracts.
 
 ## Machine-enforced contracts
 
-Offline catalog version 7 converts these results into release-signed
+Offline catalog version 9 converts these results into release-signed
 [model capability contracts](MODEL_CAPABILITY_CONTRACT.md). The 11/16 aggregate
 score is retained for display, but routing uses the individual grants and
 failures. GPT-OSS 20B and Qwen 3.6 27B therefore qualify for observed text,
@@ -156,11 +157,11 @@ may run and what actually happened.
 
 Hardware assessment recommends only measured primary profiles
 (`primary: true` with a `qualified` or `conditional` contract) that also
-meet the profile's **recommended** memory, not merely its minimum. That is
-currently GPT-OSS 20B at **24 GB or more**. A 16 GB machine can install
-that profile but does not receive a “recommended” badge. Computers below
-the 16 GB minimum receive no local primary recommendation and should use
-hosted or customer-cloud intelligence.
+meet the profile's **recommended** memory, not merely its minimum. GPT-OSS 20B
+is recommended on **24 GB** systems; Qwen 3.8 becomes the recommended primary
+at **32 GB and above**. A 16 GB machine can install GPT-OSS but does not receive
+a “recommended” badge. Computers below the 16 GB minimum receive no local
+primary recommendation and should use hosted or customer-cloud intelligence.
 
 The Qwen 4B and 8B profiles remain installable, but they are unmeasured:
 `primary: false`, `qualification.status: "unqualified"`, and no capability

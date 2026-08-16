@@ -1207,10 +1207,47 @@ test("Desktop derives active workspace eligibility from live AMOS billing state"
     ready: true,
     subscriptionStatus: "trialing",
     billingExempt: false,
+    includedCreditRemainingUsd: "20.00",
+    demo: null,
     workspaceActive: true
   });
   assert.equal(requests[0].url, "https://app.amoslabs.com/v1/intelligence/status");
   assert.equal(requests[0].options.headers.Authorization, "Bearer member-token");
+});
+
+test("Desktop preserves the authoritative Northwind hosted-turn balance", async () => {
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "demo-token"; } }
+    },
+    async () => response(200, {
+      ready: true,
+      billing: {
+        subscription_status: "none",
+        billing_exempt: true,
+        included_credit_remaining_usd: "0.0000"
+      },
+      demo: {
+        message_limit: 30,
+        messages_used: 8,
+        messages_remaining: 22
+      }
+    })
+  );
+
+  assert.deepEqual(await client.intelligenceStatus(), {
+    ready: true,
+    subscriptionStatus: "none",
+    billingExempt: true,
+    includedCreditRemainingUsd: "0.0000",
+    demo: {
+      messageLimit: 30,
+      messagesUsed: 8,
+      messagesRemaining: 22
+    },
+    workspaceActive: true
+  });
 });
 
 test("approval links are pinned to the connected AMOS origin", () => {

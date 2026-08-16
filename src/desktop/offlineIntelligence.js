@@ -57,13 +57,14 @@ const QWEN38_PASSED_WORKFLOWS = Object.freeze([
 // integrity is therefore covered by the same Developer ID signature and
 // notarization gate as the executable that consumes it.
 export const OFFLINE_MODEL_MANIFEST = Object.freeze({
-  version: 7,
+  version: 9,
   trust: "release-signed",
   runtime: "ollama",
   updatedAt: "2026-08-16T00:00:00.000Z",
   models: Object.freeze([
     Object.freeze({
       id: "qwen3:4b",
+      modelDisplayName: "Qwen3 4B",
       name: "AMOS Local · Compact",
       description: "Fast private drafting, summarization, and lightweight workspace tasks.",
       approximateSizeBytes: 2_600_000_000,
@@ -77,6 +78,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "qwen3:8b",
+      modelDisplayName: "Qwen3 8B",
       name: "AMOS Local · Balanced",
       description: "Stronger local reasoning and coding for modern laptops with more memory.",
       approximateSizeBytes: 5_200_000_000,
@@ -90,8 +92,9 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "gpt-oss:20b",
-      name: "AMOS Local · Capable",
-      description: "Fast interactive text, coding, and tool work; managed intelligence still handles unqualified or consequential steps.",
+      modelDisplayName: "GPT-OSS 20B",
+      name: "AMOS Local · Fast",
+      description: "Fast, lower-memory text, coding, and tool work for everyday local use; complex or consequential steps route to qualified intelligence.",
       approximateSizeBytes: 14_000_000_000,
       minimumMemoryGb: 16,
       recommendedMemoryGb: 24,
@@ -114,6 +117,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "qwen3.6:27b-q4_K_M",
+      modelDisplayName: "Qwen3.6 27B · Q4_K_M",
       name: "AMOS Local · Vision Legacy",
       description: "Previous multimodal profile retained for existing installations; Qwen 3.8 is the measured successor.",
       approximateSizeBytes: 17_000_000_000,
@@ -142,13 +146,14 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: QWEN38_MODEL_ID,
-      name: "AMOS Local · Vision",
-      description: "Qualified Qwen 3.8 successor for local multimodal, coding, office, and tool-use work.",
+      modelDisplayName: "Qwen3.8 27B · Q4_K_M",
+      name: "AMOS Local · Capable",
+      description: "Qualified primary model for local multimodal, coding, office, governed execution, and tool-use work.",
       approximateSizeBytes: 19_603_117_919,
       minimumMemoryGb: 24,
       recommendedMemoryGb: 32,
       capabilities: Object.freeze(["text", "vision", "tools", "code", "reasoning"]),
-      primary: false,
+      primary: true,
       replaces: "qwen3.6:27b-q4_K_M",
       recommendationPriority: 100,
       source: Object.freeze({
@@ -187,6 +192,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "qwen3.6:27b-q8_0",
+      modelDisplayName: "Qwen3.6 27B · Q8_0",
       name: "AMOS Local · Vision Max Legacy",
       description: "Previous high-memory multimodal profile retained only so existing installations can be removed or migrated.",
       approximateSizeBytes: 30_000_000_000,
@@ -428,9 +434,11 @@ export function assessHardware({
     recommendedModelId: recommended?.id || null,
     recommendedVisionModelId: recommendedVision?.id || null,
     localRecommendation: recommended
-      ? recommendedVision
-        ? `${recommended.name} is the primary offline profile; ${recommendedVision.name} handles image tasks.`
-        : `${recommended.name} is the recommended offline profile for this computer.`
+      ? recommendedVision?.id === recommended.id
+        ? `${recommended.name} is the recommended offline profile for this computer and handles image tasks.`
+        : recommendedVision
+          ? `${recommended.name} is the primary offline profile; ${recommendedVision.name} handles image tasks.`
+          : `${recommended.name} is the recommended offline profile for this computer.`
       : attemptable
         ? `${attemptable.name} can be installed here but is not recommended below ${attemptable.recommendedMemoryGb} GB.`
         : "Use AMOS-hosted or customer-cloud intelligence on this computer."
@@ -564,7 +572,7 @@ export class OllamaModelManager {
   async install(modelId, system = null) {
     const model = curatedModel(modelId);
     if (model.retired) {
-      throw new Error(`${model.name} has been replaced by AMOS Local · Vision (Qwen 3.8)`);
+      throw new Error(`${model.name} has been replaced by AMOS Local · Capable (Qwen 3.8)`);
     }
     const currentDownload = this.downloads.get(model.id);
     if (currentDownload && currentDownload.status !== "failed") {

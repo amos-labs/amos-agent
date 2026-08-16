@@ -23,7 +23,7 @@ const providerDefaults = {
   "amos-hosted": {
     model: "auto",
     baseUrl: "",
-    credential: "Uses your AMOS sign-in—no second key. Included credits apply first; additional use is metered."
+    credential: "AMOS company subscription required. Uses your AMOS sign-in—no second key. Included credits apply first; additional use is metered."
   },
   bedrock: {
     model: "openai.gpt-5.6-terra",
@@ -99,6 +99,8 @@ const elements = Object.fromEntries(
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "connectCheck",
+    "northwindIntelligenceChoice", "northwindUsageSummary", "northwindCurrentIntelligence",
+    "demoHostedIntelligenceButton", "demoLocalIntelligenceButton", "demoByokIntelligenceButton",
     "providerCheck", "onboardingProviderText", "onboardingIntelligenceHint",
     "workspaceCheck", "enterButton", "boundaryReadinessText",
     "personalIntelligenceCallout",
@@ -119,7 +121,8 @@ const elements = Object.fromEntries(
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "taskRoleBar", "plannerRoleButton", "implementerRoleButton", "checkerRoleButton",
     "taskUsageLine",
-    "settingsError", "collaborationProfileCard", "collaborationProfileFields",
+    "settingsBackButton", "settingsError", "intelligenceTestStatus", "intelligenceTestIcon",
+    "intelligenceTestTitle", "intelligenceTestDetail", "collaborationProfileCard", "collaborationProfileFields",
     "resetCollaborationProfileButton",
     "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "taskApproveButton", "alwaysApproveButton", "autoApproveFolderButton", "approvalPersistence",
@@ -169,7 +172,8 @@ const elements = Object.fromEntries(
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
     "offlineSetupSteps", "offlineSetupRuntime", "offlineSetupModel", "offlineSetupActivate",
-    "demoBanner", "demoExpiry", "demoConnectButton", "starterActions",
+    "demoBanner", "demoExpiry", "demoConnectButton", "demoChangeIntelligenceButton",
+    "demoLeaveButton", "starterActions",
     "connectionCatalogSummary", "connectedSystemList", "availableProviderList", "liveCanvasList",
     "briefingScheduleModal", "briefingScheduleForm", "briefingScheduleTitle",
     "briefingScheduleKind", "briefingScheduleWeekday", "briefingScheduleTime",
@@ -218,12 +222,18 @@ function bindActions() {
   elements.sidebarToggle.addEventListener("click", toggleSidebar);
   bindContextResize();
   for (const button of document.querySelectorAll("[data-open-settings]")) {
-    button.addEventListener("click", () => showView("settings"));
+    button.addEventListener("click", openIntelligenceSettings);
   }
+  elements.settingsBackButton.addEventListener("click", returnFromIntelligenceSettings);
   elements.connectButton.addEventListener("click", connectAmos);
   elements.localModeButton.addEventListener("click", startPersonal);
   elements.demoModeButton.addEventListener("click", startDemo);
   elements.demoConnectButton.addEventListener("click", connectAmos);
+  elements.demoHostedIntelligenceButton.addEventListener("click", useDemoHostedIntelligence);
+  elements.demoLocalIntelligenceButton.addEventListener("click", () => openDemoIntelligenceSettings("ollama"));
+  elements.demoByokIntelligenceButton.addEventListener("click", () => openDemoIntelligenceSettings("openai"));
+  elements.demoChangeIntelligenceButton.addEventListener("click", () => openDemoIntelligenceSettings());
+  elements.demoLeaveButton.addEventListener("click", leaveDemo);
   elements.workspaceButton.addEventListener("click", chooseWorkspace);
   elements.localApprovalButton.addEventListener("click", toggleLocalApproval);
   elements.onboardingWorkspaceButton.addEventListener("click", chooseWorkspace);
@@ -301,7 +311,7 @@ function bindActions() {
   });
   elements.accountIntelligenceButton.addEventListener("click", () => {
     closeAccountMenu();
-    showView("settings");
+    openIntelligenceSettings();
   });
   elements.addAccountButton.addEventListener("click", addAccount);
   elements.signOutAccountButton.addEventListener("click", disconnectAmos);
@@ -509,6 +519,17 @@ function bindEvents() {
     updateState = nextUpdateState;
     renderUpdate();
   });
+  api.on("desktop:navigate", (navigation) => {
+    if (navigation?.destination === "settings") {
+      openIntelligenceSettings();
+    } else if (navigation?.destination === "memory") {
+      showView("memory");
+    } else if (navigation?.destination === "choose-workspace") {
+      chooseWorkspace();
+    } else if (navigation?.destination === "check-updates") {
+      handleAccountUpdate();
+    }
+  });
   api.on("approval:requested", (approval) => {
     if (!eventMatchesActiveTask(approval)) {
       toast("A background run needs local approval. Open its Conversation to review.");
@@ -604,12 +625,14 @@ function render() {
   elements.demoBanner.classList.toggle("hidden", !demo);
   elements.operatorView.classList.toggle("has-demo-banner", demo);
   if (demo) {
+    const usage = northwindUsageLabel(state.accountStatus?.demo);
     elements.demoExpiry.textContent =
       `Sample data only · expires ${new Date(state.demo.expiresAt).toLocaleTimeString([], {
         hour: "numeric",
         minute: "2-digit"
-      })}`;
+      })}${usage ? ` · ${usage}` : ""}`;
   }
+  renderNorthwindIntelligenceChoice(demo);
   if (state.mode?.offline) {
     elements.operatorEyebrow.textContent = "WORK OFFLINE";
     elements.readyTitle.textContent = "Local-only is ready.";
@@ -670,6 +693,7 @@ function render() {
     Boolean((state.mode?.personal || state.mode?.offline) && !demo)
   );
   elements.demoModeButton.classList.toggle("selected", demo);
+  elements.demoModeButton.disabled = demo;
   elements.demoModeButton.classList.toggle("hidden", activeAccount);
   elements.connectButton.classList.toggle(
     "selected",
@@ -678,17 +702,26 @@ function render() {
   const connectKicker = elements.connectButton.querySelector(".start-mode-kicker");
   const connectTitle = elements.connectButton.querySelector("strong");
   const connectDescription = elements.connectButton.querySelector("strong + span");
+  const connectPlan = elements.connectButton.querySelector(".company-plan");
   const connectAction = elements.connectButton.querySelector("em");
-  connectKicker.textContent = activeAccount ? "YOUR ACTIVE AMOS COMPANY" : "YOUR ORGANIZATION";
+  connectKicker.textContent = activeAccount
+    ? "YOUR ACTIVE AMOS COMPANY"
+    : "RECOMMENDED · FULL AMOS EXPERIENCE";
   connectTitle.textContent = activeAccount
-    ? "Build my company brain"
+    ? `Continue with ${activeCompanyName()}`
     : state.connected && !demo
-      ? "Reconnect my company"
-      : "My company";
+      ? "Activate my company"
+      : "Connect my company";
   connectDescription.textContent = activeAccount
-    ? "Connect data, applications, durable memory, authority, and proof for your real organization."
-    : "Connect durable memory, applications, policy, approvals, and proof.";
-  connectAction.textContent = activeAccount ? "Continue setup →" : "Sign in or create account →";
+    ? "Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof."
+    : "Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof. AMOS guides what to connect and what to tackle first.";
+  connectPlan.textContent = activeAccount
+    ? "AMOS company connected · Managed intelligence available"
+    : "14-day free trial · Plans start at $99/month";
+  connectAction.textContent = activeAccount
+    ? "Company connected · continue below ↓"
+    : "Start my free trial →";
+  elements.connectButton.disabled = activeAccount;
   elements.boundaryReadinessText.textContent = demo
     ? "Northwind demo"
     : state.connected
@@ -698,24 +731,31 @@ function render() {
         : state.mode?.personal
           ? "Personal workspace"
           : "Choose a starting point";
-  renderStep(elements.connectCheck, state.connected || state.mode?.personal || state.mode?.offline);
-  renderStep(elements.providerCheck, state.configured);
+  const startingPointSelected = Boolean(
+    state.connected || state.mode?.personal || state.mode?.offline
+  );
+  const intelligenceReady = Boolean(startingPointSelected && state.configured);
+  renderStep(elements.connectCheck, startingPointSelected);
+  renderStep(elements.providerCheck, intelligenceReady);
   renderStep(elements.workspaceCheck, Boolean(state.settings.workspace));
   const personalNeedsIntelligence = Boolean(
     state.mode?.personal && !state.connected && !state.configured
   );
-  elements.onboardingProviderText.textContent = state.configured
+  elements.onboardingProviderText.textContent = intelligenceReady
     ? providerStatusLabel()
     : personalNeedsIntelligence
       ? "Choose a local profile or your own key"
       : "Choose intelligence";
-  elements.onboardingIntelligenceHint.classList.toggle("hidden", !personalNeedsIntelligence);
+  elements.settingsBackButton.textContent = firstRunNeeded(state)
+    ? "← Back to setup"
+    : "← Back to AMOS";
   elements.enterButton.disabled = !(
     (state.connected || state.mode?.personal || state.mode?.offline) &&
     state.configured &&
     state.settings.workspace &&
     state.mode?.valid !== false
   );
+  elements.enterButton.textContent = onboardingEnterLabel();
   elements.disconnectButton.classList.toggle("hidden", !state.connected);
   elements.disconnectButton.textContent = state.accounts?.currentAccountId
     ? "Sign out of this account"
@@ -856,6 +896,14 @@ function firstRunNeeded(current = state) {
     !liveBoundary ||
     !current.settings?.onboardingCompletedAt
   );
+}
+
+function openIntelligenceSettings() {
+  showView("settings");
+}
+
+function returnFromIntelligenceSettings() {
+  showView("operator");
 }
 
 function showView(view) {
@@ -5320,12 +5368,14 @@ async function switchAccount(accountId) {
 }
 
 async function handleAccountUpdate() {
-  if (["available", "downloaded"].includes(updateState?.status)) {
-    await handleUpdate();
-    return;
-  }
+  toast("Checking for AMOS Desktop updates…");
   try {
-    await api.checkForUpdates();
+    const next = await api.checkForUpdates();
+    if (next) updateState = next;
+    renderUpdate();
+    if (!["available", "downloading", "downloaded", "installing"].includes(updateState?.status)) {
+      toast(updateState?.message || "AMOS Desktop is up to date.");
+    }
   } catch (error) {
     toast(error.message, true);
   }
@@ -5880,6 +5930,39 @@ function renderStep(element, complete) {
   element.classList.toggle("done", complete);
 }
 
+function northwindUsageLabel(demoStatus) {
+  const limit = Number(demoStatus?.messageLimit);
+  const remaining = Number(demoStatus?.messagesRemaining);
+  if (Number.isSafeInteger(limit) && limit >= 0 && Number.isSafeInteger(remaining) && remaining >= 0) {
+    return `${remaining} of ${limit} hosted turns remaining`;
+  }
+  if (Number.isSafeInteger(limit) && limit > 0) return `Up to ${limit} hosted turns included`;
+  return "Limited hosted turns included";
+}
+
+function renderNorthwindIntelligenceChoice(demo) {
+  elements.northwindIntelligenceChoice.classList.toggle("hidden", !demo);
+  if (!demo) return;
+  const provider = state.settings.provider;
+  elements.demoHostedIntelligenceButton.classList.toggle("selected", provider === "amos-hosted");
+  elements.demoLocalIntelligenceButton.classList.toggle("selected", provider === "ollama");
+  elements.demoByokIntelligenceButton.classList.toggle(
+    "selected",
+    !["amos-hosted", "ollama"].includes(provider)
+  );
+  elements.northwindUsageSummary.textContent = northwindUsageLabel(state.accountStatus?.demo);
+  elements.northwindCurrentIntelligence.textContent = state.configured
+    ? `Current intelligence: ${providerStatusLabel()}. You can change this now or anytime from the Northwind banner.`
+    : "Choose and finish intelligence setup before entering Northwind.";
+}
+
+function onboardingEnterLabel() {
+  if (state?.connectionMode === "demo") return "Enter Northwind demo";
+  if (state?.mode?.personal || state?.mode?.offline) return "Start local workspace";
+  if (state?.connected) return `Continue with ${activeCompanyName()}`;
+  return "Enter AMOS Desktop";
+}
+
 function providerStatusLabel() {
   if (state.provider.id === "amos-hosted") {
     return "AMOS Intelligence · Automatic";
@@ -5940,10 +6023,11 @@ function renderSettings() {
     const name = document.createElement("strong");
     name.textContent = provider.displayName;
     const description = document.createElement("p");
-    description.textContent =
-      provider.id === "amos-hosted" && state.mode?.personal && !state.connected
-        ? "Needs a sign-in. Use Northwind or My company for AMOS Intelligence."
-        : provider.description;
+    description.textContent = provider.id === "amos-hosted"
+      ? state.mode?.personal && !state.connected
+        ? "AMOS company subscription required for ongoing use. Northwind includes limited hosted demo turns."
+        : "Included with an AMOS company subscription. Included credits apply first; additional use is metered."
+      : provider.description;
     card.append(location, name, description);
     card.addEventListener("click", () => selectProvider(provider.id));
     elements.providerCards.append(card);
@@ -6209,6 +6293,9 @@ function renderOfflineModels() {
     }
     const title = document.createElement("h3");
     title.textContent = model.name;
+    const identity = document.createElement("p");
+    identity.className = "offline-model-identity";
+    identity.textContent = `Model · ${model.modelDisplayName || model.id}`;
     const description = document.createElement("p");
     description.textContent = model.description;
     const meta = document.createElement("div");
@@ -6229,7 +6316,7 @@ function renderOfflineModels() {
       pill.textContent = value;
       meta.append(pill);
     }
-    card.append(labels, title, description, meta);
+    card.append(labels, title, identity, description, meta);
 
     if (model.download) {
       const progress = document.createElement("div");
@@ -6278,19 +6365,29 @@ function renderOfflineModels() {
         useNowActive
           ? "Active"
           : currentBoundary === "online"
-            ? "Use with AMOS"
-            : "Use on this computer",
+            ? "Use with company"
+            : currentBoundary === "personal"
+              ? "Use in personal workspace"
+              : "Use local-only",
         "primary"
       );
       activate.disabled = useNowActive;
+      activate.title = currentBoundary === "offline"
+        ? `Select ${model.modelDisplayName || model.id}, switch Intelligence to AMOS Local, and use local-only mode`
+        : `Select ${model.modelDisplayName || model.id} and switch Intelligence to AMOS Local without changing your ${currentBoundary === "online" ? "company" : "personal workspace"} boundary`;
       activate.addEventListener("click", () => activateLocalModel(model.id, currentBoundary));
-      const offline = actionButton(active ? "Active offline" : "Use offline", "secondary");
-      offline.disabled = active;
-      offline.addEventListener("click", () => activateLocalModel(model.id, "offline"));
       const remove = actionButton("Remove", "danger");
       remove.disabled = active;
       remove.addEventListener("click", () => removeOfflineModel(model.id));
-      actions.append(activate, offline, remove);
+      actions.append(activate);
+      if (currentBoundary !== "offline") {
+        const offline = actionButton(active ? "Active local-only" : "Use local-only", "secondary");
+        offline.disabled = active;
+        offline.title = `Select ${model.modelDisplayName || model.id}, switch Intelligence to AMOS Local, and disable company and public-network tools`;
+        offline.addEventListener("click", () => activateLocalModel(model.id, "offline"));
+        actions.append(offline);
+      }
+      actions.append(remove);
     }
     card.append(actions);
     elements.offlineModelList.append(card);
@@ -6442,6 +6539,9 @@ async function connectAmos() {
     toast(error.message, true);
   } finally {
     setButtonBusy(elements.connectButton, false, state?.connected ? "Reconnect AMOS" : "Connect AMOS");
+    if (state?.connectionMode === "user" && state?.accountStatus?.workspaceActive === true) {
+      elements.connectButton.disabled = true;
+    }
   }
 }
 
@@ -6470,7 +6570,7 @@ async function completeOnboarding() {
     render();
     showView("operator");
   } finally {
-    setButtonBusy(elements.enterButton, false, "Enter AMOS Desktop");
+    setButtonBusy(elements.enterButton, false, onboardingEnterLabel());
   }
 }
 
@@ -6499,13 +6599,68 @@ async function startDemo() {
   setButtonBusy(elements.demoModeButton, true, "Opening demo…");
   try {
     state = await api.startDemo();
-    toast("Northwind Labs is ready. Everything you see is sample data.");
+    selectedProvider = state.settings.provider;
+    toast("Northwind Labs is connected. Choose how to power the demo, then enter.");
     render();
     showView("operator");
   } catch (error) {
     toast(error.message, true);
   } finally {
-    setButtonBusy(elements.demoModeButton, false, "Northwind demo");
+    setButtonBusy(elements.demoModeButton, false, "Explore the Northwind demo");
+    if (state?.connectionMode === "demo") elements.demoModeButton.disabled = true;
+  }
+}
+
+async function useDemoHostedIntelligence() {
+  setButtonBusy(elements.demoHostedIntelligenceButton, true, "Selecting…");
+  try {
+    state = await api.saveSettings({
+      provider: "amos-hosted",
+      model: "auto",
+      baseUrl: "",
+      intelligenceProfile: "auto",
+      reasoningEffort: "",
+      operatingMode: "online"
+    });
+    selectedProvider = "amos-hosted";
+    render();
+    toast("AMOS Intelligence will power this Northwind demo.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.demoHostedIntelligenceButton, false, "AMOS Intelligence");
+  }
+}
+
+function openDemoIntelligenceSettings(providerId = "") {
+  const current = state.settings.provider;
+  const target = providerId === "openai" && !["amos-hosted", "ollama"].includes(current)
+    ? current
+    : providerId || current;
+  selectedProvider = target;
+  showView("settings");
+  renderSettings();
+  selectProvider(target);
+  elements.advancedInfrastructureDetails.open = target !== "amos-hosted";
+  requestAnimationFrame(() => {
+    const destination = target === "ollama" ? elements.offlineIntelligenceCard : elements.providerCards;
+    destination?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  });
+}
+
+async function leaveDemo() {
+  setButtonBusy(elements.demoLeaveButton, true, "Leaving…");
+  try {
+    state = await api.logout();
+    selectedProvider = state.settings.provider;
+    resetSessionView();
+    render();
+    showView("operator");
+    toast("Northwind was closed. Choose the experience you want to use next.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.demoLeaveButton, false, "Leave demo");
   }
 }
 
@@ -6594,6 +6749,7 @@ async function saveSettings(event) {
     await persistSettings();
     toast("Intelligence settings saved.");
     render();
+    showView("settings");
   } catch (error) {
     elements.settingsError.textContent = error.message;
     elements.settingsError.classList.remove("hidden");
@@ -6743,12 +6899,14 @@ async function activateOfflineModel(modelId) {
 
 async function activateLocalModel(modelId, operatingMode) {
   try {
+    const modelName = state.offline?.models?.find((model) => model.id === modelId)?.modelDisplayName || modelId;
     state = await api.activateLocalModel(modelId, operatingMode);
     selectedProvider = state.settings.provider;
     toast(operatingMode === "offline"
-      ? "Local-only mode is active."
-      : "Local intelligence is active.");
+      ? `${modelName} is active in local-only mode.`
+      : `${modelName} is active through AMOS Local.`);
     render();
+    showView("settings");
   } catch (error) {
     toast(error.message, true);
   }
@@ -6766,6 +6924,13 @@ async function removeOfflineModel(modelId) {
 
 async function testModel() {
   const needsManagedConnection = selectedProvider === "amos-hosted" && !state.connected;
+  showIntelligenceTestStatus(
+    "testing",
+    needsManagedConnection ? "Waiting for AMOS sign-in…" : "Testing intelligence…",
+    needsManagedConnection
+      ? "Finish the browser connection and AMOS will run the test automatically."
+      : `Sending a bounded connection test to ${selectedIntelligenceLabel()}.`
+  );
   setButtonBusy(
     elements.testButton,
     true,
@@ -6781,12 +6946,23 @@ async function testModel() {
     }
     await persistSettings();
     const result = await api.testModel();
+    showIntelligenceTestStatus(
+      "success",
+      `${providerStatusLabel()} is connected`,
+      `Verified just now. ${result.message || "AMOS intelligence ready."}`
+    );
     toast(result.message || "Intelligence is ready.");
   } catch (error) {
-    elements.settingsError.textContent = needsManagedConnection
+    const message = needsManagedConnection
       ? `AMOS account connection did not finish. ${friendlyError(error)}`
       : friendlyError(error);
+    elements.settingsError.textContent = message;
     elements.settingsError.classList.remove("hidden");
+    showIntelligenceTestStatus(
+      "error",
+      "Intelligence test failed",
+      message
+    );
   } finally {
     const stillNeedsManagedConnection =
       selectedProvider === "amos-hosted" && !state.connected;
@@ -6796,6 +6972,23 @@ async function testModel() {
       stillNeedsManagedConnection ? "Create or connect to test" : "Test intelligence"
     );
   }
+}
+
+function selectedIntelligenceLabel() {
+  const provider = state?.providers?.find((item) => item.id === selectedProvider);
+  if (selectedProvider === "amos-hosted") return "AMOS Intelligence";
+  const model = selectedProvider === "ollama"
+    ? state?.offline?.models?.find((item) => item.id === state?.settings?.model)?.modelDisplayName
+    : elements.modelInput.value || elements.customModelInput.value;
+  return [provider?.label || selectedProvider, model].filter(Boolean).join(" · ");
+}
+
+function showIntelligenceTestStatus(status, title, detail) {
+  elements.intelligenceTestStatus.className = `intelligence-test-status ${status}`;
+  elements.intelligenceTestStatus.classList.remove("hidden");
+  elements.intelligenceTestIcon.textContent = status === "success" ? "✓" : status === "error" ? "!" : "…";
+  elements.intelligenceTestTitle.textContent = title;
+  elements.intelligenceTestDetail.textContent = detail;
 }
 
 async function chooseAttachments() {
@@ -7763,7 +7956,10 @@ function localApprovalKindLabel(kind) {
 
 function setButtonBusy(button, busy, label) {
   button.disabled = busy;
-  if (button.classList.contains("start-mode-card")) {
+  if (
+    button.classList.contains("start-mode-card") ||
+    button.classList.contains("intelligence-choice-card")
+  ) {
     button.classList.toggle("busy", busy);
     button.setAttribute("aria-busy", String(busy));
     return;

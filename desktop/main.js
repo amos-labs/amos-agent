@@ -124,6 +124,105 @@ function showWindow() {
   window.focus();
 }
 
+function navigateFromApplicationMenu(destination) {
+  showWindow();
+  send("desktop:navigate", { destination });
+}
+
+function installApplicationMenu() {
+  if (process.platform !== "darwin") {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+  const menu = Menu.buildFromTemplate([
+    {
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        {
+          label: "Intelligence & Settings…",
+          accelerator: "CommandOrControl+,",
+          click: () => navigateFromApplicationMenu("settings")
+        },
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" }
+      ]
+    },
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "Choose Intelligence…",
+          click: () => navigateFromApplicationMenu("settings")
+        },
+        {
+          label: "Memory & Context…",
+          click: () => navigateFromApplicationMenu("memory")
+        },
+        { type: "separator" },
+        {
+          label: "Choose Workspace…",
+          accelerator: "CommandOrControl+Shift+O",
+          click: () => navigateFromApplicationMenu("choose-workspace")
+        },
+        { type: "separator" },
+        { role: "close" }
+      ]
+    },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" }
+      ]
+    },
+    {
+      label: "View",
+      submenu: [{ role: "togglefullscreen" }]
+    },
+    {
+      label: "Window",
+      submenu: [
+        { role: "minimize" },
+        { role: "zoom" },
+        { type: "separator" },
+        { role: "front" }
+      ]
+    },
+    {
+      label: "Help",
+      submenu: [
+        {
+          label: `AMOS Desktop v${app.getVersion()}`,
+          enabled: false
+        },
+        {
+          label: "Check for Updates…",
+          click: () => navigateFromApplicationMenu("check-updates")
+        },
+        { type: "separator" },
+        {
+          label: "AMOS Labs",
+          click: () => shell.openExternal("https://www.amoslabs.com")
+        }
+      ]
+    }
+  ]);
+  Menu.setApplicationMenu(menu);
+}
+
 function createTray() {
   const icon = nativeImage
     .createFromPath(join(here, "assets", "amos-mark.png"))
@@ -678,7 +777,6 @@ if (process.platform === "win32") {
 
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
-  if (process.platform !== "darwin") Menu.setApplicationMenu(null);
   settingsStore = new DesktopSettingsStore({
     filePath: join(app.getPath("userData"), "settings.json"),
     encrypt,
@@ -806,6 +904,7 @@ app.whenReady().then(async () => {
   await companionServer.start().catch(() => {});
   registerIpc();
   createWindow();
+  installApplicationMenu();
   createTray();
   autoUpdater.logger = createUpdaterLogger(join(app.getPath("logs"), "amos-updater.log"));
   updateManager = new DesktopUpdateManager({
