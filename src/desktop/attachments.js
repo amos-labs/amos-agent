@@ -165,10 +165,17 @@ export class AttachmentManager {
       throw new Error("The selected intelligence provider does not support images. Choose a vision-capable provider or remove the screenshot.");
     }
 
-    let remaining = MAX_TOTAL_MODEL_TEXT_CHARS;
+    const documents = items.filter((value) => value.kind === "document");
+    let remaining = attachmentTextBudget({
+      contextTokens: capabilities.contextTokens,
+      maxOutputTokens: capabilities.maxOutputTokens,
+      promptChars: String(text || "").length
+    });
     const documentBlocks = [];
-    for (const item of items.filter((value) => value.kind === "document")) {
-      const content = item.text.slice(0, Math.min(MAX_MODEL_TEXT_CHARS, remaining));
+    for (const [index, item] of documents.entries()) {
+      const documentsLeft = documents.length - index;
+      const fairShare = Math.floor(remaining / Math.max(1, documentsLeft));
+      const content = item.text.slice(0, Math.min(MAX_MODEL_TEXT_CHARS, fairShare));
       remaining -= content.length;
       documentBlocks.push(
         [
@@ -208,6 +215,34 @@ export class AttachmentManager {
         }
       }))
     ];
+  }
+
+  readModelChunk(id, { offset = 0, maxChars = 12_000, query = "" } = {}) {
+    const item = this.get(id);
+    if (item.kind !== "document") {
+      return { ok: false, error: "Only document attachments expose model-readable text sections" };
+    }
+    const limit = Math.min(20_000, Math.max(1_000, Number(maxChars) || 12_000));
+    let start = Math.max(0, Number(offset) || 0);
+    const needle = String(query || "").trim();
+    if (needle) {
+      const match = item.text.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase());
+      if (match < 0) {
+        return { ok: true, attachment_id: item.id, query: needle, found: false, total_chars: item.text.length };
+      }
+      start = Math.max(0, match - Math.floor(limit * 0.2));
+    }
+    const content = item.text.slice(start, start + limit);
+    return {
+      ok: true,
+      attachment_id: item.id,
+      name: item.name,
+      offset: start,
+      next_offset: start + content.length < item.text.length ? start + content.length : null,
+      total_chars: item.text.length,
+      truncated: start + content.length < item.text.length,
+      content
+    };
   }
 
   memoryPayload(id, imageDescription = "") {
@@ -293,6 +328,21 @@ export class AttachmentManager {
       throw new Error(`AMOS Desktop accepts up to ${MAX_ATTACHMENTS} attachments per session`);
     }
   }
+}
+
+export function attachmentTextBudget({
+  contextTokens = 131_072,
+  maxOutputTokens = 8_192,
+  promptChars = 0
+} = {}) {
+  const context = boundedNumber(contextTokens, 131_072, 4_096, 1_048_576);
+  const output = Math.min(
+    boundedNumber(maxOutputTokens, 8_192, 256, 131_072),
+    Math.max(1_024, Math.floor(context * 0.25))
+  );
+  const input = Math.max(2_048, context - output - Math.max(1_024, Math.floor(context * 0.1)));
+  const attachmentTokens = Math.max(1_024, Math.floor(input * 0.45) - Math.ceil(promptChars / 4));
+  return Math.min(MAX_TOTAL_MODEL_TEXT_CHARS, attachmentTokens * 4);
 }
 
 function assertBrowserImageSignature(name, buffer) {
@@ -486,6 +536,12 @@ function truncateUtf8(value, maxBytes) {
   const buffer = Buffer.from(String(value));
   if (buffer.length <= maxBytes) return String(value);
   return `${buffer.subarray(0, maxBytes).toString("utf8")}\n\n[truncated before company-memory storage]`;
+}
+
+function boundedNumber(value, fallback, minimum, maximum) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
 }
 
 export const attachmentLimits = Object.freeze({

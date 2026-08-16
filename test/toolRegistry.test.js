@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeToolName, ToolRegistry } from "../src/tools/registry.js";
+import { measureToolSurface, sanitizeToolName, ToolRegistry } from "../src/tools/registry.js";
 
 test("sanitizeToolName keeps API-compatible names", () => {
   assert.equal(sanitizeToolName("finance.list-invoices/v1"), "finance_list-invoices_v1");
@@ -19,4 +19,67 @@ test("ToolRegistry executes registered tools", async () => {
 
   assert.equal(registry.openAiTools()[0].function.name, "echo");
   assert.deepEqual(await registry.execute("echo", { value: "hi" }, {}), { value: "hi" });
+});
+
+test("ToolRegistry rejects ambiguous name collisions but permits exact idempotent registration", () => {
+  const registry = new ToolRegistry();
+  const first = {
+    name: "same_name",
+    source: "one",
+    remoteName: "first",
+    handler: () => ({ ok: true })
+  };
+  assert.equal(registry.register(first), true);
+  assert.equal(registry.register(first), false);
+  assert.throws(
+    () => registry.register({ ...first, source: "two" }),
+    /Tool name collision/
+  );
+});
+
+test("ToolRegistry reports model-facing schema burden and active toolkits", () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "echo",
+    source: "test",
+    toolkit: "testing",
+    description: "Echo input",
+    handler: () => ({ ok: true })
+  });
+  const tools = registry.openAiTools();
+  const metrics = registry.surfaceMetrics(tools);
+  assert.equal(metrics.toolCount, 1);
+  assert.equal(metrics.registeredToolCount, 1);
+  assert.ok(metrics.schemaBytes > 0);
+  assert.equal(metrics.estimatedSchemaTokens, Math.ceil(metrics.schemaBytes / 4));
+  assert.deepEqual(metrics.sources, ["test"]);
+  assert.deepEqual(metrics.toolkits, ["testing"]);
+  assert.deepEqual(measureToolSurface([]), {
+    toolCount: 0,
+    schemaBytes: 2,
+    estimatedSchemaTokens: 1
+  });
+});
+
+test("ToolRegistry progressively activates bounded specialized toolkits", () => {
+  const registry = new ToolRegistry({ progressive: true, maxActiveTools: 3, maxActiveToolkits: 1 });
+  registry.register({ name: "core_tool", toolkit: "core", handler: () => ({ ok: true }) });
+  registry.register({ name: "sheet_tool", toolkit: "spreadsheets", handler: () => ({ ok: true }) });
+  registry.register({ name: "code_tool", toolkit: "workspace", handler: () => ({ ok: true }) });
+
+  assert.deepEqual(
+    registry.openAiTools({ activeOnly: true }).map((tool) => tool.function.name),
+    ["core_tool"]
+  );
+  assert.equal(registry.activateToolkit("spreadsheets").ok, true);
+  assert.deepEqual(
+    registry.openAiTools({ activeOnly: true }).map((tool) => tool.function.name),
+    ["core_tool", "sheet_tool"]
+  );
+  assert.equal(registry.activateToolkit("workspace").ok, false);
+  assert.equal(registry.activateToolkit("workspace", { mode: "replace" }).ok, true);
+  assert.deepEqual(
+    registry.openAiTools({ activeOnly: true }).map((tool) => tool.function.name),
+    ["core_tool", "code_tool"]
+  );
 });

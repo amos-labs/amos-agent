@@ -1,6 +1,6 @@
 export const MODEL_CAPABILITY_SUITE = deepFreeze({
   id: "amos-model-capability",
-  version: 1,
+  version: 2,
   minimumConditionalPassRate: 0.65,
   minimumQualifiedRepetitions: 3,
   groups: {
@@ -19,6 +19,10 @@ export const MODEL_CAPABILITY_SUITE = deepFreeze({
       "parked approval outcome",
       "distractor-heavy evidence retrieval",
       "optimization coding"
+    ],
+    production: [
+      "progressive toolkit activation",
+      "production surface tool selection"
     ]
   },
   scenarios: {
@@ -86,6 +90,16 @@ export const MODEL_CAPABILITY_SUITE = deepFreeze({
       weight: 3,
       capabilities: ["verified-code-optimization"],
       workflows: ["optimization-code-generation"]
+    },
+    "progressive toolkit activation": {
+      weight: 3,
+      capabilities: ["tool-selection", "tool-arguments", "tool-continuation"],
+      workflows: ["progressive-tool-activation"]
+    },
+    "production surface tool selection": {
+      weight: 3,
+      capabilities: ["tool-selection", "tool-arguments", "distractor-resistant-retrieval"],
+      workflows: ["large-tool-surface-selection"]
     }
   },
   autonomy: {
@@ -108,7 +122,11 @@ export const MODEL_CAPABILITY_SUITE = deepFreeze({
 
 export function expectedScenarioNames(suiteName) {
   if (suiteName === "all") {
-    return [...MODEL_CAPABILITY_SUITE.groups.smoke, ...MODEL_CAPABILITY_SUITE.groups.qualification];
+    return [
+      ...MODEL_CAPABILITY_SUITE.groups.smoke,
+      ...MODEL_CAPABILITY_SUITE.groups.qualification,
+      ...MODEL_CAPABILITY_SUITE.groups.production
+    ];
   }
   return [...(MODEL_CAPABILITY_SUITE.groups[suiteName] || [])];
 }

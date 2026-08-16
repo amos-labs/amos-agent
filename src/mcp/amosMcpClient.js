@@ -34,6 +34,49 @@ export function extractMcpText(result) {
     .join("\n");
 }
 
+export function normalizeMcpToolResult(result) {
+  const isError = result?.isError === true || result?.is_error === true;
+  const structured = result?.structuredContent ?? result?.structured_content;
+  const text = extractMcpText(result);
+  const parsed = structured ?? parseMcpToolText(text);
+
+  if (isError) {
+    return {
+      ok: false,
+      error: mcpErrorMessage(parsed, text)
+    };
+  }
+  if (plainObject(parsed)) {
+    return parsed.ok === undefined ? { ...parsed, ok: true } : parsed;
+  }
+  if (Array.isArray(parsed)) return { ok: true, data: parsed };
+  if (parsed !== undefined && parsed !== null && parsed !== "") {
+    return { ok: true, data: parsed };
+  }
+  return { ok: true, text };
+}
+
+function parseMcpToolText(text) {
+  const value = String(text || "").trim();
+  if (!value) return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function mcpErrorMessage(payload, text) {
+  if (plainObject(payload)) {
+    return String(payload.error?.message || payload.error || payload.message || text || "AMOS tool failed");
+  }
+  return String(payload || text || "AMOS tool failed");
+}
+
+function plainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 export class AmosMcpClient {
   constructor({ url, mcpUrl, apiKey, getAccessToken, requestTimeoutMs = 30_000 }, fetchImpl = fetchCompat) {
     this.url = url || mcpUrl;

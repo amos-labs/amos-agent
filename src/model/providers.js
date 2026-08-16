@@ -263,6 +263,12 @@ export function resolveModelConfig(env = process.env) {
       1,
       131_072
     ),
+    contextTokens: boundedInt(
+      env.AMOS_MODEL_CONTEXT_TOKENS,
+      provider.deployment === "local" ? 32_768 : 131_072,
+      4_096,
+      1_048_576
+    ),
     requestTimeoutMs: boundedInt(
       env.AMOS_MODEL_REQUEST_TIMEOUT_MS ||
         (provider.id === "kimi" ? env.KIMI_REQUEST_TIMEOUT_MS : ""),

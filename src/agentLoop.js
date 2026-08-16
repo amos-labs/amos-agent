@@ -6,6 +6,7 @@ import {
   selectTaskWorkflow
 } from "./workflows.js";
 import { takeModelEvidence } from "./model/evidence.js";
+import { compileModelContext, modelContentLength } from "./model/contextCompiler.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
 // Leave headroom below AMOS Hosted's 256-message boundary while allowing long
@@ -40,6 +41,7 @@ export class AgentLoop {
     this.onToolResult = onToolResult;
     this.lastWorkflow = null;
     this.lastContextReceipt = null;
+    this.lastContextPlan = null;
     this.activeTaskMessage = null;
     this.continuityContext = null;
     this.pendingExternalOutcomes = [];
@@ -51,6 +53,7 @@ export class AgentLoop {
   clear() {
     this.lastWorkflow = null;
     this.lastContextReceipt = null;
+    this.lastContextPlan = null;
     this.activeTaskMessage = null;
     this.continuityContext = null;
     this.pendingExternalOutcomes = [];
@@ -122,6 +125,13 @@ export class AgentLoop {
     // existence across task turns so follow-ups like “make that green” can use
     // the update tool without forcing the user to say “canvas” again.
     this.canvasToolState.active = canvasActive === true;
+    if (
+      this.canvasToolState.requested ||
+      this.canvasToolState.updateRequested ||
+      this.canvasToolState.active
+    ) {
+      this.registry.activateToolkit("presentation", { mode: "add" });
+    }
     const workflow = selectedWorkflow || this.workflowSelector({ objective: userContent });
     this.lastWorkflow = workflow;
     onEvent({
@@ -178,9 +188,10 @@ export class AgentLoop {
           turn,
           summary: turn === 0 ? "Understanding the task and company context" : "Evaluating the latest results"
         });
-        const messages = this.prepareMessagesForModel();
         const tools = this.availableToolsForModel();
-        this.captureContextReceipt({ messages, tools, turn });
+        const messages = this.prepareMessagesForModel(tools);
+        const contextReceipt = this.captureContextReceipt({ messages, tools, turn });
+        onEvent({ type: "context_compiled", ...contextReceipt });
         const response = await this.modelClient.chat({
           messages,
           tools,
@@ -402,7 +413,7 @@ export class AgentLoop {
     return true;
   }
 
-  prepareMessagesForModel() {
+  prepareMessagesForModel(tools = []) {
     const limit = boundedInteger(
       this.config.agent?.maxModelMessages,
       DEFAULT_MODEL_MESSAGE_LIMIT,
@@ -411,7 +422,7 @@ export class AgentLoop {
     );
     const effectiveLimit = Math.max(3, limit);
     if (this.messages.length <= effectiveLimit) {
-      return this.withContinuityContext(this.messages);
+      return this.compileContext(this.withContinuityContext(this.messages), tools);
     }
 
     const systemMessage = this.messages.find((message) => message.role === "system") || {
@@ -421,7 +432,10 @@ export class AgentLoop {
     const taskIndex = this.messages.indexOf(this.activeTaskMessage);
     if (taskIndex < 0) {
       this.compactCompletedHistory();
-      return this.withContinuityContext(this.messages.slice(0, effectiveLimit));
+      return this.compileContext(
+        this.withContinuityContext(this.messages.slice(0, effectiveLimit)),
+        tools
+      );
     }
 
     const selected = [];
@@ -443,7 +457,19 @@ export class AgentLoop {
       this.activeTaskMessage,
       ...selected.flat()
     ];
-    return this.withContinuityContext(this.messages);
+    return this.compileContext(this.withContinuityContext(this.messages), tools);
+  }
+
+  compileContext(messages, tools) {
+    const compiled = compileModelContext({
+      messages,
+      tools,
+      contextTokens: this.config.model?.contextTokens,
+      maxOutputTokens: this.config.model?.maxCompletionTokens,
+      activeTask: this.activeTaskMessage
+    });
+    this.lastContextPlan = compiled.plan;
+    return compiled.messages;
   }
 
   withContinuityContext(messages) {
@@ -475,8 +501,9 @@ export class AgentLoop {
   }
 
   captureContextReceipt({ messages, tools, turn }) {
+    const surface = this.registry.surfaceMetrics(tools);
     this.lastContextReceipt = {
-      version: 1,
+      version: 2,
       provider: String(this.config.model?.provider || this.config.model?.displayName || "compatible"),
       model: String(this.config.model?.model || ""),
       workflow: this.lastWorkflow?.id || null,
@@ -486,15 +513,25 @@ export class AgentLoop {
         (total, message) => total + modelContentLength(message?.content),
         0
       ),
-      toolCount: tools.length,
-      continuityChars: this.continuityContext?.length || 0
+      toolCount: surface.toolCount,
+      registeredToolCount: surface.registeredToolCount,
+      toolSchemaBytes: surface.schemaBytes,
+      estimatedToolSchemaTokens: surface.estimatedSchemaTokens,
+      toolSources: surface.sources,
+      activeToolkits: surface.toolkits,
+      continuityChars: this.continuityContext?.length || 0,
+      context: this.lastContextPlan || null
     };
     return this.lastContextReceipt;
   }
 
   availableToolsForModel() {
-    return this.registry.openAiTools().filter((tool) => {
+    return this.registry.openAiTools({ activeOnly: true }).filter((tool) => {
       const name = tool?.function?.name;
+      if (
+        name === "amos_call_engine_tool" &&
+        this.registry.hasActiveToolkitPrefix("amos-engine:")
+      ) return false;
       if (name === WORK_SURFACE_REQUEST_TOOL) return true;
       if (name === CANVAS_PRESENT_TOOL) return this.canvasToolState.requested;
       if (name === COMPANY_VIEW_TOOL) return this.canvasToolState.companyOpportunity;
@@ -508,6 +545,7 @@ export class AgentLoop {
   observeCanvasToolOutcome({ name, result, failed }) {
     if (failed) return;
     if (name === WORK_SURFACE_REQUEST_TOOL && result?.requested) {
+      this.registry.activateToolkit("presentation", { mode: "add" });
       this.canvasToolState.requested = true;
       this.canvasToolState.companyOpportunity = true;
       this.canvasToolState.semanticIntent = result.intent || "auto";
@@ -524,12 +562,16 @@ export class AgentLoop {
       isCanvasEligibleCompanyTool(name) &&
       (this.canvasToolState.requested || hasDenseStructuredData(result))
     ) {
+      this.registry.activateToolkit("presentation", { mode: "add" });
       this.canvasToolState.companyOpportunity = true;
     }
   }
 
   applyCanvasIntent(content) {
     const intent = canvasToolStateFor(content);
+    if (intent.requested || intent.updateRequested) {
+      this.registry.activateToolkit("presentation", { mode: "add" });
+    }
     this.canvasToolState.requested ||= intent.requested;
     this.canvasToolState.updateRequested ||= intent.updateRequested;
   }
@@ -564,7 +606,7 @@ export class AgentLoop {
         "Do not describe this as a tool-turn limit."
       ].join(" ")
     };
-    const messages = [...this.prepareMessagesForModel(), guardInstruction];
+    const messages = [...this.prepareMessagesForModel([]), guardInstruction];
     this.captureContextReceipt({ messages, tools: [], turn: turn + 1 });
     const response = await this.modelClient.chat({
       messages,
@@ -634,15 +676,6 @@ function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
-}
-
-function modelContentLength(content) {
-  if (typeof content === "string") return content.length;
-  if (!Array.isArray(content)) return 0;
-  return content.reduce((total, item) => {
-    if (item?.type === "text") return total + String(item.text || "").length;
-    return total + JSON.stringify(item || {}).length;
-  }, 0);
 }
 
 function prependContinuityContext(content, continuity) {

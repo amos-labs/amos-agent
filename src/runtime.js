@@ -9,6 +9,7 @@ import { createFileTools } from "./tools/files.js";
 import { createArtifactTools } from "./tools/artifacts.js";
 import { createSpreadsheetTools } from "./tools/spreadsheets.js";
 import { ToolRegistry } from "./tools/registry.js";
+import { createToolkitActivationTool } from "./tools/toolkitActivation.js";
 import { createWebTools } from "./tools/web.js";
 
 export function createRegistry({
@@ -17,9 +18,10 @@ export function createRegistry({
   includeAmos = true,
   includeWeb = true,
   artifactPresenter = null,
-  spreadsheetPresenter = null
+  spreadsheetPresenter = null,
+  toolSurface = {}
 } = {}) {
-  const registry = new ToolRegistry();
+  const registry = new ToolRegistry(toolSurface);
   if (includeLocal) {
     registry.register(createBashTool());
     for (const tool of createCodingTools()) registry.register(tool);
@@ -34,6 +36,7 @@ export function createRegistry({
     for (const tool of createAmosTools()) registry.register(tool);
   }
   for (const tool of extraTools) registry.register(tool);
+  registry.register(createToolkitActivationTool(registry.availableToolkits()));
   return registry;
 }
 
@@ -59,7 +62,13 @@ export function createRuntime({
     includeAmos,
     includeWeb,
     artifactPresenter,
-    spreadsheetPresenter
+    spreadsheetPresenter,
+    toolSurface: {
+      progressive: config.agent?.progressiveTools !== false,
+      maxActiveTools: config.agent?.maxActiveTools,
+      maxActiveSchemaBytes: config.agent?.maxActiveSchemaBytes,
+      maxActiveToolkits: config.agent?.maxActiveToolkits
+    }
   });
   const modelConfig = {
     ...config.model,

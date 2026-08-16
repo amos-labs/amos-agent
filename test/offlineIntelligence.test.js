@@ -6,6 +6,7 @@ import {
   releaseSignedManifest
 } from "../src/desktop/offlineIntelligence.js";
 import { routeModelStep } from "../src/model/capabilityRouter.js";
+import { currentProductionToolSchemaVersion } from "../src/model/toolSurfaceQualification.js";
 import { createRegistry } from "../src/runtime.js";
 import {
   INTELLIGENCE_ROUTER_ARTIFACT,
@@ -98,7 +99,7 @@ test("hardware assessment recommends a bounded curated profile", () => {
 
 test("curated model manifest is release-signed and content-addressed", () => {
   const manifest = releaseSignedManifest();
-  assert.equal(manifest.version, 9);
+  assert.equal(manifest.version, 10);
   assert.equal(manifest.trust, "release-signed");
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
@@ -138,8 +139,15 @@ test("curated model manifest is release-signed and content-addressed", () => {
   assert.equal(qwen36.replacedBy, QWEN38_MODEL_ID);
   assert.equal(qwen38.replaces, "qwen3.6:27b-q4_K_M");
   assert.equal(qwen38.qualification.status, "qualified");
-  assert.equal(qwen38.qualification.score, 23);
-  assert.equal(qwen38.qualification.maximum, 23);
+  assert.equal(qwen38.qualification.score, 29);
+  assert.equal(qwen38.qualification.maximum, 29);
+  assert.equal(qwen38.qualification.suite, "amos-local-qualification-v2");
+  assert.match(qwen38.capabilityContract.identity.toolSchemaVersion, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(
+    qwen38.capabilityContract.identity.toolSchemaVersion,
+    currentProductionToolSchemaVersion(),
+    "production prompt or tool schema changed; requalify Qwen before updating the bound digest"
+  );
   assert.equal(qwen38.qualification.repetitions, 3);
   assert.equal(qwen38.qualification.visionSmoke.passed, true);
   assert.equal(qwen38.source.revision, "0669b98607d47046c7c2b3f801011d54a08cfccf");

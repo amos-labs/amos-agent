@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig } from "../src/config.js";
-import { AmosMcpClient } from "../src/mcp/amosMcpClient.js";
+import { AmosMcpClient, normalizeMcpToolResult } from "../src/mcp/amosMcpClient.js";
 
 test("AmosMcpClient accepts the AMOS config object produced by loadConfig", async () => {
   const config = loadConfig(
@@ -33,4 +33,18 @@ test("AmosMcpClient accepts the AMOS config object produced by loadConfig", asyn
 
   assert.equal(requestedUrl, "https://amos.example/mcp");
   assert.deepEqual(result, { tools: [] });
+});
+
+test("normalizeMcpToolResult parses structured JSON once", () => {
+  assert.deepEqual(normalizeMcpToolResult({
+    content: [{ type: "text", text: JSON.stringify({ total: 12 }) }],
+    isError: false
+  }), { ok: true, total: 12 });
+});
+
+test("normalizeMcpToolResult turns MCP error envelopes into failed tool results", () => {
+  assert.deepEqual(normalizeMcpToolResult({
+    content: [{ type: "text", text: JSON.stringify({ error: "connection expired" }) }],
+    isError: true
+  }), { ok: false, error: "connection expired" });
 });

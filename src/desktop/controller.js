@@ -117,6 +117,7 @@ import { createLocalPreviewTool } from "../tools/localPreview.js";
 import { createAutomationSetupTool } from "../tools/automationSetup.js";
 import { createConsultativeProposalTool } from "../tools/consultativeState.js";
 import { createCodeWorkspaceTool } from "../tools/codeWorkspace.js";
+import { createAttachmentTools } from "../tools/attachments.js";
 import {
   DEMO_SYSTEM_PROMPT,
   OFFLINE_SYSTEM_PROMPT,
@@ -2147,13 +2148,20 @@ export class DesktopController {
               abortController.signal
             ))
       ];
+      const attachmentsById = new Map(
+        this.attachments.list().map((attachment) => [attachment.id, attachment])
+      );
+      if (references.some((reference) => attachmentsById.get(reference?.id)?.kind === "document")) {
+        runtime.registry?.activateToolkit?.("documents", { mode: "add" });
+      }
       const modelContent = this.attachments.buildMessageContent(
         prompt,
         references,
-        config.model.capabilities
-      );
-      const attachmentsById = new Map(
-        this.attachments.list().map((attachment) => [attachment.id, attachment])
+        {
+          ...config.model.capabilities,
+          contextTokens: config.model.contextTokens,
+          maxOutputTokens: config.model.maxCompletionTokens
+        }
       );
       let workflow = selectTaskWorkflow({
         objective: prompt,
@@ -4275,6 +4283,9 @@ export class DesktopController {
       })
     ];
     if (!contextOnly) {
+      extraTools.push(...createAttachmentTools({
+        read: (input) => this.attachments.readModelChunk(input.id, input)
+      }));
       extraTools.push(createCodeWorkspaceTool({
         present: (spec) => this.presentCanvas(spec)
       }));
@@ -5406,6 +5417,9 @@ export class DesktopController {
       AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
       AMOS_BEDROCK_AUTH_MODE: settings.bedrockAuthMode,
       AMOS_MODEL_REASONING_EFFORT: settings.reasoningEffort,
+      AMOS_MODEL_CONTEXT_TOKENS: settings.provider === "ollama"
+        ? String(this.offlineManager?.state?.().contextLength || "")
+        : "",
       AMOS_AGENT_WORKSPACE: settings.workspace || homedir(),
       AMOS_AGENT_AUTO_APPROVE_BASH: localAutoApproveEnabled(settings) ? "true" : "false",
       AMOS_AGENT_AUTO_APPROVE_WRITES: localAutoApproveEnabled(settings) ? "true" : "false",
@@ -6170,6 +6184,26 @@ function sanitizeAgentEvent(event) {
       messageCount: Math.max(0, Number(event.messageCount || 0)),
       toolCount: Math.max(0, Number(event.toolCount || 0)),
       reason: event.reason ? String(event.reason).slice(0, 160) : null
+    };
+  }
+  if (event.type === "context_compiled") {
+    return {
+      type: "context_compiled",
+      turn: Math.max(0, Number(event.turn || 0)),
+      messageCount: Math.max(0, Number(event.messageCount || 0)),
+      messageChars: Math.max(0, Number(event.messageChars || 0)),
+      toolCount: Math.max(0, Number(event.toolCount || 0)),
+      registeredToolCount: Math.max(0, Number(event.registeredToolCount || 0)),
+      toolSchemaBytes: Math.max(0, Number(event.toolSchemaBytes || 0)),
+      estimatedToolSchemaTokens: Math.max(0, Number(event.estimatedToolSchemaTokens || 0)),
+      activeToolkits: (Array.isArray(event.activeToolkits) ? event.activeToolkits : [])
+        .slice(0, 12)
+        .map((toolkit) => String(toolkit).slice(0, 80)),
+      contextTokens: Math.max(0, Number(event.context?.contextTokens || 0)),
+      estimatedInputTokens: Math.max(0, Number(event.context?.estimatedInputTokens || 0)),
+      reservedOutputTokens: Math.max(0, Number(event.context?.reservedOutputTokens || 0)),
+      compacted: event.context?.compacted === true,
+      utilization: Math.max(0, Number(event.context?.utilization || 0))
     };
   }
   if (event.type === "tool_start") {

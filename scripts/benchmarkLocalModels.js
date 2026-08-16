@@ -4,6 +4,10 @@ import http from "node:http";
 import https from "node:https";
 import vm from "node:vm";
 import { performance } from "node:perf_hooks";
+import {
+  createQualificationRegistry,
+  currentProductionToolSchemaVersion
+} from "../src/model/toolSurfaceQualification.js";
 
 const args = process.argv.slice(2);
 const models = readModels(args);
@@ -52,7 +56,7 @@ const onlyScenarios = new Set(
 if (models.length === 0) {
   console.error(
     "Usage: npm run benchmark:local -- <model> [model...] " +
-    "[--suite smoke|qualification|all] [--url URL] [--context TOKENS] " +
+    "[--suite smoke|qualification|production|all] [--url URL] [--context TOKENS] " +
     "[--request-timeout-seconds SECONDS] [--max-tokens TOKENS] " +
     "[--reasoning-effort low|medium|high] " +
     "[--protocol ollama|openai] [--only SCENARIO,...] [--output REPORT.json]"
@@ -89,6 +93,7 @@ if (output) {
     protocol,
     suite,
     context_length: contextLength,
+    tool_schema_version: currentProductionToolSchemaVersion(),
     max_tokens: maxTokens,
     reasoning_effort: reasoningEffort,
     only_scenarios: onlyScenarios.size > 0 ? [...onlyScenarios] : null,
@@ -101,7 +106,7 @@ async function benchmarkModel(model) {
   const scenarios = [];
   const stats = [];
 
-  if (suite !== "qualification") {
+  if (!["qualification", "production"].includes(suite)) {
   scenarios.push(await scenario("structured output", 1, async () => {
     const response = await chat(model, [{
       role: "user",
@@ -227,7 +232,7 @@ async function benchmarkModel(model) {
   }));
   }
 
-  if (suite !== "smoke") {
+  if (!["smoke", "production"].includes(suite)) {
     if (shouldRunScenario("document prompt-injection resistance")) {
       scenarios.push(await qualificationPromptInjection(model, stats));
     }
@@ -251,6 +256,15 @@ async function benchmarkModel(model) {
     }
   }
 
+  if (!["smoke", "qualification"].includes(suite)) {
+    if (shouldRunScenario("progressive toolkit activation")) {
+      scenarios.push(await qualificationProgressiveToolkit(model, stats));
+    }
+    if (shouldRunScenario("production surface tool selection")) {
+      scenarios.push(await qualificationProductionSurface(model, stats));
+    }
+  }
+
   const score = scenarios.reduce((sum, item) => sum + (item.passed ? item.weight : 0), 0);
   const maximum = scenarios.reduce((sum, item) => sum + item.weight, 0);
   const evalCount = stats.reduce((sum, item) => sum + Number(item.eval_count || 0), 0);
@@ -262,6 +276,97 @@ async function benchmarkModel(model) {
     wallSeconds: (performance.now() - started) / 1_000,
     tokensPerSecond: evalDuration > 0 ? evalCount / (evalDuration / 1_000_000_000) : 0,
     scenarios
+  };
+}
+
+async function qualificationProgressiveToolkit(model, stats) {
+  return scenario("progressive toolkit activation", 3, async () => {
+    const registry = createQualificationRegistry();
+    const messages = [{
+      role: "system",
+      content: "AMOS begins with a compact tool surface. Activate the smallest needed toolkit before using a specialized tool. Consequential arithmetic must be deterministic."
+    }, {
+      role: "user",
+      content: "Current MRR is $2,200. Use deterministic AMOS tools to calculate ARR. Do not estimate mentally."
+    }];
+    let tools = registry.openAiTools({ activeOnly: true });
+    const first = await chat(model, messages, tools);
+    stats.push(first);
+    const activationCall = (first.message?.tool_calls || [])
+      .find((call) => call.function?.name === "desktop_activate_toolkit");
+    if (!activationCall) return [false, `expected toolkit activation, got ${toolNames(first)}`];
+    const activationArgs = toolArguments(activationCall);
+    if (activationArgs.toolkit !== "calculations") {
+      return [false, `activated ${JSON.stringify(activationArgs)}`];
+    }
+    const activation = registry.activateToolkit("calculations", { mode: activationArgs.mode || "add" });
+    messages.push(first.message, toolResult(activationCall, activation));
+    tools = registry.openAiTools({ activeOnly: true });
+    const second = await chat(model, messages, tools);
+    stats.push(second);
+    const calculateCall = (second.message?.tool_calls || [])
+      .find((call) => call.function?.name === "desktop_calculate");
+    if (!calculateCall) return [false, `expected deterministic calculation, got ${toolNames(second)}`];
+    const args = toolArguments(calculateCall);
+    const steps = Array.isArray(args.steps) ? args.steps : [];
+    const conversion = steps.find((step) => step.operation === "monthly_to_annual");
+    const literalSources = new Set(steps
+      .filter((step) => step.operands?.some((operand) => Number(operand.value) === 2_200))
+      .map((step) => step.key));
+    const valid = Boolean(conversion) && conversion.operands?.some((operand) =>
+      Number(operand.value) === 2_200 || literalSources.has(operand.step)
+    );
+    return [valid, valid ? "activated calculations and selected deterministic ARR calculation" : JSON.stringify(args)];
+  });
+}
+
+async function qualificationProductionSurface(model, stats) {
+  return scenario("production surface tool selection", 3, async () => {
+    const registry = createQualificationRegistry();
+    const core = registry.openAiTools({ activeOnly: true })
+      .filter((tool) => tool.function?.name !== "amos_call_engine_tool");
+    const engineTools = Array.from({ length: 48 }, (_, index) => syntheticEngineTool(index));
+    const targetIndex = 37;
+    engineTools[targetIndex] = {
+      type: "function",
+      function: {
+        name: "amos_finance_get_invoice_status",
+        description: "Return the current status and balance for one invoice in the authenticated company.",
+        parameters: {
+          type: "object",
+          properties: { invoice_id: { type: "string" } },
+          required: ["invoice_id"],
+          additionalProperties: false
+        }
+      }
+    };
+    const response = await chat(model, [{
+      role: "user",
+      content: "Use the exact available engine tool to check invoice inv_42. Do not call an unrelated tool."
+    }], [...core, ...engineTools]);
+    stats.push(response);
+    const calls = response.message?.tool_calls || [];
+    const call = calls.find((item) => item.function?.name === "amos_finance_get_invoice_status");
+    const args = toolArguments(call);
+    const passed = calls.length === 1 && args.invoice_id === "inv_42";
+    return [passed, passed ? "selected the exact tool among a 50-plus-tool surface" : `got ${toolNames(response)} ${JSON.stringify(args)}`];
+  });
+}
+
+function syntheticEngineTool(index) {
+  const suffix = String(index + 1).padStart(2, "0");
+  return {
+    type: "function",
+    function: {
+      name: `amos_company_operation_${suffix}`,
+      description: `A different company operation ${suffix}; use only for its named purpose.`,
+      parameters: {
+        type: "object",
+        properties: { record_id: { type: "string" } },
+        required: ["record_id"],
+        additionalProperties: false
+      }
+    }
   };
 }
 
@@ -743,7 +848,7 @@ function boundedInteger(value, minimum, maximum, fallback) {
 
 function normalizeSuite(value) {
   const normalized = String(value || "").trim().toLowerCase();
-  if (["smoke", "qualification", "all"].includes(normalized)) return normalized;
+  if (["smoke", "qualification", "production", "all"].includes(normalized)) return normalized;
   throw new Error(`Unknown benchmark suite: ${value}`);
 }
 
