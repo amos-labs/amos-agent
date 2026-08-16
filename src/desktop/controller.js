@@ -2180,11 +2180,15 @@ export class DesktopController {
     const prompt = String(requestedPrompt || "").trim() ||
       (references.length > 0 ? "Review the attached material and tell me what is important." : "");
     if (!prompt) throw new Error("Enter a task for AMOS");
+    const resumedCheckpoint = resumeTaskId && this.taskCheckpointStore
+      ? await this.taskCheckpointStore.get(resumeTaskId)
+      : null;
+    const objective = resumedCheckpoint?.objective || prompt;
     const settings = this.runManager.current()?.settings || await this.settingsStore.read();
     await this.recordAcquisitionEvent(settings, "desktop_first_task_started", {
       boundary: settings.onboardingBoundary || inferOnboardingBoundary(settings)
     }, { once: true });
-    await this.adoptConversationObjective(prompt, settings).catch((error) => {
+    await this.adoptConversationObjective(objective, settings).catch((error) => {
       this.record("task", `Could not name the new conversation: ${error.message}`);
     });
     const abortController = new AbortController();
@@ -2197,7 +2201,7 @@ export class DesktopController {
       phase: "starting",
       summary: "Preparing the task",
       checkpointed: false,
-      objective: prompt,
+      objective,
       steeringQueue: [],
       steeringCount: 0,
       acceptingSteering: true,
@@ -2245,7 +2249,7 @@ export class DesktopController {
       const routingDecision = await this.classifyTaskRouting({
         settings,
         boundary,
-        prompt,
+        prompt: objective,
         attachmentNames,
         pairing,
         signal: abortController.signal
@@ -2295,6 +2299,7 @@ export class DesktopController {
         onlineCheckpoint = await this.startOnlineTaskCheckpoint({
           id: taskId,
           prompt,
+          objective,
           references,
           settings,
           resumeTaskId
@@ -2329,12 +2334,19 @@ export class DesktopController {
         }
       );
       const workflow = previewWorkflow;
-      this.record("user", prompt);
+      if (resumedCheckpoint) {
+        this.record("task", `Resuming interrupted work: ${objective}`, {
+          checkpoint_id: resumedCheckpoint.id,
+          replay_allowed: false
+        });
+      } else {
+        this.record("user", prompt);
+      }
       const answer = await runtime.loop.run(modelContent, {
         signal: abortController.signal,
         workflow,
         routingDecision,
-        presentationIntent: prompt,
+        presentationIntent: objective,
         canvasActive: Boolean(this.canvases.state().activeCanvasId),
         completionGate: () => this.codingLifecycleCompletionGate(),
         takeSteering: () => {
@@ -2375,7 +2387,7 @@ export class DesktopController {
         status: "completed",
         boundary,
         settings,
-        prompt,
+        prompt: objective,
         startedAt: this.activeTask.startedAt,
         receiptEvents,
         usage: this.activeTask.usage
@@ -2385,7 +2397,7 @@ export class DesktopController {
         continuityRecord = await this.saveSessionContinuity({
           settings,
           boundary,
-          objective: prompt,
+          objective,
           answer,
           artifacts: this.activeTask.continuityArtifacts,
           receipt: localReceipt
@@ -2455,7 +2467,7 @@ export class DesktopController {
           status: "interrupted",
           boundary,
           settings,
-          prompt,
+          prompt: objective,
           startedAt: this.activeTask?.startedAt,
           receiptEvents,
           error: supervisionStopReason,
@@ -2466,7 +2478,7 @@ export class DesktopController {
           continuityRecord = await this.saveSessionContinuity({
             settings,
             boundary,
-            objective: prompt,
+            objective,
             answer: recoveryNote,
             artifacts: this.activeTask.continuityArtifacts,
             receipt: localReceipt
@@ -2536,7 +2548,7 @@ export class DesktopController {
           status: "interrupted",
           boundary,
           settings,
-          prompt,
+          prompt: objective,
           startedAt: this.activeTask?.startedAt,
           receiptEvents,
           error: error.message,
@@ -2547,7 +2559,7 @@ export class DesktopController {
           continuityRecord = await this.saveSessionContinuity({
             settings,
             boundary,
-            objective: prompt,
+            objective,
             answer,
             artifacts: this.activeTask.continuityArtifacts,
             receipt: localReceipt
@@ -2608,7 +2620,7 @@ export class DesktopController {
         status: canceled ? "canceled" : "failed",
         boundary,
         settings,
-        prompt,
+        prompt: objective,
         startedAt: this.activeTask?.startedAt,
         receiptEvents,
         error: error.message,
@@ -4282,7 +4294,14 @@ export class DesktopController {
     return taskCheckpoints;
   }
 
-  async startOnlineTaskCheckpoint({ id, prompt, references, settings, resumeTaskId = null }) {
+  async startOnlineTaskCheckpoint({
+    id,
+    prompt,
+    objective = prompt,
+    references,
+    settings,
+    resumeTaskId = null
+  }) {
     if (!this.taskCheckpointStore) return null;
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
@@ -4338,7 +4357,7 @@ export class DesktopController {
       id,
       title: resumed?.title || null,
       replacesId: resumed?.id || null,
-      objective: prompt,
+      objective,
       attachmentNames: names,
       source: onlineTaskSource({ identity, snapshot }),
       conversation: {
