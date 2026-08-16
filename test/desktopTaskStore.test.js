@@ -99,6 +99,37 @@ test("DesktopTaskStore manages pin, archive, lineage, and task-bound canvas", as
   assert.equal((await store.list(owner, { includeArchived: true })).length, 2);
 });
 
+test("DesktopTaskStore persists a bounded child outcome for later collection", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-task-outcome-"));
+  const store = new DesktopTaskStore({
+    filePath: join(directory, "tasks.json"),
+    ...codec(),
+    now: clock("2026-08-16T10:00:00.000Z", "2026-08-16T10:01:00.000Z")
+  });
+  const owner = taskOwnerScope({ boundary: "personal", workspace: "/workspace" });
+  await store.create(owner, {
+    id: "child",
+    title: "Isolated builder",
+    objective: "Apply the planned patch"
+  });
+  const updated = await store.update(owner, "child", {
+    status: "completed",
+    outcome: {
+      status: "completed",
+      summary: "Patched the receipt store",
+      answer: "Applied apply_patch and tests passed.",
+      diff: " src/desktop/localReceiptStore.js | 2 +-",
+      files: ["src/desktop/localReceiptStore.js"],
+      usage: { inputTokens: 80, outputTokens: 40, totalTokens: 120, costUsedMicrousd: 960 },
+      finishedAt: "2026-08-16T10:01:00.000Z"
+    }
+  });
+  assert.equal(updated.status, "completed");
+  assert.equal(updated.outcome.status, "completed");
+  assert.deepEqual(updated.outcome.files, ["src/desktop/localReceiptStore.js"]);
+  assert.equal(updated.outcome.usage.totalTokens, 120);
+});
+
 test("DesktopTaskStore supports all explicit workspace fork modes", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-task-store-"));
   const store = new DesktopTaskStore({

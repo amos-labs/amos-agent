@@ -9,6 +9,7 @@ import {
   intelligenceRoutingEnvelope,
   isAmosDesktopRoutingConfig
 } from "./intelligenceRouter.js";
+import { normalizedUsage } from "./protocol.js";
 
 function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item != null && item !== ""));
@@ -121,7 +122,7 @@ export class OpenAICompatibleClient {
 
       const result = {
         message: choice.message,
-        usage: payload.usage || null,
+        usage: normalizedUsage(payload.usage),
         raw: payload
       };
       this.emitHostedRoutingOutcome({ localRouting, raw: payload, onRoutingDecision });
@@ -240,7 +241,7 @@ async function readStreamingResponse(response, { onDelta, signal, displayName })
     if (typeof message.content === "string" && message.content) {
       onDelta(message.content, message.content);
     }
-    return { message, usage: payload.usage || null, raw: payload };
+    return { message, usage: normalizedUsage(payload.usage), raw: payload };
   }
   const message = { role: "assistant", content: "" };
   const toolCalls = new Map();
@@ -304,7 +305,7 @@ async function readStreamingResponse(response, { onDelta, signal, displayName })
   if (!message.content && toolCalls.size === 0) {
     throw new Error(`${displayName} streaming response did not include content or tool calls`);
   }
-  return { message, usage, raw: rawText };
+  return { message, usage: normalizedUsage(usage), raw: rawText };
 }
 
 function consumeSseEvents(buffer, consume) {

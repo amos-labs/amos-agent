@@ -42,6 +42,7 @@ export class AgentLoop {
     this.activeTaskMessage = null;
     this.continuityContext = null;
     this.pendingExternalOutcomes = [];
+    this.pendingHandoff = null;
     this.canvasToolState = emptyCanvasToolState();
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
@@ -52,6 +53,7 @@ export class AgentLoop {
     this.activeTaskMessage = null;
     this.continuityContext = null;
     this.pendingExternalOutcomes = [];
+    this.pendingHandoff = null;
     this.canvasToolState = emptyCanvasToolState();
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
@@ -76,6 +78,28 @@ export class AgentLoop {
     if (!outcome) return false;
     this.pendingExternalOutcomes.push(outcome.slice(0, 16_000));
     this.pendingExternalOutcomes = this.pendingExternalOutcomes.slice(-8);
+    return true;
+  }
+
+  queueHandoff(handoff) {
+    this.pendingHandoff = handoff || null;
+    return Boolean(this.pendingHandoff);
+  }
+
+  applyHandoff(handoff = this.pendingHandoff, onEvent = () => {}) {
+    if (!handoff) return false;
+    this.pendingHandoff = null;
+    if (handoff.modelClient) this.modelClient = handoff.modelClient;
+    if (handoff.config) this.config = handoff.config;
+    const content = String(handoff.message || "").trim();
+    if (content) this.messages.push({ role: "user", content });
+    onEvent({
+      type: "intelligence",
+      role: handoff.role || "",
+      provider: handoff.provider || "",
+      model: handoff.model || "",
+      summary: "Applied intelligence role at the next turn boundary"
+    });
     return true;
   }
 
@@ -142,6 +166,11 @@ export class AgentLoop {
           repeatedToolCycles = 0;
           consecutiveToolErrorCycles = 0;
         }
+        if (this.applyHandoff(this.pendingHandoff, onEvent)) {
+          previousToolFingerprint = null;
+          repeatedToolCycles = 0;
+          consecutiveToolErrorCycles = 0;
+        }
         onEvent({
           type: "phase",
           phase: "thinking",
@@ -163,15 +192,7 @@ export class AgentLoop {
           }
         });
 
-        onEvent({
-          type: "usage",
-          turn,
-          inputTokens: response.usage?.input_tokens || 0,
-          outputTokens: response.usage?.output_tokens || 0,
-          totalTokens: response.usage?.total_tokens || 0,
-          costUsedMicrousd: response.usage?.cost_used_microusd ||
-            response.usage?.raw?.cost_used_microusd || 0
-        });
+        onEvent(usageEventFromResponse(response.usage, turn));
 
         throwIfAborted(signal);
         const assistantMessage = response.message;
@@ -272,6 +293,8 @@ export class AgentLoop {
           });
           outcomes.push({ name, rawArgs, failed, result });
         }
+
+        this.applyHandoff(this.pendingHandoff, onEvent);
 
         if (modelEvidence.length > 0) this.appendEphemeralModelEvidence(modelEvidence);
 
@@ -553,15 +576,7 @@ export class AgentLoop {
         onEvent({ type: "assistant_delta", turn: turn + 1, delta, text });
       }
     });
-    onEvent({
-      type: "usage",
-      turn: turn + 1,
-      inputTokens: response.usage?.input_tokens || 0,
-      outputTokens: response.usage?.output_tokens || 0,
-      totalTokens: response.usage?.total_tokens || 0,
-      costUsedMicrousd: response.usage?.cost_used_microusd ||
-        response.usage?.raw?.cost_used_microusd || 0
-    });
+    onEvent(usageEventFromResponse(response.usage, turn + 1));
     throwIfAborted(signal);
     this.messages.push(response.message);
     onEvent({
@@ -584,6 +599,34 @@ export class AgentLoop {
       onEvent
     };
   }
+}
+
+function usageEventFromResponse(usage, turn) {
+  const inputTokens = Number(
+    usage?.input_tokens ?? usage?.prompt_tokens ?? 0
+  );
+  const outputTokens = Number(
+    usage?.output_tokens ?? usage?.completion_tokens ?? 0
+  );
+  const cachedInputTokens = Number(
+    usage?.cache_read_input_tokens ??
+      usage?.input_tokens_details?.cached_tokens ??
+      usage?.prompt_tokens_details?.cached_tokens ??
+      0
+  );
+  return {
+    type: "usage",
+    turn,
+    inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
+    outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
+    cachedInputTokens: Number.isFinite(cachedInputTokens) ? cachedInputTokens : 0,
+    totalTokens: Number(
+      usage?.total_tokens ??
+        ((Number.isFinite(inputTokens) ? inputTokens : 0) +
+          (Number.isFinite(outputTokens) ? outputTokens : 0))
+    ),
+    costUsedMicrousd: Number(usage?.cost_used_microusd || usage?.raw?.cost_used_microusd || 0)
+  };
 }
 
 function boundedInteger(value, fallback, minimum, maximum) {

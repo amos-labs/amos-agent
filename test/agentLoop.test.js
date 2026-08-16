@@ -4,6 +4,81 @@ import { AgentLoop } from "../src/agentLoop.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 import { attachModelEvidence } from "../src/model/evidence.js";
 
+test("usage events keep OpenAI-compatible prompt and completion token names", async () => {
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        return {
+          message: { role: "assistant", content: "done" },
+          usage: { prompt_tokens: 80, completion_tokens: 40, total_tokens: 120 }
+        };
+      }
+    }
+  });
+  await loop.run("count tokens", { onEvent: (event) => events.push(event) });
+  const usage = events.find((event) => event.type === "usage");
+  assert.equal(usage.inputTokens, 80);
+  assert.equal(usage.outputTokens, 40);
+  assert.equal(usage.totalTokens, 120);
+});
+
+test("role handoff waits until after the current tool result", async () => {
+  const registry = new ToolRegistry();
+  const seen = [];
+  registry.register({
+    name: "desktop_handoff_role",
+    handler: async () => {
+      loop.queueHandoff({
+        role: "implementer",
+        provider: "xai",
+        model: "grok-4.6",
+        message: "<amos_role_handoff role=\"implementer\">build</amos_role_handoff>"
+      });
+      return { ok: true, queued: true, role: "implementer" };
+    }
+  });
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        seen.push(messages.map((message) => message.role));
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "handoff-1",
+                function: { name: "desktop_handoff_role", arguments: "{\"role\":\"implementer\"}" }
+              }]
+            }
+          };
+        }
+        const roles = messages.map((message) => message.role);
+        const toolIndex = roles.lastIndexOf("tool");
+        const handoffIndex = messages.findIndex((message) =>
+          String(message.content || "").includes("<amos_role_handoff")
+        );
+        assert.ok(toolIndex >= 0);
+        assert.ok(handoffIndex > toolIndex);
+        return { message: { role: "assistant", content: "building" } };
+      }
+    }
+  });
+  assert.equal(await loop.run("plan then implement"), "building");
+  assert.equal(seen.length, 2);
+});
+
 test("malformed tool JSON is returned as an error and never executes", async () => {
   let calls = 0;
   let turn = 0;

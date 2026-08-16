@@ -168,8 +168,16 @@ See [Streaming, cancellation, and restart-safe tasks](TASK_LIFECYCLE.md).
 - AMOS-hosted inference;
 - Amazon Bedrock;
 - customer-controlled OpenAI-compatible endpoints;
-- provider APIs, including Moonshot/Kimi; and
+- provider APIs, including Moonshot/Kimi and xAI/Grok;
+- an optional planner / builder / checker pair that can switch mid-task;
+- estimated token and dollar usage on the local task receipt; and
 - Ollama or llama.cpp local runtimes.
+
+Desktop can also spawn isolated child tasks on Git worktrees and accepts
+commands from the VS Code companion over a loopback token. The companion never
+grants company authority. Local Qwen remains the on-device draft layer; the
+AMOS Local catalog's move from Qwen 3.6 to 3.8 is independent of these
+provider and pairing changes.
 
 ### Appearance
 

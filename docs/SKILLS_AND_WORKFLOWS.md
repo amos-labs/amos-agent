@@ -40,6 +40,7 @@ The first release ships a reviewed built-in catalog for common work:
 
 - GitHub issue and pull-request diagnosis;
 - code changes;
+- plan, implement, and check a change;
 - document analysis;
 - current research;
 - company decisions;

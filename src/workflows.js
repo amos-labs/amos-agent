@@ -113,6 +113,32 @@ const RECIPES = Object.freeze([
     ]
   },
   {
+    id: "plan-implement-verify",
+    title: "Plan, implement, and check the change",
+    summary: "Produce a plan, implement only that plan, then review the diff and checks.",
+    skills: ["code-investigation", "safe-implementation", "verification"],
+    steps: [
+      "Inspect the project and write a concrete plan before editing.",
+      "Hand off to the implementer for the smallest reviewable patch.",
+      "Run the repository's real checks and inspect git_diff.",
+      "Hand off to the checker to confirm the change or name the exact repair."
+    ],
+    doneWhen: "The plan, change, validation evidence, and remaining risk are explicit.",
+    patterns: [
+      /\bplan(?:\s*,?\s*then)?\s+implement/i,
+      /\bhand off to (?:the )?(?:implementer|checker|grok)\b/i
+    ],
+    phrases: [
+      "plan then implement",
+      "plan, implement",
+      "implement and verify",
+      "plan implement check",
+      "use the planner",
+      "hand off to grok",
+      "hand off to the implementer"
+    ]
+  },
+  {
     id: "code-change",
     title: "Inspect, change, and verify the code",
     summary: "Understand the relevant path, make the smallest safe change, and prove it works.",
@@ -121,7 +147,7 @@ const RECIPES = Object.freeze([
       "Inspect the project and trace the relevant files before editing.",
       "Define the smallest coherent change and preserve unrelated work.",
       "Apply a reviewable patch through the governed local approval path.",
-      "Run focused checks and inspect the final diff before reporting completion."
+      "Run the repository's real checks, not a substitute, then inspect git_diff before reporting completion."
     ],
     doneWhen: "The change, validation evidence, and any remaining risk are explicit.",
     patterns: [

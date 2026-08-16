@@ -37,6 +37,7 @@ import {
   shouldEnableDesktopUpdates
 } from "../src/desktop/updateManager.js";
 import { DesktopTelemetry } from "../src/desktop/telemetry.js";
+import { DesktopCompanionServer } from "../src/desktop/companionServer.js";
 import { DesktopAccountStore } from "../src/auth/tokenStore.js";
 import { DesktopBrowserRuntime } from "./browserRuntime.js";
 import { LocalPreviewRuntime } from "../src/desktop/localPreview.js";
@@ -47,6 +48,7 @@ let window;
 let controller;
 let settingsStore;
 let telemetry;
+let companionServer;
 let offlineManager;
 let browserRuntime;
 let localPreviewRuntime;
@@ -432,6 +434,9 @@ function registerIpc() {
     controller.updateTaskResource(input?.id, input?.changes)
   );
   ipcMain.handle("desktop:fork-task", (_event, input) => controller.forkTaskResource(input));
+  ipcMain.handle("desktop:switch-intelligence-role", (_event, input) =>
+    controller.switchTaskIntelligence(input)
+  );
   ipcMain.handle("desktop:confirm-consultative-assertion", (_event, input) =>
     controller.confirmConsultativeAssertion(input)
   );
@@ -794,6 +799,11 @@ app.whenReady().then(async () => {
     notify: notifyApproval
   });
   await controller.initializeTaskCheckpoints().catch(() => {});
+  companionServer = new DesktopCompanionServer({
+    userDataPath: app.getPath("userData"),
+    controller
+  });
+  await companionServer.start().catch(() => {});
   registerIpc();
   createWindow();
   createTray();
@@ -829,6 +839,7 @@ app.on("before-quit", () => {
   quitting = true;
   clearInterval(remoteSyncTimer);
   controller?.interruptActiveTask().catch(() => {});
+  companionServer?.stop().catch(() => {});
   controller?.resetRuntime();
   browserRuntime?.closeAll();
   localPreviewRuntime?.closeAll();

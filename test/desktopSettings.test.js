@@ -178,7 +178,7 @@ test("personal workspace mode allows a cloud model without AMOS company access",
   assert.equal(settings.operatingMode, "personal");
 });
 
-test("desktop settings accept native OpenAI and Anthropic providers", () => {
+test("desktop settings accept native OpenAI, Anthropic, and xAI providers", () => {
   const openai = sanitizeSettings({
     provider: "openai",
     model: "gpt-5.6-terra",
@@ -197,6 +197,49 @@ test("desktop settings accept native OpenAI and Anthropic providers", () => {
   assert.equal(openai.apiKey, "openai-key");
   assert.equal(anthropic.provider, "anthropic");
   assert.equal(anthropic.apiKey, "anthropic-key");
+  const grok = sanitizeSettings({
+    provider: "xai",
+    model: "grok-4.6",
+    baseUrl: "https://api.x.ai/v1",
+    apiKey: "xai-key",
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  assert.equal(grok.provider, "xai");
+  assert.equal(grok.model, "grok-4.6");
+  assert.equal(grok.apiKey, "xai-key");
+});
+
+test("desktop settings keep per-provider credentials and a planner/builder/checker pair", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-roles-"));
+  const path = join(directory, "settings.json");
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+  await store.write({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    provider: "xai",
+    model: "grok-4.6",
+    baseUrl: "https://api.x.ai/v1",
+    apiKey: "xai-key",
+    providerCredentials: { kimi: "kimi-key" },
+    intelligenceRoles: {
+      enabled: true,
+      planner: { provider: "kimi", model: "kimi-k3" },
+      implementer: { provider: "xai", model: "grok-4.6" },
+      checker: { provider: "kimi", model: "kimi-k3" }
+    },
+    amosMcpUrl: "https://app.amoslabs.com/mcp"
+  });
+  const settings = await store.read();
+  assert.equal(settings.provider, "xai");
+  assert.equal(settings.apiKey, "xai-key");
+  assert.equal(settings.providerCredentials.kimi, "kimi-key");
+  assert.equal(settings.providerCredentials.xai, "xai-key");
+  assert.equal(settings.intelligenceRoles.enabled, true);
+  assert.equal(settings.intelligenceRoles.implementer.model, "grok-4.6");
+  assert.equal(JSON.parse(await readFile(path, "utf8")).settings.providerCredentials, undefined);
 });
 
 test("desktop settings encrypt provider credentials at rest", async () => {

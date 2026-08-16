@@ -69,7 +69,11 @@ The concurrency contract is covered by four simultaneous tasks across two
 Projects, independently admitted at two lanes per Project. Streaming events,
 steering, cancellation, canvases, approvals, continuity, and completion are
 bound to their originating task; a background completion cannot write into the
-conversation currently visible in Operator. Relaunch still recovers
+conversation currently visible in Operator. Child tasks spawned for isolated
+implementation use a new Git worktree by default, inherit approvals for that
+folder only, and cannot spawn further children or widen company authority.
+Local receipts record the model identity plus accumulated token and estimated
+dollar usage for the run. Relaunch still recovers
 non-terminal workers as interrupted work that requires revalidation—never
 silently replaying them.
 

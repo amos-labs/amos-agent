@@ -44,7 +44,7 @@ Usage:
   amos-agent --cwd ./repo             Set workspace root
 
 Model env:
-  AMOS_MODEL_PROVIDER                 kimi | amos-hosted | bedrock | ollama | llama-cpp | openai-compatible
+  AMOS_MODEL_PROVIDER                 kimi | xai | amos-hosted | bedrock | openai | anthropic | ollama | llama-cpp | openai-compatible
   AMOS_MODEL                          Model name for the selected provider
   AMOS_MODEL_BASE_URL                 Required for AMOS-hosted and custom providers
   AMOS_MODEL_API_KEY                  Provider token; aliases remain supported

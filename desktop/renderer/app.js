@@ -15,6 +15,11 @@ const providerDefaults = {
     baseUrl: "https://api.moonshot.ai/v1",
     credential: "Moonshot API key"
   },
+  xai: {
+    model: "grok-4.6",
+    baseUrl: "https://api.x.ai/v1",
+    credential: "xAI API key"
+  },
   "amos-hosted": {
     model: "auto",
     baseUrl: "",
@@ -109,7 +114,11 @@ const elements = Object.fromEntries(
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
     "baseUrlInput", "baseUrlHelp", "bedrockAuthField", "bedrockAuthInput",
+    "intelligenceRolesField", "intelligenceRolesEnabled", "plannerRoleInput",
+    "implementerRoleInput", "checkerRoleInput",
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
+    "taskRoleBar", "plannerRoleButton", "implementerRoleButton", "checkerRoleButton",
+    "taskUsageLine",
     "settingsError", "collaborationProfileCard", "collaborationProfileFields",
     "resetCollaborationProfileButton",
     "testButton", "systemCard", "approvalModal", "approvalMessage",
@@ -269,6 +278,14 @@ function bindActions() {
     }
   });
   elements.modelInput.addEventListener("change", syncSelectedModelEndpoint);
+  elements.intelligenceRolesEnabled.addEventListener("change", () => {
+    elements.plannerRoleInput.disabled = !elements.intelligenceRolesEnabled.checked;
+    elements.implementerRoleInput.disabled = !elements.intelligenceRolesEnabled.checked;
+    elements.checkerRoleInput.disabled = !elements.intelligenceRolesEnabled.checked;
+  });
+  for (const button of [elements.plannerRoleButton, elements.implementerRoleButton, elements.checkerRoleButton]) {
+    button.addEventListener("click", () => switchIntelligenceRole(button.dataset.role));
+  }
   elements.baseUrlInput.addEventListener("change", syncSelectedModelEndpoint);
   elements.bedrockAuthInput.addEventListener("change", () =>
     renderProviderFields(elements.modelInput.value)
@@ -397,7 +414,24 @@ function bindEvents() {
     if ((state?.settings?.appearance || "system") === "system") applyAppearance("system");
   });
   api.on("agent:event", (event) => {
-    if (eventMatchesActiveTask(event)) renderLiveEvent(event);
+    if (!eventMatchesActiveTask(event)) return;
+    if (event.type === "usage") {
+      state.activeTask = {
+        ...(state.activeTask || {}),
+        usage: accumulateRendererUsage(state.activeTask?.usage, event)
+      };
+      renderTaskUsage();
+    }
+    if (event.type === "intelligence") {
+      state.intelligenceRole = event.role;
+      state.activeTask = {
+        ...(state.activeTask || {}),
+        intelligenceRole: event.role,
+        intelligence: { provider: event.provider, model: event.model, role: event.role }
+      };
+      renderTaskRoles();
+    }
+    renderLiveEvent(event);
   });
   api.on("agent:status", (taskStatus) => {
     if (!eventMatchesActiveTask(taskStatus)) return;
@@ -549,6 +583,8 @@ function render() {
 
   elements.connectionDot.classList.toggle("connected", state.connected);
   renderIdentity();
+  renderTaskRoles();
+  renderTaskUsage();
   renderAccountMenu();
   renderCompanySwitcher();
   elements.runtimeBadge.textContent = state.configured
@@ -5930,6 +5966,7 @@ function renderSettings() {
     ? "A credential is stored securely. Leave blank to keep it."
     : (providerDefaults[selectedProvider]?.credential || "Provider credential");
   renderProviderFields(settings.model);
+  renderIntelligenceRoles();
   const personalNeedsIntelligence = Boolean(
     state.mode?.personal && !state.connected && !state.configured
   );
@@ -6027,6 +6064,93 @@ function offlineCatalogFailures(model) {
     ...((model.capabilityContract?.failures || []).map((item) => item?.scenario))
   ];
   return [...new Set(named.filter(Boolean))];
+}
+
+function renderIntelligenceRoles() {
+  const pairing = state.settings.intelligenceRoles || {};
+  const options = state.roleOptions || [];
+  elements.intelligenceRolesField.classList.toggle("hidden", selectedProvider === "amos-hosted");
+  elements.intelligenceRolesEnabled.checked = pairing.enabled === true;
+  for (const [select, key] of [
+    [elements.plannerRoleInput, "planner"],
+    [elements.implementerRoleInput, "implementer"],
+    [elements.checkerRoleInput, "checker"]
+  ]) {
+    const selected = pairing[key]
+      ? `${pairing[key].provider}:${pairing[key].model}`
+      : "";
+    select.replaceChildren();
+    for (const option of options) {
+      const item = document.createElement("option");
+      item.value = option.value;
+      item.textContent = option.label;
+      if (option.value === selected) item.selected = true;
+      select.append(item);
+    }
+    select.disabled = !pairing.enabled;
+  }
+}
+
+function collectIntelligenceRoles() {
+  return {
+    enabled: elements.intelligenceRolesEnabled.checked,
+    planner: decodeRoleValue(elements.plannerRoleInput.value),
+    implementer: decodeRoleValue(elements.implementerRoleInput.value),
+    checker: decodeRoleValue(elements.checkerRoleInput.value)
+  };
+}
+
+function decodeRoleValue(value) {
+  const index = String(value || "").indexOf(":");
+  if (index <= 0) return { provider: "kimi", model: "kimi-k3" };
+  return { provider: value.slice(0, index), model: value.slice(index + 1) };
+}
+
+function renderTaskRoles() {
+  const pairingOn = state?.settings?.intelligenceRoles?.enabled === true;
+  elements.taskRoleBar.classList.toggle("hidden", !pairingOn);
+  if (!pairingOn) return;
+  const current = state.activeTask?.intelligenceRole || state.intelligenceRole || "planner";
+  for (const button of [elements.plannerRoleButton, elements.implementerRoleButton, elements.checkerRoleButton]) {
+    button.classList.toggle("active", button.dataset.role === current);
+  }
+}
+
+function renderTaskUsage() {
+  const usage = state.activeTask?.usage;
+  if (!usage?.totalTokens && !usage?.costUsedMicrousd) {
+    elements.taskUsageLine.classList.add("hidden");
+    return;
+  }
+  const dollars = ((usage.costUsedMicrousd || 0) / 1_000_000).toFixed(4);
+  elements.taskUsageLine.classList.remove("hidden");
+  elements.taskUsageLine.textContent = `${usage.totalTokens || 0} tokens · $${dollars}${usage.estimated ? " est." : ""}`;
+}
+
+function accumulateRendererUsage(current = {}, event = {}) {
+  return {
+    inputTokens: Number(current.inputTokens || 0) + Number(event.inputTokens || 0),
+    outputTokens: Number(current.outputTokens || 0) + Number(event.outputTokens || 0),
+    totalTokens: Number(current.totalTokens || 0) + Number(event.totalTokens || 0),
+    costUsedMicrousd: Number(current.costUsedMicrousd || 0) + Number(event.costUsedMicrousd || 0),
+    estimated: current.estimated === true || event.estimated === true
+  };
+}
+
+async function switchIntelligenceRole(role) {
+  try {
+    const result = await api.switchIntelligenceRole({ role });
+    state.intelligenceRole = result.role;
+    state.activeTask = {
+      ...(state.activeTask || {}),
+      intelligenceRole: result.role,
+      intelligence: result
+    };
+    renderTaskRoles();
+    toast(`${result.role} · ${result.provider} · ${result.model}`);
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 function renderOfflineModels() {
@@ -6539,6 +6663,7 @@ async function persistSettings() {
       ? elements.bedrockAuthInput.value
       : "auto",
     intelligenceProfile: "auto",
+    intelligenceRoles: collectIntelligenceRoles(),
     reasoningEffort: managed
       ? ""
       : elements.reasoningInput.value,
