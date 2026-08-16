@@ -5764,7 +5764,8 @@ async function resumeTaskCheckpoint(id, button) {
   setButtonBusy(button, true, "Revalidating…");
   try {
     const result = await api.prepareTaskCheckpoint(id);
-    state.taskCheckpoints = result.taskCheckpoints || [];
+    if (result.state) adoptOpenedTask(result);
+    else state.taskCheckpoints = result.taskCheckpoints || [];
     elements.promptInput.value = result.prompt;
     resumingCheckpointId = id;
     showView("operator");
@@ -5772,7 +5773,11 @@ async function resumeTaskCheckpoint(id, button) {
     renderTasks();
     renderProjects();
     renderDecisions();
-    toast("Context revalidated and reopened. Review the continuation, then press Run.");
+    toast(
+      result.conversationRecovery?.isolated
+        ? "This older checkpoint had no durable conversation link, so AMOS opened a separate recovery conversation. Review the continuation, then press Run."
+        : "Context revalidated in the selected conversation. Review the continuation, then press Run."
+    );
   } catch (error) {
     toast(error.message, true);
   } finally {

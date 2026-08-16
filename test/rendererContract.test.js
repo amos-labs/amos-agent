@@ -378,6 +378,7 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.match(html, /Everything[\s\S]*?From here[\s\S]*?Selected artifacts/);
   assert.match(html, /Same directory[\s\S]*?New Git worktree[\s\S]*?Context only/);
   assert.match(javascript, /api\.openTask\(task\.id\)/);
+  assert.match(javascript, /api\.prepareTaskCheckpoint\(id\)[\s\S]*?result\.state[\s\S]*?adoptOpenedTask\(result\)/);
   assert.match(javascript, /api\.startNewConversation\(\{\s*kind: "general"\s*\}\)/);
   assert.match(javascript, /forkCurrentConversation[\s\S]*?capability\.latestMilestoneId/);
   assert.match(javascript, /state\?\.conversationCapabilities/);
@@ -389,6 +390,8 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.match(preload, /desktop:fork-task/);
   assert.match(main, /controller\.forkTaskResource\(input\)/);
   assert.match(controller, /this\.canvases\.restore\(durableCanvasState\(task\.canvasState \|\| \{\}\)\)/);
+  assert.match(controller, /conversation: \{[\s\S]*?taskRecordId: this\.activeTaskRecordId,[\s\S]*?contextKey: this\.activeContextKey/);
+  assert.match(controller, /restoreSelectedConversation\(settings\)/);
   assert.match(controller, /function conversationForkCapability\(task, continuity\)/);
   assert.match(controller, /reason: "no_persisted_milestone"/);
   const capabilityContract = controller.match(
@@ -399,6 +402,7 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.match(controller, /replayed: false/);
   assert.match(taskStore, /pendingOperationsCopied: false/);
   assert.match(taskStore, /credentialsIncluded: false/);
+  assert.match(taskStore, /selectedAt: optionalTimestamp\(value\?\.selectedAt\)/);
   assert.match(workspace, /"worktree",[\s\S]*?"add"[\s\S]*?"-b"/);
   assert.doesNotMatch(workspace, /"reset"|"checkout"|"clean"|"stash"/);
 });

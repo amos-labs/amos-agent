@@ -101,6 +101,189 @@ test("desktop revalidates interrupted work and only loads a continuation prompt"
   assert.ok(emitted.some((event) => event.channel === "task-checkpoints:changed"));
 });
 
+test("desktop reopens a checkpoint in its recorded conversation instead of the current lane", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-controller-checkpoint-conversation-"));
+  const checkpoints = new TaskCheckpointStore({
+    filePath: join(root, "checkpoints.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+  const owner = taskOwnerScope({
+    boundary: "online",
+    identity: identity(),
+    workspace: "/tmp/amos-workspace"
+  });
+  await tasks.create(owner, {
+    id: "chosen-conversation",
+    contextKey: "task:chosen-conversation",
+    title: "Chosen conversation",
+    objective: "Continue the selected implementation"
+  });
+  await tasks.create(owner, {
+    id: "current-conversation",
+    contextKey: "task:current-conversation",
+    title: "Current conversation",
+    objective: "Unrelated current work"
+  });
+  await tasks.select(owner, "current-conversation");
+  const checkpoint = await checkpoints.start({
+    id: "run-for-chosen-conversation",
+    objective: "Continue the selected implementation",
+    conversation: {
+      taskRecordId: "chosen-conversation",
+      contextKey: "task:chosen-conversation"
+    },
+    source: onlineTaskSource({ identity: identity(), snapshot: snapshot() })
+  });
+  await checkpoints.update(checkpoint.id, { status: "interrupted" });
+
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settingsStore(),
+    taskCheckpointStore: checkpoints,
+    taskStore: tasks,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.activeTaskRecordId = "current-conversation";
+  controller.activeContextKey = "task:current-conversation";
+  controller.personalRemote = async () => ({
+    identity: async () => identity(),
+    companySnapshot: async () => snapshot(14),
+    approvals: async () => ({ available: true, pending_operations: [] })
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeTaskRecordId: controller.activeTaskRecordId,
+    activeContextKey: controller.activeContextKey
+  });
+
+  const result = await controller.prepareTaskCheckpoint(checkpoint.id);
+  assert.equal(result.conversationRecovery.isolated, false);
+  assert.equal(result.task.id, "chosen-conversation");
+  assert.equal(result.state.activeTaskRecordId, "chosen-conversation");
+  assert.equal(controller.activeContextKey, "task:chosen-conversation");
+  assert.equal((await tasks.selected(owner)).id, "chosen-conversation");
+});
+
+test("desktop resolves a legacy checkpoint through its exact continuity run id", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-controller-legacy-checkpoint-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+  const continuity = new SessionContinuityStore({
+    filePath: join(root, "continuity.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+  const settings = settingsStore();
+  const owner = taskOwnerScope({
+    boundary: "online",
+    identity: identity(),
+    workspace: "/tmp/amos-workspace"
+  });
+  await tasks.create(owner, {
+    id: "legacy-target",
+    contextKey: "task:legacy-target",
+    title: "Legacy target",
+    objective: "Original objective"
+  });
+  await tasks.create(owner, {
+    id: "unrelated-current",
+    contextKey: "task:unrelated-current",
+    title: "Unrelated current",
+    objective: "Different work"
+  });
+  await continuity.appendTurn(continuityScope({
+    identity: identity(),
+    boundary: "online",
+    workspace: "/tmp/amos-workspace",
+    contextKey: "task:legacy-target"
+  }), {
+    objective: "A later follow-up prompt",
+    answer: "The provider stopped after making progress",
+    receipt: { taskId: "legacy-run-id", status: "interrupted" }
+  });
+
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    sessionContinuityStore: continuity,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.activeTaskRecordId = "unrelated-current";
+  controller.activeContextKey = "task:unrelated-current";
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeTaskRecordId: controller.activeTaskRecordId,
+    activeContextKey: controller.activeContextKey
+  });
+
+  const recovered = await controller.openTaskCheckpointConversation({
+    id: "legacy-run-id",
+    objective: "A later follow-up prompt",
+    conversation: null
+  }, await settings.read());
+
+  assert.equal(recovered.legacyResolved, true);
+  assert.equal(recovered.isolated, false);
+  assert.equal(recovered.opened.task.id, "legacy-target");
+  assert.equal(controller.activeTaskRecordId, "legacy-target");
+});
+
+test("desktop restores the last selected conversation after restart", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-controller-selected-conversation-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  });
+  const settings = settingsStore();
+  const owner = taskOwnerScope({
+    boundary: "online",
+    identity: identity(),
+    workspace: "/tmp/amos-workspace"
+  });
+  await tasks.create(owner, {
+    id: "first-conversation",
+    contextKey: "task:first-conversation",
+    title: "First conversation",
+    objective: "First objective"
+  });
+  await tasks.create(owner, {
+    id: "selected-conversation",
+    contextKey: "task:selected-conversation",
+    title: "Selected conversation",
+    objective: "Selected objective"
+  });
+  await tasks.select(owner, "selected-conversation");
+
+  const restarted = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  restarted.identity = identity();
+  const restored = await restarted.restoreSelectedConversation(await settings.read());
+
+  assert.equal(restored.id, "selected-conversation");
+  assert.equal(restarted.activeTaskRecordId, "selected-conversation");
+  assert.equal(restarted.activeContextKey, "task:selected-conversation");
+});
+
 test("desktop cancellation aborts the active task signal and pending local approval", async () => {
   const controller = new DesktopController({
     userDataPath: "/tmp/amos-controller-cancel",
