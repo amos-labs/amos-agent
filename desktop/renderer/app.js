@@ -5995,6 +5995,11 @@ function renderOfflineModels() {
       `≈ ${formatBytes(model.approximateSizeBytes)}`,
       `${model.recommendedMemoryGb} GB recommended`,
       ...(model.capabilities || []).slice(0, 3),
+      ...(model.integrity?.status === "verified"
+        ? ["Release digest verified"]
+        : model.integrity?.status === "mismatch"
+          ? ["Failed: release digest mismatch"]
+          : []),
       ...offlineCatalogFailures(model).map((scenario) => `Failed: ${scenario}`)
     ]) {
       const pill = document.createElement("span");
