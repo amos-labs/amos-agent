@@ -1,6 +1,6 @@
 export const MODEL_CAPABILITY_SUITE = deepFreeze({
   id: "amos-model-capability",
-  version: 2,
+  version: 3,
   minimumConditionalPassRate: 0.65,
   minimumQualifiedRepetitions: 3,
   groups: {
@@ -22,7 +22,8 @@ export const MODEL_CAPABILITY_SUITE = deepFreeze({
     ],
     production: [
       "progressive toolkit activation",
-      "production surface tool selection"
+      "production surface tool selection",
+      "platform engine toolkit discovery"
     ]
   },
   scenarios: {
@@ -100,6 +101,11 @@ export const MODEL_CAPABILITY_SUITE = deepFreeze({
       weight: 3,
       capabilities: ["tool-selection", "tool-arguments", "distractor-resistant-retrieval"],
       workflows: ["large-tool-surface-selection"]
+    },
+    "platform engine toolkit discovery": {
+      weight: 3,
+      capabilities: ["tool-selection", "tool-arguments", "tool-continuation", "engine-toolkit-discovery"],
+      workflows: ["progressive-engine-discovery"]
     }
   },
   autonomy: {

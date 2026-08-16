@@ -99,7 +99,7 @@ test("hardware assessment recommends a bounded curated profile", () => {
 
 test("curated model manifest is release-signed and content-addressed", () => {
   const manifest = releaseSignedManifest();
-  assert.equal(manifest.version, 10);
+  assert.equal(manifest.version, 11);
   assert.equal(manifest.trust, "release-signed");
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
@@ -139,9 +139,9 @@ test("curated model manifest is release-signed and content-addressed", () => {
   assert.equal(qwen36.replacedBy, QWEN38_MODEL_ID);
   assert.equal(qwen38.replaces, "qwen3.6:27b-q4_K_M");
   assert.equal(qwen38.qualification.status, "qualified");
-  assert.equal(qwen38.qualification.score, 29);
-  assert.equal(qwen38.qualification.maximum, 29);
-  assert.equal(qwen38.qualification.suite, "amos-local-qualification-v2");
+  assert.equal(qwen38.qualification.score, 32);
+  assert.equal(qwen38.qualification.maximum, 32);
+  assert.equal(qwen38.qualification.suite, "amos-local-qualification-v3");
   assert.match(qwen38.capabilityContract.identity.toolSchemaVersion, /^sha256:[a-f0-9]{64}$/);
   assert.equal(
     qwen38.capabilityContract.identity.toolSchemaVersion,
@@ -196,6 +196,10 @@ test("release-signed local contracts expose qualified grants instead of marketin
   );
   assert.equal(
     vision.capabilityContract.grants.capabilities.includes("verified-code-optimization"),
+    true
+  );
+  assert.equal(
+    vision.capabilityContract.grants.capabilities.includes("engine-toolkit-discovery"),
     true
   );
   assert.deepEqual(vision.capabilityContract.failures, []);

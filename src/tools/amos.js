@@ -34,24 +34,39 @@ export function createAmosTools() {
     {
       name: "amos_load_engine_tools",
       source: "amos",
-      description: "Load one AMOS engine's exact permitted tool schemas, then register local wrappers for them.",
+      description: "Load one AMOS engine's exact permitted tool schemas. If list_engines advertises multiple toolkits, pass the smallest relevant toolkit; Desktop then registers only those wrappers.",
       parameters: {
         type: "object",
         properties: {
-          engine: { type: "string", description: "Engine name, such as company, finance, marketing, connections, repo, governance, core." }
+          engine: { type: "string", description: "Engine name, such as company, finance, marketing, connections, repo, governance, core." },
+          toolkit: { type: "string", description: "Optional toolkit name advertised by amos_list_engines. Required when that engine says requires_toolkit=true." }
         },
         required: ["engine"],
         additionalProperties: false
       },
       async handler(args, context) {
+        const loadArgs = { engine: args.engine };
+        if (typeof args.toolkit === "string" && args.toolkit.trim()) {
+          loadArgs.toolkit = args.toolkit.trim();
+        }
         const result = await context.amosClient.callTool(
           "load_engine_tools",
-          { engine: args.engine },
+          loadArgs,
           { signal: context.signal }
         );
         const normalized = normalizeMcpToolResult(result);
         if (normalized.ok === false) return normalized;
-        const schemas = extractToolSchemas(result);
+        const schemas = extractToolSchemas(normalized);
+        if (normalized.requires_toolkit === true) {
+          return {
+            ok: true,
+            engine: args.engine,
+            requires_toolkit: true,
+            available_toolkits: compactToolkitMenu(normalized.toolkits),
+            engine_tool_count: normalized.engine_tool_count,
+            note: normalized.note || "Choose the smallest relevant toolkit and load this engine again."
+          };
+        }
         const limits = dynamicEngineLimits(context.config);
         const surface = measureToolSurface(schemas.map(asOpenAiSchema));
         if (schemas.length > limits.maxTools) {
@@ -67,6 +82,8 @@ export function createAmosTools() {
           };
         }
         const registered = [];
+        const toolkitSuffix = loadArgs.toolkit ? `:${loadArgs.toolkit}` : "";
+        const engineToolkit = `amos-engine:${args.engine}${toolkitSuffix}`;
 
         for (const schema of schemas) {
           const originalName = schema.name || schema.function?.name;
@@ -75,7 +92,7 @@ export function createAmosTools() {
           const wasRegistered = context.registry.register({
             name: localName,
             source: `amos:${args.engine}`,
-            toolkit: `amos-engine:${args.engine}`,
+            toolkit: engineToolkit,
             remoteName: originalName,
             description: schema.description || schema.function?.description || `Call AMOS ${args.engine}.${originalName}.`,
             parameters: schema.inputSchema || schema.parameters || schema.function?.parameters || {
@@ -101,7 +118,6 @@ export function createAmosTools() {
           if (wasRegistered) registered.push(localName);
         }
 
-        const engineToolkit = `amos-engine:${args.engine}`;
         const activation = context.registry.activateToolkit(engineToolkit, {
           mode: "add",
           replacePrefix: "amos-engine:"
@@ -119,6 +135,8 @@ export function createAmosTools() {
         return {
           ok: true,
           engine: args.engine,
+          toolkit: loadArgs.toolkit || null,
+          requires_toolkit: false,
           tool_count: schemas.length,
           schema_bytes: surface.schemaBytes,
           registered_dynamic_tools: registered,
@@ -159,6 +177,16 @@ export function createAmosTools() {
       }
     }
   ];
+}
+
+function compactToolkitMenu(toolkits) {
+  if (!Array.isArray(toolkits)) return [];
+  return toolkits
+    .filter((toolkit) => toolkit?.unlocked !== false && typeof toolkit?.name === "string")
+    .map((toolkit) => ({
+      name: toolkit.name,
+      available_tools: Number(toolkit.available_tools || 0)
+    }));
 }
 
 function mcpTool(name, description, remoteName, parameters = { type: "object", properties: {}, additionalProperties: false }) {

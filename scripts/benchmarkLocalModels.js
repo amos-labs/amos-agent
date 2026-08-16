@@ -263,6 +263,9 @@ async function benchmarkModel(model) {
     if (shouldRunScenario("production surface tool selection")) {
       scenarios.push(await qualificationProductionSurface(model, stats));
     }
+    if (shouldRunScenario("platform engine toolkit discovery")) {
+      scenarios.push(await qualificationEngineToolkitDiscovery(model, stats));
+    }
   }
 
   const score = scenarios.reduce((sum, item) => sum + (item.passed ? item.weight : 0), 0);
@@ -350,6 +353,58 @@ async function qualificationProductionSurface(model, stats) {
     const args = toolArguments(call);
     const passed = calls.length === 1 && args.invoice_id === "inv_42";
     return [passed, passed ? "selected the exact tool among a 50-plus-tool surface" : `got ${toolNames(response)} ${JSON.stringify(args)}`];
+  });
+}
+
+async function qualificationEngineToolkitDiscovery(model, stats) {
+  return scenario("platform engine toolkit discovery", 3, async () => {
+    const registry = createQualificationRegistry();
+    const tools = registry.openAiTools({ activeOnly: true });
+    const messages = [{
+      role: "system",
+      content: "AMOS engines may expose bounded toolkits. Inspect the engine menu before loading the smallest relevant engine toolkit."
+    }, {
+      role: "user",
+      content: "Find the governed AMOS tools for searching our stored company documents. Do not load an entire large engine."
+    }];
+    const first = await chat(model, messages, tools);
+    stats.push(first);
+    const listCall = (first.message?.tool_calls || [])
+      .find((call) => call.function?.name === "amos_list_engines");
+    if (!listCall) return [false, `expected engine discovery, got ${toolNames(first)}`];
+    messages.push(first.message, toolResult(listCall, {
+      engines: [{
+        name: "company",
+        requires_toolkit: true,
+        available_tools: 53,
+        toolkits: [
+          { name: "company", available_tools: 21, unlocked: true },
+          { name: "data", available_tools: 14, unlocked: true },
+          { name: "docs", available_tools: 9, unlocked: true },
+          { name: "briefings", available_tools: 9, unlocked: true }
+        ]
+      }, {
+        name: "connections",
+        requires_toolkit: true,
+        available_tools: 46,
+        toolkits: [
+          { name: "connection-management", available_tools: 10, unlocked: true },
+          { name: "operations", available_tools: 8, unlocked: true }
+        ]
+      }]
+    }));
+    const second = await chat(model, messages, tools);
+    stats.push(second);
+    const loadCall = (second.message?.tool_calls || [])
+      .find((call) => call.function?.name === "amos_load_engine_tools");
+    const args = toolArguments(loadCall);
+    const passed = args.engine === "company" && args.toolkit === "docs";
+    return [
+      passed,
+      passed
+        ? "discovered the engine menu and loaded only company.docs"
+        : `expected company.docs, got ${toolNames(second)} ${JSON.stringify(args)}`
+    ];
   });
 }
 
