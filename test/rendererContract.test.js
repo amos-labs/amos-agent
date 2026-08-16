@@ -106,6 +106,10 @@ test("intelligence settings stay independent from workspace selection and are na
   assert.match(html, /Intelligence settings/);
   assert.match(html, /id="settingsBackButton"[^>]*>← Back to setup</);
   assert.match(html, /Choosing intelligence never requires choosing a workspace/);
+  assert.match(html, /id="intelligenceTestStatus"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.match(javascript, /"testing",\s*needsManagedConnection \? "Waiting for AMOS sign-in…" : "Testing intelligence…"/);
+  assert.match(javascript, /"success",\s*`\$\{providerStatusLabel\(\)\} is connected`/);
+  assert.match(javascript, /"error",\s*"Intelligence test failed"/);
   assert.match(javascript, /function returnFromIntelligenceSettings\(\) \{\s*showView\("operator"\);\s*\}/);
   assert.match(
     javascript,

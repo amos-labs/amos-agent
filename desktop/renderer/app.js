@@ -121,7 +121,8 @@ const elements = Object.fromEntries(
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
     "taskRoleBar", "plannerRoleButton", "implementerRoleButton", "checkerRoleButton",
     "taskUsageLine",
-    "settingsBackButton", "settingsError", "collaborationProfileCard", "collaborationProfileFields",
+    "settingsBackButton", "settingsError", "intelligenceTestStatus", "intelligenceTestIcon",
+    "intelligenceTestTitle", "intelligenceTestDetail", "collaborationProfileCard", "collaborationProfileFields",
     "resetCollaborationProfileButton",
     "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "taskApproveButton", "alwaysApproveButton", "autoApproveFolderButton", "approvalPersistence",
@@ -6917,6 +6918,13 @@ async function removeOfflineModel(modelId) {
 
 async function testModel() {
   const needsManagedConnection = selectedProvider === "amos-hosted" && !state.connected;
+  showIntelligenceTestStatus(
+    "testing",
+    needsManagedConnection ? "Waiting for AMOS sign-in…" : "Testing intelligence…",
+    needsManagedConnection
+      ? "Finish the browser connection and AMOS will run the test automatically."
+      : `Sending a bounded connection test to ${selectedIntelligenceLabel()}.`
+  );
   setButtonBusy(
     elements.testButton,
     true,
@@ -6932,12 +6940,23 @@ async function testModel() {
     }
     await persistSettings();
     const result = await api.testModel();
+    showIntelligenceTestStatus(
+      "success",
+      `${providerStatusLabel()} is connected`,
+      `Verified just now. ${result.message || "AMOS intelligence ready."}`
+    );
     toast(result.message || "Intelligence is ready.");
   } catch (error) {
-    elements.settingsError.textContent = needsManagedConnection
+    const message = needsManagedConnection
       ? `AMOS account connection did not finish. ${friendlyError(error)}`
       : friendlyError(error);
+    elements.settingsError.textContent = message;
     elements.settingsError.classList.remove("hidden");
+    showIntelligenceTestStatus(
+      "error",
+      "Intelligence test failed",
+      message
+    );
   } finally {
     const stillNeedsManagedConnection =
       selectedProvider === "amos-hosted" && !state.connected;
@@ -6947,6 +6966,23 @@ async function testModel() {
       stillNeedsManagedConnection ? "Create or connect to test" : "Test intelligence"
     );
   }
+}
+
+function selectedIntelligenceLabel() {
+  const provider = state?.providers?.find((item) => item.id === selectedProvider);
+  if (selectedProvider === "amos-hosted") return "AMOS Intelligence";
+  const model = selectedProvider === "ollama"
+    ? state?.offline?.models?.find((item) => item.id === state?.settings?.model)?.modelDisplayName
+    : elements.modelInput.value || elements.customModelInput.value;
+  return [provider?.label || selectedProvider, model].filter(Boolean).join(" · ");
+}
+
+function showIntelligenceTestStatus(status, title, detail) {
+  elements.intelligenceTestStatus.className = `intelligence-test-status ${status}`;
+  elements.intelligenceTestStatus.classList.remove("hidden");
+  elements.intelligenceTestIcon.textContent = status === "success" ? "✓" : status === "error" ? "!" : "…";
+  elements.intelligenceTestTitle.textContent = title;
+  elements.intelligenceTestDetail.textContent = detail;
 }
 
 async function chooseAttachments() {
