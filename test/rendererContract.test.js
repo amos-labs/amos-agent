@@ -379,6 +379,15 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.match(html, /Same directory[\s\S]*?New Git worktree[\s\S]*?Context only/);
   assert.match(javascript, /api\.openTask\(task\.id\)/);
   assert.match(javascript, /api\.prepareTaskCheckpoint\(id\)[\s\S]*?result\.state[\s\S]*?adoptOpenedTask\(result\)/);
+  const checkpointResumeContract = javascript.match(
+    /async function resumeTaskCheckpoint\(id, button\)([\s\S]*?)async function removeTaskCheckpoint/
+  )?.[1] || "";
+  assert.doesNotMatch(checkpointResumeContract, /promptInput\.value = result\.prompt/);
+  assert.match(
+    checkpointResumeContract,
+    /await runTask\(null, \{[\s\S]*?automaticResume: true,[\s\S]*?prompt: result\.prompt,[\s\S]*?resumeTaskId: id/
+  );
+  assert.match(javascript, /automaticResume[\s\S]*?api\.run\(\{[\s\S]*?resumeTaskId/);
   assert.match(javascript, /api\.startNewConversation\(\{\s*kind: "general"\s*\}\)/);
   assert.match(javascript, /forkCurrentConversation[\s\S]*?capability\.latestMilestoneId/);
   assert.match(javascript, /state\?\.conversationCapabilities/);
@@ -487,6 +496,14 @@ test("Operator is chat-first with collapsible navigation and inline governed pro
   assert.doesNotMatch(heading, /id="clearButton"/);
   assert.match(javascript, /function beginInlineActivity\(\)/);
   assert.match(javascript, /finishInlineActivity\(\)/);
+  assert.match(javascript, /selectJourneyStarterActions\(state\)/);
+  assert.match(javascript, /button\.dataset\.actionId = action\.id/);
+  assert.match(javascript, /executeStarterAction\(action, button\)/);
+  assert.match(javascript, /privateAction: true,[\s\S]*?prompt: action\.prompt,[\s\S]*?displayText: action\.label/);
+  assert.doesNotMatch(
+    javascript.match(/function renderStarterActions\(\)[\s\S]*?\n}\n\nasync function executeStarterAction/)?.[0] || "",
+    /promptInput\.value/
+  );
   assert.match(javascript, /The model timed out after making progress\. Completed work is intact/);
   assert.match(javascript, /function toggleSidebar\(\)[\s\S]*?setSidebarCollapsed/);
   assert.match(javascript, /elements\.app\.classList\.toggle\("nav-collapsed", collapsed\)/);

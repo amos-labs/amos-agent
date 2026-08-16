@@ -6,6 +6,7 @@ import {
   mappingRowsForOperation,
   previewAutomationMappings
 } from "../../src/desktop/automationSetup.js";
+import { selectJourneyStarterActions } from "../../src/desktop/journeyStarterActions.js";
 
 const api = window.amosDesktop;
 
@@ -77,7 +78,6 @@ let pendingUiActions = [];
 let pendingGenericConnectCalls = 0;
 let continuityConversationRestored = false;
 const transientTaskMessages = new Set();
-let resumingCheckpointId = null;
 let forkTaskSource = null;
 let automationSetupDraft = null;
 let automationSetupOperations = null;
@@ -497,6 +497,7 @@ function bindEvents() {
     renderTasks();
     renderProjects();
     renderDecisions();
+    renderStarterActions();
   });
   api.on("remote:changed", (remote) => {
     if (!state) return;
@@ -521,6 +522,7 @@ function bindEvents() {
     renderTasks();
     renderHistory();
     renderCanvas();
+    renderStarterActions();
     restoreConversationFromContinuity();
   });
   api.on("update:changed", (nextUpdateState) => {
@@ -1109,6 +1111,7 @@ async function disconnectConnectedSystem(connection, button) {
     state.approvals = response.approvals || state.approvals;
     renderConnections();
     renderDecisions();
+    renderStarterActions();
     toast(pendingOperationId(response.result)
       ? `Disconnecting ${connection.displayName} is waiting for governed approval in Decisions.`
       : `${connection.displayName} disconnected. Its vaulted credential was removed.`);
@@ -1556,6 +1559,7 @@ async function refreshAutomations() {
   try {
     state = await api.refreshRemote();
     renderAutomations();
+    renderStarterActions();
     toast("Automations refreshed from AMOS Platform.");
   } catch (error) {
     toast(error.message, true);
@@ -1570,6 +1574,7 @@ async function changeAutomationStatus(automation, active, button) {
     const response = await api.setAutomationStatus(automation.name, active);
     state.automations = response.automations || state.automations;
     renderAutomations();
+    renderStarterActions();
     const message = response.result?.message || (
       active
         ? `${automation.name} was submitted for governed resume.`
@@ -1630,6 +1635,7 @@ async function openAutomationTask(
     elements.promptInput.value = response.launch.objective;
     elements.promptInput.focus();
     if (guided && !automation) {
+      elements.promptInput.value = "";
       try {
         await api.beginAutomationSetup({ intent: objective });
         toast("Opened guided Automation setup beside a separate conversation.");
@@ -5561,38 +5567,42 @@ async function handleAccountUpdate() {
 
 function renderStarterActions() {
   if (!state || !elements.starterActions) return;
-  const actions = state.connectionMode === "demo"
-    ? [
-        ["Brief me on Northwind", "Give me an executive briefing on Northwind Labs: what matters, what needs attention, and what I can safely do next."],
-        ["Find a growth opportunity", "Inspect Northwind's current growth signals and propose one useful, governed experiment."],
-        ["Create with approval", "Create a useful customer-facing asset for Northwind and walk me through the approval and receipt flow."],
-        ["Show the proof trail", "Show me recent Northwind activity and explain how AMOS proves what changed and why."]
-      ]
-    : state.mode?.personal || state.mode?.offline
-      ? [
-          ["Brief this project", "Inspect this workspace and give me a concise project briefing: architecture, current state, risks, and the best next task."],
-          ["Explain the architecture", "Inspect this workspace and explain how the main components fit together, citing the files you used."],
-          ["Find the riskiest code", "Inspect this project for the highest-leverage reliability, security, and maintainability risks. Do not change anything yet."],
-          ["Improve something small", "Inspect this workspace, propose one small high-value improvement, and wait for my approval before changing files."]
-        ]
-      : [
-          ["Resume the company", "Resume my company context and tell me what most needs attention right now."],
-          ["Show key decisions", "Show me the consequential work waiting for approval and explain the business impact."],
-          ["Find an automation", "Inspect the company and propose one repetitive workflow AMOS could safely automate."],
-          ["Show recent proof", "Summarize recent company actions, receipts, and what the organization learned from them."]
-        ];
+  const actions = selectJourneyStarterActions(state);
   elements.starterActions.replaceChildren();
-  for (const [label, prompt] of actions) {
+  for (const action of actions) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "starter-action";
-    button.textContent = label;
-    button.addEventListener("click", () => {
-      elements.promptInput.value = prompt;
-      elements.promptInput.focus();
-    });
+    button.dataset.actionId = action.id;
+    button.textContent = action.label;
+    button.addEventListener("click", () => executeStarterAction(action, button));
     elements.starterActions.append(button);
   }
+}
+
+async function executeStarterAction(action, button) {
+  if (running) return;
+  if (action.type === "view") {
+    showView(action.view);
+    return;
+  }
+  if (action.type === "resume") {
+    await resumeTaskCheckpoint(action.checkpointId, button);
+    return;
+  }
+  if (action.type === "automation_builder") {
+    await openAutomationTask(null, button, true);
+    return;
+  }
+  if (action.type !== "run") {
+    toast("That quick action is not available in this version of AMOS.", true);
+    return;
+  }
+  await runTask(null, {
+    privateAction: true,
+    prompt: action.prompt,
+    displayText: action.label
+  });
 }
 
 function renderConversationChrome() {
@@ -5766,18 +5776,21 @@ async function resumeTaskCheckpoint(id, button) {
     const result = await api.prepareTaskCheckpoint(id);
     if (result.state) adoptOpenedTask(result);
     else state.taskCheckpoints = result.taskCheckpoints || [];
-    elements.promptInput.value = result.prompt;
-    resumingCheckpointId = id;
+    elements.promptInput.value = "";
     showView("operator");
-    elements.promptInput.focus();
     renderTasks();
     renderProjects();
     renderDecisions();
     toast(
       result.conversationRecovery?.isolated
-        ? "This older checkpoint had no durable conversation link, so AMOS opened a separate recovery conversation. Review the continuation, then press Run."
-        : "Context revalidated in the selected conversation. Review the continuation, then press Run."
+        ? "This older checkpoint had no durable conversation link, so AMOS opened a separate recovery conversation and is resuming it safely."
+        : "Context revalidated. AMOS is safely continuing the selected conversation."
     );
+    await runTask(null, {
+      automaticResume: true,
+      prompt: result.prompt,
+      resumeTaskId: id
+    });
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -7425,10 +7438,21 @@ function renderAttachments() {
   }
 }
 
-async function runTask(event) {
-  event.preventDefault();
-  const prompt = elements.promptInput.value.trim();
+async function runTask(event, options = {}) {
+  event?.preventDefault?.();
+  const automaticResume = options.automaticResume === true;
+  const privateAction = options.privateAction === true;
+  const usesPrivatePrompt = automaticResume || privateAction;
+  const prompt = usesPrivatePrompt
+    ? String(options.prompt || "").trim()
+    : elements.promptInput.value.trim();
+  const resumeTaskId = automaticResume
+    ? String(options.resumeTaskId || "").trim()
+    : null;
   if (running) {
+    if (usesPrivatePrompt) {
+      throw new Error("Finish or stop the current run before starting this action");
+    }
     if (!prompt) return;
     await steerTask(prompt);
     return;
@@ -7442,11 +7466,23 @@ async function runTask(event) {
   const attachmentSummary = attachments.length > 0
     ? `\n\nAttached: ${attachments.map((item) => item.name).join(", ")}`
     : "";
-  addMessage("user", `${prompt || "Review the attached material."}${attachmentSummary}`);
+  if (!automaticResume) {
+    const visibleRequest = privateAction
+      ? String(options.displayText || "Run quick action").trim()
+      : prompt || "Review the attached material.";
+    addMessage("user", `${visibleRequest}${attachmentSummary}`);
+  }
   elements.promptInput.value = "";
   clearTransientTaskMessages();
   beginInlineActivity();
-  const pending = addMessage("pending", "AMOS is loading company context and determining the next action…");
+  const pending = addMessage(
+    "pending",
+    automaticResume
+      ? "AMOS is revalidating current context and continuing only the work that remains…"
+      : privateAction
+        ? "AMOS is loading the relevant context and carrying out that request…"
+        : "AMOS is loading company context and determining the next action…"
+  );
   transientTaskMessages.add(pending);
   streamingMessage = pending;
   setRunning(true);
@@ -7455,7 +7491,7 @@ async function runTask(event) {
     const submitted = [...attachments];
     const result = await api.run({
       text: prompt,
-      resumeTaskId: resumingCheckpointId,
+      resumeTaskId,
       attachments: submitted.map((item) => ({ id: item.id, retention: item.retention }))
     });
     if (!submittedTask.taskRecordId && result.taskRecordId) {
@@ -7472,7 +7508,6 @@ async function runTask(event) {
       toast("A background run completed. Open its Conversation or Project to review the result.");
       return;
     }
-    resumingCheckpointId = null;
     streamingMessage = null;
     clearTransientTaskMessages();
     addMessage("assistant", result.answer, { eventId: result.taskEventId });
@@ -7505,7 +7540,6 @@ async function runTask(event) {
       toast(`A background task stopped: ${error.message}`, true);
       return;
     }
-    resumingCheckpointId = null;
     streamingMessage = null;
     clearTransientTaskMessages();
     addMessage(
@@ -7530,6 +7564,7 @@ async function runTask(event) {
       renderHistory();
       renderTasks();
       renderConversationActions();
+      renderStarterActions();
     } catch {
       // Task completion must not be masked if a local memory refresh fails.
     }
@@ -7603,7 +7638,6 @@ async function clearSession() {
 }
 
 function resetSessionView() {
-  resumingCheckpointId = null;
   continuityConversationRestored = false;
   state.sessionContinuity = null;
   state.workingContinuity = null;
