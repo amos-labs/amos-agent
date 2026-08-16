@@ -5,6 +5,29 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
 import { createSpreadsheetArtifact, createSpreadsheetTools } from "../src/tools/spreadsheets.js";
+import { ToolRegistry } from "../src/tools/registry.js";
+
+test("model schema removes grammar-expanding bounds while runtime schema keeps exact ceilings", () => {
+  const tool = createSpreadsheetTools().find((item) => item.name === "desktop_create_spreadsheet");
+  const spreadsheet = tool.parameters.properties.spreadsheet;
+  const sheet = spreadsheet.properties.sheets.items.properties;
+
+  assert.equal(sheet.cells.maxItems, 6_000);
+  assert.equal(sheet.column_widths.maxItems, 1_000);
+  assert.equal(spreadsheet.properties.checks.maxItems, 300);
+
+  const registry = new ToolRegistry();
+  registry.register(tool);
+  const modelSpreadsheet = registry.openAiTools()[0].function.parameters.properties.spreadsheet;
+  const modelSheet = modelSpreadsheet.properties.sheets.items.properties;
+  assert.equal(modelSheet.cells.maxItems, undefined);
+  assert.equal(modelSheet.column_widths.maxItems, undefined);
+  assert.equal(modelSpreadsheet.properties.checks.maxItems, undefined);
+  assert.equal(sheet.charts.maxItems, 20);
+  assert.equal(spreadsheet.properties.scenario_baselines.maxItems, 100);
+  assert.equal(modelSheet.charts.maxItems, 20);
+  assert.equal(modelSpreadsheet.properties.scenario_baselines.maxItems, 100);
+});
 
 test("deterministic calculator verifies payroll period conversion", async () => {
   const calculator = createSpreadsheetTools().find((tool) => tool.name === "desktop_calculate");

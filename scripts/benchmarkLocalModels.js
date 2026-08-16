@@ -266,6 +266,9 @@ async function benchmarkModel(model) {
     if (shouldRunScenario("platform engine toolkit discovery")) {
       scenarios.push(await qualificationEngineToolkitDiscovery(model, stats));
     }
+    if (shouldRunScenario("native spreadsheet tool grammar")) {
+      scenarios.push(await qualificationSpreadsheetToolGrammar(model, stats));
+    }
   }
 
   const score = scenarios.reduce((sum, item) => sum + (item.passed ? item.weight : 0), 0);
@@ -404,6 +407,39 @@ async function qualificationEngineToolkitDiscovery(model, stats) {
       passed
         ? "discovered the engine menu and loaded only company.docs"
         : `expected company.docs, got ${toolNames(second)} ${JSON.stringify(args)}`
+    ];
+  });
+}
+
+async function qualificationSpreadsheetToolGrammar(model, stats) {
+  return scenario("native spreadsheet tool grammar", 3, async () => {
+    const registry = createQualificationRegistry();
+    const activation = registry.activateToolkit("spreadsheets", { mode: "replace" });
+    if (!activation.ok) return [false, activation.error];
+    const tools = registry.openAiTools({ activeOnly: true });
+    const response = await chat(model, [{
+      role: "system",
+      content: "Use AMOS native spreadsheet tools for XLSX work. Produce the smallest valid workbook requested."
+    }, {
+      role: "user",
+      content: "Call desktop_create_spreadsheet now to create models/hello with title Hello and one sheet named Summary containing A1 = Hello."
+    }], tools);
+    stats.push(response);
+    const call = (response.message?.tool_calls || [])
+      .find((item) => item.function?.name === "desktop_create_spreadsheet");
+    const args = toolArguments(call);
+    const sheets = args.spreadsheet?.sheets;
+    const cells = Array.isArray(sheets) ? sheets[0]?.cells : null;
+    const passed = args.path === "models/hello" &&
+      args.spreadsheet?.title === "Hello" &&
+      sheets?.[0]?.name === "Summary" &&
+      cells?.[0]?.address === "A1" &&
+      cells?.[0]?.value === "Hello";
+    return [
+      passed,
+      passed
+        ? "compiled the native spreadsheet grammar and selected a valid minimal workbook"
+        : `expected a native spreadsheet call, got ${toolNames(response)} ${JSON.stringify(args)}`
     ];
   });
 }

@@ -1,6 +1,8 @@
 import { Buffer } from "node:buffer";
 import { inferToolToolkit, toolkitDefinition } from "./toolkitCatalog.js";
 
+const MAX_GRAMMAR_ARRAY_BOUND = 100;
+
 export function sanitizeToolName(name) {
   return String(name)
     .replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -34,6 +36,18 @@ function asOpenAiTool(tool) {
   };
 }
 
+function normalizeModelToolDefinition(value) {
+  if (Array.isArray(value)) return value.map(normalizeModelToolDefinition);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key, item]) => !(
+      key === "maxItems" &&
+      Number.isInteger(item) &&
+      item > MAX_GRAMMAR_ARRAY_BOUND
+    ))
+    .map(([key, item]) => [key, normalizeModelToolDefinition(item)]));
+}
+
 export class ToolRegistry {
   constructor({
     progressive = false,
@@ -61,7 +75,11 @@ export class ToolRegistry {
       ...tool,
       source: tool.source || "local",
       toolkit: inferredToolkit || "core",
-      definition: tool.definition || asOpenAiTool(tool)
+      // Ollama 0.32 expands large maxItems values into grammar repetitions and
+      // can fail before inference. Keep exact high-volume ceilings in the
+      // deterministic handler/server while giving every model a compilable
+      // schema. Small bounds remain useful and are preserved.
+      definition: normalizeModelToolDefinition(tool.definition || asOpenAiTool(tool))
     };
     const existing = this.tools.get(tool.name);
     if (existing) {
