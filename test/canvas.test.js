@@ -49,6 +49,33 @@ test("canvas contract normalizes every safe block type", () => {
         content: "const value = '<script>never execute</script>';\n"
       },
       {
+        type: "file_tree",
+        title: "Files",
+        root_label: "amos-agent",
+        nodes: [
+          { path: "src", name: "src", kind: "directory", depth: 0, status: "modified" },
+          { path: "src/app.js", name: "app.js", kind: "file", depth: 1, status: "modified" }
+        ]
+      },
+      {
+        type: "diff",
+        title: "Working changes",
+        scope: "working",
+        files: [{
+          path: "src/app.js",
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          hunks: [{
+            header: "@@ -1 +1 @@",
+            lines: [
+              { kind: "deletion", old_line: 1, new_line: null, text: "const answer = 41;" },
+              { kind: "addition", old_line: null, new_line: 1, text: "const answer = 42;" }
+            ]
+          }]
+        }]
+      },
+      {
         type: "document",
         title: "Verified artifact",
         document: {
@@ -157,19 +184,21 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.source.references[0].id, "campaign-1");
   assert.equal(canvas.blocks[1].rows[0].spend, 18.25);
   assert.equal(canvas.blocks[4].content.includes("<script>"), true);
-  assert.equal(canvas.blocks[5].artifacts[0].path, "reports/quarterly.pdf");
-  assert.equal(canvas.blocks[5].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
-  assert.equal(canvas.blocks[6].artifact.path, "models/quarterly-plan.xlsx");
-  assert.equal(canvas.blocks[6].verification.formulaCount, 42);
-  assert.equal(canvas.blocks[7].sessionId, "browser-session-1");
-  assert.equal(canvas.blocks[7].frameId, "frame-1");
-  assert.equal(canvas.blocks[7].frameSha256, "c".repeat(64));
-  assert.equal(canvas.blocks[7].visualFallback, true);
-  assert.equal(canvas.blocks[7].takeoverActive, true);
-  assert.equal(canvas.blocks[8].url, "http://127.0.0.1:3000/preview");
-  assert.equal(canvas.blocks[10].pendingId, "pending-1");
-  assert.equal(canvas.blocks[11].sections[0].items[0].id, "obj-1");
-  assert.equal(canvas.blocks[11].provenance.uncertainty, "inferred");
+  assert.equal(canvas.blocks[5].nodes[1].path, "src/app.js");
+  assert.equal(canvas.blocks[6].files[0].hunks[0].lines[1].newLine, 1);
+  assert.equal(canvas.blocks[7].artifacts[0].path, "reports/quarterly.pdf");
+  assert.equal(canvas.blocks[7].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
+  assert.equal(canvas.blocks[8].artifact.path, "models/quarterly-plan.xlsx");
+  assert.equal(canvas.blocks[8].verification.formulaCount, 42);
+  assert.equal(canvas.blocks[9].sessionId, "browser-session-1");
+  assert.equal(canvas.blocks[9].frameId, "frame-1");
+  assert.equal(canvas.blocks[9].frameSha256, "c".repeat(64));
+  assert.equal(canvas.blocks[9].visualFallback, true);
+  assert.equal(canvas.blocks[9].takeoverActive, true);
+  assert.equal(canvas.blocks[10].url, "http://127.0.0.1:3000/preview");
+  assert.equal(canvas.blocks[12].pendingId, "pending-1");
+  assert.equal(canvas.blocks[13].sections[0].items[0].id, "obj-1");
+  assert.equal(canvas.blocks[13].provenance.uncertainty, "inferred");
 });
 
 test("canvas contract rejects arbitrary block types and unbounded tables", () => {
@@ -182,6 +211,18 @@ test("canvas contract rejects arbitrary block types and unbounded tables", () =>
     () => normalizeCanvasSpec({ ...base, blocks: [{ type: "html", content: "<script>run()</script>" }] }),
     /Unsupported canvas block type/
   );
+  for (const unsafePath of ["../secret.js", "/tmp/secret.js", "C:\\secret.js"]) {
+    assert.throws(
+      () => normalizeCanvasSpec({
+        ...base,
+        blocks: [{
+          type: "file_tree",
+          nodes: [{ path: unsafePath, name: "secret.js", kind: "file", depth: 0 }]
+        }]
+      }),
+      /workspace-relative path/
+    );
+  }
   assert.throws(
     () => normalizeCanvasSpec({
       ...base,

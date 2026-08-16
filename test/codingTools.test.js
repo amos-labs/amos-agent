@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCodingTools, parsePatchPaths, runProgram } from "../src/tools/coding.js";
+import { createCodeWorkspaceTool } from "../src/tools/codeWorkspace.js";
+import { DesktopCanvasManager } from "../src/desktop/canvas.js";
 
 test("patch paths are workspace-relative and reject traversal", () => {
   assert.deepEqual(
@@ -89,4 +91,56 @@ test("program runner tolerates a short-lived child closing unused stdin", async 
     )
   );
   assert.equal(results.every((result) => result.ok), true);
+});
+
+test("coding work surface derives its tree and diff directly from the workspace", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-code-surface-"));
+  await mkdir(join(root, "src"));
+  await writeFile(join(root, "src", "app.js"), "export const answer = 41;\n");
+  await writeFile(join(root, ".env"), "SECRET=never-render-this\n");
+  const options = { cwd: root, timeoutMs: 10_000, maxOutputBytes: 100_000 };
+  for (const command of [
+    ["init"],
+    ["config", "user.email", "test@example.com"],
+    ["config", "user.name", "AMOS Test"],
+    ["config", "commit.gpgsign", "false"],
+    ["add", "src/app.js", ".env"],
+    ["commit", "-m", "initial"]
+  ]) {
+    const result = await runProgram("git", command, options);
+    assert.equal(result.ok, true, result.stderr);
+  }
+  await writeFile(join(root, "src", "app.js"), "export const answer = 42;\n");
+  await writeFile(join(root, "src", "new.js"), "export const ready = true;\n");
+  await writeFile(join(root, ".env"), "SECRET=still-never-render-this\n");
+
+  const manager = new DesktopCanvasManager();
+  const tool = createCodeWorkspaceTool({ present: async (spec) => manager.present(spec) });
+  const result = await tool.handler({ scope: "all", focus_path: "src/app.js" }, {
+    config: {
+      safety: {
+        workspaceRoot: root,
+        allowOutsideWorkspace: false,
+        maxOutputBytes: 100_000
+      }
+    },
+    signal: null
+  });
+  const canvas = manager.active();
+  const tree = canvas.blocks.find((block) => block.type === "file_tree");
+  const working = canvas.blocks.find((block) => block.type === "diff" && block.scope === "working");
+  const focus = canvas.blocks.find((block) => block.type === "code");
+
+  assert.equal(result.ok, true);
+  assert.equal(result.changed_files, 2);
+  assert.ok(tree.nodes.some((node) => node.path === "src/app.js" && node.status === "modified"));
+  assert.ok(tree.nodes.some((node) => node.path === "src/new.js" && node.status === "untracked"));
+  assert.equal(tree.nodes.some((node) => node.path === ".env"), false);
+  assert.ok(working.files.some((file) => file.path === "src/app.js" && file.additions === 1));
+  assert.ok(working.files.some((file) => file.path === "src/new.js" && file.status === "untracked"));
+  assert.equal(focus.filename, "src/app.js");
+  assert.match(focus.content, /answer = 42/);
+  assert.equal(JSON.stringify(canvas).includes("never-render-this"), false);
+  assert.equal(JSON.stringify(canvas).includes("still-never-render-this"), false);
+  assert.equal(Object.hasOwn(tool.parameters.properties, "content"), false);
 });

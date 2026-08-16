@@ -9,6 +9,8 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "timeseries",
   "markdown",
   "code",
+  "file_tree",
+  "diff",
   "document",
   "spreadsheet",
   "browser",
@@ -43,6 +45,10 @@ const MAX_TABLE_ROWS = 200;
 const MAX_SERIES = 6;
 const MAX_POINTS = 300;
 const MAX_SOURCES = 100;
+const MAX_FILE_TREE_NODES = 600;
+const MAX_DIFF_FILES = 100;
+const MAX_DIFF_HUNKS = 300;
+const MAX_DIFF_LINES = 4_000;
 const MAX_DECISION_DETAILS = 20;
 const MAX_DOCUMENT_ARTIFACTS = 2;
 const MAX_DOCUMENT_DIAGNOSTICS = 20;
@@ -367,6 +373,68 @@ function normalizeBlock(input, index, canvasSource) {
     };
   }
 
+  if (type === "file_tree") {
+    const nodes = array(block.nodes || [], `blocks[${index}].nodes`, MAX_FILE_TREE_NODES);
+    return {
+      ...common,
+      rootLabel: optionalText(
+        block.root_label || block.rootLabel,
+        `blocks[${index}].root_label`,
+        160
+      ) || "Workspace",
+      truncated: block.truncated === true,
+      nodes: nodes.map((node, nodeIndex) => {
+        const value = object(
+          node,
+          `blocks[${index}].nodes[${nodeIndex}] must be an object`
+        );
+        const kind = enumValue(
+          value.kind,
+          ["file", "directory"],
+          `blocks[${index}].nodes[${nodeIndex}].kind`
+        );
+        return {
+          path: safeWorkspaceDisplayPath(
+            value.path,
+            `blocks[${index}].nodes[${nodeIndex}].path`
+          ),
+          name: text(value.name, `blocks[${index}].nodes[${nodeIndex}].name`, 240),
+          kind,
+          depth: boundedInteger(
+            value.depth ?? 0,
+            `blocks[${index}].nodes[${nodeIndex}].depth`,
+            0,
+            20
+          ),
+          status: enumValue(
+            value.status || "none",
+            ["none", "modified", "added", "deleted", "renamed", "untracked", "conflicted"],
+            `blocks[${index}].nodes[${nodeIndex}].status`
+          )
+        };
+      })
+    };
+  }
+
+  if (type === "diff") {
+    const files = array(block.files || [], `blocks[${index}].files`, MAX_DIFF_FILES);
+    const budget = { hunks: 0, lines: 0 };
+    return {
+      ...common,
+      scope: enumValue(
+        block.scope || "working",
+        ["working", "staged", "untracked"],
+        `blocks[${index}].scope`
+      ),
+      truncated: block.truncated === true,
+      files: files.map((file, fileIndex) => normalizeDiffFile(
+        file,
+        `blocks[${index}].files[${fileIndex}]`,
+        budget
+      ))
+    };
+  }
+
   if (type === "document") {
     const artifacts = array(
       block.artifacts || [],
@@ -591,6 +659,89 @@ function normalizeBlock(input, index, canvasSource) {
       };
     })
   };
+}
+
+function normalizeDiffFile(input, path, budget) {
+  const file = object(input, `${path} must be an object`);
+  const hunks = array(file.hunks || [], `${path}.hunks`, MAX_DIFF_HUNKS);
+  budget.hunks += hunks.length;
+  if (budget.hunks > MAX_DIFF_HUNKS) {
+    throw new Error(`diff hunks exceed the limit of ${MAX_DIFF_HUNKS}`);
+  }
+  return {
+    path: safeWorkspaceDisplayPath(file.path, `${path}.path`),
+    oldPath: file.old_path || file.oldPath
+      ? safeWorkspaceDisplayPath(file.old_path || file.oldPath, `${path}.old_path`)
+      : null,
+    status: enumValue(
+      file.status || "modified",
+      ["modified", "added", "deleted", "renamed", "binary", "untracked", "conflicted"],
+      `${path}.status`
+    ),
+    additions: boundedInteger(file.additions ?? 0, `${path}.additions`, 0, 1_000_000),
+    deletions: boundedInteger(file.deletions ?? 0, `${path}.deletions`, 0, 1_000_000),
+    hunks: hunks.map((hunk, hunkIndex) => {
+      const value = object(hunk, `${path}.hunks[${hunkIndex}] must be an object`);
+      const lines = array(value.lines || [], `${path}.hunks[${hunkIndex}].lines`, MAX_DIFF_LINES);
+      budget.lines += lines.length;
+      if (budget.lines > MAX_DIFF_LINES) {
+        throw new Error(`diff lines exceed the limit of ${MAX_DIFF_LINES}`);
+      }
+      return {
+        header: text(value.header, `${path}.hunks[${hunkIndex}].header`, 500),
+        lines: lines.map((line, lineIndex) => {
+          const entry = object(
+            line,
+            `${path}.hunks[${hunkIndex}].lines[${lineIndex}] must be an object`
+          );
+          return {
+            kind: enumValue(
+              entry.kind,
+              ["context", "addition", "deletion", "meta"],
+              `${path}.hunks[${hunkIndex}].lines[${lineIndex}].kind`
+            ),
+            oldLine: nullableLineNumber(
+              entry.old_line ?? entry.oldLine,
+              `${path}.hunks[${hunkIndex}].lines[${lineIndex}].old_line`
+            ),
+            newLine: nullableLineNumber(
+              entry.new_line ?? entry.newLine,
+              `${path}.hunks[${hunkIndex}].lines[${lineIndex}].new_line`
+            ),
+            text: diffLineText(
+              entry.text ?? "",
+              `${path}.hunks[${hunkIndex}].lines[${lineIndex}].text`,
+              10_000
+            )
+          };
+        })
+      };
+    })
+  };
+}
+
+function nullableLineNumber(value, path) {
+  if (value === undefined || value === null || value === "") return null;
+  return boundedInteger(value, path, 1, 1_000_000_000);
+}
+
+function diffLineText(value, path, maximum) {
+  if (typeof value !== "string") throw new Error(`${path} must be a string`);
+  if (value.length > maximum) throw new Error(`${path} exceeds the limit of ${maximum}`);
+  return value;
+}
+
+function safeWorkspaceDisplayPath(value, path) {
+  const normalized = text(value, path, 1_000).replaceAll("\\", "/");
+  if (
+    normalized.startsWith("/") ||
+    /^[A-Za-z]:\//.test(normalized) ||
+    normalized.split("/").includes("..") ||
+    normalized.includes("\0")
+  ) {
+    throw new Error(`${path} must be a safe workspace-relative path`);
+  }
+  return normalized.replace(/^\.\//, "") || ".";
 }
 
 function normalizeOperatingPlanSection(input, path) {

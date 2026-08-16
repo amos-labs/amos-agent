@@ -16,6 +16,7 @@ const CANVAS_PRESENT_TOOL = "desktop_present_canvas";
 const COMPANY_VIEW_TOOL = "desktop_present_company_view";
 const CANVAS_UPDATE_TOOL = "desktop_update_canvas";
 const WORK_SURFACE_REQUEST_TOOL = "desktop_request_work_surface";
+const CODE_WORKSPACE_TOOL = "desktop_present_code_workspace";
 
 export class AgentLoop {
   constructor({
@@ -513,7 +514,7 @@ export class AgentLoop {
       this.canvasToolState.semanticTitle = result.title || null;
     }
     if (
-      [CANVAS_PRESENT_TOOL, COMPANY_VIEW_TOOL, CANVAS_UPDATE_TOOL].includes(name) &&
+      [CANVAS_PRESENT_TOOL, COMPANY_VIEW_TOOL, CANVAS_UPDATE_TOOL, CODE_WORKSPACE_TOOL].includes(name) &&
       result?.canvas_id
     ) {
       this.canvasToolState.active = true;

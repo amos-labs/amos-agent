@@ -34,6 +34,28 @@ test("every renderer element reference is registered and present in the HTML she
   );
 });
 
+test("the coding work surface renders deterministic file trees and inert line-numbered diffs", async () => {
+  const [javascript, css, canvas, tool] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/canvas.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/tools/codeWorkspace.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(javascript, /block\.type === "file_tree"/);
+  assert.match(javascript, /block\.type === "diff"/);
+  assert.match(javascript, /function renderCanvasFileTree/);
+  assert.match(javascript, /function renderCanvasDiff/);
+  assert.match(javascript, /code\.textContent = line\.text/);
+  assert.doesNotMatch(javascript, /renderCanvasDiff[\s\S]*?innerHTML/);
+  assert.match(css, /\.canvas-diff-line\.addition/);
+  assert.match(css, /\.canvas-file-tree-row\.hidden/);
+  assert.match(canvas, /MAX_DIFF_LINES = 4_000/);
+  assert.match(canvas, /safeWorkspaceDisplayPath/);
+  assert.match(tool, /name: "desktop_present_code_workspace"/);
+  assert.match(tool, /Desktop reads Git and the filesystem directly/);
+});
+
 test("the running-task composer stays available for steering through the allowlisted IPC bridge", async () => {
   const [javascript, preload, main] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
