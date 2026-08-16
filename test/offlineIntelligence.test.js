@@ -94,7 +94,7 @@ test("hardware assessment recommends a bounded curated profile", () => {
 
 test("curated model manifest is release-signed and content-addressed", () => {
   const manifest = releaseSignedManifest();
-  assert.equal(manifest.version, 7);
+  assert.equal(manifest.version, 8);
   assert.equal(manifest.trust, "release-signed");
   assert.match(manifest.digest, /^[a-f0-9]{64}$/);
   assert.deepEqual(
@@ -123,6 +123,8 @@ test("curated model manifest is release-signed and content-addressed", () => {
   assert.equal(compact.capabilityContract, undefined);
   assert.equal(balanced.capabilityContract, undefined);
   assert.equal(capable.primary, true);
+  assert.equal(capable.modelDisplayName, "GPT-OSS 20B");
+  assert.equal(qwen38.modelDisplayName, "Qwen3.8 27B · Q4_K_M");
   assert.equal(capable.qualification.status, "conditional");
   assert.equal(qwen36.deprecated, true);
   assert.equal(qwen36.retired, true);

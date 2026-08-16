@@ -14,6 +14,7 @@ const eventChannels = new Set([
   "task-checkpoints:changed",
   "remote:changed",
   "auth:browser",
+  "desktop:navigate",
   "update:changed"
 ]);
 

@@ -1,8 +1,10 @@
 # First run and operating boundaries
 
-AMOS Desktop is the cold path. The first-run screen asks what you want to
-operate and persists that choice so a restart does not send you back through
-onboarding.
+AMOS Desktop is the cold path. The first-run screen teaches the intended
+product hierarchy before it asks for setup: connect a real company for the
+complete AMOS experience, explore Northwind as a bounded sample company, or
+use a local/BYO personal workspace. The selected boundary persists so a
+restart does not send a configured user back through onboarding.
 
 The product loop is the same on every path: describe the work, build or change
 something, ask for the next step, delegate a bounded task, and keep a local
@@ -19,11 +21,53 @@ reopens first-run so the user is not left in a dead Online company shell.
 Anonymous usage events stay off until the first-run privacy choice. Telemetry
 never gates **Enter**.
 
+## My company — recommended
+
+The primary first-run card is the complete company product. It states the
+commercial boundary before signup: a 14-day free trial and plans starting at
+$99/month. OAuth supplies durable company memory, applications, engines,
+goals, policies, approvals, and receipts. Managed AMOS Intelligence is the
+default; no provider key or model selection is required. Ongoing AMOS
+Intelligence access requires an AMOS company subscription.
+
+Returning users see their active company instead of trial acquisition copy.
+"Reconnect" is reserved for an authentication session that actually needs to
+be renewed.
+
+## Northwind demo
+
+Northwind is the second path: a realistic but intentionally bounded company
+experience. The demo launches the public Playground in a browser. After abuse
+checks create a short-lived Northwind tenant, the Playground sends the
+tenant-scoped key to a one-time loopback receiver using an HTML form POST. The
+key does not enter the browser URL, history, query logs, or referrer.
+
+Desktop stores the expiring demo credential with the same owner-only token
+store used for OAuth, switches to an app-owned demo workspace, and returns to
+first-run for an explicit intelligence choice:
+
+- AMOS Intelligence is preselected and includes 30 hosted messages per demo;
+- AMOS Local uses an installed model on the person's computer with no AMOS
+  subscription; and
+- BYOK uses the person's selected provider credential with no AMOS
+  subscription (the provider's own usage charges may still apply).
+
+The hosted balance comes from `/v1/intelligence/status`; Desktop does not
+infer it from rendered messages. The persistent Northwind banner shows the
+remaining balance and exposes **Connect my company**, **Change intelligence**,
+and **Leave demo**. Leaving restores the prior local workspace and returns to
+the starting-point screen.
+
+The demo uses real AMOS tools, policy, approvals, receipts, and metered hosted
+intelligence against sample data. It cannot connect credentials, spend real
+money, or escape the demo tenant.
+
 ## My workspace
 
-**Your model, this computer.** No AMOS account is required. Hosted `auto` is
-not available here and needs a sign-in — use **Northwind** or **My company**
-for AMOS Intelligence.
+**Your model, this computer.** No AMOS account or AMOS subscription is
+required. Hosted `auto` is not available here and needs a sign-in — use
+**Northwind** or **My company** for AMOS Intelligence. A BYOK provider may bill
+its own usage separately.
 
 Recommended intelligence:
 
@@ -31,6 +75,12 @@ Recommended intelligence:
   run it; or
 - a provider key you already have (OpenAI, Anthropic, Bedrock, Kimi, or a
   compatible endpoint).
+
+Installing an AMOS Local model only downloads it. Selecting **Use with
+company**, **Use in personal workspace**, or **Use local-only** then sets both
+the `ollama` provider and that exact model in one action; there is no separate
+provider-selection step. Local-only also disables company and public-network
+tools.
 
 Unqualified Compact and Balanced (4B / 8B) may still be chosen for personal or
 ungoverned work. They are badged **Unmeasured — not for governed work** and are
@@ -54,22 +104,16 @@ suggested tasks.
 Personal + AMOS Intelligence + no OAuth stays **not configured**. Enter stays
 off until a local profile or BYO key is saved and a folder is chosen.
 
-## Northwind demo
+The readiness row is path-aware: its intelligence check remains incomplete
+until the person chooses a starting point. The stored hosted default therefore
+does not appear as a completed choice on an untouched first-run screen.
 
-Northwind is the featured hosted-`auto` path. The demo launches the public
-Playground in a browser. After abuse checks create a short-lived Northwind
-tenant, the Playground sends the tenant-scoped key to a one-time loopback
-receiver using an HTML form POST. The key does not enter the browser URL,
-history, query logs, or referrer.
-
-Desktop stores the expiring demo credential with the same owner-only token
-store used for OAuth, switches to an app-owned demo workspace, and labels the
-entire session **Northwind demo**. The demo uses real AMOS tools, policy,
-approvals, receipts, and metered hosted intelligence against sample data. It
-cannot connect credentials, spend real money, or escape the demo tenant.
-
-Connecting a real company replaces the demo credential and restores the
-previous personal workspace.
+Intelligence and workspace selection are independent. Choosing, activating,
+or saving intelligence keeps the person in **Intelligence & Settings** until
+they explicitly return to setup; it never opens or requires the workspace
+picker. Intelligence can be changed later from the account menu or the native
+**AMOS Desktop → Intelligence & Settings…** menu (`Cmd+,` on macOS). The native
+**File → Choose Workspace…** action remains a separate choice.
 
 ### Privacy-safe activation measurement
 
@@ -91,13 +135,6 @@ OAuth. Access and refresh tokens are never stored in the telemetry file.
 Telemetry is best-effort and never controls product access, policy, billing,
 or authorization.
 
-## My company
-
-The normal OAuth path supplies durable company memory, applications, engines,
-goals, policies, approvals, and receipts. Hosted `auto` works after sign-in.
-The selected model and local workspace remain independent of the company
-connection.
-
 ## Intelligence posture
 
 There is no anonymous hosted `auto`.
@@ -105,7 +142,7 @@ There is no anonymous hosted `auto`.
 | Path | Intelligence |
 | --- | --- |
 | My workspace | Local profile or BYO key. Hosted `auto` requires sign-in. |
-| Northwind | Hosted `auto` against the demo tenant. |
+| Northwind | Hosted `auto` with 30 included demo messages, AMOS Local, or BYOK. |
 | My company | Hosted `auto` after OAuth 2.1 + PKCE + installation key. |
 
 On Northwind and My company, Desktop sends the stable `auto` model alias

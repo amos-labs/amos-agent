@@ -940,10 +940,22 @@ export class DesktopRemoteStateClient {
     }
     const subscriptionStatus = String(payload?.billing?.subscription_status || "none");
     const billingExempt = payload?.billing?.billing_exempt === true;
+    const demo = payload?.demo && typeof payload.demo === "object"
+      ? {
+          messageLimit: boundedCount(payload.demo.message_limit),
+          messagesUsed: boundedCount(payload.demo.messages_used),
+          messagesRemaining: boundedCount(payload.demo.messages_remaining)
+        }
+      : null;
     return {
       ready: payload?.ready === true,
       subscriptionStatus,
       billingExempt,
+      includedCreditRemainingUsd:
+        typeof payload?.billing?.included_credit_remaining_usd === "string"
+          ? payload.billing.included_credit_remaining_usd.slice(0, 32)
+          : null,
+      demo,
       workspaceActive:
         billingExempt || subscriptionStatus === "active" || subscriptionStatus === "trialing"
     };

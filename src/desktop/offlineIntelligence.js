@@ -57,13 +57,14 @@ const QWEN38_PASSED_WORKFLOWS = Object.freeze([
 // integrity is therefore covered by the same Developer ID signature and
 // notarization gate as the executable that consumes it.
 export const OFFLINE_MODEL_MANIFEST = Object.freeze({
-  version: 7,
+  version: 8,
   trust: "release-signed",
   runtime: "ollama",
   updatedAt: "2026-08-16T00:00:00.000Z",
   models: Object.freeze([
     Object.freeze({
       id: "qwen3:4b",
+      modelDisplayName: "Qwen3 4B",
       name: "AMOS Local · Compact",
       description: "Fast private drafting, summarization, and lightweight workspace tasks.",
       approximateSizeBytes: 2_600_000_000,
@@ -77,6 +78,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "qwen3:8b",
+      modelDisplayName: "Qwen3 8B",
       name: "AMOS Local · Balanced",
       description: "Stronger local reasoning and coding for modern laptops with more memory.",
       approximateSizeBytes: 5_200_000_000,
@@ -90,6 +92,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "gpt-oss:20b",
+      modelDisplayName: "GPT-OSS 20B",
       name: "AMOS Local · Capable",
       description: "Fast interactive text, coding, and tool work; managed intelligence still handles unqualified or consequential steps.",
       approximateSizeBytes: 14_000_000_000,
@@ -114,6 +117,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "qwen3.6:27b-q4_K_M",
+      modelDisplayName: "Qwen3.6 27B · Q4_K_M",
       name: "AMOS Local · Vision Legacy",
       description: "Previous multimodal profile retained for existing installations; Qwen 3.8 is the measured successor.",
       approximateSizeBytes: 17_000_000_000,
@@ -142,6 +146,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: QWEN38_MODEL_ID,
+      modelDisplayName: "Qwen3.8 27B · Q4_K_M",
       name: "AMOS Local · Vision",
       description: "Qualified Qwen 3.8 successor for local multimodal, coding, office, and tool-use work.",
       approximateSizeBytes: 19_603_117_919,
@@ -187,6 +192,7 @@ export const OFFLINE_MODEL_MANIFEST = Object.freeze({
     }),
     Object.freeze({
       id: "qwen3.6:27b-q8_0",
+      modelDisplayName: "Qwen3.6 27B · Q8_0",
       name: "AMOS Local · Vision Max Legacy",
       description: "Previous high-memory multimodal profile retained only so existing installations can be removed or migrated.",
       approximateSizeBytes: 30_000_000_000,

@@ -130,45 +130,78 @@
         <section id="onboardingView" class="view onboarding hidden">
           <div class="onboarding-copy">
             <span class="eyebrow accent">WELCOME TO AMOS DESKTOP</span>
-            <h1>Start useful.<br>Connect when ready.</h1>
+            <h1>Connect your company.<br>Put AMOS to work.</h1>
             <p>
-              Work privately on this computer, explore a live sample company, or connect
-              your own AMOS company. You can change paths later without losing the local workspace.
+              AMOS learns how your company operates from its systems and context, then helps
+              you understand what is happening, decide what to do, automate the work, and
+              measure the outcome.
             </p>
+            <div class="operating-path" aria-label="How AMOS works">
+              <span>Connect</span><i>→</i><span>Learn</span><i>→</i><span>Act</span><i>→</i><span>Measure</span>
+            </div>
             <div class="principles">
-              <span>Local first</span>
-              <span>Model independent</span>
-              <span>Human governed</span>
-              <span>Company actions proven</span>
+              <span>Durable company memory</span>
+              <span>Managed AMOS Intelligence</span>
+              <span>Governed automation</span>
+              <span>Outcomes you can prove</span>
             </div>
           </div>
 
           <div class="setup-panel">
             <div class="setup-heading">
-              <span class="eyebrow">CHOOSE A STARTING POINT</span>
-              <h2>What do you want to operate?</h2>
+              <span class="eyebrow">START WITH AMOS</span>
+              <h2>How would you like to begin?</h2>
             </div>
             <div class="start-mode-grid">
-              <button id="localModeButton" class="start-mode-card" type="button">
-                <span class="start-mode-kicker">NO ACCOUNT REQUIRED</span>
-                <strong>My workspace</strong>
-                <span>Run locally or bring your own model key. Only AMOS-hosted Intelligence requires a sign-in.</span>
-                <span class="start-mode-options">AMOS Local (including Qwen 3.8 27B) · OpenAI · Claude · Kimi · compatible endpoints</span>
-                <em>Start privately →</em>
+              <button id="connectButton" class="start-mode-card featured primary-path" type="button">
+                <span class="start-mode-kicker">RECOMMENDED · FULL AMOS EXPERIENCE</span>
+                <strong>Connect my company</strong>
+                <span>Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof. AMOS guides what to connect and what to tackle first.</span>
+                <span class="start-mode-options company-plan">14-day free trial · Plans start at $99/month</span>
+                <em>Start my free trial →</em>
               </button>
-              <button id="demoModeButton" class="start-mode-card featured" type="button">
+              <button id="demoModeButton" class="start-mode-card" type="button">
                 <span class="start-mode-kicker">LIVE SAMPLE COMPANY</span>
-                <strong>Northwind demo</strong>
-                <span>Use real AMOS tools, approvals, receipts, and sample company data.</span>
-                <em>Explore AMOS →</em>
+                <strong>Explore the Northwind demo</strong>
+                <span>Experience AMOS with realistic sample data, tools, approvals, and automations. Some integrations, history, and real-world actions are intentionally limited.</span>
+                <span class="start-mode-options">Limited hosted turns included · Local and BYOK available</span>
+                <em>Choose intelligence and explore →</em>
               </button>
-              <button id="connectButton" class="start-mode-card" type="button">
-                <span class="start-mode-kicker">YOUR ORGANIZATION</span>
-                <strong>My company</strong>
-                <span>Connect durable memory, applications, policy, approvals, and proof.</span>
-                <em>Sign in or create account →</em>
+              <button id="localModeButton" class="start-mode-card tertiary-path" type="button">
+                <span class="start-mode-kicker">LOCAL OR BRING YOUR OWN MODEL</span>
+                <strong>Use AMOS as a personal AI workspace</strong>
+                <span>Work privately with chat, coding, files, and local tools using a local model or your own frontier-model API key. Connect a company later without losing this workspace.</span>
+                <span class="start-mode-options">No AMOS subscription required · AMOS Local · OpenAI · Claude · Grok · Kimi · compatible endpoints</span>
+                <em>Configure my intelligence →</em>
               </button>
             </div>
+            <section id="northwindIntelligenceChoice" class="northwind-intelligence-choice hidden" aria-labelledby="northwindIntelligenceTitle">
+              <div class="northwind-intelligence-heading">
+                <div>
+                  <span class="eyebrow accent">NORTHWIND IS CONNECTED</span>
+                  <h3 id="northwindIntelligenceTitle">Choose how to power the demo</h3>
+                </div>
+                <span id="northwindUsageSummary" class="northwind-usage-summary">Limited hosted turns included</span>
+              </div>
+              <div class="northwind-intelligence-options">
+                <button id="demoHostedIntelligenceButton" class="intelligence-choice-card" type="button">
+                  <span class="start-mode-kicker">RECOMMENDED</span>
+                  <strong>AMOS Intelligence</strong>
+                  <small>AMOS subscription required for ongoing use. Northwind includes limited hosted demo turns.</small>
+                </button>
+                <button id="demoLocalIntelligenceButton" class="intelligence-choice-card" type="button">
+                  <span class="start-mode-kicker">THIS COMPUTER</span>
+                  <strong>AMOS Local</strong>
+                  <small>No AMOS subscription required. Use an installed local model; capability depends on your hardware.</small>
+                </button>
+                <button id="demoByokIntelligenceButton" class="intelligence-choice-card" type="button">
+                  <span class="start-mode-kicker">YOUR PROVIDER</span>
+                  <strong>Bring my own key</strong>
+                  <small>No AMOS subscription required. Use OpenAI, Claude, Grok, Kimi, or a compatible endpoint; provider charges may apply.</small>
+                </button>
+              </div>
+              <p id="northwindCurrentIntelligence" class="northwind-current-intelligence"></p>
+            </section>
             <div class="setup-readiness">
               <div>
                 <span id="connectCheck" class="step-check">—</span>
@@ -176,8 +209,12 @@
               </div>
               <div>
                 <span id="providerCheck" class="step-check">—</span>
-                <button class="text-button onboarding-provider-link" data-open-settings>
-                  <span id="onboardingProviderText">Choose intelligence</span>
+                <button class="onboarding-provider-link" data-open-settings type="button">
+                  <span class="onboarding-provider-button-copy">
+                    <small>Intelligence settings</small>
+                    <span id="onboardingProviderText">Choose intelligence</span>
+                  </span>
+                  <span class="onboarding-provider-button-arrow" aria-hidden="true">→</span>
                 </button>
               </div>
               <div>
@@ -185,8 +222,8 @@
                 <button id="onboardingWorkspaceButton" class="text-button">Choose workspace</button>
               </div>
             </div>
-            <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint hidden">
-              Choose AMOS Local, OpenAI, Anthropic (Claude), Kimi, or any OpenAI-compatible endpoint. Only AMOS-hosted Intelligence requires Northwind or My company.
+            <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint">
+              Choose AMOS Local, OpenAI, Anthropic (Claude), Kimi, or any OpenAI-compatible endpoint. Change intelligence at any time from AMOS Desktop → Intelligence &amp; Settings. AMOS Local and BYOK require no AMOS subscription; only AMOS-hosted Intelligence does.
             </p>
             <div id="telemetryConsent" class="local-setup-callout">
               <div>
@@ -208,7 +245,11 @@
               <strong>Northwind Labs demo</strong>
               <span id="demoExpiry">Sample data in a short-lived company.</span>
             </div>
-            <button id="demoConnectButton" class="button secondary" type="button">Use my company</button>
+            <div class="demo-banner-actions">
+              <button id="demoConnectButton" class="button secondary" type="button">Connect my company</button>
+              <button id="demoChangeIntelligenceButton" class="button ghost" type="button">Change intelligence</button>
+              <button id="demoLeaveButton" class="button ghost" type="button">Leave demo</button>
+            </div>
           </div>
           <div id="operatorGrid" class="operator-grid">
             <div id="conversation" class="conversation">
@@ -735,10 +776,12 @@
 
         <section id="settingsView" class="view settings-view hidden">
           <div class="section-heading settings-heading">
-            <div>
+            <div class="settings-heading-copy">
+              <button id="settingsBackButton" class="button ghost settings-back-button" type="button">← Back to setup</button>
               <span class="eyebrow">INTELLIGENCE &amp; INFRASTRUCTURE</span>
               <h1>AMOS Intelligence routes automatically.</h1>
-              <p>Ask AMOS to do the work. It selects the most efficient qualified intelligence for each step, escalates when necessary, and keeps model choice out of your workflow.</p>
+              <p>AMOS Intelligence is available with an AMOS company subscription: 14-day free trial, then plans starting at $99/month. It selects the most efficient qualified intelligence for each step and escalates when necessary. AMOS Local and BYOK require no AMOS subscription.</p>
+              <p class="settings-availability-note">Change intelligence at any time here or from AMOS Desktop → Intelligence &amp; Settings (⌘,). Choosing intelligence never requires choosing a workspace.</p>
             </div>
             <div id="systemCard" class="system-card"></div>
           </div>
@@ -748,6 +791,10 @@
               <div id="managedProfileField" class="amos-routing-card hidden">
                 <span class="eyebrow accent">AUTOMATIC ROUTING</span>
                 <h2>AMOS Intelligence</h2>
+                <div class="intelligence-commercial-note">
+                  <strong>AMOS company subscription required</strong>
+                  <span>14-day free trial · Plans start at $99/month · Included credits apply first</span>
+                </div>
                 <p>
                   Qualification, task requirements, privacy, latency, and cost determine
                   the route. AMOS uses the least expensive model that has proven it can
@@ -771,9 +818,10 @@
                 <div>
                   <strong>Your model, this computer</strong>
                   <span>
-                    Choose a local profile or your own key. AMOS Intelligence needs a
-                    sign-in — use Northwind or My company. Recommended: a measured local
-                    profile or a provider key. Compact and Balanced stay available for
+                    Choose a local profile or your own key with no AMOS subscription.
+                    AMOS Intelligence requires an AMOS company subscription; Northwind
+                    includes limited hosted demo turns. Recommended: a measured local
+                    profile or provider key. Compact and Balanced stay available for
                     personal or ungoverned work.
                   </span>
                 </div>
@@ -917,7 +965,9 @@
                   AMOS Local is included with Desktop. The recommended path is a measured
                   profile or your own key. Compact and Balanced stay installable for
                   personal or ungoverned work and are badged, not recommended. Model
-                  downloads are resumable and remain installed across app updates.
+                  downloads are resumable and remain installed across app updates. After
+                  installation, choosing a model here automatically switches Intelligence
+                  to AMOS Local; you do not need to select the provider separately.
                 </p>
               </div>
               <div class="offline-actions">
@@ -929,7 +979,7 @@
             <ol id="offlineSetupSteps" class="offline-setup-steps" aria-label="Local intelligence setup">
               <li id="offlineSetupRuntime"><strong>AMOS Local runtime</strong><span>Included, verified, loopback-only, and managed by Desktop.</span></li>
               <li id="offlineSetupModel"><strong>Install a local model</strong><span>Choose the recommended model below; downloads are resumable.</span></li>
-              <li id="offlineSetupActivate"><strong>Choose how to use it</strong><span>Use the model with your AMOS company or switch to explicit local-only mode.</span></li>
+              <li id="offlineSetupActivate"><strong>Choose how to use it</strong><span>One click selects the model and AMOS Local. Keep your company connected, use a personal workspace, or enter local-only mode.</span></li>
             </ol>
             <div id="offlineModelList" class="offline-model-list"></div>
             <div class="offline-trust-note">

@@ -210,6 +210,51 @@ test("first-run personal local/BYO walks to cancelTask and a local receipt", asy
   assert.equal(requests.some((event) => event.event_type === "desktop_first_launch"), false);
 });
 
+test("selecting an installed model atomically switches provider, model, and boundary", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-local-select-"));
+  const settingsStore = new DesktopSettingsStore({
+    filePath: join(directory, "settings.json"),
+    ...identityEncrypt()
+  });
+  await settingsStore.write({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    apiKey: "prior-provider-key",
+    operatingMode: "personal"
+  });
+  const offlineState = {
+    runtime: { available: true },
+    manifest: { version: 8, trust: "release-signed", digest: "test" },
+    models: [{ id: "gpt-oss:20b", modelDisplayName: "GPT-OSS 20B", installed: true }]
+  };
+  const controller = new DesktopController({
+    userDataPath: directory,
+    settingsStore,
+    offlineManager: {
+      async refresh() { return offlineState; },
+      state() { return offlineState; },
+      openAiBaseUrl() { return "http://127.0.0.1:11434/v1"; }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+
+  await controller.activateLocalModel("gpt-oss:20b", "personal");
+  const personal = await settingsStore.read();
+  assert.equal(personal.provider, "ollama");
+  assert.equal(personal.model, "gpt-oss:20b");
+  assert.equal(personal.baseUrl, "http://127.0.0.1:11434/v1");
+  assert.equal(personal.apiKey, "");
+  assert.equal(personal.operatingMode, "personal");
+
+  await controller.activateLocalModel("gpt-oss:20b", "offline");
+  const offline = await settingsStore.read();
+  assert.equal(offline.provider, "ollama");
+  assert.equal(offline.model, "gpt-oss:20b");
+  assert.equal(offline.operatingMode, "offline");
+});
+
 test("a ready existing workspace is not sent back through first-run after upgrading", async () => {
   const { controller, workspace } = await firstRunHarness({ telemetryEnabled: null });
   await controller.settingsStore.write({

@@ -871,15 +871,19 @@ export class DesktopController {
     }
     const saved = await this.settingsStore.write({
       ...settings,
-      provider: "amos-hosted",
-      model: "auto",
-      baseUrl: "",
-      intelligenceProfile: "auto",
-      reasoningEffort: "",
+      ...(settings.provider === "amos-hosted"
+        ? {
+            provider: "amos-hosted",
+            model: "auto",
+            baseUrl: "",
+            intelligenceProfile: "auto",
+            reasoningEffort: ""
+          }
+        : {}),
       operatingMode: "online",
       workspace: demoWorkspace,
       onboardingBoundary: "northwind",
-      onboardingCompletedAt: settings.onboardingCompletedAt || new Date().toISOString()
+      onboardingCompletedAt: ""
     });
     this.clearEphemeralCompanyBoundary();
     this.record("auth", "Northwind Labs demo company connected");
@@ -887,11 +891,6 @@ export class DesktopController {
       await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
         boundary: "northwind"
       });
-    }
-    if (!settings.onboardingCompletedAt) {
-      await this.recordAcquisitionEvent(saved, "desktop_onboarding_completed", {
-        boundary: "northwind"
-      }, { once: true });
     }
     await this.refreshRemote({ notify: false });
     return this.state();
@@ -1731,6 +1730,12 @@ export class DesktopController {
     return remote.intelligenceStatus();
   }
 
+  async refreshDemoAccountStatus(settings) {
+    this.accountStatus = await this.accountStatusFor(settings);
+    await this.sendRemoteState();
+    return this.accountStatus;
+  }
+
   async notifyNewCompanyApprovals(settings) {
     const known = new Set(settings.notifiedApprovalIds || []);
     const pending = this.companyApprovals.filter((approval) => approval.status === "pending");
@@ -2287,6 +2292,11 @@ export class DesktopController {
       if (canceled) throw createAbortError();
       throw error;
     } finally {
+      if (settings.onboardingBoundary === "northwind" && settings.provider === "amos-hosted") {
+        await this.refreshDemoAccountStatus(settings).catch((error) => {
+          this.record("billing", `Could not refresh Northwind hosted-turn balance: ${error.message}`);
+        });
+      }
       if (this.activeTask?.id === taskId) this.activeTask = null;
       this.send("agent:status", { running: false, taskId });
     }

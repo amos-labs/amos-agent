@@ -69,6 +69,9 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   ]);
 
   assert.match(html, /AMOS Intelligence routes automatically/);
+  assert.match(html, /AMOS Intelligence is available with an AMOS company subscription: 14-day free trial, then plans starting at \$99\/month/);
+  assert.match(html, /AMOS company subscription required/);
+  assert.match(html, /AMOS Local and BYOK require no AMOS subscription/);
   assert.match(html, /id="managedProfileField" class="amos-routing-card hidden"/);
   assert.match(html, /id="advancedInfrastructureDetails"/);
   assert.match(html, /Advanced intelligence infrastructure/);
@@ -89,6 +92,35 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   assert.match(javascript, /syncProviderReasoning\(provider, model\)/);
   assert.match(javascript, /data sharing required/);
   assert.match(javascript, /opt into provider data sharing/);
+});
+
+test("intelligence settings stay independent from workspace selection and are native-menu discoverable", async () => {
+  const [javascript, html, preload, main] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(html, /class="onboarding-provider-link" data-open-settings/);
+  assert.match(html, /Intelligence settings/);
+  assert.match(html, /id="settingsBackButton"[^>]*>← Back to setup</);
+  assert.match(html, /Choosing intelligence never requires choosing a workspace/);
+  assert.match(javascript, /function returnFromIntelligenceSettings\(\) \{\s*showView\("operator"\);\s*\}/);
+  assert.match(
+    javascript,
+    /async function saveSettings[\s\S]*?render\(\);\s*showView\("settings"\);/
+  );
+  assert.match(
+    javascript,
+    /async function activateLocalModel[\s\S]*?render\(\);\s*showView\("settings"\);/
+  );
+  assert.match(preload, /"desktop:navigate"/);
+  assert.match(main, /label: "Intelligence & Settings…"/);
+  assert.match(main, /accelerator: "CommandOrControl\+,"/);
+  assert.match(main, /label: "Choose Workspace…"/);
+  assert.match(main, /navigateFromApplicationMenu\("settings"\)/);
+  assert.match(main, /navigateFromApplicationMenu\("choose-workspace"\)/);
 });
 
 test("routine approval review stays inside Desktop", async () => {
@@ -589,6 +621,11 @@ test("offline model cards badge unmeasured, conditional, experimental, and retir
   assert.match(javascript, /Retired — replace with Qwen 3\.8/);
   assert.match(javascript, /offlineCatalogFailures\(model\)/);
   assert.match(javascript, /model\.capabilityContract\?\.failures/);
+  assert.match(javascript, /identity\.textContent = `Model · \$\{model\.modelDisplayName \|\| model\.id\}`/);
+  assert.match(javascript, /Use in personal workspace/);
+  assert.match(javascript, /switch Intelligence to AMOS Local/);
+  assert.match(javascript, /currentBoundary !== "offline"/);
+  assert.match(css, /\.offline-model-card > \.offline-model-identity/);
   assert.match(css, /\.offline-model-labels \.unmeasured \{ color: var\(--coral\); \}/);
   assert.match(css, /\.offline-model-labels \.retired \{ color: var\(--coral\); \}/);
   assert.match(
@@ -613,13 +650,14 @@ test("chat renders only typed Platform-authorized connect actions", async () => 
 });
 
 test("first-run persists completion and requires local or BYO for My workspace", async () => {
-  const [javascript, html, preload, main, settings, controller] = await Promise.all([
+  const [javascript, html, preload, main, settings, controller, css] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
     readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
     readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
     readFile(new URL("../src/desktop/settingsStore.js", import.meta.url), "utf8"),
-    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
   ]);
   const onboarding = html.match(/<section id="onboardingView"([\s\S]*?)<section id="operatorView"/)?.[1] || "";
 
@@ -633,17 +671,40 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(javascript, /api\.completeOnboarding\(\{ boundary \}\)/);
   assert.match(preload, /desktop:complete-onboarding/);
   assert.match(main, /controller\.completeOnboarding\(input\)/);
-  assert.match(controller, /onboardingCompletedAt: settings\.onboardingCompletedAt \|\| new Date\(\)\.toISOString\(\)/);
+  assert.match(controller, /const completedAt = settings\.onboardingCompletedAt \|\| new Date\(\)\.toISOString\(\)/);
+  assert.match(controller, /onboardingCompletedAt: completedAt/);
+  assert.match(controller, /onboardingBoundary: "northwind",\s*onboardingCompletedAt: ""/);
 
-  assert.match(onboarding, /What do you want to operate\?/);
-  assert.match(onboarding, /<strong>My workspace<\/strong>/);
-  assert.match(onboarding, /id="demoModeButton" class="start-mode-card featured"/);
-  assert.match(onboarding, /<strong>Northwind demo<\/strong>/);
-  assert.match(onboarding, /<strong>My company<\/strong>/);
-  assert.match(onboarding, /Run locally or bring your own model key/);
-  assert.match(onboarding, /Qwen 3\.8 27B/);
-  assert.match(onboarding, /OpenAI · Claude · Kimi · compatible endpoints/);
+  assert.match(onboarding, /Connect your company\.<br>Put AMOS to work\./);
+  assert.match(onboarding, /Connect<\/span><i>→<\/i><span>Learn<\/span><i>→<\/i><span>Act<\/span><i>→<\/i><span>Measure/);
+  assert.match(onboarding, /id="connectButton" class="start-mode-card featured primary-path"/);
+  assert.match(onboarding, /<strong>Connect my company<\/strong>/);
+  assert.match(onboarding, /14-day free trial · Plans start at \$99\/month/);
+  assert.match(onboarding, /<strong>Explore the Northwind demo<\/strong>/);
+  assert.match(onboarding, /Limited hosted turns included · Local and BYOK available/);
+  assert.match(onboarding, /id="northwindIntelligenceChoice"/);
+  assert.match(onboarding, /Choose how to power the demo/);
+  assert.match(onboarding, /<strong>AMOS Intelligence<\/strong>/);
+  assert.match(onboarding, /AMOS subscription required for ongoing use\. Northwind includes limited hosted demo turns/);
+  assert.match(onboarding, /<strong>AMOS Local<\/strong>/);
+  assert.match(onboarding, /<strong>Bring my own key<\/strong>/);
+  assert.match(onboarding, /<strong>Use AMOS as a personal AI workspace<\/strong>/);
+  assert.match(onboarding, /No AMOS subscription required · AMOS Local · OpenAI · Claude · Grok · Kimi · compatible endpoints/);
+  assert.match(onboarding, /No AMOS subscription required\. Use an installed local model/);
+  assert.match(onboarding, /No AMOS subscription required\. Use OpenAI, Claude, Grok, Kimi/);
+  assert.match(javascript, /const intelligenceReady = Boolean\(startingPointSelected && state\.configured\)/);
+  assert.match(javascript, /renderStep\(elements\.providerCheck, intelligenceReady\)/);
+  assert.match(css, /#telemetryConsent\s*{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(css, /#telemetryConsent > div:first-child\s*{ min-width: 0; }/);
+  assert.match(css, /\.onboarding\s*{[\s\S]*?align-items: start;/);
   assert.match(html, /Choose AMOS Local, OpenAI, Anthropic \(Claude\), Kimi, or any OpenAI-compatible endpoint/);
+  assert.match(html, /id="demoConnectButton"[^>]*>Connect my company<\/button>/);
+  assert.match(html, /id="demoChangeIntelligenceButton"[^>]*>Change intelligence<\/button>/);
+  assert.match(html, /id="demoLeaveButton"[^>]*>Leave demo<\/button>/);
+  assert.match(javascript, /northwindUsageLabel/);
+  assert.match(javascript, /messagesRemaining/);
+  assert.match(javascript, /openDemoIntelligenceSettings/);
+  assert.match(javascript, /async function leaveDemo/);
   assert.match(javascript, /personalNeedsIntelligence/);
   assert.match(javascript, /Choose a local profile or your own key/);
   assert.match(
