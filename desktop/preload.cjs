@@ -170,6 +170,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   installUpdate: () => ipcRenderer.invoke("desktop:install-update"),
   resolveApproval: (id, approved) =>
     ipcRenderer.invoke("desktop:resolve-approval", { id, approved }),
+  resolveDecisionInput: (id, input) =>
+    ipcRenderer.invoke("desktop:resolve-decision-input", { id, ...(input || {}) }),
   on(channel, callback) {
     if (!eventChannels.has(channel)) throw new Error(`Unsupported AMOS Desktop event: ${channel}`);
     const listener = (_event, payload) => callback(payload);

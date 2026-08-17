@@ -163,8 +163,7 @@ const elements = Object.fromEntries(
     "refreshProjectsButton", "newProjectButton", "activityCenterScope", "projectRunFilter",
     "activityCenterEmpty", "activityCenterList", "projectModal", "projectForm",
     "projectModalTitle", "projectModalClose", "projectIdInput", "projectNameInput",
-    "projectInstructionsInput", "projectParallelInput", "projectTokenInput", "projectToolInput",
-    "projectWallTimeInput", "projectCostInput", "projectModalError", "projectCancelButton",
+    "projectInstructionsInput", "projectCostInput", "projectModalError", "projectCancelButton",
     "projectSubmitButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
@@ -543,6 +542,18 @@ function bindEvents() {
     }
   });
   api.on("approval:requested", (approval) => {
+    if (approval?.kind === "decision-input") {
+      if (!state) return;
+      const pending = Array.isArray(state.pendingInputs) ? state.pendingInputs : [];
+      if (!pending.some((item) => item.id === approval.id)) {
+        state.pendingInputs = [...pending, approval];
+      }
+      renderDecisions();
+      if (currentView !== "decisions") {
+        toast("AMOS needs your input. Open Decisions to answer.");
+      }
+      return;
+    }
     if (!eventMatchesActiveTask(approval)) {
       toast("A background run needs local approval. Open its Conversation to review.");
       return;
@@ -2686,10 +2697,8 @@ function projectCard(project, conversations) {
   const details = document.createElement("div");
   details.className = "task-card-details";
   for (const value of [
-    `${project.taskCount} task${project.taskCount === 1 ? "" : "s"}`,
-    `${project.runningCount}/${project.maxParallelRuns} running`,
-    `${compactNumber(project.defaultBudget?.tokenLimit)} tokens / run`,
-    `${formatUsdMicros(project.defaultBudget?.costLimitMicrousd)} / run`
+    `${project.taskCount} conversation${project.taskCount === 1 ? "" : "s"}`,
+    `${formatUsdMicros(project.defaultBudget?.costLimitMicrousd)} cap / conversation`
   ]) {
     const chip = document.createElement("span");
     chip.textContent = value;
@@ -2702,7 +2711,7 @@ function projectCard(project, conversations) {
     selectedProjectId = selected ? "" : project.id;
     renderProjects();
   });
-  const newTask = actionButton("New task", "secondary");
+  const newTask = actionButton("Start conversation", "secondary");
   newTask.disabled = project.archived || project.status !== "active";
   newTask.addEventListener("click", () => createTaskInProject(project, newTask));
   const edit = actionButton("Edit", "ghost");
@@ -2738,7 +2747,7 @@ function projectConversationList(conversations) {
   if (conversations.length === 0) {
     const empty = document.createElement("p");
     empty.className = "project-conversations-empty";
-    empty.textContent = "No conversations are assigned to this Project yet.";
+    empty.textContent = "No conversations in this workspace yet. Start one when you are ready.";
     section.append(empty);
     return section;
   }
@@ -2869,10 +2878,6 @@ function openProjectModal(project = null) {
   elements.projectModalTitle.textContent = project ? "Edit Project" : "Create a Project";
   elements.projectNameInput.value = project?.name || "";
   elements.projectInstructionsInput.value = project?.instructions || "";
-  elements.projectParallelInput.value = String(project?.maxParallelRuns || 4);
-  elements.projectTokenInput.value = String(budget.tokenLimit || 200_000);
-  elements.projectToolInput.value = String(budget.toolCallLimit || 200);
-  elements.projectWallTimeInput.value = String(Math.max(1, Math.round((budget.wallTimeLimitSeconds || 14_400) / 60)));
   elements.projectCostInput.value = String((budget.costLimitMicrousd || 50_000_000) / 1_000_000);
   elements.projectModalError.textContent = "";
   elements.projectModalError.classList.add("hidden");
@@ -2894,10 +2899,6 @@ async function submitProject(event) {
   const input = {
     name: elements.projectNameInput.value.trim(),
     instructions: elements.projectInstructionsInput.value.trim(),
-    maxParallelRuns: Number(elements.projectParallelInput.value),
-    tokenLimit: Number(elements.projectTokenInput.value),
-    toolCallLimit: Number(elements.projectToolInput.value),
-    wallTimeLimitSeconds: Number(elements.projectWallTimeInput.value) * 60,
     costLimitMicrousd: Math.round(Number(elements.projectCostInput.value) * 1_000_000)
   };
   setButtonBusy(elements.projectSubmitButton, true, "Saving…");
@@ -2936,17 +2937,18 @@ async function updateProject(project, changes, button) {
 async function createTaskInProject(project, button) {
   setButtonBusy(button, true, "Opening…");
   try {
-    const response = await api.startNewConversation({ kind: "general" });
-    const taskId = response.launch?.task?.remoteId || response.launch?.task?.id || response.launch?.taskId;
-    if (!taskId) throw new Error("AMOS did not return the new task identifier");
-    await api.assignTaskProject(taskId, project.id);
-    response.state = await api.state();
+    const response = await api.startNewConversation({
+      kind: "general",
+      projectId: project.id
+    });
     adoptOpenedTask(response);
-    toast(`Started a new task in ${project.name}.`);
+    elements.promptInput.value = "";
+    elements.promptInput.focus();
+    toast(`Started a conversation in ${project.name}.`);
   } catch (error) {
     toast(error.message, true);
   } finally {
-    if (button.isConnected) setButtonBusy(button, false, "New task");
+    if (button.isConnected) setButtonBusy(button, false, "Start conversation");
   }
 }
 
@@ -5765,9 +5767,10 @@ function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
   const proposals = Array.isArray(state.offlineProposals) ? state.offlineProposals : [];
+  const pendingInputs = Array.isArray(state.pendingInputs) ? state.pendingInputs : [];
   const pending = approvals.filter((approval) => approval.status === "pending");
   const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  const waitingCount = pending.length + proposals.length;
+  const waitingCount = pending.length + proposals.length + pendingInputs.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
   elements.workDecisionTabCount.textContent = String(waitingCount);
@@ -5811,13 +5814,16 @@ function renderDecisions() {
   }
 
   elements.pendingDecisions.replaceChildren();
-  if (pending.length === 0) {
+  if (pending.length === 0 && pendingInputs.length === 0) {
     elements.pendingDecisions.append(
       decisionEmpty(
-        sync.syncing ? "Checking for decisions…" : "Nothing is waiting for your approval."
+        sync.syncing ? "Checking for decisions…" : "Nothing is waiting for your decision."
       )
     );
   } else {
+    for (const request of pendingInputs) {
+      elements.pendingDecisions.append(decisionInputCard(request));
+    }
     for (const approval of pending) {
       elements.pendingDecisions.append(decisionCard(approval, true));
     }
@@ -6084,6 +6090,107 @@ async function removeOfflineProposal(proposal, button) {
     toast(error.message, true);
   } finally {
     setButtonBusy(button, false, "Remove draft");
+  }
+}
+
+function decisionInputCard(request) {
+  const card = document.createElement("article");
+  card.className = "decision-card pending decision-input";
+  card.dataset.inputId = request.id;
+  const content = document.createElement("div");
+  content.className = "decision-content";
+  const meta = document.createElement("div");
+  meta.className = "decision-meta";
+  const status = document.createElement("span");
+  status.className = "decision-status pending";
+  status.textContent = "needs input";
+  const time = document.createElement("time");
+  time.dateTime = request.requestedAt || "";
+  time.textContent = request.requestedAt ? new Date(request.requestedAt).toLocaleString() : "";
+  meta.append(status, time);
+  const title = document.createElement("h2");
+  title.textContent = request.title || "AMOS needs your input";
+  const summary = document.createElement("p");
+  summary.textContent = request.message || "";
+  content.append(meta, title, summary);
+  if (request.context) {
+    const context = document.createElement("small");
+    context.textContent = request.context;
+    content.append(context);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "decision-card-actions";
+  const form = document.createElement("form");
+  form.className = "decision-input-form";
+  const field = document.createElement("label");
+  field.className = "decision-input-field";
+  const fieldLabel = document.createElement("span");
+  fieldLabel.textContent = "Your answer";
+  const textarea = document.createElement("textarea");
+  textarea.rows = 3;
+  textarea.maxLength = 8000;
+  textarea.required = true;
+  textarea.placeholder = "Type the answer AMOS needs to continue…";
+  field.append(fieldLabel, textarea);
+  form.append(field);
+  if (Array.isArray(request.options) && request.options.length > 0) {
+    const chips = document.createElement("div");
+    chips.className = "decision-input-options";
+    for (const option of request.options) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "button ghost compact-button";
+      chip.textContent = option;
+      chip.addEventListener("click", () => {
+        textarea.value = option;
+        textarea.focus();
+      });
+      chips.append(chip);
+    }
+    form.append(chips);
+  }
+  const buttons = document.createElement("div");
+  buttons.className = "decision-input-actions";
+  const skip = document.createElement("button");
+  skip.type = "button";
+  skip.className = "button secondary";
+  skip.textContent = "Skip";
+  skip.addEventListener("click", () => resolveDecisionInput(request, "", skip, false));
+  const submit = document.createElement("button");
+  submit.type = "submit";
+  submit.className = "button primary";
+  submit.textContent = "Send answer";
+  buttons.append(skip, submit);
+  form.append(buttons);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    resolveDecisionInput(request, textarea.value, submit, true);
+  });
+  actions.append(form);
+  card.append(content, actions);
+  return card;
+}
+
+async function resolveDecisionInput(request, answer, button, answered) {
+  const label = button?.textContent || "Send answer";
+  if (button) setButtonBusy(button, true, answered ? "Sending…" : "Skipping…");
+  try {
+    const result = await api.resolveDecisionInput(request.id, {
+      answered,
+      answer
+    });
+    if (!result?.resolved) throw new Error("That question is no longer waiting.");
+    if (state) {
+      state.pendingInputs = (Array.isArray(state.pendingInputs) ? state.pendingInputs : [])
+        .filter((item) => item.id !== request.id);
+    }
+    renderDecisions();
+    toast(answered ? "Answer sent. AMOS can continue." : "Skipped. AMOS will continue without that answer.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button?.isConnected) setButtonBusy(button, false, label);
   }
 }
 

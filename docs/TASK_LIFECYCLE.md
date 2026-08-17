@@ -34,11 +34,16 @@ states what is established, what remains unresolved, and the best next step.
 
 ## Projects and supervised work
 
-Projects are durable, user-private operating areas supplied by AMOS Platform.
-They group tasks, bounded orientation instructions, portable resource
-references, and default token, cost, tool-call, wall-time, and parallel-run
-ceilings. They do not copy task transcripts and do not grant approval or
-execution authority.
+Projects are durable, user-private conversation workspaces supplied by AMOS
+Platform. They group conversations, shared orientation instructions, portable
+resource references, and a user-facing dollar cap. Token, tool-call, wall-time,
+and parallel-run ceilings stay internal safety fuses. They do not copy
+transcripts and do not grant approval or execution authority.
+
+A Project starts a conversation. Tasks remain the internal unit of work and are
+not a user-facing control. When AMOS needs a consequential answer, it parks the
+question in Decisions with `desktop_request_decision` instead of inventing a
+second input surface.
 
 The Desktop **Activity Center** projects the Platform task-run inbox across all
 Projects. It shows bounded progress, cumulative usage, stalled work, budget

@@ -653,6 +653,12 @@ function registerIpc() {
   ipcMain.handle("desktop:resolve-approval", (_event, input) =>
     controller.resolveApproval(input?.id, input?.approved)
   );
+  ipcMain.handle("desktop:resolve-decision-input", (_event, input) =>
+    controller.resolveDecisionInput(input?.id, {
+      answered: input?.answered !== false,
+      answer: input?.answer
+    })
+  );
   ipcMain.handle("desktop:choose-workspace", async () => {
     const result = await dialog.showOpenDialog(window, {
       title: "Choose the folders AMOS may work in",

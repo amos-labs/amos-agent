@@ -128,6 +128,7 @@ import { createBrowserVisualTools } from "../tools/browserVisual.js";
 import { createLocalPreviewTool } from "../tools/localPreview.js";
 import { createAutomationSetupTool } from "../tools/automationSetup.js";
 import { createConsultativeProposalTool } from "../tools/consultativeState.js";
+import { createDecisionInputTool } from "../tools/decisionInput.js";
 import { createCodeWorkspaceTool } from "../tools/codeWorkspace.js";
 import { createAttachmentTools } from "../tools/attachments.js";
 import {
@@ -372,6 +373,7 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
+      pendingInputs: this.pendingDecisionInputs(),
       localTaskGrant: this.approvals.state(),
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
@@ -2842,6 +2844,50 @@ export class DesktopController {
     return { resolved: false };
   }
 
+  resolveDecisionInput(id, input = {}) {
+    const payload = {
+      answered: input?.answered !== false,
+      answer: String(input?.answer || "")
+    };
+    const resolved = this.approvals.resolveInput?.(id, payload)
+      ? { resolved: true }
+      : null;
+    if (!resolved) {
+      for (const lane of this.runManager.nonTerminal()) {
+        if (lane.approvals?.resolveInput?.(id, payload)) {
+          void this.sendRemoteState();
+          return { resolved: true, taskId: lane.id };
+        }
+      }
+      return { resolved: false };
+    }
+    void this.sendRemoteState();
+    return resolved;
+  }
+
+  pendingDecisionInputs() {
+    const items = [];
+    const seen = new Set();
+    const collect = (bridge, lane = null) => {
+      if (typeof bridge?.pendingRequests !== "function") return;
+      for (const request of bridge.pendingRequests()) {
+        if (!request?.id || seen.has(request.id)) continue;
+        seen.add(request.id);
+        items.push({
+          ...request,
+          runId: lane?.id || "",
+          taskRecordId: lane?.taskRecordId || this.activeTaskRecordId || "",
+          contextKey: lane?.contextKey || this.activeContextKey || ""
+        });
+      }
+    };
+    collect(this.approvals, this.runManager.current() || this.runManager.selected());
+    for (const lane of this.runManager.nonTerminal()) {
+      collect(lane.approvals, lane);
+    }
+    return items;
+  }
+
   removeCanvas(id) {
     const existing = this.canvases.list().find((canvas) => canvas.id === id);
     for (const block of existing?.blocks || []) {
@@ -3354,6 +3400,10 @@ export class DesktopController {
       ? NEW_CONVERSATION_TITLE
       : "New task";
     const title = String(input.title || defaultTitle).trim().slice(0, 160) || defaultTitle;
+    const requestedProjectId = String(input.projectId || "").trim();
+    if (requestedProjectId && !isUuid(requestedProjectId)) {
+      throw new Error("That Project identifier is invalid");
+    }
     const settings = await this.settingsStore.read();
     await this.backgroundSelectedRun(settings);
     this.automationSetup = null;
@@ -3378,7 +3428,8 @@ export class DesktopController {
         kind,
         status: "active",
         workspaceMode,
-        workspace
+        workspace,
+        ...(requestedProjectId ? { projectId: requestedProjectId } : {})
       });
       task = await this.taskStore.select(scope, task.id);
     }
@@ -3398,6 +3449,14 @@ export class DesktopController {
         });
         task = await this.retainRemoteTask(settings, registered.task, task);
         this.upsertRemoteTask(registered.task);
+        if (requestedProjectId) {
+          const assigned = await remote.assignTaskToProject(
+            registered.task.id || id,
+            requestedProjectId
+          );
+          task = await this.retainRemoteTask(settings, assigned.task, task);
+          this.upsertRemoteTask(assigned.task);
+        }
       } catch (error) {
         this.record("task", `Task will sync when Platform is available: ${error.message}`);
       }
@@ -3413,6 +3472,7 @@ export class DesktopController {
       task_id: id,
       previous_context_key: previousContextKey,
       kind,
+      project_id: requestedProjectId || null,
       replay_allowed: false
     });
     this.send("canvas:changed", this.canvases.state());
@@ -4668,6 +4728,7 @@ export class DesktopController {
     });
     const extraTools = [
       createWorkSurfaceRequestTool(),
+      createDecisionInputTool(),
       createCanvasTool({
         present: (spec) => this.presentCanvas(spec)
       }),
@@ -4822,7 +4883,9 @@ export class DesktopController {
             ? PERSONAL_SYSTEM_PROMPT
             : credentials?.demo
               ? DEMO_SYSTEM_PROMPT
-              : SYSTEM_PROMPT, settings, config)}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly
+              : SYSTEM_PROMPT, settings, config, {
+                project: activeProjectForRuntime(this.projects, taskRecord)
+              })}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly
           ? "\n\nThis task is context-only. No local workspace is granted, and local shell, file, code, Git, and document-generation tools are unavailable."
           : ""}`,
         extraTools,
@@ -6210,6 +6273,7 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
+      pendingInputs: this.pendingDecisionInputs(),
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       briefings: structuredClone(this.briefings),
@@ -6741,7 +6805,7 @@ function validateHybridRoutingSettings(settings, configFrom) {
   }
 }
 
-export function desktopSystemPrompt(basePrompt, settings, config) {
+export function desktopSystemPrompt(basePrompt, settings, config, extras = {}) {
   const workspace = config?.safety?.workspaceRoot || settings?.workspace || homedir();
   const focus = config?.safety?.workspaceFocus || workspace;
   const focusNote = focus && focus !== workspace
@@ -6760,6 +6824,7 @@ ${settings?.operatingMode === "offline"
     : "- For generated HTML/CSS/JavaScript apps, use desktop_preview_app to serve and inspect the workspace output. Do not start an unmanaged background web server or ask browser_open to open localhost or a file URL."}
 - Local approval policy: ${desktopLocalApprovalDescription(settings)}
 - This local policy never approves AMOS company operations, external-system writes, or governed decisions.
+${projectOrientationPrompt(extras.project)}
 ${settings?.intelligenceRoles?.enabled
     ? "- Coding-role pairing is on for coding workflows only. AMOS Desktop deterministically requires plan, implementation, independent check, and any necessary repair before completion. Report every stage through desktop_report_coding_stage; do not infer time pressure or silently skip a stage. Non-coding work stays on its normal intelligence route. Use desktop_spawn_subagent for isolated Git worktrees, and collect every spawned child before completing the current stage. Children cannot spawn children or widen company authority."
     : ""}`;
@@ -7231,6 +7296,25 @@ function localRouterFailureCode(error) {
   if (message.includes("missing") || message.includes("include")) return "artifact_missing";
   if (message.includes("timed out")) return "installation_timeout";
   return "router_unavailable";
+}
+
+function activeProjectForRuntime(library, task = null) {
+  const projectId = String(task?.projectId || "").trim();
+  if (!projectId) return null;
+  const projects = Array.isArray(library?.projects) ? library.projects : [];
+  return projects.find((project) => project.id === projectId) || null;
+}
+
+function projectOrientationPrompt(project) {
+  const instructions = String(project?.instructions || "").trim();
+  if (!project || !instructions) return "";
+  return [
+    "",
+    `Active Project: ${String(project.name || "Untitled Project").trim() || "Untitled Project"}`,
+    "- Shared Project instructions are orientation only. They do not grant approval, spending, or execution authority.",
+    instructions,
+    ""
+  ].join("\n");
 }
 
 function emptyProjectsState() {
