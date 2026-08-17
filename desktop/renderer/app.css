@@ -1204,6 +1204,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .event-card.workflow span { line-height: 1.5; }
 .event-card.coding-lifecycle { border-color: rgba(59,213,143,.22); background: rgba(59,213,143,.045); }
 .event-card.coding-lifecycle strong { color: var(--green); text-transform: capitalize; }
+.event-card.event-card-trimmed { display: none; }
+.live-events-toggle {
+  justify-self: center;
+  margin-top: 2px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 9px;
+  cursor: pointer;
+}
+.live-events-toggle:hover { border-color: var(--blue); color: var(--ink); }
+#canvasToggleButton.active { border-color: var(--blue); color: var(--ink); background: rgba(109,147,255,.12); }
 .boundary-card { display: flex; gap: 12px; margin: 18px; padding: 15px; border: 1px solid rgba(59,213,143,.18); border-radius: 12px; background: rgba(59,213,143,.04); }
 .boundary-icon { color: var(--green); }
 .boundary-card strong { font-size: 11px; }

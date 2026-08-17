@@ -59,6 +59,7 @@ const providerDefaults = {
   }
 };
 
+const LIVE_EVENT_VISIBLE_COUNT = 3;
 let state = null;
 let currentView = "operator";
 let currentWorkTab = "open";
@@ -170,7 +171,7 @@ const elements = Object.fromEntries(
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
     "capsulePreviewItems", "capsulePreviewWarning", "capsulePreviewCancelButton",
     "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton", "canvasSaveButton", "canvasScheduleButton",
-    "canvasCloseButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasEmptyTitle",
+    "canvasCloseButton", "canvasToggleButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasEmptyTitle",
     "canvasEmptyMessage", "canvasBlocks", "briefingLibrary", "savedViewList", "briefingTemplateList",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
@@ -376,6 +377,7 @@ function bindActions() {
     elements.promptInput.focus();
   });
   elements.canvasCloseButton.addEventListener("click", closeCanvasSidecar);
+  elements.canvasToggleButton.addEventListener("click", toggleCanvasSidecar);
   elements.canvasSaveButton.addEventListener("click", saveActiveBriefing);
   elements.canvasScheduleButton.addEventListener("click", openBriefingScheduleModal);
   elements.briefingScheduleKind.addEventListener("change", renderBriefingScheduleFields);
@@ -3519,6 +3521,10 @@ function renderCanvas() {
   );
   elements.operatorGrid.classList.toggle("has-context", sidecarVisible);
   elements.canvasSidecar.classList.toggle("hidden", !sidecarVisible);
+  const canvasAvailable = setupVisible || Boolean(canvas);
+  elements.canvasToggleButton.classList.toggle("hidden", !canvasAvailable || currentView !== "operator");
+  elements.canvasToggleButton.setAttribute("aria-pressed", sidecarVisible ? "true" : "false");
+  elements.canvasToggleButton.classList.toggle("active", sidecarVisible);
   elements.contextResizeHandle.classList.toggle("hidden", !sidecarVisible);
   elements.automationSetupSurface.classList.toggle("hidden", !setupVisible);
   elements.canvasSurface.classList.toggle("hidden", setupVisible);
@@ -5062,6 +5068,15 @@ function closeCanvasSidecar() {
   canvasSidecarOpen = false;
   renderCanvas();
   elements.promptInput.focus();
+}
+
+function toggleCanvasSidecar() {
+  // A manual toggle should win over the auto-open heuristic for this view, so
+  // just flip the flag and re-render. Closing behaves exactly like the ×
+  // button; opening shows the most recent canvas.
+  canvasSidecarOpen = !canvasSidecarOpen;
+  renderCanvas();
+  if (!canvasSidecarOpen) elements.promptInput.focus();
 }
 
 async function removeCanvas(id) {
@@ -8164,34 +8179,81 @@ function renderLiveEvent(event) {
   const card = document.createElement("div");
   card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}${event.type === "coding_lifecycle" ? " coding-lifecycle" : ""}`;
   const title = document.createElement("strong");
-  title.textContent =
-    event.type === "workflow"
-      ? `◇ ${event.title}`
-      : event.type === "coding_lifecycle"
-      ? `↻ Coding · ${humanizeTool(event.state?.role || event.phase || "workflow")}`
-      : event.type === "phase"
-      ? `◌ ${event.phase}`
-      : event.type === "tool_start"
-      ? `→ ${event.name}`
-      : event.type === "tool_error"
-        ? `× ${event.name}`
-        : `✓ ${event.name}`;
+  // Tool events carry `name`; phase/workflow/coding events carry their own
+  // label. Every other event type (intelligence, context_compiled, text, …)
+  // has neither, so label it by summary/type instead of printing `undefined`.
+  const fallbackLabel = event.name || event.title || event.summary || humanizeTool(String(event.type || "event"));
+  if (event.type === "workflow") {
+    title.textContent = `◇ ${event.title || fallbackLabel}`;
+  } else if (event.type === "coding_lifecycle") {
+    title.textContent = `↻ Coding · ${humanizeTool(event.state?.role || event.phase || "workflow")}`;
+  } else if (event.type === "phase") {
+    title.textContent = `◌ ${event.phase || fallbackLabel}`;
+  } else if (event.type === "tool_start") {
+    title.textContent = `→ ${event.name || fallbackLabel}`;
+  } else if (event.type === "tool_error") {
+    title.textContent = `× ${event.name || fallbackLabel}`;
+  } else {
+    title.textContent = event.name ? `✓ ${event.name}` : `◌ ${fallbackLabel}`;
+  }
   const detail = document.createElement("span");
-  detail.textContent =
-    event.type === "workflow"
-      ? `${event.steps?.join(" → ") || event.summary}${event.doneWhen ? ` · Done when: ${event.doneWhen}` : ""}`
-      : event.type === "coding_lifecycle"
-      ? event.summary
-      : event.type === "phase"
-      ? event.summary
-      : event.type === "tool_error"
-      ? event.error
-      : event.type === "tool_start"
-        ? humanizeTool(event.name)
-        : "Completed with a recorded result";
+  if (event.type === "workflow") {
+    detail.textContent = `${event.steps?.join(" → ") || event.summary}${event.doneWhen ? ` · Done when: ${event.doneWhen}` : ""}`;
+  } else if (event.type === "coding_lifecycle") {
+    detail.textContent = event.summary || "";
+  } else if (event.type === "phase") {
+    detail.textContent = event.summary || "";
+  } else if (event.type === "tool_error") {
+    detail.textContent = event.error || "Tool returned an error";
+  } else if (event.type === "tool_start") {
+    detail.textContent = humanizeTool(event.name || "");
+  } else if (event.type === "tool_end") {
+    detail.textContent = "Completed with a recorded result";
+  } else {
+    // Nameless event: the title already shows the summary, so only add detail
+    // when there is a distinct summary to avoid duplicating the title.
+    detail.textContent = event.summary && event.summary !== fallbackLabel ? event.summary : "";
+  }
   card.append(title, detail);
   elements.liveEvents.append(card);
+  trimLiveEvents();
   elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
+// Default the work stream to the most recent few steps. Older cards stay in
+// the DOM (hidden) so a single "show all" reveals them, and a control at the
+// bottom of the expanded list collapses back down.
+function trimLiveEvents() {
+  const container = elements.liveEvents;
+  if (!container) return;
+  const cards = Array.from(container.querySelectorAll(".event-card"));
+  const expanded = container.classList.contains("expanded");
+  const overflow = Math.max(0, cards.length - LIVE_EVENT_VISIBLE_COUNT);
+  cards.forEach((card, index) => {
+    card.classList.toggle("event-card-trimmed", !expanded && index < overflow);
+  });
+  let toggle = container.querySelector(".live-events-toggle");
+  if (cards.length <= LIVE_EVENT_VISIBLE_COUNT) {
+    toggle?.remove();
+    return;
+  }
+  if (!toggle) {
+    toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "live-events-toggle";
+    toggle.addEventListener("click", () => {
+      const nowExpanded = container.classList.toggle("expanded");
+      trimLiveEvents();
+      if (!nowExpanded) {
+        container.scrollIntoView({ block: "nearest" });
+      }
+      elements.messages.scrollTop = elements.messages.scrollHeight;
+    });
+    container.append(toggle);
+  }
+  toggle.textContent = expanded
+    ? `Show fewer steps ↑`
+    : `Show ${overflow} earlier step${overflow === 1 ? "" : "s"} ↓`;
 }
 
 const CONSEQUENTIAL_RECEIPT_STATES = new Set([
