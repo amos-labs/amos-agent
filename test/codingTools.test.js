@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCodingTools, parsePatchPaths, runProgram } from "../src/tools/coding.js";
 import { createCodeWorkspaceTool } from "../src/tools/codeWorkspace.js";
 import { DesktopCanvasManager } from "../src/desktop/canvas.js";
+import { createWorkspaceFocusTool, pathResolutionBase, resolveDefaultWorkspacePath } from "../src/util/workspaceFocus.js";
 
 test("patch paths are workspace-relative and reject traversal", () => {
   assert.deepEqual(
@@ -143,4 +144,122 @@ test("coding work surface derives its tree and diff directly from the workspace"
   assert.equal(JSON.stringify(canvas).includes("never-render-this"), false);
   assert.equal(JSON.stringify(canvas).includes("still-never-render-this"), false);
   assert.equal(Object.hasOwn(tool.parameters.properties, "content"), false);
+});
+
+async function gitInit(root) {
+  const options = { cwd: root, timeoutMs: 10_000, maxOutputBytes: 100_000 };
+  for (const command of [
+    ["init", "-b", "main"],
+    ["config", "user.email", "test@example.com"],
+    ["config", "user.name", "AMOS Test"],
+    ["config", "commit.gpgsign", "false"]
+  ]) {
+    const result = await runProgram("git", command, options);
+    assert.equal(result.ok, true, result.stderr);
+  }
+}
+
+test("inspecting a parent grant catalogs nested repos instead of walking them as one project", async () => {
+  const grant = await mkdtemp(join(tmpdir(), "amos-parent-grant-"));
+  const child = join(grant, "amos-agent-continuity");
+  await mkdir(child);
+  await writeFile(join(child, "package.json"), JSON.stringify({ name: "amos-agent" }));
+  await gitInit(child);
+  await writeFile(join(grant, "notes.txt"), "parent notes\n");
+  const tools = new Map(createCodingTools().map((tool) => [tool.name, tool]));
+  const context = {
+    config: {
+      safety: {
+        workspaceRoot: grant,
+        allowOutsideWorkspace: false,
+        maxOutputBytes: 24_000
+      }
+    }
+  };
+  const briefing = await tools.get("desktop_inspect_project").handler({}, context);
+  assert.equal(briefing.kind, "workspace_catalog");
+  assert.equal(briefing.git.repository, false);
+  assert.equal(briefing.projects[0].path, "amos-agent-continuity");
+  assert.equal(briefing.projects[0].name, "amos-agent");
+  assert.match(briefing.suggested_tasks[0], /desktop_focus_workspace/);
+});
+
+test("workspace focus keeps git and file defaults inside the nested work item", async () => {
+  const grant = await mkdtemp(join(tmpdir(), "amos-focus-grant-"));
+  const child = join(grant, "amos-agent-continuity");
+  await mkdir(child);
+  await writeFile(join(child, "app.js"), "const answer = 41;\n");
+  await gitInit(child);
+  await runProgram("git", ["add", "app.js"], { cwd: child, timeoutMs: 10_000, maxOutputBytes: 100_000 });
+  await runProgram("git", ["commit", "-m", "initial"], { cwd: child, timeoutMs: 10_000, maxOutputBytes: 100_000 });
+  const tools = new Map([
+    ...createCodingTools().map((tool) => [tool.name, tool]),
+    ["desktop_focus_workspace", createWorkspaceFocusTool()]
+  ]);
+  const context = {
+    config: {
+      safety: {
+        workspaceRoot: grant,
+        allowOutsideWorkspace: false,
+        autoApproveWrites: true,
+        autoApproveKinds: ["code-patch"],
+        maxOutputBytes: 24_000
+      }
+    },
+    approvals: { confirm: async () => true }
+  };
+  const focused = await tools.get("desktop_focus_workspace").handler({ path: "amos-agent-continuity" }, context);
+  assert.equal(focused.path, "amos-agent-continuity");
+  const status = await tools.get("git_status").handler({}, context);
+  assert.equal(status.ok, true);
+  assert.match(status.stdout, /## main/);
+  const applied = await tools.get("apply_patch").handler({
+    patch: "--- a/amos-agent-continuity/app.js\n+++ b/amos-agent-continuity/app.js\n@@ -1 +1 @@\n-const answer = 41;\n+const answer = 42;\n",
+    reason: "Correct the nested file"
+  }, context);
+  assert.equal(applied.ok, true, applied.stderr);
+  assert.equal(await readFile(join(child, "app.js"), "utf8"), "const answer = 42;\n");
+});
+
+test("focus path resolution is deterministic: grant-root segments win, focus-only segments nest", async () => {
+  const grant = await mkdtemp(join(tmpdir(), "amos-ambiguous-grant-"));
+  const child = join(grant, "nested-repo");
+  await mkdir(child);
+  await mkdir(join(child, "src"), { recursive: true });
+  await mkdir(join(grant, "shared"), { recursive: true });
+  await mkdir(join(child, "shared"), { recursive: true });
+  const safety = { workspaceRoot: grant, workspaceFocus: child, allowOutsideWorkspace: false };
+  const canonicalChild = await realpath(child);
+  // "." means the focus
+  assert.equal(resolveDefaultWorkspacePath(safety, "."), canonicalChild);
+  // grant-only segment resolves grant-relative
+  assert.equal(pathResolutionBase(grant, child, "nested-repo/src"), "grant");
+  // focus-only segment resolves focus-relative
+  assert.equal(pathResolutionBase(grant, child, "src/tools"), "focus");
+  assert.equal(resolveDefaultWorkspacePath(safety, "src/tools"), join(canonicalChild, "src", "tools"));
+  // ambiguous segment present in both resolves grant-relative
+  assert.equal(pathResolutionBase(grant, child, "shared"), "grant");
+  // traversal stays grant-relative (and pathSafety still fences it)
+  assert.equal(pathResolutionBase(grant, child, "../outside"), "grant");
+  // no focus bound: everything is grant-relative
+  assert.equal(pathResolutionBase(grant, grant, "src"), "grant");
+});
+
+test("desktop_focus_workspace rejects a missing folder and . returns to the grant root", async () => {
+  const grant = await mkdtemp(join(tmpdir(), "amos-focus-reset-"));
+  const child = join(grant, "child");
+  await mkdir(child);
+  const tools = new Map([["desktop_focus_workspace", createWorkspaceFocusTool()]]);
+  const context = {
+    config: { safety: { workspaceRoot: grant, allowOutsideWorkspace: false, maxOutputBytes: 24_000 } }
+  };
+  await assert.rejects(
+    tools.get("desktop_focus_workspace").handler({ path: "does-not-exist" }, context),
+    /existing folder inside the grant/
+  );
+  await tools.get("desktop_focus_workspace").handler({ path: "child" }, context);
+  assert.equal(context.config.safety.workspaceFocus, await realpath(child));
+  const reset = await tools.get("desktop_focus_workspace").handler({ path: "." }, context);
+  assert.equal(reset.path, ".");
+  assert.equal(context.config.safety.workspaceFocus, await realpath(grant));
 });

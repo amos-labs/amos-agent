@@ -73,6 +73,7 @@ const CORE_NAMES = new Set([
 
 const EXACT_TOOLKITS = new Map([
   ["run_bash", "workspace"],
+  ["desktop_focus_workspace", "workspace"],
   ["desktop_inspect_project", "workspace"],
   ["search_files", "workspace"],
   ["git_status", "workspace"],

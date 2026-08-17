@@ -15,6 +15,7 @@ import {
   normalizeSpreadsheetSpec
 } from "../artifacts/spreadsheetSpec.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
+import { resolveDefaultWorkspacePath } from "../util/workspaceFocus.js";
 
 const CALCULATION_OPERATIONS = Object.freeze([
   "add",
@@ -139,8 +140,8 @@ export async function createSpreadsheetArtifact(args, context, { present = null 
   const root = context.config.safety.workspaceRoot;
   const canonicalRoot = resolveWorkspacePath(root, ".", false);
   const relativePath = `${normalizedBasePath(args.path)}.xlsx`;
-  const absolutePath = resolveWorkspacePath(
-    root,
+  const absolutePath = resolveDefaultWorkspacePath(
+    context.config.safety,
     relativePath,
     context.config.safety.allowOutsideWorkspace
   );

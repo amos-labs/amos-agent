@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
+import { workspaceFocusPath } from "../util/workspaceFocus.js";
 import { runProgram } from "./coding.js";
 
 const IGNORED = new Set([
@@ -49,7 +50,7 @@ export function createCodeWorkspaceTool({ present }) {
       }
     },
     async handler(args, context) {
-      const root = context.config.safety.workspaceRoot;
+      const root = workspaceFocusPath(context.config.safety);
       const canonicalRoot = resolveWorkspacePath(root, ".", false);
       const scope = ["working", "staged", "all"].includes(args.scope)
         ? args.scope

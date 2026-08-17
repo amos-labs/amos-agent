@@ -68,6 +68,12 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
         3,
         1,
         12
+      ),
+      maxModelTransientRetries: intFromEnv(
+        env.AMOS_AGENT_MAX_MODEL_TRANSIENT_RETRIES,
+        2,
+        0,
+        4
       )
     }
   };

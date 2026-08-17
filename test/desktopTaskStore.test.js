@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
+import { taskWorkspaceFocus } from "../src/desktop/controller.js";
 
 function codec() {
   return {
@@ -42,10 +43,11 @@ test("DesktopTaskStore encrypts and isolates task metadata by account", async ()
     contextKey: "task:task-1",
     title: "Build weekly scorecard",
     objective: "Use password=hunter2 to build the governed scorecard",
-    workspace: { localPath: "/private/workspace", label: "AMOS Platform" }
+    workspace: { localPath: "/private/workspace", focusPath: "/private/workspace/amos-agent", label: "AMOS Platform" }
   });
 
   assert.equal(task.objective, "Use password=[REDACTED] to build the governed scorecard");
+  assert.equal(task.workspace.focusPath, "/private/workspace/amos-agent");
   assert.equal((await store.list(owner)).length, 1);
   assert.equal((await store.list(other)).length, 0);
   assert.doesNotMatch(await readFile(filePath, "utf8"), /weekly scorecard|private\/workspace/);
@@ -186,4 +188,26 @@ test("DesktopTaskStore supports all explicit workspace fork modes", async () => 
     assert.equal(task.workspaceMode, workspaceMode);
     assert.equal(task.workspace.localPath, workspaceMode === "context_only" ? undefined : `/workspace/${index}`);
   }
+});
+
+test("taskWorkspaceFocus keeps a live nested focus and drops a stale one", async () => {
+  const grant = await mkdtemp(join(tmpdir(), "amos-focus-grant-"));
+  await mkdir(join(grant, "nested-repo"));
+  const task = {
+    workspaceMode: "same_directory",
+    workspace: { localPath: grant, focusPath: "nested-repo" }
+  };
+  const settings = { workspace: grant };
+  assert.equal(taskWorkspaceFocus(task, settings), "nested-repo");
+  const stale = {
+    workspaceMode: "same_directory",
+    workspace: { localPath: grant, focusPath: "deleted-repo" }
+  };
+  assert.equal(taskWorkspaceFocus(stale, settings), "");
+  const escaped = {
+    workspaceMode: "same_directory",
+    workspace: { localPath: grant, focusPath: "../outside" }
+  };
+  assert.equal(taskWorkspaceFocus(escaped, settings), "");
+  assert.equal(taskWorkspaceFocus({ workspaceMode: "context_only", workspace: {} }, settings), "");
 });

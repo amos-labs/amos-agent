@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { basename } from "node:path";
 import { resolveWorkspacePath } from "../util/pathSafety.js";
+import { resolveDefaultWorkspacePath } from "../util/workspaceFocus.js";
 
 export function createBashTool() {
   return {
@@ -34,8 +35,8 @@ export function createBashTool() {
       const command = String(args.command || "").trim();
       if (!command) throw new Error("command is required");
 
-      const cwd = resolveWorkspacePath(
-        context.config.safety.workspaceRoot,
+      const cwd = resolveDefaultWorkspacePath(
+        context.config.safety,
         args.workdir || ".",
         context.config.safety.allowOutsideWorkspace
       );
