@@ -13,6 +13,7 @@ export const CANVAS_BLOCK_TYPES = Object.freeze([
   "diff",
   "document",
   "spreadsheet",
+  "presentation",
   "browser",
   "link",
   "sources",
@@ -55,6 +56,9 @@ const MAX_DOCUMENT_DIAGNOSTICS = 20;
 const MAX_DOCUMENT_PREVIEW_PAGES = 12;
 const MAX_SPREADSHEET_SHEETS = 32;
 const MAX_SPREADSHEET_CHECKS = 300;
+const MAX_PRESENTATION_DIAGNOSTICS = 20;
+const MAX_PRESENTATION_PREVIEW_SLIDES = 16;
+const MAX_PRESENTATION_TITLES = 40;
 const MAX_PLAN_SECTIONS = 7;
 const MAX_PLAN_ITEMS = 64;
 const MAX_PLAN_ACTIONS = 4;
@@ -545,6 +549,68 @@ function normalizeBlock(input, index, canvasSource) {
     };
   }
 
+  if (type === "presentation") {
+    const artifact = normalizePresentationArtifact(
+      block.artifact,
+      `blocks[${index}].artifact`
+    );
+    const verification = object(
+      block.verification || {},
+      `blocks[${index}].verification must be an object`
+    );
+    const diagnostics = array(
+      block.diagnostics || [],
+      `blocks[${index}].diagnostics`,
+      MAX_PRESENTATION_DIAGNOSTICS
+    );
+    const slidePreview = block.slide_preview || block.slidePreview || {};
+    const titles = array(
+      verification.titles || [],
+      `blocks[${index}].verification.titles`,
+      MAX_PRESENTATION_TITLES
+    ).map((title, titleIndex) =>
+      text(title, `blocks[${index}].verification.titles[${titleIndex}]`, 160)
+    );
+    return {
+      ...common,
+      artifact,
+      kind: optionalText(block.kind, `blocks[${index}].kind`, 40),
+      style: optionalText(block.style, `blocks[${index}].style`, 40),
+      slideCount: boundedInteger(
+        block.slide_count || block.slideCount || titles.length || 1,
+        `blocks[${index}].slide_count`,
+        1,
+        MAX_PRESENTATION_TITLES
+      ),
+      diagnostics: diagnostics.map((diagnostic, diagnosticIndex) =>
+        normalizePresentationDiagnostic(
+          diagnostic,
+          `blocks[${index}].diagnostics[${diagnosticIndex}]`
+        )
+      ),
+      verification: {
+        verified: verification.verified === true,
+        slideCount: boundedInteger(
+          verification.slideCount ?? verification.slide_count ?? titles.length ?? 1,
+          `blocks[${index}].verification.slide_count`,
+          1,
+          MAX_PRESENTATION_TITLES
+        ),
+        extractedCharacters: boundedInteger(
+          verification.extractedCharacters ?? verification.extracted_characters ?? 0,
+          `blocks[${index}].verification.extracted_characters`,
+          0,
+          200_000
+        ),
+        titles
+      },
+      slidePreview: normalizePresentationSlidePreview(
+        slidePreview,
+        `blocks[${index}].slide_preview`
+      )
+    };
+  }
+
   if (type === "browser") {
     const viewport = object(block.viewport || {}, `blocks[${index}].viewport must be an object`);
     const localPreviewAttested = block[LOCAL_PREVIEW_ATTESTATION] === true;
@@ -980,6 +1046,83 @@ function normalizeSpreadsheetArtifact(input, path) {
     sha256,
     verified: artifact.verified === true
   };
+}
+
+function normalizePresentationArtifact(input, path) {
+  const artifact = object(input, `${path} must be an object`);
+  const artifactPath = text(artifact.path, `${path}.path`, 1_000);
+  const portablePath = artifactPath.replaceAll("\\", "/");
+  if (
+    portablePath.startsWith("/") ||
+    /^[a-z]:\//i.test(portablePath) ||
+    portablePath.split("/").includes("..") ||
+    !portablePath.toLowerCase().endsWith(".pptx")
+  ) {
+    throw new Error(`${path}.path must be a workspace-relative PPTX path`);
+  }
+  const sha256 = text(artifact.sha256, `${path}.sha256`, 64).toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error(`${path}.sha256 must be a SHA-256 digest`);
+  return {
+    path: portablePath,
+    format: "pptx",
+    bytes: boundedInteger(artifact.bytes, `${path}.bytes`, 1, Number.MAX_SAFE_INTEGER),
+    sha256,
+    verified: artifact.verified === true
+  };
+}
+
+function normalizePresentationSlidePreview(input, path) {
+  const preview = object(input, `${path} must be an object`);
+  const slides = array(preview.slides || [], `${path}.slides`, MAX_PRESENTATION_PREVIEW_SLIDES)
+    .map((slide, index) => {
+      const value = object(slide, `${path}.slides[${index}] must be an object`);
+      const previewPath = text(value.path, `${path}.slides[${index}].path`, 1_000).replaceAll("\\", "/");
+      if (
+        !previewPath.startsWith(".amos/previews/") ||
+        previewPath.split("/").includes("..") ||
+        !previewPath.toLowerCase().endsWith(".png")
+      ) {
+        throw new Error(`${path}.slides[${index}].path must be an AMOS preview PNG path`);
+      }
+      const sha256 = text(value.sha256, `${path}.slides[${index}].sha256`, 64).toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(sha256)) {
+        throw new Error(`${path}.slides[${index}].sha256 must be a SHA-256 digest`);
+      }
+      return {
+        path: previewPath,
+        slide: boundedInteger(value.slide, `${path}.slides[${index}].slide`, 1, MAX_PRESENTATION_TITLES),
+        title: optionalText(value.title, `${path}.slides[${index}].title`, 160),
+        layout: optionalText(value.layout, `${path}.slides[${index}].layout`, 40),
+        width: boundedInteger(value.width, `${path}.slides[${index}].width`, 1, 4_000),
+        height: boundedInteger(value.height, `${path}.slides[${index}].height`, 1, 4_000),
+        bytes: boundedInteger(value.bytes, `${path}.slides[${index}].bytes`, 1, 5_000_000),
+        sha256
+      };
+    });
+  return {
+    slideCount: boundedInteger(
+      preview.slide_count || preview.slideCount || slides.length || 1,
+      `${path}.slide_count`,
+      1,
+      MAX_PRESENTATION_TITLES
+    ),
+    truncated: preview.truncated === true,
+    slides
+  };
+}
+
+function normalizePresentationDiagnostic(input, path) {
+  const diagnostic = object(input, `${path} must be an object`);
+  const normalized = {
+    severity: enumValue(diagnostic.severity || "warning", ["info", "warning", "error"], `${path}.severity`),
+    code: text(diagnostic.code, `${path}.code`, 80),
+    message: text(diagnostic.message, `${path}.message`, 500)
+  };
+  const slideIndex = diagnostic.slide_index ?? diagnostic.slideIndex;
+  if (slideIndex != null) {
+    normalized.slideIndex = boundedInteger(slideIndex, `${path}.slide_index`, 0, MAX_PRESENTATION_TITLES - 1);
+  }
+  return normalized;
 }
 
 function normalizeDocumentDiagnostic(input, path) {

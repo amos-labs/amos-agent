@@ -48,6 +48,7 @@ import { adaptBriefingRun, adaptCompanyResult } from "./canvasAdapters.js";
 import { DesktopCanvasManager } from "./canvas.js";
 import { DesktopCanvasResultStore } from "./canvasResults.js";
 import { documentArtifactCanvas } from "./documentArtifactCanvas.js";
+import { presentationArtifactCanvas } from "./presentationArtifactCanvas.js";
 import { spreadsheetArtifactCanvas } from "./spreadsheetArtifactCanvas.js";
 import { browserSessionCanvas } from "./browserCanvas.js";
 import { BrowserRecipeRecorder } from "./browserRecipeRecorder.js";
@@ -3925,6 +3926,27 @@ export class DesktopController {
     return canvas;
   }
 
+  presentPresentationArtifact(input) {
+    const spec = presentationArtifactCanvas(input);
+    const artifactPath = spec.blocks[0].artifact.path;
+    const existing = this.canvases.list().find((canvas) =>
+      canvas.blocks.some((block) => block.type === "presentation" && block.artifact.path === artifactPath)
+    );
+    const canvas = existing
+      ? this.canvases.update(existing.id, spec)
+      : this.canvases.present(spec);
+    this.record("artifact", `${existing ? "Refreshed" : "Previewed"} ${canvas.title}`, {
+      canvasId: canvas.id,
+      revision: canvas.revision,
+      format: "pptx",
+      verified: input.verification.verified,
+      slideCount: input.verification.slideCount
+    });
+    this.send("canvas:changed", this.canvases.state());
+    this.snapshotActiveTask().catch(() => {});
+    return canvas;
+  }
+
   presentBrowserSession(input) {
     const sessionId = String(input.session_id || "");
     const preview = input.preview || this.browserRuntime?.localPreviewForSession?.(sessionId);
@@ -4032,8 +4054,8 @@ export class DesktopController {
     if (!artifactPath || artifactPath.length > 1_000) {
       throw new Error("AMOS blocked an invalid local artifact path");
     }
-    if (![".docx", ".pdf", ".xlsx"].includes(extname(artifactPath).toLowerCase())) {
-      throw new Error("AMOS can open only DOCX, PDF, and XLSX artifacts");
+    if (![".docx", ".pdf", ".xlsx", ".pptx"].includes(extname(artifactPath).toLowerCase())) {
+      throw new Error("AMOS can open only DOCX, PDF, XLSX, and PPTX artifacts");
     }
     const settings = await this.settingsStore.read();
     if (!settings.workspace) throw new Error("Choose the local workspace first");
@@ -4792,6 +4814,7 @@ export class DesktopController {
         includeWeb: !isOffline,
         artifactPresenter: (input) => this.presentDocumentArtifact(input),
         spreadsheetPresenter: (input) => this.presentSpreadsheetArtifact(input),
+        presentationPresenter: (input) => this.presentPresentationArtifact(input),
         intelligenceRouter,
         hybridRouting,
         systemPrompt: `${desktopSystemPrompt(isOffline
@@ -6233,6 +6256,7 @@ const CONTINUITY_LOCAL_TOOLS = new Set([
   "write_file",
   "desktop_create_document",
   "desktop_create_spreadsheet",
+  "desktop_create_presentation",
   "desktop_calculate",
   "search_files",
   "git_status",

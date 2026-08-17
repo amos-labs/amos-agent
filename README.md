@@ -359,6 +359,7 @@ as the AMOS platform grows.
 - [Canvas, offline intelligence, and portable memory proposal](docs/CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Governed browser and computer use](docs/BROWSER_AND_COMPUTER_USE.md)
 - [Verified spreadsheet artifact engine](docs/SPREADSHEET_ARTIFACT_ENGINE.md)
+- [Verified presentation artifact engine](docs/PRESENTATION_ARTIFACT_ENGINE.md)
 - [Guided Automation setup](docs/GUIDED_AUTOMATION_SETUP.md)
 - [Browser/CUA gap analysis and roadmap](docs/BROWSER_CUA_GAP_ANALYSIS.md)
 - [Contributing](CONTRIBUTING.md)
@@ -367,13 +368,16 @@ as the AMOS platform grows.
 
 The near-term product path is:
 
-1. add the presentation engine beside the completed DOCX/PDF and XLSX artifact systems;
-2. qualify and promote stable Desktop browser recipes into governed Platform
+1. qualify and promote stable Desktop browser recipes into governed Platform
    connectors and scheduled automations where browser execution should not be
    the system of record;
-3. finish consent-aware Router learning and richer typed company work surfaces;
-4. add signed device identity, revocable environment grants, and fleet-management controls; and
-5. deliver Windows on Arm and managed-store distribution when customer demand warrants them.
+2. finish consent-aware Router learning and richer typed company work surfaces;
+3. add signed device identity, revocable environment grants, and fleet-management controls; and
+4. deliver Windows on Arm and managed-store distribution when customer demand warrants them.
+
+Local-model digest drift after PPTX is parked in [docs/FOLLOWUPS.md](docs/FOLLOWUPS.md).
+It is not a ship gate. AMOS does not promise any model works; models will make
+mistakes.
 
 The governing principle is constant: **local intelligence may observe, reason,
 draft, and execute within explicit grants; AMOS remains authoritative for

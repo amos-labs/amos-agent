@@ -119,9 +119,10 @@ the tool reports success.
 
 Remaining artifact work is intentionally separate from document parity:
 
-1. **More artifact types** — presentations using a separate typed contract.
-   Spreadsheets now use the sibling [verified XLSX engine](SPREADSHEET_ARTIFACT_ENGINE.md)
-   while sharing approvals, provenance, verification, previews, and continuity.
+1. **More artifact types** — presentations now share create, verify, preview,
+   and Open/Reveal with documents and spreadsheets. See
+   [PRESENTATION_ARTIFACT_ENGINE.md](PRESENTATION_ARTIFACT_ENGINE.md) and the
+   sibling [verified XLSX engine](SPREADSHEET_ARTIFACT_ENGINE.md).
 2. **Governed publishing** — explicit share/publish actions and optional
    evidence manifests beyond local file creation.
 3. **Expanded template catalog** — reviewed tenant-specific template packs and

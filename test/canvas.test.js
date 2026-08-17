@@ -126,6 +126,41 @@ test("canvas contract normalizes every safe block type", () => {
         checks: [{ label: "Starting MRR", passed: true, required: true }]
       },
       {
+        type: "presentation",
+        title: "Verified deck",
+        artifact: {
+          path: "decks/q3-operating-review.pptx",
+          format: "pptx",
+          bytes: 8192,
+          sha256: "e".repeat(64),
+          verified: true
+        },
+        kind: "operating_review",
+        style: "business",
+        slide_count: 10,
+        verification: {
+          verified: true,
+          slide_count: 10,
+          extracted_characters: 420,
+          titles: ["Q3 Operating Review"]
+        },
+        diagnostics: [],
+        slide_preview: {
+          slide_count: 10,
+          pages: [],
+          slides: [{
+            path: ".amos/previews/fixture/slide-1.png",
+            slide: 1,
+            title: "Q3 Operating Review",
+            layout: "title",
+            width: 960,
+            height: 540,
+            bytes: 2048,
+            sha256: "f".repeat(64)
+          }]
+        }
+      },
+      {
         type: "browser",
         title: "Public page",
         session_id: "browser-session-1",
@@ -190,15 +225,17 @@ test("canvas contract normalizes every safe block type", () => {
   assert.equal(canvas.blocks[7].pagePreview.pages[0].path, ".amos/previews/fixture/page-1.png");
   assert.equal(canvas.blocks[8].artifact.path, "models/quarterly-plan.xlsx");
   assert.equal(canvas.blocks[8].verification.formulaCount, 42);
-  assert.equal(canvas.blocks[9].sessionId, "browser-session-1");
-  assert.equal(canvas.blocks[9].frameId, "frame-1");
-  assert.equal(canvas.blocks[9].frameSha256, "c".repeat(64));
-  assert.equal(canvas.blocks[9].visualFallback, true);
-  assert.equal(canvas.blocks[9].takeoverActive, true);
-  assert.equal(canvas.blocks[10].url, "http://127.0.0.1:3000/preview");
-  assert.equal(canvas.blocks[12].pendingId, "pending-1");
-  assert.equal(canvas.blocks[13].sections[0].items[0].id, "obj-1");
-  assert.equal(canvas.blocks[13].provenance.uncertainty, "inferred");
+  assert.equal(canvas.blocks[9].artifact.path, "decks/q3-operating-review.pptx");
+  assert.equal(canvas.blocks[9].slidePreview.slides[0].path, ".amos/previews/fixture/slide-1.png");
+  assert.equal(canvas.blocks[10].sessionId, "browser-session-1");
+  assert.equal(canvas.blocks[10].frameId, "frame-1");
+  assert.equal(canvas.blocks[10].frameSha256, "c".repeat(64));
+  assert.equal(canvas.blocks[10].visualFallback, true);
+  assert.equal(canvas.blocks[10].takeoverActive, true);
+  assert.equal(canvas.blocks[11].url, "http://127.0.0.1:3000/preview");
+  assert.equal(canvas.blocks[13].pendingId, "pending-1");
+  assert.equal(canvas.blocks[14].sections[0].items[0].id, "obj-1");
+  assert.equal(canvas.blocks[14].provenance.uncertainty, "inferred");
 });
 
 test("canvas contract rejects arbitrary block types and unbounded tables", () => {

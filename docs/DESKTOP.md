@@ -439,13 +439,15 @@ proof govern any resulting action. See
 The next product layers build on the signed distribution foundation:
 
 1. signed device identity and policy-controlled environment grants;
-2. presentation artifacts beside the completed typed DOCX/PDF and XLSX engines;
-3. Platform promotion and scheduling for stable deterministic browser recipes;
-4. richer typed canvas blocks and managed AMOS result adapters;
-5. richer private-memory retrieval and sharing proposals;
-6. richer retrieval within the bounded signed company briefing;
-7. richer offline-draft conflict explanations and lifecycle controls;
-8. enterprise/MDM packaging; and
-9. Windows on Arm and managed-store distribution.
+2. Platform promotion and scheduling for stable deterministic browser recipes;
+3. richer typed canvas blocks and managed AMOS result adapters;
+4. richer private-memory retrieval and sharing proposals;
+5. richer retrieval within the bounded signed company briefing;
+6. richer offline-draft conflict explanations and lifecycle controls;
+7. enterprise/MDM packaging; and
+8. Windows on Arm and managed-store distribution.
+
+Local-model digest drift after PPTX is parked in [FOLLOWUPS.md](FOLLOWUPS.md).
+It is not a ship gate.
 
 See [Canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md).

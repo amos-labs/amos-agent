@@ -20,6 +20,10 @@ const DEFINITIONS = Object.freeze({
     title: "Spreadsheets",
     description: "Create verified native XLSX workbooks, financial models, forecasts, budgets, and scenarios."
   }),
+  presentations: Object.freeze({
+    title: "Presentations",
+    description: "Create verified native PowerPoint decks from a typed slide specification."
+  }),
   research: Object.freeze({
     title: "Web research",
     description: "Fetch or search public web sources without operating an interactive browser."
@@ -85,6 +89,7 @@ const EXACT_TOOLKITS = new Map([
   ["desktop_read_attachment", "documents"],
   ["desktop_calculate", "calculations"],
   ["desktop_create_spreadsheet", "spreadsheets"],
+  ["desktop_create_presentation", "presentations"],
   ["web_fetch", "research"],
   ["web_search", "research"],
   ["desktop_begin_automation_setup", "automation"],
