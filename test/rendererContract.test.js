@@ -483,10 +483,11 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.doesNotMatch(html, /Neighborly rollout|Build KPI scorecard/);
 });
 
-test("Briefings use the platform catalog and typed actions instead of Desktop prompt injection", async () => {
-  const [javascript, html] = await Promise.all([
+test("Briefings are a single-column saved-view library with typed platform actions", async () => {
+  const [javascript, html, css] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
   ]);
 
   assert.match(javascript, /const platformLibrary = state\.briefings \|\| \{\}/);
@@ -494,6 +495,17 @@ test("Briefings use the platform catalog and typed actions instead of Desktop pr
   assert.match(javascript, /templateKey: template\.key/);
   assert.match(javascript, /api\.scheduleCanvasView\(activeCanvasId, cadence\)/);
   assert.match(html, /Company Briefing definitions and schedules live in governed AMOS state/);
+  assert.match(html, />Briefings</);
+  assert.match(html, /A saved company view that refreshes with governed data/);
+  assert.match(html, /class="briefing-open-now hidden"/);
+  assert.match(html, /<details class="briefing-templates">/);
+  assert.doesNotMatch(html, /CURRENT WORK SURFACES/);
+  assert.doesNotMatch(html, /START FROM A TEMPLATE/);
+  assert.doesNotMatch(html, /Briefings that stay useful/);
+  assert.match(javascript, /function briefingSettingsMenu\(/);
+  assert.match(javascript, /actionLabel: "Open now"/);
+  assert.match(css, /\.briefing-library\s*\{[\s\S]*?max-width:\s*760px/);
+  assert.doesNotMatch(css, /minmax\(280px/);
   assert.doesNotMatch(javascript, /const briefingTemplates\s*=/);
   assert.doesNotMatch(javascript, /title: "Goals and coaching"/);
   assert.doesNotMatch(javascript, /most relevant coaching or learning intervention/);
@@ -629,7 +641,8 @@ test("dynamic canvases open beside chat without navigating away from Operator", 
     javascript,
     /api\.on\("canvas:changed",[\s\S]*?if \(activeCanvasId\) showView\("canvas"\)/
   );
-  assert.match(javascript, /actionLabel: "Open beside chat"/);
+  assert.match(javascript, /actionLabel: "Open now"/);
+  assert.match(javascript, /onAction: \(\) => openCanvasSidecar\(canvas\.id\)/);
   assert.match(
     css,
     /\.operator-grid\.has-context\s*{\s*grid-template-columns: minmax\(480px, 1fr\) 6px minmax\(380px, var\(--context-width, 48%\)\);/
