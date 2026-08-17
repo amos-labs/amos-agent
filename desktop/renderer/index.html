@@ -400,12 +400,11 @@
         <section id="projectsView" class="view projects-view hidden">
           <div class="section-heading projects-heading">
             <div>
-              <span class="eyebrow">CONVERSATION WORKSPACES</span>
-              <h1>Projects keep the whole outcome moving.</h1>
+              <span class="eyebrow">PROJECTS</span>
+              <h1>Projects</h1>
               <p>
-                Give a workspace instructions and a dollar cap, then start a conversation
-                or give AMOS a goal and leave. Tasks stay internal. Project coordination
-                never grants execution authority or replaces proof receipts.
+                A named workspace with instructions and a dollar cap.
+                Talk in it, or give it a goal and leave.
               </p>
             </div>
             <div class="project-heading-actions">
@@ -416,51 +415,18 @@
           <div id="projectUnavailable" class="task-platform-notice hidden">
             Projects require a current AMOS Platform with the private Project and supervised-run contract.
           </div>
-          <div id="projectSummary" class="task-summary project-summary"></div>
-          <div class="project-workspace">
-            <section class="project-library" aria-labelledby="projectLibraryTitle">
-              <div class="project-panel-heading">
-                <div>
-                  <span class="eyebrow">PROJECTS</span>
-                  <h2 id="projectLibraryTitle">Conversation workspaces</h2>
-                </div>
-                <label class="task-search project-search">
-                  <span aria-hidden="true">⌕</span>
-                  <input id="projectSearchInput" type="search" maxlength="160" placeholder="Search Projects" autocomplete="off" />
-                </label>
-              </div>
-              <div id="projectEmpty" class="automation-empty hidden">
-                <span>▱</span>
-                <strong>No Projects yet</strong>
-                <p>Create one to share instructions, set a dollar cap, and start talking or give AMOS a goal.</p>
-              </div>
-              <div id="projectList" class="project-list"></div>
-            </section>
-            <section class="activity-center" aria-labelledby="activityCenterTitle">
-              <div class="project-panel-heading">
-                <div>
-                  <span class="eyebrow accent">ACTIVITY CENTER</span>
-                  <h2 id="activityCenterTitle">Work that needs attention</h2>
-                  <p id="activityCenterScope">All Projects</p>
-                </div>
-                <label class="task-filter-label project-run-filter">
-                  <span>Show</span>
-                  <select id="projectRunFilter">
-                    <option value="attention">Needs attention</option>
-                    <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="all">All runs</option>
-                  </select>
-                </label>
-              </div>
-              <div id="activityCenterEmpty" class="automation-empty hidden">
-                <span>✓</span>
-                <strong>No matching task runs</strong>
-                <p>Supervised runs will appear here with progress, budgets, and stop controls.</p>
-              </div>
-              <div id="activityCenterList" class="activity-center-list"></div>
-            </section>
+          <div class="project-toolbar">
+            <label class="task-search project-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="projectSearchInput" type="search" maxlength="160" placeholder="Search Projects" autocomplete="off" />
+            </label>
           </div>
+          <div id="projectEmpty" class="automation-empty hidden">
+            <span>▱</span>
+            <strong>No Projects yet</strong>
+            <p>Create one to share instructions, set a dollar cap, and start talking or give AMOS a goal.</p>
+          </div>
+          <div id="projectList" class="project-list"></div>
         </section>
 
         <section id="tasksView" class="view tasks-view hidden">
@@ -1171,7 +1137,7 @@
           <div>
             <span class="eyebrow">AUTONOMOUS GOAL</span>
             <h2 id="goalModalTitle">Give AMOS a goal</h2>
-            <p>AMOS will start this in the Project and keep working. Watch Activity Center. Questions land in Decisions.</p>
+            <p>AMOS will start this in the Project and keep working. Progress lives on the Project card. Questions land in Decisions.</p>
           </div>
           <button id="goalModalClose" class="icon-button" type="button" aria-label="Close goal setup">×</button>
         </div>

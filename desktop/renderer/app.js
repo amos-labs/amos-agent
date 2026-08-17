@@ -84,6 +84,7 @@ let automationSetupDraft = null;
 let automationSetupOperations = null;
 let automationSetupBusy = false;
 let selectedProjectId = "";
+const expandedProjectAccordions = new Set();
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
@@ -159,9 +160,8 @@ const elements = Object.fromEntries(
     "automationSetupBack", "automationSetupNext", "automationSetupClose", "canvasSurface",
     "taskSummary", "taskSearchInput", "taskFilterInput", "taskPlatformNotice", "taskEmpty",
     "taskList", "newTaskButton", "conversationRecovery", "conversationRecoveryList",
-    "projectSummary", "projectUnavailable", "projectSearchInput", "projectEmpty", "projectList",
-    "refreshProjectsButton", "newProjectButton", "activityCenterScope", "projectRunFilter",
-    "activityCenterEmpty", "activityCenterList", "projectModal", "projectForm",
+    "projectUnavailable", "projectSearchInput", "projectEmpty", "projectList",
+    "refreshProjectsButton", "newProjectButton", "projectModal", "projectForm",
     "projectModalTitle", "projectModalClose", "projectIdInput", "projectNameInput",
     "projectInstructionsInput", "projectCostInput", "projectModalError", "projectCancelButton",
     "projectSubmitButton",
@@ -334,7 +334,6 @@ function bindActions() {
   elements.taskSearchInput.addEventListener("input", renderTasks);
   elements.taskFilterInput.addEventListener("change", renderTasks);
   elements.projectSearchInput.addEventListener("input", renderProjects);
-  elements.projectRunFilter.addEventListener("change", renderProjects);
   elements.refreshProjectsButton.addEventListener("click", refreshProjects);
   elements.newProjectButton.addEventListener("click", () => openProjectModal());
   elements.projectForm.addEventListener("submit", submitProject);
@@ -2637,44 +2636,98 @@ function renderProjects() {
   const activeStatuses = new Set(["scheduled", "running", "waiting", "blocked", "cancel_requested"]);
   const activeRuns = inbox.filter((run) => activeStatuses.has(run.status));
   const attentionRuns = inbox.filter((run) => run.stalled || attentionStatuses.has(run.status));
-  const capacity = projects
-    .filter((project) => !project.archived)
-    .reduce((total, project) => total + Number(project.maxParallelRuns || 0), 0);
+  const waitingDecisions = projectDecisionItems().length;
 
   elements.projectUnavailable.classList.toggle("hidden", library.supported === true);
   elements.newProjectButton.disabled = library.supported !== true || state.connectionMode !== "user";
   elements.refreshProjectsButton.disabled = state.connectionMode !== "user";
-  elements.projectBadge.textContent = String(attentionRuns.length || activeRuns.length);
-  elements.projectBadge.classList.toggle("hidden", attentionRuns.length + activeRuns.length === 0);
+  const badgeCount = attentionRuns.length || waitingDecisions || activeRuns.length;
+  elements.projectBadge.textContent = String(badgeCount);
+  elements.projectBadge.classList.toggle(
+    "hidden",
+    attentionRuns.length + waitingDecisions + activeRuns.length === 0
+  );
   elements.projectEmpty.classList.toggle("hidden", visibleProjects.length > 0);
-  elements.projectSummary.replaceChildren();
-  for (const [label, value, detail] of [
-    ["Projects", projects.filter((project) => !project.archived).length, "durable operating areas"],
-    ["Active", activeRuns.length, `${capacity} bounded parallel lanes configured`],
-    ["Attention", attentionRuns.length, "waiting, blocked, stalled, or failed"]
-  ]) {
-    const item = document.createElement("article");
-    const number = document.createElement("strong");
-    number.textContent = String(value);
-    const title = document.createElement("span");
-    title.textContent = label;
-    const copy = document.createElement("small");
-    copy.textContent = detail;
-    item.append(number, title, copy);
-    elements.projectSummary.append(item);
-  }
 
   elements.projectList.replaceChildren();
   for (const project of visibleProjects) {
     elements.projectList.append(projectCard(
       project,
-      conversations.filter((task) => task.projectId === project.id)
+      conversations.filter((task) => task.projectId === project.id),
+      inbox.filter((run) => run.projectId === project.id)
     ));
   }
-  renderActivityCenter(projects, inbox);
 }
 
-function projectCard(project, conversations) {
+function projectDecisionItems(project = null) {
+  const conversations = Array.isArray(state?.tasks?.tasks) ? state.tasks.tasks : [];
+  const inbox = Array.isArray(state?.projects?.inbox) ? state.projects.inbox : [];
+  const relatedProjectId = (taskId = "", contextKey = "") => {
+    const task = conversations.find((item) =>
+      item.id === taskId ||
+      item.remoteId === taskId ||
+      (contextKey && item.contextKey === contextKey)
+    );
+    if (task?.projectId) return task.projectId;
+    const run = inbox.find((item) => item.taskId === taskId || item.id === taskId);
+    return run?.projectId || "";
+  };
+  const belongsHere = (taskId = "", contextKey = "", explicitProjectId = "") => {
+    const projectId = explicitProjectId || relatedProjectId(taskId, contextKey);
+    if (!projectId) return false;
+    return !project || projectId === project.id;
+  };
+  const inputs = (Array.isArray(state?.pendingInputs) ? state.pendingInputs : [])
+    .filter((request) => belongsHere(request.taskRecordId || request.runId, request.contextKey))
+    .map((request) => ({
+      kind: "input",
+      id: request.id,
+      title: request.title || "AMOS needs your input",
+      summary: request.message || ""
+    }));
+  const approvals = (Array.isArray(state?.approvals) ? state.approvals : [])
+    .filter((approval) => approval.status === "pending")
+    .filter((approval) => {
+      const args = approval.args && typeof approval.args === "object" ? approval.args : {};
+      return belongsHere(
+        args.task_id || args.taskId || "",
+        approval.contextKey || "",
+        args.project_id || args.projectId || ""
+      );
+    })
+    .map((approval) => ({
+      kind: "approval",
+      id: approval.id,
+      title: humanizeTool(approval.verb),
+      summary: decisionSummary(approval, true)
+    }));
+  return [...inputs, ...approvals];
+}
+
+function projectAccordionKey(projectId, section) {
+  return `${projectId}:${section}`;
+}
+
+function projectAccordionOpen(projectId, section, fallback = false) {
+  const key = projectAccordionKey(projectId, section);
+  return expandedProjectAccordions.has(key) ||
+    (!expandedProjectAccordions.has(`${key}:closed`) && fallback);
+}
+
+function bindProjectAccordion(details, projectId, section) {
+  const key = projectAccordionKey(projectId, section);
+  details.addEventListener("toggle", () => {
+    if (details.open) {
+      expandedProjectAccordions.add(key);
+      expandedProjectAccordions.delete(`${key}:closed`);
+    } else {
+      expandedProjectAccordions.delete(key);
+      expandedProjectAccordions.add(`${key}:closed`);
+    }
+  });
+}
+
+function projectCard(project, conversations, runs) {
   const card = document.createElement("article");
   const selected = project.id === selectedProjectId;
   card.className = `project-card${selected ? " selected" : ""}${project.archived ? " archived" : ""}`;
@@ -2693,6 +2746,22 @@ function projectCard(project, conversations) {
     pinned.textContent = "PINNED";
     kicker.append(pinned);
   }
+  const attentionCount = runs.filter((run) =>
+    run.stalled || ["waiting", "blocked", "cancel_requested", "failed"].includes(run.status)
+  ).length;
+  const decisionItems = projectDecisionItems(project);
+  if (attentionCount > 0) {
+    const attention = document.createElement("span");
+    attention.className = "task-lineage-chip fork";
+    attention.textContent = `${attentionCount} NEED${attentionCount === 1 ? "S" : ""} ATTENTION`;
+    kicker.append(attention);
+  }
+  if (decisionItems.length > 0) {
+    const waiting = document.createElement("span");
+    waiting.className = "task-lineage-chip fork";
+    waiting.textContent = `${decisionItems.length} DECISION${decisionItems.length === 1 ? "" : "S"}`;
+    kicker.append(waiting);
+  }
   const title = document.createElement("h2");
   title.textContent = project.name;
   copy.append(kicker, title);
@@ -2705,27 +2774,65 @@ function projectCard(project, conversations) {
   instructions.textContent = project.instructions || "No shared Project instructions yet.";
   const details = document.createElement("div");
   details.className = "task-card-details";
+  const used = runs.reduce((total, run) => total + Number(run.usage?.costUsedMicrousd || 0), 0);
+  const cap = project.defaultBudget?.costLimitMicrousd;
   for (const value of [
-    `${project.taskCount} conversation${project.taskCount === 1 ? "" : "s"}`,
-    `${formatUsdMicros(project.defaultBudget?.costLimitMicrousd)} cap / conversation`
+    `${conversations.length} conversation${conversations.length === 1 ? "" : "s"}`,
+    `${formatUsdMicros(used)} used · ${formatUsdMicros(cap)} cap`
   ]) {
     const chip = document.createElement("span");
     chip.textContent = value;
     details.append(chip);
   }
+
   const actions = document.createElement("div");
-  actions.className = "task-card-actions";
-  const view = actionButton(selected ? "Show all activity" : "View activity", "primary");
-  view.addEventListener("click", () => {
-    selectedProjectId = selected ? "" : project.id;
-    renderProjects();
-  });
-  const newTask = actionButton("Start conversation", "secondary");
-  newTask.disabled = project.archived || project.status !== "active";
-  newTask.addEventListener("click", () => createTaskInProject(project, newTask));
-  const giveGoal = actionButton("Give it a goal", "ghost");
+  actions.className = "task-card-actions project-card-actions";
+  const talk = actionButton("Talk", "primary");
+  talk.disabled = project.archived || project.status !== "active";
+  talk.addEventListener("click", () => createTaskInProject(project, talk));
+  const giveGoal = actionButton("Leave a goal", "secondary");
   giveGoal.disabled = project.archived || project.status !== "active";
   giveGoal.addEventListener("click", () => openGoalModal(project));
+  actions.append(talk, giveGoal, projectSettingsMenu(project));
+
+  card.append(heading, instructions, details, actions);
+  if (conversations.length > 0) {
+    card.append(projectAccordion(
+      project.id,
+      "conversations",
+      `Conversations · ${conversations.length}`,
+      projectConversationList(conversations),
+      true
+    ));
+  }
+  if (runs.length > 0) {
+    card.append(projectAccordion(
+      project.id,
+      "activity",
+      `Activity · ${runs.length}`,
+      projectActivityList(runs),
+      attentionCount > 0
+    ));
+  }
+  if (decisionItems.length > 0) {
+    card.append(projectAccordion(
+      project.id,
+      "decisions",
+      `Decisions · ${decisionItems.length}`,
+      projectDecisionList(decisionItems),
+      true
+    ));
+  }
+  return card;
+}
+
+function projectSettingsMenu(project) {
+  const wrap = document.createElement("details");
+  wrap.className = "project-settings";
+  const summary = document.createElement("summary");
+  summary.textContent = "More";
+  const menu = document.createElement("div");
+  menu.className = "project-settings-menu";
   const edit = actionButton("Edit", "ghost");
   edit.disabled = project.archived;
   edit.addEventListener("click", () => openProjectModal(project));
@@ -2740,26 +2847,29 @@ function projectCard(project, conversations) {
   ));
   const archive = actionButton(project.archived ? "Restore" : "Archive", "ghost");
   archive.addEventListener("click", () => updateProject(project, { archived: !project.archived }, archive));
-  actions.append(view, newTask, giveGoal, edit, pin, pause, archive);
-  card.append(heading, instructions, details, projectConversationList(conversations), actions);
-  return card;
+  menu.append(edit, pin, pause, archive);
+  wrap.append(summary, menu);
+  return wrap;
+}
+
+function projectAccordion(projectId, section, label, body, fallbackOpen = false) {
+  const details = document.createElement("details");
+  details.className = "project-accordion";
+  details.open = projectAccordionOpen(projectId, section, fallbackOpen);
+  bindProjectAccordion(details, projectId, section);
+  const summary = document.createElement("summary");
+  summary.textContent = label;
+  details.append(summary, body);
+  return details;
 }
 
 function projectConversationList(conversations) {
   const section = document.createElement("section");
   section.className = "project-conversations";
-  const heading = document.createElement("div");
-  heading.className = "project-conversations-heading";
-  const label = document.createElement("strong");
-  label.textContent = "Conversations";
-  const count = document.createElement("span");
-  count.textContent = String(conversations.length);
-  heading.append(label, count);
-  section.append(heading);
   if (conversations.length === 0) {
     const empty = document.createElement("p");
     empty.className = "project-conversations-empty";
-    empty.textContent = "No conversations in this workspace yet. Start one when you are ready.";
+    empty.textContent = "No conversations in this workspace yet.";
     section.append(empty);
     return section;
   }
@@ -2790,17 +2900,7 @@ function projectConversationList(conversations) {
     rowActions.className = "project-conversation-actions";
     const open = actionButton(task.active ? "Open" : "Continue", "ghost");
     open.addEventListener("click", () => openManagedTask(task, open));
-    const forkCapability = task.forkCapability || {
-      canFork: false,
-      reason: "no_persisted_milestone"
-    };
-    const fork = actionButton("Fork", "ghost");
-    fork.disabled = !forkCapability.canFork;
-    fork.title = conversationForkCapabilityMessage(forkCapability);
-    fork.addEventListener("click", () =>
-      openTaskForkModal(task, forkCapability.latestMilestoneId)
-    );
-    rowActions.append(open, fork);
+    rowActions.append(open);
     row.append(copy, rowActions);
     list.append(row);
   }
@@ -2808,22 +2908,60 @@ function projectConversationList(conversations) {
   return section;
 }
 
-function renderActivityCenter(projects, inbox) {
-  const filter = elements.projectRunFilter.value || "attention";
-  const terminal = new Set(["completed", "failed", "cancelled", "interrupted"]);
-  const attention = new Set(["waiting", "blocked", "cancel_requested", "failed"]);
-  const selectedProject = projects.find((project) => project.id === selectedProjectId);
-  const visible = inbox.filter((run) => {
-    if (selectedProjectId && run.projectId !== selectedProjectId) return false;
-    if (filter === "attention") return run.stalled || attention.has(run.status);
-    if (filter === "active") return !terminal.has(run.status);
-    if (filter === "completed") return terminal.has(run.status);
-    return true;
-  });
-  elements.activityCenterScope.textContent = selectedProject?.name || "All Projects";
-  elements.activityCenterEmpty.classList.toggle("hidden", visible.length > 0);
-  elements.activityCenterList.replaceChildren();
-  for (const run of visible) elements.activityCenterList.append(activityRunCard(run));
+function projectActivityList(runs) {
+  const section = document.createElement("section");
+  section.className = "project-activity";
+  if (runs.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "project-conversations-empty";
+    empty.textContent = "No background work yet. Leave a goal when you want AMOS to keep going.";
+    section.append(empty);
+    return section;
+  }
+  const list = document.createElement("div");
+  list.className = "project-activity-list";
+  for (const run of runs) list.append(activityRunCard(run));
+  section.append(list);
+  return section;
+}
+
+function projectDecisionList(items) {
+  const section = document.createElement("section");
+  section.className = "project-decisions";
+  const list = document.createElement("div");
+  list.className = "project-decision-list";
+  for (const item of items) {
+    const row = document.createElement("article");
+    row.className = "project-conversation-row";
+    const copy = document.createElement("div");
+    const meta = document.createElement("div");
+    meta.className = "project-conversation-meta";
+    const status = document.createElement("span");
+    status.className = "task-status waiting";
+    status.textContent = item.kind === "input" ? "NEEDS INPUT" : "NEEDS APPROVAL";
+    meta.append(status);
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+    copy.append(meta, title);
+    if (item.summary) {
+      const summary = document.createElement("p");
+      summary.className = "project-conversations-empty";
+      summary.textContent = item.summary;
+      copy.append(summary);
+    }
+    const open = actionButton("Answer", "ghost");
+    open.addEventListener("click", () => {
+      showView("decisions");
+      if (item.kind === "approval") focusDecisionCard(item.id);
+    });
+    const actions = document.createElement("div");
+    actions.className = "project-conversation-actions";
+    actions.append(open);
+    row.append(copy, actions);
+    list.append(row);
+  }
+  section.append(list);
+  return section;
 }
 
 function activityRunCard(run) {
@@ -2836,40 +2974,33 @@ function activityRunCard(run) {
   status.className = `task-status ${run.stalled ? "stalled" : run.status}`;
   status.textContent = run.stalled ? "STALLED" : run.status.replaceAll("_", " ").toUpperCase();
   const title = document.createElement("h3");
-  title.textContent = run.taskTitle || `Task ${shortTaskId(run.taskId)}`;
-  const project = document.createElement("small");
-  project.textContent = `${run.projectName || "Project"} · ${run.executionMode} · ${run.sourceClient}`;
-  copy.append(status, title, project);
+  title.textContent = run.taskTitle || `Work ${shortTaskId(run.taskId)}`;
+  copy.append(status, title);
   const when = document.createElement("time");
   when.textContent = relativeTime(run.updatedAt || run.heartbeatAt || run.createdAt);
   heading.append(copy, when);
   const progress = document.createElement("p");
   progress.textContent = run.progressSummary || run.resultSummary || run.stopReason ||
-    (run.phase ? `Phase: ${run.phase}` : "Waiting for the first progress report.");
+    "Waiting for the first progress report.";
   const usage = document.createElement("div");
   usage.className = "task-card-details activity-run-usage";
-  for (const value of [
-    `${compactNumber(run.usage?.tokensUsed)}/${compactNumber(run.budget?.tokenLimit)} tokens`,
-    `${run.usage?.toolCallsUsed || 0}/${run.budget?.toolCallLimit || 0} tools`,
-    `${formatUsdMicros(run.usage?.costUsedMicrousd)}/${formatUsdMicros(run.budget?.costLimitMicrousd)}`,
-    run.phase || "No phase reported"
-  ]) {
-    const chip = document.createElement("span");
-    chip.textContent = value;
-    usage.append(chip);
-  }
+  const used = formatUsdMicros(run.usage?.costUsedMicrousd);
+  const cap = formatUsdMicros(run.budget?.costLimitMicrousd);
+  const chip = document.createElement("span");
+  chip.textContent = `${used} / ${cap}`;
+  usage.append(chip);
   const actions = document.createElement("div");
   actions.className = "task-card-actions";
   const task = (state.tasks?.tasks || []).find((item) =>
     item.id === run.taskId || item.remoteId === run.taskId
   );
   if (task) {
-    const open = actionButton("Open task", "secondary");
+    const open = actionButton("Open", "secondary");
     open.addEventListener("click", () => openManagedTask(task, open));
     actions.append(open);
   }
   if (!["completed", "failed", "cancelled", "interrupted", "cancel_requested"].includes(run.status)) {
-    const stop = actionButton("Request stop", "ghost");
+    const stop = actionButton("Stop", "ghost");
     stop.addEventListener("click", () => cancelSupervisedRun(run, stop));
     actions.append(stop);
   }
@@ -2984,7 +3115,7 @@ async function submitAutonomousGoal(event) {
     renderProjects();
     renderTasks();
     showView("projects");
-    toast("AMOS is pursuing that goal. Watch Activity Center; questions land in Decisions.");
+    toast("AMOS is pursuing that goal. Progress lives on the Project card; questions land in Decisions.");
   } catch (error) {
     elements.goalModalError.textContent = error.message;
     elements.goalModalError.classList.remove("hidden");
@@ -3007,7 +3138,7 @@ async function createTaskInProject(project, button) {
   } catch (error) {
     toast(error.message, true);
   } finally {
-    if (button.isConnected) setButtonBusy(button, false, "Start conversation");
+    if (button.isConnected) setButtonBusy(button, false, "Talk");
   }
 }
 
@@ -3022,7 +3153,7 @@ async function cancelSupervisedRun(run, button) {
   } catch (error) {
     toast(error.message, true);
   } finally {
-    if (button.isConnected) setButtonBusy(button, false, "Request stop");
+    if (button.isConnected) setButtonBusy(button, false, "Stop");
   }
 }
 
