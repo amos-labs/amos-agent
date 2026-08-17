@@ -1990,38 +1990,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   margin-bottom: 22px;
 }
 .project-heading-actions { display: flex; gap: 8px; padding-bottom: 3px; }
-.project-workspace {
-  display: grid;
-  grid-template-columns: minmax(360px, .82fr) minmax(440px, 1.18fr);
-  max-width: 1240px;
-  min-height: 480px;
-  gap: 14px;
-  padding-bottom: 42px;
-}
-.project-library,
-.activity-center {
-  min-width: 0;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface-softer);
-}
-.project-panel-heading {
+.projects-heading h1 { margin: 6px 0 6px; font-size: 32px; letter-spacing: -.03em; }
+.projects-heading p { max-width: 520px; margin: 0; color: var(--muted); font-size: 13px; }
+.project-toolbar {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 14px;
+  max-width: 760px;
+  margin: 0 0 14px;
 }
-.project-panel-heading h2 { margin: 7px 0 0; font-size: 18px; }
-.project-panel-heading p { margin: 5px 0 0; color: var(--muted-2); font-size: 9px; }
-.project-search { max-width: 210px; min-width: 150px; flex: 0 1 210px; }
+.project-search { width: 100%; max-width: 360px; }
 .project-search input { min-width: 0; }
-.project-run-filter { align-items: flex-end; flex-direction: column; gap: 4px; }
-.project-list,
-.activity-center-list { display: grid; gap: 10px; }
-.project-library .automation-empty,
-.activity-center .automation-empty { min-height: 250px; padding: 24px; }
+.project-list { display: grid; max-width: 760px; gap: 12px; padding-bottom: 42px; }
+.projects-view .automation-empty { max-width: 760px; min-height: 220px; padding: 28px; }
 .project-card {
   display: grid;
   gap: 11px;
@@ -2039,13 +2018,53 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .project-card-heading time,
 .activity-run-heading time { color: var(--muted-2); font-size: 8px; white-space: nowrap; }
 .project-card-instructions { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.55; }
+.project-card-actions { align-items: center; }
+.project-settings { position: relative; margin-left: auto; }
+.project-settings > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+.project-settings > summary::-webkit-details-marker { display: none; }
+.project-settings-menu {
+  position: absolute;
+  right: 0;
+  z-index: 3;
+  display: grid;
+  gap: 6px;
+  min-width: 132px;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .18);
+}
+.project-accordion {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.project-accordion > summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.project-accordion[open] > summary { border-bottom: 1px solid var(--line); }
 .project-conversations {
   display: grid;
   gap: 7px;
   padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-soft);
 }
 .project-conversations-heading,
 .project-conversation-row,
@@ -2078,6 +2097,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .project-conversation-actions { gap: 6px; }
 .project-conversation-actions .button.ghost { padding: 6px 8px; font-size: 8px; }
 .project-conversations-empty { margin: 0; color: var(--muted-2); font-size: 8px; }
+.project-activity,
+.project-decisions { display: grid; gap: 8px; padding: 10px; }
+.project-activity-list,
+.project-decision-list { display: grid; gap: 8px; }
+.project-decision-more { display: flex; justify-content: flex-end; }
+.project-accordion .activity-run-card,
+.project-accordion .decision-card {
+  padding: 12px;
+  border-radius: 10px;
+}
+.project-accordion .decision-card { background: var(--panel); }
 .activity-run-card {
   display: grid;
   gap: 11px;
@@ -3877,10 +3907,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .task-summary { grid-template-columns: 1fr; }
   .task-toolbar { align-items: stretch; flex-direction: column; }
   .projects-heading { grid-template-columns: 1fr; align-items: start; }
-  .project-workspace { grid-template-columns: 1fr; }
-  .project-panel-heading { align-items: stretch; flex-direction: column; }
-  .project-search { max-width: none; }
-  .project-run-filter { align-items: stretch; }
+  .project-search { max-width: none; width: 100%; }
   .task-filter-label { justify-content: space-between; }
   .automation-heading-actions, .automation-actions { flex-wrap: wrap; }
   .automation-failure-heading, .automation-simulation > div { flex-direction: column; }

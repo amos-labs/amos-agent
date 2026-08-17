@@ -417,7 +417,7 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.doesNotMatch(workspace, /"reset"|"checkout"|"clean"|"stash"/);
 });
 
-test("Projects expose conversation workspaces, a dollar cap, and one supervised activity center", async () => {
+test("Projects are single-column conversation workspaces with accordion activity", async () => {
   const [javascript, html, css, preload, main, controller, remoteState] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
@@ -430,9 +430,11 @@ test("Projects expose conversation workspaces, a dollar cap, and one supervised 
 
   assert.match(html, /data-view="projects"/);
   assert.match(html, /id="projectsView"/);
-  assert.match(html, /CONVERSATION WORKSPACES/);
-  assert.match(html, /id="activityCenterList"/);
-  assert.match(html, /never grants execution authority[\s\S]*replaces proof receipts/);
+  assert.match(html, />Projects</);
+  assert.match(html, /Talk in it, or give it a goal and leave/);
+  assert.doesNotMatch(html, /id="activityCenterList"/);
+  assert.doesNotMatch(html, /ACTIVITY CENTER/);
+  assert.doesNotMatch(html, /id="projectSummary"/);
   assert.match(html, /id="projectCostInput"/);
   assert.match(html, /Dollar cap \/ conversation \(USD\)/);
   assert.doesNotMatch(html, /id="projectParallelInput"/);
@@ -440,10 +442,13 @@ test("Projects expose conversation workspaces, a dollar cap, and one supervised 
   assert.doesNotMatch(html, /Token ceiling/);
   assert.match(javascript, /function renderProjects\(\)/);
   assert.match(javascript, /function projectConversationList\(conversations\)/);
+  assert.match(javascript, /function projectActivityList\(runs\)/);
+  assert.match(javascript, /function projectDecisionList\(/);
+  assert.match(javascript, /function projectAccordion\(/);
   assert.match(javascript, /task\.projectId === project\.id/);
   assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?projectId: project\.id/);
-  assert.match(javascript, /Start conversation/);
-  assert.match(javascript, /Give it a goal/);
+  assert.match(javascript, /actionButton\("Talk", "primary"\)/);
+  assert.match(javascript, /Leave a goal/);
   assert.match(javascript, /api\.startAutonomousGoal\(/);
   assert.match(html, /id="goalObjectiveInput"/);
   assert.match(html, /Start and leave/);
@@ -469,12 +474,11 @@ test("Projects expose conversation workspaces, a dollar cap, and one supervised 
   assert.match(remoteState, /this\.mcp\.callTool\("list_task_inbox"/);
   assert.match(remoteState, /this\.mcp\.callTool\("start_task_run"/);
   assert.match(remoteState, /this\.mcp\.callTool\("report_task_run"/);
-  assert.match(css, /\.project-workspace\s*\{[\s\S]*?grid-template-columns/);
+  assert.match(css, /\.project-list\s*\{[\s\S]*?max-width:\s*760px/);
+  assert.match(css, /\.project-accordion\s*\{/);
   assert.match(css, /\.project-conversations\s*\{/);
-  const activityCenterContract = javascript.match(
-    /function renderActivityCenter\(projects, inbox\)([\s\S]*?)function activityRunCard/
-  )?.[1] || "";
-  assert.doesNotMatch(activityCenterContract, /taskCheckpoints|taskCheckpointCard/);
+  assert.doesNotMatch(javascript, /function renderActivityCenter\(/);
+  assert.doesNotMatch(javascript, /Watch Activity Center/);
   assert.doesNotMatch(javascript, /All Projects & Conversations/);
   assert.doesNotMatch(html, /Neighborly rollout|Build KPI scorecard/);
 });

@@ -40,8 +40,9 @@ managed local intelligence, and local-primary AMOS Router integration.
 
 The Projects execution and supervisory loop is implemented against the public
 Platform contract. User-private Projects can be created and managed, tasks can
-be assigned, and the Activity Center presents bounded progress, cumulative
-usage, stalls, and cooperative cancellation. Desktop runs isolated local
+be assigned, and each Project card can open activity and decision accordions
+for bounded progress, dollar usage, stalls, and cooperative cancellation.
+Desktop runs isolated local
 workers concurrently, uses Platform for atomic Project admission and budgets,
 reports monotonic 30-second heartbeats, and keeps every streamed event, canvas,
 approval, checkpoint, and completion bound to its originating conversation.

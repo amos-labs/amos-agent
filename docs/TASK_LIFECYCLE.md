@@ -46,11 +46,12 @@ AMOS working in the background under that Project's dollar cap. When AMOS
 needs a consequential answer, it parks the question in Decisions with
 `desktop_request_decision` instead of inventing a second input surface.
 
-The Desktop **Activity Center** projects the Platform task-run inbox across all
-Projects. It shows bounded progress, cumulative usage, stalled work, budget
-ceilings, and cooperative stop controls. A task-run record is coordination
-metadata, not evidence that an external effect occurred; governed receipts
-remain the proof source for every business action.
+Each Project card can open accordions for conversations, background activity,
+and parked decisions. Activity still projects the Platform task-run inbox:
+bounded progress, dollar used / cap, stalled work, and a cooperative stop.
+A task-run record is coordination metadata, not evidence that an external
+effect occurred; governed receipts remain the proof source for every business
+action.
 
 Desktop now uses a bounded multi-run manager. The Operator is the selected run,
 not the only run: opening or creating another conversation leaves the previous
