@@ -6273,7 +6273,9 @@ export class DesktopController {
       approvals: this.companyApprovals,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
-      pendingInputs: this.pendingDecisionInputs(),
+      pendingInputs: typeof this.pendingDecisionInputs === "function"
+        ? this.pendingDecisionInputs()
+        : [],
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       briefings: structuredClone(this.briefings),
