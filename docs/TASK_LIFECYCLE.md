@@ -40,10 +40,11 @@ resource references, and a user-facing dollar cap. Token, tool-call, wall-time,
 and parallel-run ceilings stay internal safety fuses. They do not copy
 transcripts and do not grant approval or execution authority.
 
-A Project starts a conversation. Tasks remain the internal unit of work and are
-not a user-facing control. When AMOS needs a consequential answer, it parks the
-question in Decisions with `desktop_request_decision` instead of inventing a
-second input surface.
+A Project starts a conversation or an autonomous goal. Tasks remain the
+internal unit of work and are not a user-facing control. Give it a goal leaves
+AMOS working in the background under that Project's dollar cap. When AMOS
+needs a consequential answer, it parks the question in Decisions with
+`desktop_request_decision` instead of inventing a second input surface.
 
 The Desktop **Activity Center** projects the Platform task-run inbox across all
 Projects. It shows bounded progress, cumulative usage, stalled work, budget

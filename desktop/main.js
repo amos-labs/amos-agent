@@ -528,6 +528,9 @@ function registerIpc() {
   ipcMain.handle("desktop:start-new-conversation", (_event, input) =>
     controller.startNewConversation(input)
   );
+  ipcMain.handle("desktop:start-autonomous-goal", (_event, input) =>
+    controller.startAutonomousGoal(input)
+  );
   ipcMain.handle("desktop:open-task", (_event, id) => controller.openTask(id));
   ipcMain.handle("desktop:update-task", (_event, input) =>
     controller.updateTaskResource(input?.id, input?.changes)

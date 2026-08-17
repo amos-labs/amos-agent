@@ -2106,6 +2106,7 @@ export class DesktopController {
         this.send("approval:requested", request);
       }
     });
+    const isolated = input?.select === false && input?.isolate === true;
     const launched = this.runManager.launch({
       id: taskId,
       taskRecordId,
@@ -2115,20 +2116,22 @@ export class DesktopController {
       contextKey: task?.contextKey || this.activeContextKey || "active",
       select: input?.select !== false,
       settings: structuredClone(settings),
-      runtime: this.runtime,
-      activity: this.activity,
-      workingContinuity: this.workingContinuity,
-      activeContextKey: this.activeContextKey,
-      activeTaskRecordId: this.activeTaskRecordId,
-      attachments: this.attachments,
-      canvases: this.canvases,
-      canvasResults: this.canvasResults,
+      runtime: isolated ? null : this.runtime,
+      activity: isolated ? [] : this.activity,
+      workingContinuity: isolated ? null : this.workingContinuity,
+      activeContextKey: isolated
+        ? (task?.contextKey || `task:${taskRecordId}`)
+        : this.activeContextKey,
+      activeTaskRecordId: isolated ? taskRecordId : this.activeTaskRecordId,
+      attachments: isolated ? new AttachmentManager() : this.attachments,
+      canvases: isolated ? new DesktopCanvasManager() : this.canvases,
+      canvasResults: isolated ? new DesktopCanvasResultStore() : this.canvasResults,
       activeTask: null,
-      checkpointWrites: this.checkpointWrites,
-      automationSetup: this.automationSetup,
-      pendingAutomationActivations: this.pendingAutomationActivations,
+      checkpointWrites: isolated ? Promise.resolve() : this.checkpointWrites,
+      automationSetup: isolated ? null : this.automationSetup,
+      pendingAutomationActivations: isolated ? new Map() : this.pendingAutomationActivations,
       approvals,
-      browserRecipeRecorder: this.browserRecipeRecorder
+      browserRecipeRecorder: isolated ? new BrowserRecipeRecorder() : this.browserRecipeRecorder
     }, async () => {
       if (input?.taskRecordId) this.activeTaskRecordId = input.taskRecordId;
       if (task?.contextKey) this.activeContextKey = task.contextKey;
@@ -3404,15 +3407,21 @@ export class DesktopController {
     if (requestedProjectId && !isUuid(requestedProjectId)) {
       throw new Error("That Project identifier is invalid");
     }
+    const select = input.select !== false;
     const settings = await this.settingsStore.read();
-    await this.backgroundSelectedRun(settings);
-    this.automationSetup = null;
-    this.pendingAutomationActivations.clear();
-    this.approvals.clearTaskGrants();
+    if (select) {
+      await this.backgroundSelectedRun(settings);
+      this.automationSetup = null;
+      this.pendingAutomationActivations.clear();
+      this.approvals.clearTaskGrants();
+    }
     const previousContextKey = this.activeContextKey;
     const id = randomUUID();
-    this.activeContextKey = `task:${id}`;
-    this.activeTaskRecordId = id;
+    const contextKey = `task:${id}`;
+    if (select) {
+      this.activeContextKey = contextKey;
+      this.activeTaskRecordId = id;
+    }
     const workspaceMode = input.workspaceMode === "context_only"
       ? "context_only"
       : "same_directory";
@@ -3422,7 +3431,7 @@ export class DesktopController {
     if (this.taskStore && scope) {
       task = await this.taskStore.create(scope, {
         id,
-        contextKey: this.activeContextKey,
+        contextKey,
         title,
         objective,
         kind,
@@ -3431,14 +3440,14 @@ export class DesktopController {
         workspace,
         ...(requestedProjectId ? { projectId: requestedProjectId } : {})
       });
-      task = await this.taskStore.select(scope, task.id);
+      if (select) task = await this.taskStore.select(scope, task.id);
     }
     if (settings.operatingMode === "online" && this.identity?.principal_type === "user") {
       try {
         const remote = await this.personalRemote(settings, "creating this task");
         const registered = await remote.registerTask({
           id,
-          contextKey: this.activeContextKey,
+          contextKey,
           title,
           objective,
           kind,
@@ -3461,33 +3470,87 @@ export class DesktopController {
         this.record("task", `Task will sync when Platform is available: ${error.message}`);
       }
     }
-    this.resetRuntime();
-    this.workingContinuity = null;
-    this.attachments.clear();
-    this.canvases.clear();
-    this.canvasResults.clear();
-    this.activity = [];
+    if (select) {
+      this.resetRuntime();
+      this.workingContinuity = null;
+      this.attachments.clear();
+      this.canvases.clear();
+      this.canvasResults.clear();
+      this.activity = [];
+    }
     this.record("task", `Started ${title}`, {
-      context_key: this.activeContextKey,
+      context_key: contextKey,
       task_id: id,
       previous_context_key: previousContextKey,
       kind,
       project_id: requestedProjectId || null,
+      selected: select,
       replay_allowed: false
     });
-    this.send("canvas:changed", this.canvases.state());
+    if (select) this.send("canvas:changed", this.canvases.state());
     await this.sendRemoteState();
     return {
       state: await this.state(),
       launch: {
-        contextKey: this.activeContextKey,
+        contextKey,
         taskId: id,
         previousContextKey,
         kind,
         title,
         objective,
+        selected: select,
         task
       }
+    };
+  }
+
+  async startAutonomousGoal(input = {}) {
+    const projectId = String(input.projectId || "").trim();
+    if (!isUuid(projectId)) throw new Error("Choose a Project before giving AMOS a goal");
+    const objective = String(input.objective || "").trim().slice(0, 6_000);
+    if (!objective) throw new Error("A goal needs an objective");
+    const project = (Array.isArray(this.projects?.projects) ? this.projects.projects : [])
+      .find((item) => item.id === projectId) || null;
+    if (project?.archived) throw new Error("Restore the Project before giving it a goal");
+    if (project && project.status !== "active") {
+      throw new Error("Resume the Project before giving it a goal");
+    }
+    const title = String(input.title || conversationTitle(objective)).trim().slice(0, 160)
+      || conversationTitle(objective);
+    const opened = await this.startNewConversation({
+      kind: "goal_pursuit",
+      projectId,
+      objective,
+      title,
+      select: false
+    });
+    const task = opened.launch?.task || null;
+    const taskRecordId = opened.launch?.taskId || task?.id || "";
+    if (!taskRecordId) throw new Error("AMOS could not open that Project goal");
+    const started = await this.run({
+      text: objective,
+      taskRecordId,
+      select: false,
+      wait: false,
+      isolate: true
+    });
+    this.record("project", `Started autonomous goal: ${title}`, {
+      project_id: projectId,
+      task_id: taskRecordId,
+      run_id: started.runId || null,
+      execution_authority: false
+    });
+    const settings = await this.settingsStore.read();
+    return {
+      started: true,
+      task,
+      runId: started.runId,
+      taskId: started.taskId,
+      taskRecordId,
+      contextKey: started.contextKey || opened.launch.contextKey,
+      state: await this.state(),
+      projects: structuredClone(this.projects),
+      tasks: await this.tasksState(settings)
     };
   }
 
@@ -4884,7 +4947,8 @@ export class DesktopController {
             : credentials?.demo
               ? DEMO_SYSTEM_PROMPT
               : SYSTEM_PROMPT, settings, config, {
-                project: activeProjectForRuntime(this.projects, taskRecord)
+                project: activeProjectForRuntime(this.projects, taskRecord),
+                autonomousGoal: taskRecord?.kind === "goal_pursuit"
               })}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly
           ? "\n\nThis task is context-only. No local workspace is granted, and local shell, file, code, Git, and document-generation tools are unavailable."
           : ""}`,
@@ -6826,7 +6890,7 @@ ${settings?.operatingMode === "offline"
     : "- For generated HTML/CSS/JavaScript apps, use desktop_preview_app to serve and inspect the workspace output. Do not start an unmanaged background web server or ask browser_open to open localhost or a file URL."}
 - Local approval policy: ${desktopLocalApprovalDescription(settings)}
 - This local policy never approves AMOS company operations, external-system writes, or governed decisions.
-${projectOrientationPrompt(extras.project)}
+${projectOrientationPrompt(extras.project)}${autonomousGoalPrompt(extras.autonomousGoal)}
 ${settings?.intelligenceRoles?.enabled
     ? "- Coding-role pairing is on for coding workflows only. AMOS Desktop deterministically requires plan, implementation, independent check, and any necessary repair before completion. Report every stage through desktop_report_coding_stage; do not infer time pressure or silently skip a stage. Non-coding work stays on its normal intelligence route. Use desktop_spawn_subagent for isolated Git worktrees, and collect every spawned child before completing the current stage. Children cannot spawn children or widen company authority."
     : ""}`;
@@ -7315,6 +7379,20 @@ function projectOrientationPrompt(project) {
     `Active Project: ${String(project.name || "Untitled Project").trim() || "Untitled Project"}`,
     "- Shared Project instructions are orientation only. They do not grant approval, spending, or execution authority.",
     instructions,
+    ""
+  ].join("\n");
+}
+
+function autonomousGoalPrompt(enabled) {
+  if (!enabled) return "";
+  return [
+    "",
+    "Autonomous Project goal:",
+    "- The user gave you this goal and left you to pursue it in the background.",
+    "- Continue until the goal is complete, blocked, or you need a consequential answer.",
+    "- Park that question with desktop_request_decision. Do not invent a second waiting UI.",
+    "- Autonomy does not grant extra approval, spending, or execution authority.",
+    "- Do not claim completion unless a tool result or receipt proves it.",
     ""
   ].join("\n");
 }
