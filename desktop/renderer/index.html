@@ -403,9 +403,9 @@
               <span class="eyebrow">CONVERSATION WORKSPACES</span>
               <h1>Projects keep the whole outcome moving.</h1>
               <p>
-                Give a workspace instructions and a dollar cap, then start a conversation.
-                Tasks stay internal. Project coordination never grants execution authority
-                or replaces proof receipts.
+                Give a workspace instructions and a dollar cap, then start a conversation
+                or give AMOS a goal and leave. Tasks stay internal. Project coordination
+                never grants execution authority or replaces proof receipts.
               </p>
             </div>
             <div class="project-heading-actions">
@@ -432,7 +432,7 @@
               <div id="projectEmpty" class="automation-empty hidden">
                 <span>▱</span>
                 <strong>No Projects yet</strong>
-                <p>Create one to share instructions, set a dollar cap, and start a conversation.</p>
+                <p>Create one to share instructions, set a dollar cap, and start talking or give AMOS a goal.</p>
               </div>
               <div id="projectList" class="project-list"></div>
             </section>
@@ -1161,6 +1161,31 @@
         <div class="connection-modal-actions">
           <button id="projectCancelButton" class="button secondary" type="button">Cancel</button>
           <button id="projectSubmitButton" class="button primary" type="submit">Save Project <span>→</span></button>
+        </div>
+      </form>
+    </div>
+
+    <div id="goalModal" class="modal-backdrop hidden" role="presentation">
+      <form id="goalForm" class="connection-modal project-modal" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle">
+        <div class="connection-modal-heading">
+          <div>
+            <span class="eyebrow">AUTONOMOUS GOAL</span>
+            <h2 id="goalModalTitle">Give AMOS a goal</h2>
+            <p>AMOS will start this in the Project and keep working. Watch Activity Center. Questions land in Decisions.</p>
+          </div>
+          <button id="goalModalClose" class="icon-button" type="button" aria-label="Close goal setup">×</button>
+        </div>
+        <input id="goalProjectIdInput" type="hidden" />
+        <p id="goalProjectName" class="project-modal-note"></p>
+        <label class="connection-field">
+          <span>Goal</span>
+          <textarea id="goalObjectiveInput" maxlength="6000" rows="5" required placeholder="What should AMOS finish while you leave this running?"></textarea>
+        </label>
+        <p class="project-modal-note">This uses the Project dollar cap and existing approvals. It does not grant extra authority.</p>
+        <div id="goalModalError" class="connection-modal-error hidden" role="alert"></div>
+        <div class="connection-modal-actions">
+          <button id="goalCancelButton" class="button secondary" type="button">Cancel</button>
+          <button id="goalSubmitButton" class="button primary" type="submit">Start and leave <span>→</span></button>
         </div>
       </form>
     </div>

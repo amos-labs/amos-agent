@@ -95,6 +95,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:remove-browser-recipe", id),
   startNewConversation: (input) =>
     ipcRenderer.invoke("desktop:start-new-conversation", input),
+  startAutonomousGoal: (input) =>
+    ipcRenderer.invoke("desktop:start-autonomous-goal", input),
   openTask: (id) => ipcRenderer.invoke("desktop:open-task", id),
   updateTask: (id, changes) => ipcRenderer.invoke("desktop:update-task", { id, changes }),
   forkTask: (input) => ipcRenderer.invoke("desktop:fork-task", input),

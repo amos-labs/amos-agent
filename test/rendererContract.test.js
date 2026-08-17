@@ -294,7 +294,8 @@ test("Automations replace Memory in primary navigation and launch isolated gover
   assert.match(main, /controller\.simulateAutomation\(input\?\.automationId, input\?\.sampleTrigger \?\? null\)/);
   assert.match(main, /controller\.repairAutomationFailure\(input\?\.incidentId, input\?\.resolution\)/);
   assert.match(main, /controller\.removeBrowserRecipe\(id\)/);
-  assert.match(controller, /const id = randomUUID\(\);[\s\S]*?this\.activeContextKey = `task:\$\{id\}`/);
+  assert.match(controller, /const contextKey = `task:\$\{id\}`/);
+  assert.match(controller, /if \(select\) \{[\s\S]*?this\.activeContextKey = contextKey/);
   assert.match(controller, /continuityCapturePayload\(transition, settings, this\.activeContextKey, record\)/);
   const turnPayload = controller.slice(
     controller.indexOf("function continuityCapturePayload"),
@@ -442,6 +443,15 @@ test("Projects expose conversation workspaces, a dollar cap, and one supervised 
   assert.match(javascript, /task\.projectId === project\.id/);
   assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?projectId: project\.id/);
   assert.match(javascript, /Start conversation/);
+  assert.match(javascript, /Give it a goal/);
+  assert.match(javascript, /api\.startAutonomousGoal\(/);
+  assert.match(html, /id="goalObjectiveInput"/);
+  assert.match(html, /Start and leave/);
+  assert.match(preload, /desktop:start-autonomous-goal/);
+  assert.match(main, /controller\.startAutonomousGoal/);
+  assert.match(controller, /async startAutonomousGoal\(/);
+  assert.match(controller, /kind: "goal_pursuit"/);
+  assert.match(controller, /isolate: true/);
   assert.match(javascript, /function decisionInputCard\(/);
   assert.match(javascript, /api\.resolveDecisionInput\(/);
   assert.match(preload, /desktop:resolve-decision-input/);

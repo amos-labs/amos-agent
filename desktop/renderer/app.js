@@ -165,6 +165,9 @@ const elements = Object.fromEntries(
     "projectModalTitle", "projectModalClose", "projectIdInput", "projectNameInput",
     "projectInstructionsInput", "projectCostInput", "projectModalError", "projectCancelButton",
     "projectSubmitButton",
+    "goalModal", "goalForm", "goalModalTitle", "goalModalClose", "goalProjectIdInput",
+    "goalProjectName", "goalObjectiveInput", "goalModalError", "goalCancelButton",
+    "goalSubmitButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -339,6 +342,12 @@ function bindActions() {
   elements.projectCancelButton.addEventListener("click", closeProjectModal);
   elements.projectModal.addEventListener("click", (event) => {
     if (event.target === elements.projectModal) closeProjectModal();
+  });
+  elements.goalForm.addEventListener("submit", submitAutonomousGoal);
+  elements.goalModalClose.addEventListener("click", closeGoalModal);
+  elements.goalCancelButton.addEventListener("click", closeGoalModal);
+  elements.goalModal.addEventListener("click", (event) => {
+    if (event.target === elements.goalModal) closeGoalModal();
   });
   elements.forkTaskForm.addEventListener("submit", submitTaskFork);
   elements.forkTaskCancel.addEventListener("click", closeTaskForkModal);
@@ -2714,6 +2723,9 @@ function projectCard(project, conversations) {
   const newTask = actionButton("Start conversation", "secondary");
   newTask.disabled = project.archived || project.status !== "active";
   newTask.addEventListener("click", () => createTaskInProject(project, newTask));
+  const giveGoal = actionButton("Give it a goal", "ghost");
+  giveGoal.disabled = project.archived || project.status !== "active";
+  giveGoal.addEventListener("click", () => openGoalModal(project));
   const edit = actionButton("Edit", "ghost");
   edit.disabled = project.archived;
   edit.addEventListener("click", () => openProjectModal(project));
@@ -2728,7 +2740,7 @@ function projectCard(project, conversations) {
   ));
   const archive = actionButton(project.archived ? "Restore" : "Archive", "ghost");
   archive.addEventListener("click", () => updateProject(project, { archived: !project.archived }, archive));
-  actions.append(view, newTask, edit, pin, pause, archive);
+  actions.append(view, newTask, giveGoal, edit, pin, pause, archive);
   card.append(heading, instructions, details, projectConversationList(conversations), actions);
   return card;
 }
@@ -2768,6 +2780,12 @@ function projectConversationList(conversations) {
     const title = document.createElement("strong");
     title.textContent = task.title;
     copy.append(meta, title);
+    if (task.kind === "goal_pursuit") {
+      const goal = document.createElement("span");
+      goal.className = "task-lineage-chip";
+      goal.textContent = "GOAL";
+      meta.append(goal);
+    }
     const rowActions = document.createElement("div");
     rowActions.className = "project-conversation-actions";
     const open = actionButton(task.active ? "Open" : "Continue", "ghost");
@@ -2931,6 +2949,47 @@ async function updateProject(project, changes, button) {
     toast(error.message, true);
   } finally {
     if (button.isConnected) setButtonBusy(button, false, label);
+  }
+}
+
+function openGoalModal(project) {
+  elements.goalProjectIdInput.value = project.id;
+  elements.goalProjectName.textContent = `Project: ${project.name}`;
+  elements.goalObjectiveInput.value = "";
+  elements.goalModalError.textContent = "";
+  elements.goalModalError.classList.add("hidden");
+  elements.goalModal.classList.remove("hidden");
+  elements.goalObjectiveInput.focus();
+}
+
+function closeGoalModal() {
+  elements.goalModal.classList.add("hidden");
+  elements.goalForm.reset();
+  elements.goalProjectIdInput.value = "";
+  elements.goalModalError.textContent = "";
+  elements.goalModalError.classList.add("hidden");
+}
+
+async function submitAutonomousGoal(event) {
+  event.preventDefault();
+  const projectId = elements.goalProjectIdInput.value;
+  const objective = elements.goalObjectiveInput.value.trim();
+  setButtonBusy(elements.goalSubmitButton, true, "Starting…");
+  try {
+    const response = await api.startAutonomousGoal({ projectId, objective });
+    state.projects = response.projects || state.projects;
+    state.tasks = response.tasks || state.tasks;
+    selectedProjectId = projectId;
+    closeGoalModal();
+    renderProjects();
+    renderTasks();
+    showView("projects");
+    toast("AMOS is pursuing that goal. Watch Activity Center; questions land in Decisions.");
+  } catch (error) {
+    elements.goalModalError.textContent = error.message;
+    elements.goalModalError.classList.remove("hidden");
+  } finally {
+    setButtonBusy(elements.goalSubmitButton, false, "Start and leave →");
   }
 }
 
@@ -3099,7 +3158,9 @@ function taskCard(task) {
   const details = document.createElement("div");
   details.className = "task-card-details";
   for (const value of [
-    task.kind === "automation_builder" ? "Automation build" : humanizeTool(task.kind || "general"),
+    task.kind === "goal_pursuit"
+      ? "Autonomous goal"
+      : task.kind === "automation_builder" ? "Automation build" : humanizeTool(task.kind || "general"),
     taskWorkspaceLabel(task),
     task.parentTaskId ? `From ${shortTaskId(task.parentTaskId)}` : "Root conversation",
     task.remote ? "Platform + local" : "Encrypted local"

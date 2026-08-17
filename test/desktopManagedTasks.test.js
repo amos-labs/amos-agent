@@ -292,3 +292,111 @@ test("a Project conversation is created already assigned to that workspace", asy
   assert.equal(conversation.projectId, projectId);
   assert.equal(opened.launch.task.projectId, projectId);
 });
+
+test("a Project goal starts in the background without stealing Operator", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-autonomous-goal-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:00:00.000Z")
+  });
+  const settings = settingsStore(root);
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeContextKey: controller.activeContextKey,
+    activeTaskRecordId: controller.activeTaskRecordId
+  });
+  controller.projects = {
+    supported: true,
+    projects: [{
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Enterprise rollout",
+      status: "active",
+      archived: false
+    }]
+  };
+
+  const opened = await controller.startNewConversation({ kind: "general" });
+  assert.equal(opened.launch.title, "New conversation");
+  const selectedId = controller.activeTaskRecordId;
+  const selectedKey = controller.activeContextKey;
+
+  let runCalls = 0;
+  controller.executeRun = async (input) => {
+    runCalls += 1;
+    assert.equal(input.text, "Ship the first-location scorecard");
+    assert.notEqual(controller.activeTaskRecordId, selectedId);
+    return { answer: "Working", taskEventId: "run:goal" };
+  };
+
+  const started = await controller.startAutonomousGoal({
+    projectId: "22222222-2222-4222-8222-222222222222",
+    objective: "Ship the first-location scorecard"
+  });
+
+  assert.equal(started.started, true);
+  assert.equal(controller.activeTaskRecordId, selectedId);
+  assert.equal(controller.activeContextKey, selectedKey);
+  const owner = taskOwnerScope({ boundary: "personal", workspace: root });
+  const library = await tasks.list(owner);
+  const goal = library.find((task) => task.kind === "goal_pursuit");
+  assert.ok(goal);
+  assert.equal(goal.projectId, "22222222-2222-4222-8222-222222222222");
+  assert.equal(goal.objective, "Ship the first-location scorecard");
+  assert.equal(goal.title, "Ship the first-location scorecard");
+  assert.notEqual(goal.id, selectedId);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runCalls, 1);
+});
+
+test("a Project goal requires an active Project and an objective", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-autonomous-goal-guard-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:00:00.000Z")
+  });
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settingsStore(root),
+    taskStore: tasks,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeContextKey: controller.activeContextKey,
+    activeTaskRecordId: controller.activeTaskRecordId
+  });
+  controller.projects = {
+    supported: true,
+    projects: [{
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Enterprise rollout",
+      status: "paused",
+      archived: false
+    }]
+  };
+
+  await assert.rejects(
+    controller.startAutonomousGoal({
+      projectId: "22222222-2222-4222-8222-222222222222",
+      objective: ""
+    }),
+    /goal needs an objective/
+  );
+  await assert.rejects(
+    controller.startAutonomousGoal({
+      projectId: "22222222-2222-4222-8222-222222222222",
+      objective: "Do the work"
+    }),
+    /Resume the Project/
+  );
+});
