@@ -515,33 +515,25 @@
           <div class="canvas-shell">
             <div class="canvas-heading">
               <div>
-                <span class="eyebrow">DURABLE BRIEFINGS</span>
-                <h1>Briefings that stay useful.</h1>
-                <p>Save the definition of a useful company view, then reopen it beside any conversation with fresh governed data.</p>
+                <span class="eyebrow">BRIEFINGS</span>
+                <h1>Briefings</h1>
+                <p>
+                  A saved company view that refreshes with governed data.
+                  Company Briefing definitions and schedules live in governed AMOS state.
+                </p>
               </div>
             </div>
             <section id="briefingLibrary" class="briefing-library">
-              <div class="briefing-library-section">
-                <div>
-                  <span class="eyebrow accent">CURRENT WORK SURFACES</span>
-                  <p>Temporary views from this task. Open one beside chat or save its definition for later.</p>
-                </div>
+              <div class="briefing-open-now hidden">
+                <span class="eyebrow accent">OPEN NOW</span>
                 <div id="liveCanvasList" class="briefing-card-list"></div>
               </div>
-              <div class="briefing-library-section">
-                <div>
-                  <span class="eyebrow">SAVED VIEWS</span>
-                  <p>Company Briefing definitions and schedules live in governed AMOS state. Every run refreshes current sources and authority.</p>
-                </div>
-                <div id="savedViewList" class="briefing-card-list"></div>
-              </div>
-              <div class="briefing-library-section">
-                <div>
-                  <span class="eyebrow">START FROM A TEMPLATE</span>
-                  <p>Choose a useful operating question; AMOS selects the governed sources and representation.</p>
-                </div>
+              <div id="savedViewList" class="briefing-card-list"></div>
+              <details class="briefing-templates">
+                <summary>Start from a template</summary>
+                <p>Choose a useful operating question; AMOS selects the governed sources and representation.</p>
                 <div id="briefingTemplateList" class="briefing-card-list"></div>
-              </div>
+              </details>
             </section>
           </div>
         </section>

@@ -3678,17 +3678,14 @@ function renderBriefingLibrary() {
   elements.savedViewList.replaceChildren();
   elements.briefingTemplateList.replaceChildren();
 
-  if (canvases.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "briefing-library-empty";
-    empty.textContent = "Ask AMOS for a comparison, analysis, draft, or visualization to create a work surface.";
-    elements.liveCanvasList.append(empty);
-  } else {
+  const openNow = elements.liveCanvasList.closest(".briefing-open-now");
+  if (openNow) openNow.classList.toggle("hidden", canvases.length === 0);
+  if (canvases.length > 0) {
     for (const canvas of canvases) {
       elements.liveCanvasList.append(briefingCard({
         title: canvas.title,
         description: `${canvas.blocks?.length || 0} block${canvas.blocks?.length === 1 ? "" : "s"} · ${canvas.source?.label || "AMOS work"}`,
-        actionLabel: "Open beside chat",
+        actionLabel: "Open now",
         onAction: () => openCanvasSidecar(canvas.id),
         onRemove: () => removeCanvas(canvas.id)
       }));
@@ -3765,30 +3762,31 @@ function briefingCard({ title, description, actionLabel, onAction, onRemove = nu
   detail.textContent = description;
   copy.append(heading, detail);
   const actions = document.createElement("div");
-  const action = document.createElement("button");
-  action.type = "button";
-  action.className = "text-button";
-  action.textContent = `${actionLabel} →`;
+  actions.className = "briefing-card-actions";
+  const action = actionButton(actionLabel, "primary");
   action.addEventListener("click", onAction);
   actions.append(action);
-  for (const extraAction of extraActions) {
-    const secondary = document.createElement("button");
-    secondary.type = "button";
-    secondary.className = "text-button";
-    secondary.textContent = extraAction.label;
-    secondary.addEventListener("click", extraAction.onAction);
-    actions.append(secondary);
-  }
-  if (onRemove) {
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "text-button danger-text";
-    remove.textContent = "Remove";
-    remove.addEventListener("click", onRemove);
-    actions.append(remove);
-  }
+  const overflow = extraActions.slice();
+  if (onRemove) overflow.push({ label: "Remove", onAction: onRemove, danger: true });
+  if (overflow.length > 0) actions.append(briefingSettingsMenu(overflow));
   card.append(copy, actions);
   return card;
+}
+
+function briefingSettingsMenu(items) {
+  const wrap = document.createElement("details");
+  wrap.className = "briefing-settings";
+  const summary = document.createElement("summary");
+  summary.textContent = "More";
+  const menu = document.createElement("div");
+  menu.className = "briefing-settings-menu";
+  for (const item of items) {
+    const button = actionButton(item.label, item.danger ? "danger" : "ghost");
+    button.addEventListener("click", item.onAction);
+    menu.append(button);
+  }
+  wrap.append(summary, menu);
+  return wrap;
 }
 
 function stageBriefingPrompt(prompt) {
