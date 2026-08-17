@@ -44,6 +44,16 @@ export const PRESENTATION_LIMITS = Object.freeze({
 });
 
 export function normalizePresentationSpec(input) {
+  // Cheap early guard: reject a runaway or hostile payload before any per-field
+  // normalization allocates. The authoritative text budget is re-checked on the
+  // normalized spec below; this only bounds raw input size (2x headroom for
+  // JSON structure, escaping, and non-text fields).
+  const rawSize = input == null ? 0 : Buffer.byteLength(safeSerialize(input), "utf8");
+  if (rawSize > PRESENTATION_LIMITS.maxTotalCharacters * 2) {
+    throw new Error(
+      `Presentation payload exceeds the ${(PRESENTATION_LIMITS.maxTotalCharacters * 2).toLocaleString()} byte input limit`
+    );
+  }
   const source = object(input, "PresentationSpec must be an object");
   const version = text(source.version || PRESENTATION_SPEC_VERSION, "version", 8);
   if (version !== PRESENTATION_SPEC_VERSION) {
@@ -423,4 +433,14 @@ function clean(value) {
     .replace(/\r\n?/g, "\n")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .trim();
+}
+
+function safeSerialize(value) {
+  try {
+    return JSON.stringify(value) || "";
+  } catch {
+    // Circular or unserializable input: fall back to a bounded string form so the
+    // size guard still runs; object() below will reject non-objects anyway.
+    return String(value);
+  }
 }

@@ -111,6 +111,14 @@ export async function verifyPresentationBuffer(buffer, input) {
   if (slideFiles.length !== spec.slides.length) {
     throw new Error("Generated PPTX did not reopen with the expected slide count");
   }
+  const expectedMedia = countExpectedMedia(spec);
+  const packagedMedia = Object.keys(zip.files)
+    .filter((name) => /^ppt\/media\/.+/.test(name)).length;
+  if (packagedMedia !== expectedMedia) {
+    throw new Error(
+      `Generated PPTX packaged ${packagedMedia} media parts, expected ${expectedMedia}`
+    );
+  }
   const extracted = await extractPresentationTextFromZip(zip);
   if (!extracted.includes(spec.title)) {
     throw new Error("Generated PPTX failed text verification for the deck title");
@@ -747,3 +755,10 @@ const SLIDE_LAYOUT_RELS_XML = relsXml([
 const NOTES_MASTER_RELS_XML = relsXml([
   rel("rId1", "theme", "../theme/theme1.xml")
 ]);
+
+function countExpectedMedia(spec) {
+  let count = spec.slides.filter((slide) => slide.layout === "chart").length
+    + spec.slides.filter((slide) => slide.layout === "image").length;
+  if (spec.brand?.logo_path) count += 1;
+  return count;
+}

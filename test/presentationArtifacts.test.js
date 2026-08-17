@@ -11,7 +11,9 @@ import {
   presentationText
 } from "../src/artifacts/presentationSpec.js";
 import { analyzePresentationLayout } from "../src/artifacts/presentationDiagnostics.js";
-import { extractPresentationText } from "../src/artifacts/presentationRenderer.js";
+import { extractPresentationText, verifyPresentationBuffer } from "../src/artifacts/presentationRenderer.js";
+import { renderPresentationArtifact } from "../src/artifacts/presentationRenderer.js";
+import { resolvePresentationAssets } from "../src/artifacts/presentationAssets.js";
 import { createPresentationArtifact, createPresentationTools } from "../src/tools/presentations.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 
@@ -99,6 +101,46 @@ const DECK = {
     }
   ]
 };
+
+test("PresentationSpec rejects a runaway payload before normalizing fields", () => {
+  const huge = {
+    title: "Oversized",
+    slides: [{ layout: "bullets", title: "Big", items: ["x".repeat(PRESENTATION_LIMITS.maxTotalCharacters * 3)] }]
+  };
+  assert.throws(() => normalizePresentationSpec(huge), /byte input limit/);
+  // A circular structure still fails safely (size guard, then object validation).
+  const circular = { title: "Loop" };
+  circular.self = circular;
+  assert.throws(() => normalizePresentationSpec(circular));
+});
+
+test("PPTX verification reopens the package and counts packaged media", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-pptx-media-"));
+  const chartDeck = {
+    version: "1",
+    title: "Media Check",
+    slides: [
+      { layout: "title", title: "Media Check" },
+      {
+        layout: "chart",
+        title: "ARR",
+        chart_type: "bar",
+        labels: ["Q1", "Q2"],
+        series: [{ name: "ARR", values: [1, 2] }],
+        alt_text: "ARR rising"
+      }
+    ]
+  };
+  const assets = await resolvePresentationAssets(chartDeck, root);
+  const rendered = await renderPresentationArtifact(chartDeck, { assets });
+  assert.equal(rendered.verification.verified, true);
+  // One chart renders as exactly one packaged media part; the reopened package
+  // agrees, and the slide count round-trips.
+  const zip = await JSZip.loadAsync(rendered.buffer);
+  const mediaParts = Object.keys(zip.files).filter((name) => /^ppt\/media\/.+/.test(name));
+  assert.equal(mediaParts.length, 1);
+  assert.equal(rendered.verification.slideCount, 2);
+});
 
 test("PresentationSpec is bounded and rejects unsafe contracts", () => {
   const spec = normalizePresentationSpec(DECK);
