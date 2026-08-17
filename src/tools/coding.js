@@ -2,6 +2,14 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { spawn } from "node:child_process";
 import { assertSafeAgentPath, resolveWorkspacePath, truncateText } from "../util/pathSafety.js";
+import {
+  isGitRepo,
+  relativeWorkspacePath,
+  resolveDefaultWorkspacePath,
+  rewritePatchForGitCwd,
+  workspaceCommandCwd,
+  workspaceFocusPath
+} from "../util/workspaceFocus.js";
 import { safeChildEnvironment } from "./bash.js";
 
 const IGNORED = new Set([".git", "node_modules", "dist", "coverage", ".amos-agent", ".next", "target", "vendor"]);
@@ -12,10 +20,24 @@ export function createCodingTools() {
       name: "desktop_inspect_project",
       source: "local",
       description:
-        "Build a bounded, read-only briefing of the selected project: stack, manifests, scripts, git state, README context, verification commands, and suggested next tasks.",
-      parameters: { type: "object", properties: {}, additionalProperties: false },
-      async handler(_args, context) {
-        return inspectProject(context.config.safety.workspaceRoot, context);
+        "Build a bounded, read-only briefing of the selected project. If the grant is a parent of nested repos, return that catalog instead of treating the parent as one project.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Optional workspace-relative folder to inspect. Defaults to the active work item, then the grant."
+          }
+        },
+        additionalProperties: false
+      },
+      async handler(args, context) {
+        const root = resolveDefaultWorkspacePath(
+          context.config.safety,
+          args.path || ".",
+          context.config.safety.allowOutsideWorkspace
+        );
+        return inspectProject(root, context);
       }
     },
     {
@@ -38,7 +60,7 @@ export function createCodingTools() {
         if (!query) throw new Error("query is required");
         const root = context.config.safety.workspaceRoot;
         const canonicalRoot = resolveWorkspacePath(root, ".", context.config.safety.allowOutsideWorkspace);
-        const start = resolveWorkspacePath(root, args.path || ".", context.config.safety.allowOutsideWorkspace);
+        const start = resolveDefaultWorkspacePath(context.config.safety, args.path || ".", context.config.safety.allowOutsideWorkspace);
         const maxResults = boundedNumber(args.max_results, 100, 1, 500);
         const matches = [];
         const budget = { files: 0, maxFiles: 2_000 };
@@ -58,7 +80,7 @@ export function createCodingTools() {
       parameters: { type: "object", properties: {}, additionalProperties: false },
       async handler(_args, context) {
         return runProgram("git", ["status", "--short", "--branch"], {
-          cwd: context.config.safety.workspaceRoot,
+          cwd: workspaceFocusPath(context.config.safety),
           timeoutMs: 15_000,
           maxOutputBytes: context.config.safety.maxOutputBytes,
           signal: context.signal
@@ -79,17 +101,20 @@ export function createCodingTools() {
       },
       async handler(args, context) {
         const root = context.config.safety.workspaceRoot;
-        const canonicalRoot = resolveWorkspacePath(root, ".", context.config.safety.allowOutsideWorkspace);
-        const paths = (args.paths || []).map((path) => {
-          const resolved = resolveWorkspacePath(root, path, context.config.safety.allowOutsideWorkspace);
+        const requested = args.paths || [];
+        const cwd = requested.length > 0
+          ? workspaceCommandCwd(context.config.safety, requested)
+          : workspaceFocusPath(context.config.safety);
+        const paths = requested.map((path) => {
+          const resolved = resolveDefaultWorkspacePath(context.config.safety, path, context.config.safety.allowOutsideWorkspace);
           assertSafeAgentPath(resolved, root);
-          return relative(canonicalRoot, resolved) || ".";
+          return relative(cwd, resolved) || ".";
         });
         const command = ["diff"];
         if (args.staged) command.push("--cached");
         if (paths.length > 0) command.push("--", ...paths);
         return runProgram("git", command, {
-          cwd: root,
+          cwd,
           timeoutMs: 15_000,
           maxOutputBytes: context.config.safety.maxOutputBytes,
           signal: context.signal
@@ -117,15 +142,17 @@ export function createCodingTools() {
 
         const root = context.config.safety.workspaceRoot;
         const paths = parsePatchPaths(patch);
+        const focus = workspaceCommandCwd(context.config.safety, paths);
+        const gitPatch = rewritePatchForGitCwd(patch, root, focus);
         if (paths.length === 0) throw new Error("Patch did not contain any file paths");
         for (const path of paths) {
-          const resolved = resolveWorkspacePath(root, path, context.config.safety.allowOutsideWorkspace);
+          const resolved = resolveDefaultWorkspacePath(context.config.safety, path, context.config.safety.allowOutsideWorkspace);
           assertSafeAgentPath(resolved, root);
         }
 
         const checked = await runProgram("git", ["apply", "--check", "--recount", "--whitespace=nowarn", "-"], {
-          cwd: root,
-          input: patch,
+          cwd: focus,
+          input: gitPatch,
           timeoutMs: 20_000,
           maxOutputBytes: context.config.safety.maxOutputBytes,
           signal: context.signal
@@ -150,8 +177,8 @@ export function createCodingTools() {
         }
 
         const applied = await runProgram("git", ["apply", "--recount", "--whitespace=nowarn", "-"], {
-          cwd: root,
-          input: patch,
+          cwd: focus,
+          input: gitPatch,
           timeoutMs: 20_000,
           maxOutputBytes: context.config.safety.maxOutputBytes,
           signal: context.signal
@@ -163,6 +190,41 @@ export function createCodingTools() {
 }
 
 async function inspectProject(root, context) {
+  const grant = context.config.safety.workspaceRoot;
+  const focus = workspaceFocusPath(context.config.safety);
+  const children = await listChildProjects(root, grant, context);
+  if (!isGitRepo(root) && children.length > 0) {
+    return {
+      kind: "workspace_catalog",
+      project: basename(root),
+      workspace: root,
+      grant,
+      focus: focus && focus !== root ? focus : "",
+      branch: null,
+      git: {
+        repository: false,
+        dirty: null,
+        changes: [],
+        recent_commits: []
+      },
+      stack: [],
+      manifests: [],
+      scripts: {},
+      verification: [],
+      readme: null,
+      projects: children,
+      inventory: {
+        files: 0,
+        directories: children.length,
+        truncated: children.length >= 40,
+        top_extensions: []
+      },
+      sensitive_files:
+        "Names and contents of .env, credentials, keys, and secrets were intentionally excluded.",
+      suggested_tasks: catalogSuggestions(children)
+    };
+  }
+
   const inventory = {
     files: 0,
     directories: 0,
@@ -210,8 +272,11 @@ async function inspectProject(root, context) {
   const verification = verificationCommands(manifestSet, scripts);
   const stack = detectedStack(manifestSet, packageJson, inventory.extensions);
   return {
+    kind: "project",
     project: packageJson?.name || basename(root),
     workspace: root,
+    grant,
+    focus: focus && focus !== root ? focus : "",
     branch: branch.ok ? branch.stdout.trim() || null : null,
     git: {
       repository: branch.ok || status.ok || recent.ok,
@@ -245,6 +310,45 @@ async function inspectProject(root, context) {
         : "Identify one small, high-value improvement and propose it before editing"
     ]
   };
+}
+
+
+async function listChildProjects(root, grant, context) {
+  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
+  const children = [];
+  for (const entry of entries) {
+    if (children.length >= 40) break;
+    if (!entry.isDirectory()) continue;
+    if (IGNORED.has(entry.name) || entry.name.startsWith(".")) continue;
+    const absolute = join(root, entry.name);
+    if (!isGitRepo(absolute)) continue;
+    const [branch, packageJson] = await Promise.all([
+      runProgram("git", ["branch", "--show-current"], {
+        cwd: absolute,
+        timeoutMs: 5_000,
+        maxOutputBytes: context.config.safety.maxOutputBytes,
+        signal: context.signal
+      }),
+      readJson(join(absolute, "package.json"))
+    ]);
+    children.push({
+      path: relativeWorkspacePath(grant, absolute),
+      name: packageJson?.name || entry.name,
+      branch: branch.ok ? branch.stdout.trim() || null : null,
+      stack: packageJson ? detectedStack(new Set(["package.json"]), packageJson, new Map()) : []
+    });
+  }
+  return children;
+}
+
+function catalogSuggestions(children) {
+  const first = children[0];
+  return [
+    first
+      ? `Use desktop_focus_workspace on ${first.path} before treating this grant as one project`
+      : "Choose one nested project before inspecting or editing",
+    "Do not inventory the parent grant as if it were a single repository"
+  ];
 }
 
 async function inventoryPath(path, root, inventory) {

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { SYSTEM_PROMPT } from "./prompts.js";
-import { throwIfAborted } from "./util/abort.js";
+import { isAbortError, throwIfAborted } from "./util/abort.js";
 import {
   applyWorkflowToModelContent,
   selectTaskWorkflow
@@ -177,6 +177,7 @@ export class AgentLoop {
       let completedToolActions = 0;
       let failedToolActions = 0;
       let rejectedCompletions = 0;
+      let transientRetries = 0;
       let pendingRoutingDecision = routingDecision?.minimumClass
         ? routingDecision
         : null;
@@ -221,6 +222,18 @@ export class AgentLoop {
             }
           });
         } catch (error) {
+          if (isAbortError(error) || signal?.aborted) throw error;
+          const retryBudget = this.config.agent?.maxModelTransientRetries ?? 2;
+          if (isTransientModelFailure(error) && transientRetries < retryBudget) {
+            transientRetries += 1;
+            onEvent({
+              type: "phase",
+              phase: "retrying",
+              turn,
+              summary: `The model stopped responding; retrying with completed work intact (${transientRetries} of ${retryBudget})`
+            });
+            continue;
+          }
           if (isModelTimeout(error) && completedToolActions > 0) {
             error.code = "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS";
             error.completedToolActions = completedToolActions;
@@ -235,6 +248,7 @@ export class AgentLoop {
           }
           throw error;
         }
+        transientRetries = 0;
         pendingRoutingDecision = null;
 
         onEvent(usageEventFromResponse(response.usage, turn));
@@ -739,6 +753,14 @@ function isModelTimeout(error) {
   return /request timed out|stopped responding|response timed out/i.test(
     String(error?.message || "")
   );
+}
+
+function isTransientModelFailure(error) {
+  if (isAbortError(error)) return false;
+  const message = String(error?.message || "");
+  return isModelTimeout(error) ||
+    /did not include choices\[0\]\.message|did not include content or tool calls|empty response|no choices/i.test(message) ||
+    /fetch failed|ECONNRESET|socket hang up|network error|UND_ERR/i.test(message);
 }
 
 function usageEventFromResponse(usage, turn) {

@@ -3445,9 +3445,6 @@ export class DesktopController {
     const runningLane = this.runManager.findByTask(task.id);
     if (runningLane) {
       this.runManager.select(runningLane.id);
-      if (task.workspaceMode !== "context_only" && task.workspace?.localPath) {
-        await this.settingsStore.write({ ...settings, workspace: task.workspace.localPath });
-      }
       this.send("canvas:changed", this.canvases.state());
       this.send("agent:status", {
         running: true,
@@ -3481,9 +3478,6 @@ export class DesktopController {
       }
     }
 
-    if (task.workspaceMode !== "context_only" && task.workspace?.localPath) {
-      await this.settingsStore.write({ ...settings, workspace: task.workspace.localPath });
-    }
     this.activeTaskRecordId = task.id;
     this.activeContextKey = task.contextKey;
     if (this.taskStore) task = await this.taskStore.select(scope, task.id);
@@ -4619,14 +4613,17 @@ export class DesktopController {
     const requestedBoundary = boundary || (offline ? "offline" : "online");
     const settings = this.runManager.current()?.settings || await this.settingsStore.read();
     const contextOnly = await this.activeTaskIsContextOnly(settings);
+    const taskRecord = await this.activeTaskRecord(settings);
+    const workspaceFocus = taskWorkspaceFocus(taskRecord, settings);
     if (
       this.runtime?.boundary === requestedBoundary &&
-      this.runtime?.contextOnly === contextOnly
+      this.runtime?.contextOnly === contextOnly &&
+      this.runtime?.workspaceFocus === workspaceFocus
     ) {
       return this.runtime;
     }
     if (this.runtime) this.resetRuntime();
-    const config = this.configFrom(settings);
+    const config = this.configFrom(settings, { workspaceFocus });
     const missing = validateConfig(config);
     if (missing.length > 0) {
       throw new Error(`Finish intelligence setup: ${missing.join(", ")}`);
@@ -4801,6 +4798,7 @@ export class DesktopController {
       offline: isOffline,
       boundary: requestedBoundary,
       contextOnly,
+      workspaceFocus,
       demo: Boolean(credentials?.demo),
       config,
       oauth,
@@ -4829,6 +4827,9 @@ export class DesktopController {
         extraTools,
         onToolResult: (outcome) => {
           this.captureContinuityToolOutcome(outcome, config.safety.workspaceRoot);
+          if (outcome?.name === "desktop_focus_workspace" && outcome.result?.ok && !outcome.failed) {
+            void this.persistWorkspaceFocus(outcome.result);
+          }
           return this.canvasResults.capture(outcome);
         }
       })
@@ -5175,15 +5176,47 @@ export class DesktopController {
     const path = fallback?.localPath || settings?.workspace || "";
     if (!path) return {};
     try {
-      return await inspectTaskWorkspace(path);
+      return {
+        ...await inspectTaskWorkspace(path),
+        focusPath: fallback?.focusPath || ""
+      };
     } catch {
       return {
         ...portableTaskWorkspace(fallback),
         localPath: resolve(path),
+        focusPath: fallback?.focusPath || "",
         label: fallback?.label || basename(path),
         dirty: fallback?.dirty === true
       };
     }
+  }
+
+  async activeTaskRecord(settings = null) {
+    if (!this.taskStore || !this.activeTaskRecordId) return null;
+    const currentSettings = settings || await this.settingsStore.read();
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return null;
+    return this.taskStore.get(scope, this.activeTaskRecordId);
+  }
+
+  async persistWorkspaceFocus(result) {
+    const settings = await this.settingsStore.read();
+    if (!this.taskStore || !this.activeTaskRecordId) return result;
+    const scope = this.taskScope(settings);
+    if (!scope) return result;
+    const task = await this.taskStore.get(scope, this.activeTaskRecordId);
+    if (!task || task.workspaceMode === "context_only") return result;
+    const nextWorkspace = {
+      ...(task.workspace || {}),
+      localPath: task.workspace?.localPath || settings.workspace || "",
+      focusPath: result.focus
+    };
+    await this.taskStore.update(scope, task.id, { workspace: nextWorkspace });
+    if (this.runtime?.config?.safety) {
+      this.runtime.config.safety.workspaceFocus = result.focus;
+      this.runtime.workspaceFocus = result.focus;
+    }
+    return result;
   }
 
   relationshipProfileScope(settings = null) {
@@ -6049,7 +6082,7 @@ export class DesktopController {
     return { ok: true, workspace: saved.settings?.workspace || workspace };
   }
 
-  configFrom(settings) {
+  configFrom(settings, { workspaceFocus = "" } = {}) {
     const env = {
       ...process.env,
       AMOS_MODEL_PROVIDER: settings.provider,
@@ -6067,7 +6100,9 @@ export class DesktopController {
       AMOS_AGENT_AUTO_APPROVE_KINDS: (settings.localApprovalKinds || []).join(","),
       AMOS_MCP_URL: settings.amosMcpUrl
     };
-    return loadConfig(env, settings.workspace || homedir());
+    const config = loadConfig(env, settings.workspace || homedir());
+    if (workspaceFocus) config.safety.workspaceFocus = workspaceFocus;
+    return config;
   }
 
   oauthFor(settings, { store = null } = {}) {
@@ -6707,11 +6742,16 @@ function validateHybridRoutingSettings(settings, configFrom) {
 
 export function desktopSystemPrompt(basePrompt, settings, config) {
   const workspace = config?.safety?.workspaceRoot || settings?.workspace || homedir();
+  const focus = config?.safety?.workspaceFocus || workspace;
+  const focusNote = focus && focus !== workspace
+    ? `- Active work item: ${focus}. Default local reads, writes, Git, and shell start here. This does not replace the workspace grant.`
+    : "- If this conversation is about a nested project, use desktop_focus_workspace to bind that folder. Do not treat a nested repo as a new grant.";
   return `${basePrompt}
 
 Current Desktop workspace grant:
 - The user selected this exact local project root for the current runtime: ${workspace}
 - Treat that folder as the current project when the user says “this project,” “the folder,” or “the workspace.”
+${focusNote}
 - Inspect the project with local read tools when its contents are relevant; do not claim the folder is missing without first checking it.
 ${settings?.operatingMode === "offline"
     ? ""
@@ -6732,6 +6772,11 @@ function desktopLocalApprovalDescription(settings) {
   return allowedKinds.length > 0
     ? `ask by default, except these user-approved local request types: ${allowedKinds.join(", ")}.`
     : "ask before local file writes, patches, and shell commands.";
+}
+
+function taskWorkspaceFocus(task, settings) {
+  if (!task || task.workspaceMode === "context_only") return "";
+  return String(task.workspace?.focusPath || "").trim();
 }
 
 function applyLocalApprovalSettings(runtimeState, settings) {

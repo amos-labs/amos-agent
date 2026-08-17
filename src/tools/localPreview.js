@@ -1,3 +1,4 @@
+import { workspaceFocusPath } from "../util/workspaceFocus.js";
 export function createLocalPreviewTool({ preview, browser, scope, present = null } = {}) {
   if (!preview || !browser) throw new Error("Local preview requires preview and browser runtimes");
   if (typeof scope !== "function") throw new Error("Local preview requires a task scope provider");
@@ -19,7 +20,7 @@ export function createLocalPreviewTool({ preview, browser, scope, present = null
     async handler(args, context) {
       const currentScope = scope();
       const started = await preview.start(currentScope, {
-        workspace: context.config.safety.workspaceRoot,
+        workspace: workspaceFocusPath(context.config.safety),
         path: args.path || ".",
         signal: context.signal
       });

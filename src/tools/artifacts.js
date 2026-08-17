@@ -15,6 +15,7 @@ import {
 } from "../artifacts/documentSpec.js";
 import { extractDocumentText } from "../desktop/attachments.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
+import { resolveDefaultWorkspacePath } from "../util/workspaceFocus.js";
 import { createDocumentReviewTools } from "./documentReview.js";
 
 export function createArtifactTools({ present = null } = {}) {
@@ -142,8 +143,8 @@ export async function createDocumentArtifacts(args, context, { present = null } 
   const basePath = normalizedBasePath(args.path);
   const targets = formats.map((format) => {
     const relativePath = `${basePath}.${format}`;
-    const absolutePath = resolveWorkspacePath(
-      root,
+    const absolutePath = resolveDefaultWorkspacePath(
+      context.config.safety,
       relativePath,
       context.config.safety.allowOutsideWorkspace
     );

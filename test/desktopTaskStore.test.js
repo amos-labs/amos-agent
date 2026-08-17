@@ -42,10 +42,11 @@ test("DesktopTaskStore encrypts and isolates task metadata by account", async ()
     contextKey: "task:task-1",
     title: "Build weekly scorecard",
     objective: "Use password=hunter2 to build the governed scorecard",
-    workspace: { localPath: "/private/workspace", label: "AMOS Platform" }
+    workspace: { localPath: "/private/workspace", focusPath: "/private/workspace/amos-agent", label: "AMOS Platform" }
   });
 
   assert.equal(task.objective, "Use password=[REDACTED] to build the governed scorecard");
+  assert.equal(task.workspace.focusPath, "/private/workspace/amos-agent");
   assert.equal((await store.list(owner)).length, 1);
   assert.equal((await store.list(other)).length, 0);
   assert.doesNotMatch(await readFile(filePath, "utf8"), /weekly scorecard|private\/workspace/);

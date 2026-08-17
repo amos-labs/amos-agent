@@ -7,6 +7,7 @@ import { createAmosTools } from "./tools/amos.js";
 import { createBashTool } from "./tools/bash.js";
 import { createCodingTools } from "./tools/coding.js";
 import { createFileTools } from "./tools/files.js";
+import { createWorkspaceFocusTool } from "./util/workspaceFocus.js";
 import { createArtifactTools } from "./tools/artifacts.js";
 import { createSpreadsheetTools } from "./tools/spreadsheets.js";
 import { createPresentationTools } from "./tools/presentations.js";
@@ -27,6 +28,7 @@ export function createRegistry({
   const registry = new ToolRegistry(toolSurface);
   if (includeLocal) {
     registry.register(createBashTool());
+    registry.register(createWorkspaceFocusTool());
     for (const tool of createCodingTools()) registry.register(tool);
     for (const tool of createFileTools()) registry.register(tool);
     for (const tool of createArtifactTools({ present: artifactPresenter })) registry.register(tool);

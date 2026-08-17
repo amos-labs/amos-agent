@@ -297,6 +297,7 @@ function normalizeWorkspace(value, mode) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   return {
     localPath: cleanText(source.localPath, 4_096),
+    focusPath: cleanText(source.focusPath, 4_096),
     label: redact(cleanText(source.label, 160)),
     repository: cleanText(source.repository, 500),
     branch: cleanText(source.branch, 300),

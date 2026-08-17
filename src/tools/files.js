@@ -1,6 +1,7 @@
 import { mkdir, open, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
-import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
+import { assertSafeAgentPath } from "../util/pathSafety.js";
+import { resolveDefaultWorkspacePath } from "../util/workspaceFocus.js";
 
 const DEFAULT_IGNORES = new Set([".git", "node_modules", "dist", "coverage", ".amos-agent", ".ssh", ".aws", ".gnupg"]);
 
@@ -25,7 +26,7 @@ export function createFileTools() {
       },
       async handler(args, context) {
         const root = context.config.safety.workspaceRoot;
-        const start = resolveWorkspacePath(root, args.path || ".", context.config.safety.allowOutsideWorkspace);
+        const start = resolveDefaultWorkspacePath(context.config.safety, args.path || ".", context.config.safety.allowOutsideWorkspace);
         const maxResults = Number(args.max_results || 200);
         const files = [];
         await walk(start, root, files, maxResults);
@@ -46,8 +47,8 @@ export function createFileTools() {
         additionalProperties: false
       },
       async handler(args, context) {
-        const file = resolveWorkspacePath(
-          context.config.safety.workspaceRoot,
+        const file = resolveDefaultWorkspacePath(
+          context.config.safety,
           args.path,
           context.config.safety.allowOutsideWorkspace
         );
@@ -76,8 +77,8 @@ export function createFileTools() {
         additionalProperties: false
       },
       async handler(args, context) {
-        const file = resolveWorkspacePath(
-          context.config.safety.workspaceRoot,
+        const file = resolveDefaultWorkspacePath(
+          context.config.safety,
           args.path,
           context.config.safety.allowOutsideWorkspace
         );

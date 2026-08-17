@@ -875,6 +875,73 @@ test("a model timeout after completed tools exposes recoverable progress", async
   assert.ok(events.some((event) => event.type === "phase" && event.phase === "interrupted"));
 });
 
+test("a stalled empty model response retries the same turn without replaying completed tools", async () => {
+  const registry = new ToolRegistry();
+  let writes = 0;
+  registry.register({
+    name: "write_part",
+    async handler() {
+      writes += 1;
+      return { ok: true, path: "finished.txt" };
+    }
+  });
+  let turn = 0;
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: { maxModelTransientRetries: 2 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "write-1",
+                function: { name: "write_part", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        if (turn === 2) {
+          throw new Error("xAI / Grok streaming response did not include content or tool calls");
+        }
+        if (turn === 3) {
+          throw new Error("fetch failed");
+        }
+        return { message: { role: "assistant", content: "Finished the remaining work." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("build it", { onEvent: (event) => events.push(event) }), "Finished the remaining work.");
+  assert.equal(writes, 1);
+  assert.equal(turn, 4);
+  assert.equal(events.filter((event) => event.type === "phase" && event.phase === "retrying").length, 2);
+});
+
+test("a user cancel still stops immediately and does not retry", async () => {
+  const loop = new AgentLoop({
+    config: { agent: { maxModelTransientRetries: 2 } },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        const error = new Error("Task canceled");
+        error.name = "AbortError";
+        error.code = "AMOS_TASK_CANCELED";
+        throw error;
+      }
+    }
+  });
+  await assert.rejects(loop.run("continue"), /Task canceled/);
+});
+
 test("completed task history stays below the provider message ceiling", async () => {
   const observedLengths = [];
   const loop = new AgentLoop({

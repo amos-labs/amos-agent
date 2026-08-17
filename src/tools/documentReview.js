@@ -8,6 +8,7 @@ import {
 } from "../artifacts/documentReview.js";
 import { extractDocumentText } from "../desktop/attachments.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
+import { resolveDefaultWorkspacePath } from "../util/workspaceFocus.js";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_DOCX_BYTES = 50 * 1024 * 1024;
@@ -128,8 +129,8 @@ async function documentPaths(args, context) {
   const sourcePath = normalizedDocxPath(args.source_path, "source_path");
   const outputPath = normalizedDocxPath(args.output_path, "output_path");
   if (sourcePath === outputPath) throw new Error("output_path must differ from source_path");
-  const sourceAbsolute = resolveWorkspacePath(root, sourcePath, false);
-  const outputAbsolute = resolveWorkspacePath(root, outputPath, false);
+  const sourceAbsolute = resolveDefaultWorkspacePath(context.config.safety, sourcePath, false);
+  const outputAbsolute = resolveDefaultWorkspacePath(context.config.safety, outputPath, false);
   assertSafeAgentPath(sourceAbsolute, root);
   assertSafeAgentPath(outputAbsolute, root);
   return { root, sourcePath, outputPath, sourceAbsolute, outputAbsolute };
