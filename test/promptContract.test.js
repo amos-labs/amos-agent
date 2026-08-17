@@ -48,6 +48,8 @@ test("the shared AMOS constitution is versioned and used on every boundary", () 
   assert.equal(AMOS_OPERATOR_CONSTITUTION_VERSION, 1);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Investigate before interrogating/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Ask only consequential questions/);
+  assert.match(AMOS_OPERATOR_CONSTITUTION, /desktop_request_decision/);
+  assert.match(SYSTEM_PROMPT, /call desktop_request_decision/);
   assert.doesNotMatch(AMOS_OPERATOR_CONSTITUTION, /What kind of business/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Do not run a personality survey or a fixed questionnaire/);
   for (const prompt of [

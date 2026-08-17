@@ -61,3 +61,29 @@ test("task-scoped local grants never cover browser or company action classes", a
   bridge.resolve(request.id, false);
   assert.equal(await decision, false);
 });
+
+test("desktop approval bridge parks a Decisions question until the user answers", async () => {
+  let request;
+  const bridge = new DesktopApprovalBridge({ onRequest: (value) => (request = value) });
+  const pending = bridge.ask("Which location should launch first?", {
+    title: "Launch market",
+    context: "The recommendation changes the first-store plan.",
+    options: ["Austin", "Denver"]
+  });
+
+  assert.equal(request.kind, "decision-input");
+  assert.equal(request.message, "Which location should launch first?");
+  assert.deepEqual(request.options, ["Austin", "Denver"]);
+  assert.equal(bridge.pendingRequests().length, 1);
+  assert.equal(bridge.resolveInput(request.id, { answered: true, answer: "Austin" }), true);
+  assert.deepEqual(await pending, { answered: true, answer: "Austin" });
+  assert.equal(bridge.pendingRequests().length, 0);
+});
+
+test("desktop approval bridge does not treat a skipped Decisions question as an answer", async () => {
+  const bridge = new DesktopApprovalBridge();
+  const pending = bridge.ask("What budget should this Project use?");
+  const id = [...bridge.pending.keys()][0];
+  assert.equal(bridge.resolveInput(id, { answered: false, answer: "" }), true);
+  assert.deepEqual(await pending, { answered: false, answer: "" });
+});

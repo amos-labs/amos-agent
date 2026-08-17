@@ -71,6 +71,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     approvals: controller.companyApprovals,
     approvalsAvailable: true,
     approvalDecisionMode: "desktop",
+    pendingInputs: [],
     companyReceipts: controller.companyReceipts,
     connectionsCatalog: controller.connectionsCatalog,
     briefings: controller.briefings,

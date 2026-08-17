@@ -260,3 +260,35 @@ test("Desktop opens and forks durable tasks without replaying a model or tool ca
   assert.equal(contextTools.some((tool) => tool.name === "apply_patch"), false);
   assert.equal(contextTools.some((tool) => tool.name === "desktop_create_document"), false);
 });
+
+test("a Project conversation is created already assigned to that workspace", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-project-conversation-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-08-10T12:00:00.000Z")
+  });
+  const settings = settingsStore(root);
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeContextKey: controller.activeContextKey,
+    activeTaskRecordId: controller.activeTaskRecordId
+  });
+
+  const projectId = "11111111-1111-4111-8111-111111111111";
+  const opened = await controller.startNewConversation({
+    kind: "general",
+    projectId
+  });
+  const owner = taskOwnerScope({ boundary: "personal", workspace: root });
+  const [conversation] = await tasks.list(owner);
+  assert.equal(conversation.projectId, projectId);
+  assert.equal(opened.launch.task.projectId, projectId);
+});

@@ -400,12 +400,12 @@
         <section id="projectsView" class="view projects-view hidden">
           <div class="section-heading projects-heading">
             <div>
-              <span class="eyebrow">PARALLEL WORK &amp; SUPERVISION</span>
+              <span class="eyebrow">CONVERSATION WORKSPACES</span>
               <h1>Projects keep the whole outcome moving.</h1>
               <p>
-                Group durable tasks, bound parallel capacity and budgets, and see every lane
-                that is running, waiting, blocked, stalled, or complete. Project coordination
-                never grants execution authority or replaces proof receipts.
+                Give a workspace instructions and a dollar cap, then start a conversation.
+                Tasks stay internal. Project coordination never grants execution authority
+                or replaces proof receipts.
               </p>
             </div>
             <div class="project-heading-actions">
@@ -422,7 +422,7 @@
               <div class="project-panel-heading">
                 <div>
                   <span class="eyebrow">PROJECTS</span>
-                  <h2 id="projectLibraryTitle">Durable operating areas</h2>
+                  <h2 id="projectLibraryTitle">Conversation workspaces</h2>
                 </div>
                 <label class="task-search project-search">
                   <span aria-hidden="true">⌕</span>
@@ -432,7 +432,7 @@
               <div id="projectEmpty" class="automation-empty hidden">
                 <span>▱</span>
                 <strong>No Projects yet</strong>
-                <p>Create one to group tasks, set bounded parallel capacity, and supervise work.</p>
+                <p>Create one to share instructions, set a dollar cap, and start a conversation.</p>
               </div>
               <div id="projectList" class="project-list"></div>
             </section>
@@ -716,7 +716,7 @@
           <div class="section-heading work-heading">
             <span class="eyebrow">GOVERNED WORK</span>
             <h1>Decide what moves—and see what happened.</h1>
-            <p>Handle work that needs you, then review the decisions and consequential outcomes that followed.</p>
+            <p>Answer questions, approve governed work, then review the decisions and outcomes that followed.</p>
           </div>
           <div class="work-tabs" role="tablist" aria-label="Work and proof">
             <button id="workDecisionsTab" class="work-tab active" type="button" role="tab" aria-selected="true" aria-controls="workDecisionsPanel">
@@ -1139,7 +1139,7 @@
           <div>
             <span class="eyebrow">PRIVATE PROJECT</span>
             <h2 id="projectModalTitle">Create a Project</h2>
-            <p>Instructions and ceilings coordinate work; they do not approve actions or carry credentials.</p>
+            <p>Instructions and a dollar cap coordinate work. They do not approve actions or carry credentials.</p>
           </div>
           <button id="projectModalClose" class="icon-button" type="button" aria-label="Close Project setup">×</button>
         </div>
@@ -1150,30 +1150,13 @@
         </label>
         <label class="connection-field">
           <span>Instructions</span>
-          <textarea id="projectInstructionsInput" maxlength="12000" rows="5" placeholder="What should every task in this Project understand?"></textarea>
+          <textarea id="projectInstructionsInput" maxlength="12000" rows="5" placeholder="What should AMOS understand every time you start a conversation here?"></textarea>
         </label>
-        <div class="project-budget-grid">
-          <label class="connection-field">
-            <span>Parallel runs</span>
-            <input id="projectParallelInput" type="number" min="1" max="32" value="4" required />
-          </label>
-          <label class="connection-field">
-            <span>Token ceiling / run</span>
-            <input id="projectTokenInput" type="number" min="1" max="1000000000" value="200000" required />
-          </label>
-          <label class="connection-field">
-            <span>Tool calls / run</span>
-            <input id="projectToolInput" type="number" min="1" max="100000" value="200" required />
-          </label>
-          <label class="connection-field">
-            <span>Wall time (minutes)</span>
-            <input id="projectWallTimeInput" type="number" min="1" max="10080" value="240" required />
-          </label>
-          <label class="connection-field">
-            <span>Cost ceiling / run (USD)</span>
-            <input id="projectCostInput" type="number" min="0.000001" max="100000" step="0.01" value="50" required />
-          </label>
-        </div>
+        <label class="connection-field">
+          <span>Dollar cap / conversation (USD)</span>
+          <input id="projectCostInput" type="number" min="0.000001" max="100000" step="0.01" value="50" required />
+        </label>
+        <p class="project-modal-note">AMOS keeps internal safety fuses for tokens, tool calls, wait time, and parallel work. You only set the dollar amount.</p>
         <div id="projectModalError" class="connection-modal-error hidden" role="alert"></div>
         <div class="connection-modal-actions">
           <button id="projectCancelButton" class="button secondary" type="button">Cancel</button>

@@ -2101,12 +2101,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .task-status.completed { background: rgba(59,213,143,.11); color: var(--green); }
 .task-status.paused { background: rgba(255,202,105,.11); color: var(--warning); }
 .project-modal { width: min(720px, 100%); }
-.project-budget-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 12px;
+.project-modal-note {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
 }
-.project-budget-grid .connection-field:last-child { grid-column: 1 / -1; }
 .task-fork-modal { width: min(720px, 100%); }
 .fork-advanced-options {
   margin-top: 17px;
@@ -3344,6 +3344,26 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   color: var(--warning);
 }
 .decision-card-actions { display: grid; justify-items: stretch; gap: 10px; }
+.decision-card.decision-input {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+.decision-input-form { display: grid; gap: 10px; }
+.decision-input-field { display: grid; gap: 6px; color: var(--muted); font-size: 10px; }
+.decision-input-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 84px;
+  resize: vertical;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--modal-inset);
+  color: var(--emphasis);
+  font: inherit;
+}
+.decision-input-options,
+.decision-input-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .decision-card-actions details { max-width: 340px; color: var(--muted-2); font-size: 9px; }
 .decision-card-actions summary { cursor: pointer; text-align: right; }
 .decision-card-actions pre {
@@ -3861,8 +3881,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .project-panel-heading { align-items: stretch; flex-direction: column; }
   .project-search { max-width: none; }
   .project-run-filter { align-items: stretch; }
-  .project-budget-grid { grid-template-columns: 1fr; }
-  .project-budget-grid .connection-field:last-child { grid-column: auto; }
   .task-filter-label { justify-content: space-between; }
   .automation-heading-actions, .automation-actions { flex-wrap: wrap; }
   .automation-failure-heading, .automation-simulation > div { flex-direction: column; }

@@ -416,7 +416,7 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.doesNotMatch(workspace, /"reset"|"checkout"|"clean"|"stash"/);
 });
 
-test("Projects expose bounded parallel coordination and one supervised activity center", async () => {
+test("Projects expose conversation workspaces, a dollar cap, and one supervised activity center", async () => {
   const [javascript, html, css, preload, main, controller, remoteState] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
@@ -429,14 +429,24 @@ test("Projects expose bounded parallel coordination and one supervised activity 
 
   assert.match(html, /data-view="projects"/);
   assert.match(html, /id="projectsView"/);
-  assert.match(html, /PARALLEL WORK &amp; SUPERVISION/);
+  assert.match(html, /CONVERSATION WORKSPACES/);
   assert.match(html, /id="activityCenterList"/);
-  assert.match(html, /never grants execution authority or replaces proof receipts/);
-  assert.match(html, /id="projectParallelInput"[^>]*max="32"/);
+  assert.match(html, /never grants execution authority[\s\S]*replaces proof receipts/);
+  assert.match(html, /id="projectCostInput"/);
+  assert.match(html, /Dollar cap \/ conversation \(USD\)/);
+  assert.doesNotMatch(html, /id="projectParallelInput"/);
+  assert.doesNotMatch(html, /id="projectTokenInput"/);
+  assert.doesNotMatch(html, /Token ceiling/);
   assert.match(javascript, /function renderProjects\(\)/);
   assert.match(javascript, /function projectConversationList\(conversations\)/);
   assert.match(javascript, /task\.projectId === project\.id/);
-  assert.match(javascript, /api\.assignTaskProject\(/);
+  assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?projectId: project\.id/);
+  assert.match(javascript, /Start conversation/);
+  assert.match(javascript, /function decisionInputCard\(/);
+  assert.match(javascript, /api\.resolveDecisionInput\(/);
+  assert.match(preload, /desktop:resolve-decision-input/);
+  assert.match(main, /controller\.resolveDecisionInput/);
+  assert.match(controller, /createDecisionInputTool\(\)/);
   assert.match(javascript, /api\.cancelSupervisedRun\(/);
   assert.match(javascript, /The worker must acknowledge it at the next heartbeat/);
   assert.match(preload, /desktop:create-project/);
