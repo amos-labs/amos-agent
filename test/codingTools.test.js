@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createCodingTools, parsePatchPaths, runProgram } from "../src/tools/coding.js";
 import { createCodeWorkspaceTool } from "../src/tools/codeWorkspace.js";
 import { DesktopCanvasManager } from "../src/desktop/canvas.js";
-import { createWorkspaceFocusTool } from "../src/util/workspaceFocus.js";
+import { createWorkspaceFocusTool, pathResolutionBase, resolveDefaultWorkspacePath } from "../src/util/workspaceFocus.js";
 
 test("patch paths are workspace-relative and reject traversal", () => {
   assert.deepEqual(
@@ -219,4 +219,47 @@ test("workspace focus keeps git and file defaults inside the nested work item", 
   }, context);
   assert.equal(applied.ok, true, applied.stderr);
   assert.equal(await readFile(join(child, "app.js"), "utf8"), "const answer = 42;\n");
+});
+
+test("focus path resolution is deterministic: grant-root segments win, focus-only segments nest", async () => {
+  const grant = await mkdtemp(join(tmpdir(), "amos-ambiguous-grant-"));
+  const child = join(grant, "nested-repo");
+  await mkdir(child);
+  await mkdir(join(child, "src"), { recursive: true });
+  await mkdir(join(grant, "shared"), { recursive: true });
+  await mkdir(join(child, "shared"), { recursive: true });
+  const safety = { workspaceRoot: grant, workspaceFocus: child, allowOutsideWorkspace: false };
+  const canonicalChild = await realpath(child);
+  // "." means the focus
+  assert.equal(resolveDefaultWorkspacePath(safety, "."), canonicalChild);
+  // grant-only segment resolves grant-relative
+  assert.equal(pathResolutionBase(grant, child, "nested-repo/src"), "grant");
+  // focus-only segment resolves focus-relative
+  assert.equal(pathResolutionBase(grant, child, "src/tools"), "focus");
+  assert.equal(resolveDefaultWorkspacePath(safety, "src/tools"), join(canonicalChild, "src", "tools"));
+  // ambiguous segment present in both resolves grant-relative
+  assert.equal(pathResolutionBase(grant, child, "shared"), "grant");
+  // traversal stays grant-relative (and pathSafety still fences it)
+  assert.equal(pathResolutionBase(grant, child, "../outside"), "grant");
+  // no focus bound: everything is grant-relative
+  assert.equal(pathResolutionBase(grant, grant, "src"), "grant");
+});
+
+test("desktop_focus_workspace rejects a missing folder and . returns to the grant root", async () => {
+  const grant = await mkdtemp(join(tmpdir(), "amos-focus-reset-"));
+  const child = join(grant, "child");
+  await mkdir(child);
+  const tools = new Map([["desktop_focus_workspace", createWorkspaceFocusTool()]]);
+  const context = {
+    config: { safety: { workspaceRoot: grant, allowOutsideWorkspace: false, maxOutputBytes: 24_000 } }
+  };
+  await assert.rejects(
+    tools.get("desktop_focus_workspace").handler({ path: "does-not-exist" }, context),
+    /existing folder inside the grant/
+  );
+  await tools.get("desktop_focus_workspace").handler({ path: "child" }, context);
+  assert.equal(context.config.safety.workspaceFocus, await realpath(child));
+  const reset = await tools.get("desktop_focus_workspace").handler({ path: "." }, context);
+  assert.equal(reset.path, ".");
+  assert.equal(context.config.safety.workspaceFocus, await realpath(grant));
 });

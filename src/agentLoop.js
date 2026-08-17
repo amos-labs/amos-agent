@@ -245,6 +245,20 @@ export class AgentLoop {
               turn,
               summary: `The model stopped responding after ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}; completed work remains intact`
             });
+          } else if (completedToolActions > 0 && isTransientModelFailure(error)) {
+            // Retries are exhausted for a transient failure after completed tool
+            // work. Surface the same recoverable-progress contract as a timeout
+            // so continuity can pick up finished work instead of a bare error.
+            error.code = error.code || "AMOS_MODEL_TRANSIENT_AFTER_PROGRESS";
+            error.completedToolActions = completedToolActions;
+            error.failedToolActions = failedToolActions;
+            error.partialResponse = partialResponse;
+            onEvent({
+              type: "phase",
+              phase: "interrupted",
+              turn,
+              summary: `The model stopped responding after ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}; completed work remains intact`
+            });
           }
           throw error;
         }

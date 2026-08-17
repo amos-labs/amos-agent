@@ -26,7 +26,7 @@ export function createCodingTools() {
         properties: {
           path: {
             type: "string",
-            description: "Optional workspace-relative folder to inspect. Defaults to the active work item, then the grant."
+            description: "Optional workspace-relative folder to inspect. Defaults to the active work item, then the grant. Grant-root segments resolve grant-relative; segments unique to the focused work item resolve focus-relative."
           }
         },
         additionalProperties: false

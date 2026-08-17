@@ -924,6 +924,51 @@ test("a stalled empty model response retries the same turn without replaying com
   assert.equal(events.filter((event) => event.type === "phase" && event.phase === "retrying").length, 2);
 });
 
+test("exhausted transient retries after progress surface recoverable progress", async () => {
+  const registry = new ToolRegistry();
+  let writes = 0;
+  registry.register({
+    name: "write_part",
+    async handler() {
+      writes += 1;
+      return { ok: true };
+    }
+  });
+  let turn = 0;
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: { maxModelTransientRetries: 1 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{ id: "w1", function: { name: "write_part", arguments: "{}" } }]
+            }
+          };
+        }
+        throw new Error("fetch failed");
+      }
+    }
+  });
+  const failure = await loop.run("build it", { onEvent: (event) => events.push(event) }).then(
+    () => null,
+    (error) => error
+  );
+  assert.equal(writes, 1);
+  assert.equal(turn, 3); // tool turn, one retry, then the exhausted failing turn
+  assert.equal(failure.code, "AMOS_MODEL_TRANSIENT_AFTER_PROGRESS");
+  assert.equal(failure.completedToolActions, 1);
+  assert.ok(events.some((event) => event.type === "phase" && event.phase === "retrying"));
+  assert.ok(events.some((event) => event.type === "phase" && event.phase === "interrupted"));
+});
+
 test("a user cancel still stops immediately and does not retry", async () => {
   const loop = new AgentLoop({
     config: { agent: { maxModelTransientRetries: 2 } },

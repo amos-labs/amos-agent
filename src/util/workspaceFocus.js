@@ -2,6 +2,14 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { resolveWorkspacePath } from "./pathSafety.js";
 
+// Grant-relative vs focus-relative resolution, decided once here so every tool
+// behaves the same:
+// 1. "." means the focus when one is bound, else the grant root.
+// 2. ".." and grant-root children (e.g. a sibling repo name) stay grant-relative.
+// 3. A first segment that exists only inside the focus resolves focus-relative.
+// 4. A first segment that exists in both is ambiguous and resolves grant-relative;
+//    pass the grant-root-relative path to reach the nested copy.
+
 export function workspaceFocusPath(safety = {}) {
   const focus = String(safety?.workspaceFocus || "").trim();
   const root = String(safety?.workspaceRoot || "").trim();
@@ -15,12 +23,17 @@ export function resolveDefaultWorkspacePath(safety = {}, target = ".", allowOuts
   if (requested === ".") {
     return resolveWorkspacePath(root, relativeToRoot(root, focus) || ".", allowOutside);
   }
-  if (!hasDistinctFocus(root, focus) || preferGrantRelative(root, requested)) {
+  if (pathResolutionBase(root, focus, requested) === "grant") {
     return resolveWorkspacePath(root, requested, allowOutside);
   }
   const focusRel = relativeToRoot(root, focus);
   const fromFocus = focusRel && focusRel !== "." ? join(focusRel, requested) : requested;
   return resolveWorkspacePath(root, fromFocus, allowOutside);
+}
+
+export function pathResolutionBase(root, focus, requested) {
+  if (!hasDistinctFocus(root, focus)) return "grant";
+  return preferGrantRelative(root, requested) ? "grant" : "focus";
 }
 
 export function createWorkspaceFocusTool({ persist } = {}) {
@@ -35,7 +48,8 @@ export function createWorkspaceFocusTool({ persist } = {}) {
       properties: {
         path: {
           type: "string",
-          description: "Workspace-relative folder to focus. Use . to return to the grant root."
+          description:
+            "Workspace-relative folder to focus. Use . to return to the grant root. After focusing, grant-root segments resolve grant-relative and segments unique to the focus resolve focus-relative."
         }
       },
       required: ["path"]
@@ -100,6 +114,8 @@ export function rewritePatchForGitCwd(patch, grantRoot, gitCwd) {
   if (!prefix || prefix === ".") return String(patch || "");
   const token = `${prefix}/`;
   return String(patch || "").split(/\r?\n/).map((line) => {
+    // Quoted paths (e.g. "a/foo bar.js") are intentionally not rewritten here:
+    // parsePatchPaths in src/tools/coding.js rejects them before this runs.
     const match = /^(---|\+\+\+) ([^\t]+)(.*)$/.exec(line);
     if (!match || match[2] === "/dev/null") return line;
     const value = match[2];

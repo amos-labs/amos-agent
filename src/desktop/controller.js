@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
+import { statSync } from "node:fs";
 import { homedir, totalmem, freemem, arch, platform, release } from "node:os";
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { loadConfig, validateConfig } from "../config.js";
@@ -6752,6 +6753,7 @@ Current Desktop workspace grant:
 - The user selected this exact local project root for the current runtime: ${workspace}
 - Treat that folder as the current project when the user says “this project,” “the folder,” or “the workspace.”
 ${focusNote}
+- With an active work item, "." resolves to it. A first path segment that exists at the grant root resolves grant-relative; a segment that exists only inside the work item resolves focus-relative. If a segment exists in both, the grant copy wins — pass the grant-root-relative path to reach the nested one.
 - Inspect the project with local read tools when its contents are relevant; do not claim the folder is missing without first checking it.
 ${settings?.operatingMode === "offline"
     ? ""
@@ -6774,9 +6776,18 @@ function desktopLocalApprovalDescription(settings) {
     : "ask before local file writes, patches, and shell commands.";
 }
 
-function taskWorkspaceFocus(task, settings) {
+export function taskWorkspaceFocus(task, settings) {
   if (!task || task.workspaceMode === "context_only") return "";
-  return String(task.workspace?.focusPath || "").trim();
+  const stored = String(task.workspace?.focusPath || "").trim();
+  if (!stored) return "";
+  const root = settings?.workspace || task.workspace?.localPath || "";
+  if (!root) return "";
+  try {
+    const resolved = resolveWorkspacePath(root, stored, false);
+    return statSync(resolved).isDirectory() ? stored : "";
+  } catch {
+    return "";
+  }
 }
 
 function applyLocalApprovalSettings(runtimeState, settings) {
