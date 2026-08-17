@@ -46,10 +46,14 @@ jobs:
           test -n "$APPLE_APP_SPECIFIC_PASSWORD" || { echo "::error::APPLE_APP_SPECIFIC_PASSWORD is not configured"; exit 1; }
           test -n "$APPLE_TEAM_ID" || { echo "::error::APPLE_TEAM_ID is not configured"; exit 1; }
 
+      - name: Install desktop canvas native bindings
+        run: npm run canvas:prepare
+
       - name: Build signed installers
         run: npm run desktop:release
         env:
           AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -180,10 +184,14 @@ jobs:
           }
           node -e 'require("./desktop/electron-builder.windows-azure.cjs")'
 
+      - name: Install desktop canvas native bindings
+        run: npm run canvas:prepare
+
       - name: Build signed installer
         run: npm run desktop:release:win
         env:
           AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}

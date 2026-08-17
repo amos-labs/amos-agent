@@ -114,15 +114,40 @@ async function downloadVerifiedArtifact(urlValue, destinationPath, value) {
   if (url.protocol !== "https:") {
     throw new Error("AMOS_ROUTER_GGUF_URL must use HTTPS");
   }
-  const response = await fetch(url, {
-    headers: { "user-agent": "AMOS-Desktop-release-builder/1" },
+  // The artifact lives behind a GitHub release-asset URL, which answers the
+  // initial request with a 302 to a short-lived signed CDN URL. Handle two
+  // failure modes:
+  //   - The GitHub asset endpoint 403s unless authenticated, so attach the
+  //     Actions GITHUB_TOKEN when the host is GitHub.
+  //   - The signed CDN URL must NOT receive the Authorization header (the CDN
+  //     rejects an unexpected Bearer token), so resolve the redirect manually
+  //     and download the final URL without auth.
+  const isGitHub =
+    /(^|\.)github\.com$/i.test(url.hostname) ||
+    /(^|\.)githubusercontent\.com$/i.test(url.hostname) ||
+    /(^|\.)githubassets\.com$/i.test(url.hostname);
+  const token = String(process.env.GITHUB_TOKEN || process.env.GH_TOKEN || "").trim();
+  const authHeaders = isGitHub && token ? { Authorization: `Bearer ${token}` } : {};
+  const ua = { "user-agent": "AMOS-Desktop-release-builder/1" };
+  const head = await fetch(url, {
+    redirect: "manual",
+    headers: { ...ua, ...authHeaders },
     signal: AbortSignal.timeout(20 * 60_000)
   });
+  const location = head.headers.get("location");
+  const isRedirect = head.status >= 300 && head.status < 400 && !!location;
+  const finalUrl = isRedirect ? new URL(location, url) : url;
+  if (finalUrl.protocol !== "https:") {
+    throw new Error("Router artifact download redirected outside HTTPS");
+  }
+  // A redirect target (signed CDN URL) carries its auth in the query string, so
+  // do not forward the bearer token. A direct non-redirect response keeps the
+  // auth headers in case the asset endpoint streams the body inline.
+  const response = isRedirect
+    ? await fetch(finalUrl, { headers: { ...ua }, signal: AbortSignal.timeout(20 * 60_000) })
+    : head;
   if (!response.ok || !response.body) {
     throw new Error(`Router artifact download failed with HTTP ${response.status}`);
-  }
-  if (new URL(response.url).protocol !== "https:") {
-    throw new Error("Router artifact download redirected outside HTTPS");
   }
   const contentLength = response.headers.get("content-length");
   const declaredSize = contentLength == null ? null : Number(contentLength);

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas } from "./napiCanvas.js";
 
 const MAX_PREVIEW_PAGES = 12;
 const PREVIEW_WIDTH = 420;
@@ -22,7 +22,7 @@ export async function renderPdfPreviewPages(buffer, { maxPages = MAX_PREVIEW_PAG
       const natural = page.getViewport({ scale: 1 });
       const scale = PREVIEW_WIDTH / natural.width;
       const viewport = page.getViewport({ scale });
-      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const canvas = await createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext("2d");
       await page.render({ canvas, canvasContext: context, viewport }).promise;
       const data = canvas.toBuffer("image/png");

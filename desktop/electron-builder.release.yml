@@ -11,6 +11,21 @@ files:
   - src/**/*
   - package.json
   - LICENSE
+  # @napi-rs/canvas loads its native binding from a per-platform optional
+  # dependency (@napi-rs/canvas-<platform>-<arch>). electron-builder only
+  # collects the build machine's arch by default, so the x64 installer shipped
+  # only the arm64 binding and crashed on launch ("Cannot find native
+  # binding"). Ship every desktop binding so each arch resolves its own.
+  - "!node_modules/@napi-rs/canvas-android-*"
+  - "!node_modules/@napi-rs/canvas-linux-*"
+  - "!node_modules/@napi-rs/canvas-win32-arm64-*"
+  - "!node_modules/@napi-rs/canvas-freebsd-*"
+  - node_modules/@napi-rs/canvas/**/*
+  - node_modules/@napi-rs/canvas-darwin-*/**/*
+  - node_modules/@napi-rs/canvas-win32-x64-msvc/**/*
+
+asarUnpack:
+  - "node_modules/@napi-rs/**/*.node"
 
 extraResources:
   - from: desktop/vendor/ollama
