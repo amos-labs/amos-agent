@@ -14,6 +14,7 @@ Chat remains the command surface. The canvas is a presentation surface for:
 - line-numbered staged, working-tree, and untracked diffs;
 - verified DOCX/PDF document previews;
 - verified XLSX workbook summaries, tables, and charts with direct open actions;
+- verified PPTX slide previews with Open in PowerPoint and Show in Folder;
 - safe browser destinations for app, page, and course previews;
 - task-bound public browser observations with opaque local screenshot frames;
 - source and evidence lists; and
@@ -57,6 +58,7 @@ The v1 limits are intentionally bounded:
 - 100 source references; and
 - 20 details per decision card; and
 - 32 sheet names and 300 spreadsheet checks per workbook card;
+- 16 rendered slide thumbnails and 20 layout diagnostics per presentation card;
 - 600 nodes per file-tree block;
 - 100 files and 4,000 lines per diff block; and
 - 50,000 characters per inert code block.

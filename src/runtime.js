@@ -9,6 +9,7 @@ import { createCodingTools } from "./tools/coding.js";
 import { createFileTools } from "./tools/files.js";
 import { createArtifactTools } from "./tools/artifacts.js";
 import { createSpreadsheetTools } from "./tools/spreadsheets.js";
+import { createPresentationTools } from "./tools/presentations.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { createToolkitActivationTool } from "./tools/toolkitActivation.js";
 import { createWebTools } from "./tools/web.js";
@@ -20,6 +21,7 @@ export function createRegistry({
   includeWeb = true,
   artifactPresenter = null,
   spreadsheetPresenter = null,
+  presentationPresenter = null,
   toolSurface = {}
 } = {}) {
   const registry = new ToolRegistry(toolSurface);
@@ -29,6 +31,7 @@ export function createRegistry({
     for (const tool of createFileTools()) registry.register(tool);
     for (const tool of createArtifactTools({ present: artifactPresenter })) registry.register(tool);
     for (const tool of createSpreadsheetTools({ present: spreadsheetPresenter })) registry.register(tool);
+    for (const tool of createPresentationTools({ present: presentationPresenter })) registry.register(tool);
   }
   if (includeWeb) {
     for (const tool of createWebTools()) registry.register(tool);
@@ -53,6 +56,7 @@ export function createRuntime({
   includeWeb = true,
   artifactPresenter = null,
   spreadsheetPresenter = null,
+  presentationPresenter = null,
   systemPrompt,
   onToolResult = null,
   intelligenceRouter = null,
@@ -65,6 +69,7 @@ export function createRuntime({
     includeWeb,
     artifactPresenter,
     spreadsheetPresenter,
+    presentationPresenter,
     toolSurface: {
       progressive: config.agent?.progressiveTools !== false,
       maxActiveTools: config.agent?.maxActiveTools,

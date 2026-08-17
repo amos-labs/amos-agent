@@ -3901,6 +3901,7 @@ function renderCanvasBlock(block) {
   else if (block.type === "diff") card = renderCanvasDiff(block);
   else if (block.type === "document") card = renderCanvasDocument(block);
   else if (block.type === "spreadsheet") card = renderCanvasSpreadsheet(block);
+  else if (block.type === "presentation") card = renderCanvasPresentation(block);
   else if (block.type === "browser") card = renderCanvasBrowser(block);
   else if (block.type === "link") card = renderCanvasLink(block);
   else if (block.type === "sources") card = renderCanvasSources(block);
@@ -4514,6 +4515,124 @@ function renderCanvasSpreadsheet(block) {
   refine.addEventListener("click", () => {
     showView("operator");
     elements.promptInput.value = `Revise “${block.artifact.path}” and regenerate the verified Excel workbook. Preserve its current assumptions, formulas, and required checks unless I specify a change.`;
+    elements.promptInput.focus();
+  });
+  artifactRow.append(refine);
+  card.append(artifactRow);
+  return card;
+}
+
+function renderCanvasPresentation(block) {
+  const card = canvasCard(block, `canvas-presentation-block wide presentation-style-${block.style || "business"}`);
+  const summary = document.createElement("div");
+  summary.className = "presentation-preview-summary";
+  const verified = document.createElement("span");
+  verified.className = `presentation-verification-status ${block.verification.verified ? "ready" : "attention"}`;
+  verified.textContent = block.verification.verified ? "Reopened and verified" : "Verification incomplete";
+  const slides = document.createElement("span");
+  slides.textContent = `${block.verification.slideCount} ${block.verification.slideCount === 1 ? "slide" : "slides"}`;
+  const kind = document.createElement("span");
+  kind.textContent = (block.kind || "general").replaceAll("_", " ");
+  const status = document.createElement("span");
+  status.className = `document-layout-status ${block.diagnostics.length ? "attention" : "ready"}`;
+  status.textContent = block.diagnostics.length
+    ? `${block.diagnostics.length} layout ${block.diagnostics.length === 1 ? "note" : "notes"}`
+    : "Layout checks passed";
+  summary.append(verified, slides, kind, status);
+  card.append(summary);
+
+  if (block.diagnostics.length > 0) {
+    const diagnostics = document.createElement("div");
+    diagnostics.className = "document-diagnostics";
+    for (const item of block.diagnostics) {
+      const row = document.createElement("div");
+      row.className = `document-diagnostic ${item.severity}`;
+      const mark = document.createElement("span");
+      mark.textContent = item.severity === "error" ? "×" : item.severity === "warning" ? "!" : "i";
+      const copy = document.createElement("div");
+      const code = document.createElement("strong");
+      code.textContent = item.code.replaceAll("-", " ");
+      const message = document.createElement("p");
+      message.textContent = item.slideIndex == null
+        ? item.message
+        : `Slide ${item.slideIndex + 1}: ${item.message}`;
+      copy.append(code, message);
+      row.append(mark, copy);
+      diagnostics.append(row);
+    }
+    card.append(diagnostics);
+  }
+
+  const previewLabel = document.createElement("div");
+  previewLabel.className = "document-preview-label";
+  previewLabel.textContent = block.slidePreview?.slides?.length
+    ? `Rendered slide preview · ${block.slidePreview.slides.length} of ${block.slidePreview.slideCount} slides`
+    : "Open the verified PowerPoint file to inspect the deck";
+  card.append(previewLabel);
+
+  const deck = document.createElement("div");
+  deck.className = "presentation-slide-deck";
+  if (block.slidePreview?.slides?.length) {
+    for (const preview of block.slidePreview.slides) {
+      const page = document.createElement("section");
+      page.className = "presentation-preview-slide rendered";
+      const image = document.createElement("img");
+      image.className = "presentation-preview-thumbnail";
+      image.alt = preview.title
+        ? `Rendered preview of slide ${preview.slide}: ${preview.title}`
+        : `Rendered preview of slide ${preview.slide}`;
+      image.width = preview.width;
+      image.height = preview.height;
+      image.addEventListener("error", () => page.classList.add("load-error"), { once: true });
+      api.readDocumentPreview(preview.path).then((result) => {
+        image.src = `data:${result.mime};base64,${result.base64}`;
+      }).catch(() => page.classList.add("load-error"));
+      const pageMarker = document.createElement("footer");
+      pageMarker.textContent = preview.title
+        ? `Slide ${preview.slide} of ${block.slidePreview.slideCount} · ${preview.title}`
+        : `Slide ${preview.slide} of ${block.slidePreview.slideCount}`;
+      page.append(image, pageMarker);
+      deck.append(page);
+    }
+  } else {
+    const empty = document.createElement("div");
+    empty.className = "presentation-preview-empty";
+    empty.textContent = "Slide preview is unavailable. Open the verified PPTX to inspect the deck.";
+    deck.append(empty);
+  }
+  card.append(deck);
+
+  const artifactRow = document.createElement("div");
+  artifactRow.className = "document-artifacts presentation-artifacts";
+  const row = document.createElement("div");
+  row.className = "document-artifact-row";
+  const copy = document.createElement("div");
+  const name = document.createElement("button");
+  name.type = "button";
+  name.className = "presentation-artifact-link";
+  name.textContent = block.artifact.path;
+  name.title = "Open this PowerPoint deck";
+  name.addEventListener("click", () =>
+    openDocumentArtifact(block.artifact.path, "open", name, block.artifact.path)
+  );
+  const detail = document.createElement("small");
+  detail.textContent = `PPTX · ${formatBytes(block.artifact.bytes)} · SHA-256 ${block.artifact.sha256.slice(0, 12)}…`;
+  copy.append(name, detail);
+  const actions = document.createElement("div");
+  const open = actionButton("Open in PowerPoint", "primary");
+  open.addEventListener("click", () => openDocumentArtifact(block.artifact.path, "open", open));
+  const reveal = actionButton("Show in folder", "secondary");
+  reveal.addEventListener("click", () => openDocumentArtifact(block.artifact.path, "reveal", reveal));
+  actions.append(open, reveal);
+  row.append(copy, actions);
+  artifactRow.append(row);
+  const refine = actionButton("Refine with AMOS", "secondary");
+  refine.classList.add("document-refine-button");
+  refine.addEventListener("click", () => {
+    showView("operator");
+    elements.promptInput.value = block.diagnostics.length
+      ? `Refine “${block.artifact.path}” using the visible slide diagnostics, then regenerate the same PowerPoint file.`
+      : `Revise “${block.artifact.path}” and regenerate the verified PowerPoint deck. Preserve the current slide argument unless I specify a change.`;
     elements.promptInput.focus();
   });
   artifactRow.append(refine);

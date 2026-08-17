@@ -662,6 +662,10 @@ test("canvas code and previews stay typed, inert, and outside the privileged ren
   assert.match(main, /shell\.showItemInFolder\(artifactPath\)/);
   assert.match(javascript, /function renderCanvasSpreadsheet[\s\S]*?Open in Excel[\s\S]*?Show in folder/);
   assert.match(javascript, /className = "spreadsheet-artifact-link"/);
+  assert.match(javascript, /function renderCanvasPresentation[\s\S]*?Open in PowerPoint[\s\S]*?Show in folder/);
+  assert.match(javascript, /className = "presentation-artifact-link"/);
+  assert.match(javascript, /api\.readDocumentPreview\(preview\.path\)/);
+  assert.doesNotMatch(javascript, /renderCanvasPresentation[\s\S]{0,6000}(?:innerHTML|createElement\("iframe"\))/);
   assert.match(javascript, /className = "message-copy-button"/);
   assert.match(javascript, /await api\.copyText\(content\)/);
   assert.match(preload, /desktop:copy-text/);

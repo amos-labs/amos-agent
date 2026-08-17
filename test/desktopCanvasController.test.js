@@ -357,10 +357,75 @@ test("local preview attestation survives browser follow-up actions", () => {
   assert.equal(second.blocks[0].summary, "Score 1");
 });
 
+test("a generated presentation opens a verified dynamic canvas and refreshes in place", () => {
+  const events = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-presentation-canvas-controller",
+    settingsStore: {},
+    openBrowser() {},
+    emit(channel, payload) { events.push({ channel, payload }); }
+  });
+  const input = {
+    generatedAt: timestamp,
+    presentation: {
+      title: "Q3 Operating Review",
+      kind: "operating_review",
+      style: "business",
+      slides: [{ title: "Q3 Operating Review", layout: "title" }]
+    },
+    artifact: {
+      path: "decks/q3-operating-review.pptx",
+      format: "pptx",
+      bytes: 8_192,
+      sha256: "c".repeat(64),
+      verified: true
+    },
+    verification: {
+      verified: true,
+      slideCount: 1,
+      extractedCharacters: 42,
+      titles: ["Q3 Operating Review"]
+    },
+    layout: {
+      status: "ready",
+      slide_count: 1,
+      diagnostic_count: 0,
+      diagnostics: []
+    },
+    slidePreview: {
+      slide_count: 1,
+      truncated: false,
+      slides: [{
+        path: ".amos/previews/fixture/slide-1.png",
+        slide: 1,
+        title: "Q3 Operating Review",
+        layout: "title",
+        width: 960,
+        height: 540,
+        bytes: 2048,
+        sha256: "d".repeat(64)
+      }]
+    }
+  };
+  const first = controller.presentPresentationArtifact(input);
+  const second = controller.presentPresentationArtifact({
+    ...input,
+    artifact: { ...input.artifact, bytes: 9_216, sha256: "e".repeat(64) }
+  });
+  assert.equal(second.id, first.id);
+  assert.equal(second.revision, 2);
+  assert.equal(controller.canvases.list().length, 1);
+  assert.equal(second.blocks[0].type, "presentation");
+  assert.equal(second.blocks[0].artifact.bytes, 9216);
+  assert.equal(second.blocks[0].slidePreview.slides[0].path, ".amos/previews/fixture/slide-1.png");
+  assert.equal(events.filter((event) => event.channel === "canvas:changed").length, 2);
+});
+
 test("artifact actions resolve only existing DOCX, PDF, or XLSX files inside the workspace", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "amos-artifact-actions-"));
   await writeFile(join(workspace, "brief.pdf"), "%PDF-1.7\n");
   await writeFile(join(workspace, "model.xlsx"), "PK\u0003\u0004");
+  await writeFile(join(workspace, "review.pptx"), "PK\u0003\u0004");
   await writeFile(join(workspace, "notes.txt"), "not an artifact\n");
   const controller = new DesktopController({
     userDataPath: join(workspace, ".amos"),
@@ -377,13 +442,17 @@ test("artifact actions resolve only existing DOCX, PDF, or XLSX files inside the
     await controller.resolveDocumentArtifactPath("model.xlsx"),
     await realpath(join(workspace, "model.xlsx"))
   );
+  assert.equal(
+    await controller.resolveDocumentArtifactPath("review.pptx"),
+    await realpath(join(workspace, "review.pptx"))
+  );
   await assert.rejects(
     controller.resolveDocumentArtifactPath("../brief.pdf"),
     /escapes workspace/
   );
   await assert.rejects(
     controller.resolveDocumentArtifactPath("notes.txt"),
-    /only DOCX, PDF, and XLSX/
+    /only DOCX, PDF, XLSX, and PPTX/
   );
   await assert.rejects(
     controller.resolveDocumentArtifactPath("missing.docx"),

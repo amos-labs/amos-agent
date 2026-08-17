@@ -28,6 +28,7 @@ const MIME_BY_EXTENSION = {
   ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ".md": "text/markdown",
   ".csv": "text/csv",
   ".tsv": "text/tab-separated-values",
@@ -82,8 +83,8 @@ export class AttachmentManager {
     if (buffer.length > MAX_FILE_BYTES) throw new Error("The browser download exceeds the 20 MB attachment limit");
     const safeName = cleanName(name);
     const extension = extname(safeName).toLowerCase();
-    if (!IMAGE_MIMES.has(mimeForName(safeName)) && extension !== ".pdf" && extension !== ".docx" && extension !== ".xlsx" && !TEXT_EXTENSIONS.has(extension)) {
-      throw new Error(`${safeName} is not supported yet. Download PDF, DOCX, XLSX, text, markdown, CSV, JSON, source code, or an image.`);
+    if (!IMAGE_MIMES.has(mimeForName(safeName)) && extension !== ".pdf" && extension !== ".docx" && extension !== ".xlsx" && extension !== ".pptx" && !TEXT_EXTENSIONS.has(extension)) {
+      throw new Error(`${safeName} is not supported yet. Download PDF, DOCX, XLSX, PPTX, text, markdown, CSV, JSON, source code, or an image.`);
     }
     assertBrowserImageSignature(safeName, buffer);
     const item = await attachmentFromBuffer({
@@ -411,11 +412,22 @@ export async function extractDocumentText({ name, mime, buffer }) {
   ) {
     return extractSpreadsheet(buffer);
   }
+  if (
+    mime === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    extension === ".pptx"
+  ) {
+    return extractPresentation(buffer);
+  }
   if (TEXT_EXTENSIONS.has(extension) || mime.startsWith("text/") || mime === "application/json") {
     if (looksBinary(buffer)) throw new Error(`${name} does not appear to be a UTF-8 text file`);
     return normalizeText(buffer.toString("utf8"));
   }
-  throw new Error(`${name} is not supported yet. Attach PDF, DOCX, XLSX, text, markdown, CSV, JSON, source code, or an image.`);
+  throw new Error(`${name} is not supported yet. Attach PDF, DOCX, XLSX, PPTX, text, markdown, CSV, JSON, source code, or an image.`);
+}
+
+async function extractPresentation(buffer) {
+  const { extractPresentationText } = await import("../artifacts/presentationRenderer.js");
+  return normalizeText(await extractPresentationText(buffer)).slice(0, MAX_EXTRACTED_CHARS);
 }
 
 async function extractSpreadsheet(buffer) {
