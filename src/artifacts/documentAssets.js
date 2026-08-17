@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "./napiCanvas.js";
 import { normalizeDocumentSpec } from "./documentSpec.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 
@@ -44,9 +44,9 @@ export async function resolveDocumentAssets(input, workspaceRoot) {
   }
 
   const charts = new Map();
-  spec.blocks.forEach((block, index) => {
-    if (block.type !== "chart") return;
-    const data = renderChart(block, spec.brand);
+  for (const [index, block] of spec.blocks.entries()) {
+    if (block.type !== "chart") continue;
+    const data = await renderChart(block, spec.brand);
     charts.set(index, {
       kind: "chart",
       data,
@@ -54,7 +54,7 @@ export async function resolveDocumentAssets(input, workspaceRoot) {
       width: 1_200,
       height: 700
     });
-  });
+  }
 
   return {
     images,
@@ -63,10 +63,10 @@ export async function resolveDocumentAssets(input, workspaceRoot) {
   };
 }
 
-function renderChart(block, brand) {
+async function renderChart(block, brand) {
   const width = 1_200;
   const height = 700;
-  const canvas = createCanvas(width, height);
+  const canvas = await createCanvas(width, height);
   const context = canvas.getContext("2d");
   const primary = `#${brand?.primary_color || CHART_COLORS[0]}`;
   const colors = block.series.map((series, index) =>

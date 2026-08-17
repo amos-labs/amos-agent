@@ -1,4 +1,4 @@
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas } from "./napiCanvas.js";
 import ExcelJS from "exceljs";
 import {
   compileSpreadsheetFormula,
@@ -102,7 +102,7 @@ export async function renderSpreadsheetArtifact(input) {
     }
     applyUsefulWidths(worksheet, sheetSpec);
     for (const chart of sheetSpec.charts) {
-      const snapshot = renderChartSnapshot(chart, sheetSpec.name, calculation);
+      const snapshot = await renderChartSnapshot(chart, sheetSpec.name, calculation);
       const imageId = workbook.addImage({ buffer: snapshot.buffer, extension: "png" });
       const from = decodeCell(chart.from);
       const to = decodeCell(chart.to);
@@ -302,11 +302,11 @@ function chartPreview(chart, currentSheet, calculation) {
   };
 }
 
-function renderChartSnapshot(chart, currentSheet, calculation) {
+async function renderChartSnapshot(chart, currentSheet, calculation) {
   const preview = chartPreview(chart, currentSheet, calculation);
   const width = 960;
   const height = 520;
-  const canvas = createCanvas(width, height);
+  const canvas = await createCanvas(width, height);
   const context = canvas.getContext("2d");
   context.fillStyle = "#FFFFFF";
   context.fillRect(0, 0, width, height);

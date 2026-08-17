@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "./napiCanvas.js";
 import {
   SLIDE_HEIGHT_IN,
   SLIDE_WIDTH_IN,
@@ -42,7 +42,7 @@ async function renderSlidePng(slide) {
   const scale = PREVIEW_WIDTH / SLIDE_WIDTH_IN;
   const width = Math.round(SLIDE_WIDTH_IN * scale);
   const height = Math.round(SLIDE_HEIGHT_IN * scale);
-  const canvas = createCanvas(width, height);
+  const canvas = await createCanvas(width, height);
   const context = canvas.getContext("2d");
   context.fillStyle = "#FFFFFF";
   context.fillRect(0, 0, width, height);

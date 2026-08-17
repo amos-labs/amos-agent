@@ -1,5 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "./napiCanvas.js";
 import { normalizePresentationSpec } from "./presentationSpec.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 
@@ -45,9 +45,9 @@ export async function resolvePresentationAssets(input, workspaceRoot) {
   }
 
   const charts = new Map();
-  spec.slides.forEach((slide, index) => {
-    if (slide.layout !== "chart") return;
-    const data = renderChart(slide, spec.brand);
+  for (const [index, slide] of spec.slides.entries()) {
+    if (slide.layout !== "chart") continue;
+    const data = await renderChart(slide, spec.brand);
     charts.set(index, {
       kind: "chart",
       data,
@@ -55,7 +55,7 @@ export async function resolvePresentationAssets(input, workspaceRoot) {
       width: 1_600,
       height: 900
     });
-  });
+  }
 
   return {
     images,
@@ -68,10 +68,10 @@ export function emptyPresentationAssets() {
   return { images: new Map(), charts: new Map(), logo: null };
 }
 
-function renderChart(slide, brand) {
+async function renderChart(slide, brand) {
   const width = 1_600;
   const height = 900;
-  const canvas = createCanvas(width, height);
+  const canvas = await createCanvas(width, height);
   const context = canvas.getContext("2d");
   const primary = `#${brand?.primary_color || CHART_COLORS[0]}`;
   const colors = slide.series.map((series, index) =>
