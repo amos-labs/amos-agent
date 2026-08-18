@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { DesktopController } from "../src/desktop/controller.js";
 import { DEFAULT_DESKTOP_SETTINGS } from "../src/desktop/settingsStore.js";
 
-function controllerHarness() {
-  let current = { ...DEFAULT_DESKTOP_SETTINGS, apiKey: "" };
+function controllerHarness(initial = {}) {
+  let current = { ...DEFAULT_DESKTOP_SETTINGS, apiKey: "", ...initial };
   let writes = 0;
   const controller = new DesktopController({
     userDataPath: "/tmp/amos-intelligence-settings",
@@ -26,6 +26,31 @@ function controllerHarness() {
     writes: () => writes
   };
 }
+
+test("Desktop restores the target provider credential when switching models", async () => {
+  const harness = controllerHarness({
+    provider: "xai",
+    model: "grok-4.6",
+    baseUrl: "https://api.x.ai/v1",
+    apiKey: "xai-key",
+    providerCredentials: {
+      xai: "xai-key",
+      openai: "openai-key"
+    }
+  });
+
+  await harness.controller.saveSettings({
+    provider: "openai",
+    model: "gpt-5.6-terra",
+    baseUrl: "https://api.openai.com/v1",
+    reasoningEffort: "medium"
+  });
+
+  assert.equal(harness.current().provider, "openai");
+  assert.equal(harness.current().apiKey, "openai-key");
+  assert.equal(harness.current().providerCredentials.xai, "xai-key");
+  assert.equal(harness.current().providerCredentials.openai, "openai-key");
+});
 
 test("Desktop rejects an unqualified Bedrock combination before persisting it", async () => {
   const harness = controllerHarness();

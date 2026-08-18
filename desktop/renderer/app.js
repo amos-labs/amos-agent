@@ -7479,9 +7479,18 @@ function selectProvider(providerId) {
     elements.bedrockAuthInput.value = defaults.authMode || "sigv4";
   }
   renderProviderSelection();
-  elements.apiKeyHelp.textContent = defaults.credential || "Provider credential";
+  elements.apiKeyHelp.textContent = selectedProviderHasStoredCredential()
+    ? "A credential is stored securely for this provider. Leave blank to keep it."
+    : (defaults.credential || "Provider credential");
   renderProviderFields(defaults.model || "");
   renderHybridRouting();
+}
+
+function selectedProviderHasStoredCredential() {
+  return Boolean(
+    (state?.settings?.provider === selectedProvider && state.settings.hasApiKey) ||
+    state?.settings?.storedCredentialProviders?.includes(selectedProvider)
+  );
 }
 
 function renderProviderFields(modelValue = "") {

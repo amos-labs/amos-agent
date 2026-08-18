@@ -37,7 +37,24 @@ function asOpenAiTool(tool) {
 }
 
 function normalizeModelToolDefinition(value) {
-  if (Array.isArray(value)) return value.map(normalizeModelToolDefinition);
+  const normalized = normalizeModelSchema(value);
+  const parameters = normalized?.type === "function"
+    ? normalized.function?.parameters
+    : null;
+  if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) {
+    return normalized;
+  }
+  return {
+    ...normalized,
+    function: {
+      ...normalized.function,
+      parameters: normalizeObjectRootUnions(parameters)
+    }
+  };
+}
+
+function normalizeModelSchema(value) {
+  if (Array.isArray(value)) return value.map(normalizeModelSchema);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value)
     .filter(([key, item]) => !(
@@ -45,7 +62,26 @@ function normalizeModelToolDefinition(value) {
       Number.isInteger(item) &&
       item > MAX_GRAMMAR_ARRAY_BOUND
     ))
-    .map(([key, item]) => [key, normalizeModelToolDefinition(item)]));
+    .map(([key, item]) => [key, normalizeModelSchema(item)]));
+}
+
+function normalizeObjectRootUnions(parameters) {
+  if (parameters.type !== "object") return parameters;
+  const normalized = { ...parameters };
+  for (const keyword of ["anyOf", "oneOf"]) {
+    if (!Array.isArray(normalized[keyword])) continue;
+    normalized[keyword] = normalized[keyword].map((branch) => {
+      if (!branch || typeof branch !== "object" || Array.isArray(branch) || branch.type) {
+        return branch;
+      }
+      // A branch containing only `required` (or other object constraints) is
+      // already intersected with the object root by JSON Schema. Some model
+      // runtimes validate union branches independently, though, and reject the
+      // entire tool unless every root branch explicitly declares object type.
+      return { ...branch, type: "object" };
+    });
+  }
+  return normalized;
 }
 
 export class ToolRegistry {

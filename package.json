@@ -1,6 +1,6 @@
 {
   "name": "@amos-labs/amos-agent",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "AMOS Desktop and local agent: model-independent operators for the governed AMOS company brain.",
   "type": "module",
   "main": "desktop/main.js",

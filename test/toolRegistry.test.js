@@ -21,6 +21,32 @@ test("ToolRegistry executes registered tools", async () => {
   assert.deepEqual(await registry.execute("echo", { value: "hi" }, {}), { value: "hi" });
 });
 
+test("ToolRegistry makes object root union branches explicit for model runtimes", () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "capture_context",
+    parameters: {
+      type: "object",
+      required: ["source_client"],
+      anyOf: [
+        { required: ["objective", "outcome"] },
+        { required: ["expected_revision", "consultative_state"] }
+      ],
+      properties: {
+        source_client: { type: "string" },
+        objective: { type: "string" },
+        outcome: { type: "string" }
+      }
+    },
+    handler: () => ({ ok: true })
+  });
+
+  assert.deepEqual(registry.openAiTools()[0].function.parameters.anyOf, [
+    { required: ["objective", "outcome"], type: "object" },
+    { required: ["expected_revision", "consultative_state"], type: "object" }
+  ]);
+});
+
 test("ToolRegistry rejects ambiguous name collisions but permits exact idempotent registration", () => {
   const registry = new ToolRegistry();
   const first = {
