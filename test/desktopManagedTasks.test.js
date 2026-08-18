@@ -283,6 +283,10 @@ test("a Project conversation is created already assigned to that workspace", asy
   });
 
   const projectId = "11111111-1111-4111-8111-111111111111";
+  controller.projects = {
+    supported: true,
+    projects: [{ id: projectId, name: "amos website", status: "active", archived: false }]
+  };
   const opened = await controller.startNewConversation({
     kind: "general",
     projectId
@@ -291,6 +295,8 @@ test("a Project conversation is created already assigned to that workspace", asy
   const [conversation] = await tasks.list(owner);
   assert.equal(conversation.projectId, projectId);
   assert.equal(opened.launch.task.projectId, projectId);
+  assert.equal(opened.launch.title, "Talk in amos website");
+  assert.equal(opened.launch.objective, "Start a conversation in the amos website Project.");
 });
 
 test("a Project goal starts in the background without stealing Operator", async () => {

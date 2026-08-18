@@ -373,11 +373,20 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
 
   assert.match(html, /id="tasksView"/);
   assert.match(html, /data-view="tasks"[\s\S]*?Conversations/);
+  assert.match(html, /Every durable thread/);
+  assert.match(html, /id="taskProjectFilterInput"/);
+  assert.match(html, /id="taskStatusFilters"/);
+  assert.match(html, /id="taskPager"/);
   assert.match(html, /id="newTaskButton"[^>]*>New conversation/);
   assert.match(html, /id="newConversationButton"[^>]*>[\s\S]*?New conversation/);
   assert.match(html, /id="forkConversationButton"[^>]*>[\s\S]*?Fork conversation/);
   assert.match(html, /Everything[\s\S]*?From here[\s\S]*?Selected artifacts/);
   assert.match(html, /Same directory[\s\S]*?New Git worktree[\s\S]*?Context only/);
+  assert.match(javascript, /const LIST_PAGE_SIZE = 15;/);
+  assert.match(javascript, /function conversationStatusBucket\(task\)/);
+  assert.match(javascript, /PROJECT · \$\{\(project\?\.name \|\| "Assigned"\)\.toUpperCase\(\)\}/);
+  assert.match(javascript, /taskStatusFilter = option\.id/);
+  assert.match(javascript, /paginateItems\(visible, "tasks"\)/);
   assert.match(javascript, /api\.openTask\(task\.id\)/);
   assert.match(javascript, /api\.prepareTaskCheckpoint\(id\)[\s\S]*?result\.state[\s\S]*?adoptOpenedTask\(result\)/);
   const checkpointResumeContract = javascript.match(
@@ -441,12 +450,12 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.doesNotMatch(html, /id="projectTokenInput"/);
   assert.doesNotMatch(html, /Token ceiling/);
   assert.match(javascript, /function renderProjects\(\)/);
-  assert.match(javascript, /function projectConversationList\(conversations\)/);
-  assert.match(javascript, /function projectActivityList\(runs\)/);
+  assert.match(javascript, /function projectConversationList\(projectId, conversations\)/);
+  assert.match(javascript, /function projectActivityList\(projectId, runs\)/);
   assert.match(javascript, /function projectDecisionList\(/);
   assert.match(javascript, /function projectAccordion\(/);
   assert.match(javascript, /task\.projectId === project\.id/);
-  assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?projectId: project\.id/);
+  assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?projectId: project\.id[\s\S]*?title: `Talk in \$\{project\.name\}`/);
   assert.match(javascript, /actionButton\("Talk", "primary"\)/);
   assert.match(javascript, /Leave a goal/);
   assert.match(javascript, /api\.startAutonomousGoal\(/);
@@ -474,8 +483,16 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(remoteState, /this\.mcp\.callTool\("list_task_inbox"/);
   assert.match(remoteState, /this\.mcp\.callTool\("start_task_run"/);
   assert.match(remoteState, /this\.mcp\.callTool\("report_task_run"/);
-  assert.match(css, /\.project-list\s*\{[\s\S]*?max-width:\s*760px/);
+  assert.match(css, /\.project-list\s*\{[\s\S]*?max-width:\s*none/);
   assert.match(css, /\.project-accordion\s*\{/);
+  assert.match(css, /\.project-activity-filters\s*\{/);
+  assert.match(javascript, /projectActivityFilters\.set\(projectId, next\)/);
+  assert.match(javascript, /`Activity · \$\{runs\.length\}`[\s\S]*?false/);
+  assert.match(javascript, /function renderComposerProjectChip\(/);
+  assert.match(javascript, /Talking in \$\{project\.name\}/);
+  assert.match(html, /id="projectPager"/);
+  assert.match(javascript, /paginateItems\(matchingProjects, "projects"\)/);
+  assert.match(javascript, /In Conversations/);
   assert.match(css, /\.project-conversations\s*\{/);
   assert.doesNotMatch(javascript, /function renderActivityCenter\(/);
   assert.doesNotMatch(javascript, /Watch Activity Center/);
@@ -498,13 +515,20 @@ test("Briefings are a single-column saved-view library with typed platform actio
   assert.match(html, />Briefings</);
   assert.match(html, /A saved company view that refreshes with governed data/);
   assert.match(html, /class="briefing-open-now hidden"/);
-  assert.match(html, /<details class="briefing-templates">/);
+  assert.match(html, /id="briefingSearchInput"/);
+  assert.match(html, /id="briefingPager"/);
+  assert.match(html, /id="newBriefingButton"[^>]*>New Briefing/);
+  assert.match(html, /id="composerProjectChip"/);
+  assert.match(html, /<section class="briefing-templates"/);
+  assert.match(javascript, /function startNewBriefingFromScratch\(/);
   assert.doesNotMatch(html, /CURRENT WORK SURFACES/);
   assert.doesNotMatch(html, /START FROM A TEMPLATE/);
   assert.doesNotMatch(html, /Briefings that stay useful/);
   assert.match(javascript, /function briefingSettingsMenu\(/);
   assert.match(javascript, /actionLabel: "Open now"/);
-  assert.match(css, /\.briefing-library\s*\{[\s\S]*?max-width:\s*760px/);
+  assert.match(javascript, /paginateItems\(saved, "briefings"\)/);
+  assert.match(css, /\.briefing-library\s*\{[\s\S]*?max-width:\s*none/);
+  assert.match(css, /\.canvas-view \.canvas-shell \{ width: 100%; \}/);
   assert.doesNotMatch(css, /minmax\(280px/);
   assert.doesNotMatch(javascript, /const briefingTemplates\s*=/);
   assert.doesNotMatch(javascript, /title: "Goals and coaching"/);
@@ -545,8 +569,9 @@ test("Operator is chat-first with collapsible navigation and inline governed pro
   assert.match(javascript, /elements\.app\.classList\.toggle\("nav-collapsed", collapsed\)/);
   assert.match(
     javascript,
-    /function renderConversationChrome\(\)[\s\S]*?\.message\.user, \.message\.assistant, \.message\.error[\s\S]*?conversationHeading\.classList\.toggle\("hidden", hasConversation\)[\s\S]*?welcomeMessage\.classList\.toggle\("hidden", hasConversation\)[\s\S]*?starterActions\.classList\.toggle\("hidden", hasConversation\)/
+    /function renderConversationChrome\(\)[\s\S]*?\.message\.user, \.message\.assistant, \.message\.error[\s\S]*?conversationHeading\.classList\.toggle\("hidden", hasConversation \|\| Boolean\(project\)\)[\s\S]*?welcomeMessage\.classList\.toggle\("hidden", hasConversation\)[\s\S]*?starterActions\.classList\.toggle\("hidden", hasConversation \|\| Boolean\(project\)\)/
   );
+  assert.match(javascript, /function renderComposerProjectChip\(/);
   assert.match(javascript, /elements\.messages\.append\(message\);\s+renderConversationChrome\(\)/);
   assert.match(javascript, /operatorView\.classList\.toggle\("has-demo-banner", demo\)/);
   assert.match(css, /\.sidebar-toggle\s*{[\s\S]*?-webkit-app-region: no-drag;[\s\S]*?z-index: 3;/);

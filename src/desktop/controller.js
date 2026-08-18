@@ -157,6 +157,27 @@ const execFile = promisify(execFileCallback);
 const NEW_CONVERSATION_TITLE = "New conversation";
 const NEW_CONVERSATION_OBJECTIVE = "Start a new conversation with AMOS.";
 
+function projectTalkTitle(name) {
+  const label = String(name || "").trim() || "Project";
+  return `Talk in ${label}`.slice(0, 160);
+}
+
+function projectTalkObjective(name) {
+  const label = String(name || "").trim() || "Project";
+  return `Start a conversation in the ${label} Project.`;
+}
+
+function isUnnamedConversation(task) {
+  const title = String(task?.title || "");
+  const objective = String(task?.objective || "");
+  return task?.kind === "general" &&
+    (title === NEW_CONVERSATION_TITLE || title.startsWith("Talk in ")) &&
+    (
+      objective === NEW_CONVERSATION_OBJECTIVE ||
+      /^Start a conversation in the .+ Project\.$/.test(objective)
+    );
+}
+
 export class DesktopController {
   constructor({
     userDataPath,
@@ -3398,15 +3419,23 @@ export class DesktopController {
     if (!requestedObjective && kind !== "general") {
       throw new Error("A new conversation needs an objective");
     }
-    const objective = requestedObjective || NEW_CONVERSATION_OBJECTIVE;
-    const defaultTitle = kind === "general" && !requestedObjective
-      ? NEW_CONVERSATION_TITLE
-      : "New task";
-    const title = String(input.title || defaultTitle).trim().slice(0, 160) || defaultTitle;
     const requestedProjectId = String(input.projectId || "").trim();
     if (requestedProjectId && !isUuid(requestedProjectId)) {
       throw new Error("That Project identifier is invalid");
     }
+    const project = requestedProjectId
+      ? (Array.isArray(this.projects?.projects) ? this.projects.projects : [])
+        .find((item) => item.id === requestedProjectId) || null
+      : null;
+    const objective = requestedObjective || (
+      kind === "general" && requestedProjectId
+        ? projectTalkObjective(project?.name)
+        : NEW_CONVERSATION_OBJECTIVE
+    );
+    const defaultTitle = kind === "general" && !requestedObjective
+      ? (requestedProjectId ? projectTalkTitle(project?.name) : NEW_CONVERSATION_TITLE)
+      : "New task";
+    const title = String(input.title || defaultTitle).trim().slice(0, 160) || defaultTitle;
     const select = input.select !== false;
     const settings = await this.settingsStore.read();
     if (select) {
@@ -3790,12 +3819,7 @@ export class DesktopController {
     const scope = this.taskScope(currentSettings);
     if (!scope) return null;
     const current = await this.taskStore.get(scope, this.activeTaskRecordId);
-    if (
-      !current ||
-      current.kind !== "general" ||
-      current.title !== NEW_CONVERSATION_TITLE ||
-      current.objective !== NEW_CONVERSATION_OBJECTIVE
-    ) {
+    if (!current || !isUnnamedConversation(current)) {
       return current;
     }
 
