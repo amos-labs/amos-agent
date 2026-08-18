@@ -460,10 +460,14 @@ export class DesktopController {
 
   async saveSettings(settings) {
     const current = await this.settingsStore.read();
+    const requestedProvider = String(settings.provider || current.provider || "");
+    const requestedApiKey = settings.apiKey === undefined
+      ? credentialForProvider(current, requestedProvider)
+      : settings.apiKey;
     let candidate = sanitizeSettings({
       ...current,
       ...settings,
-      apiKey: settings.apiKey === undefined ? current.apiKey : settings.apiKey
+      apiKey: requestedApiKey
     });
     if (intelligenceSettingsRequested(settings)) {
       if (!candidate.apiKey) {

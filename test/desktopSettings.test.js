@@ -305,6 +305,39 @@ test("desktop settings encrypt provider credentials at rest", async () => {
   assert.equal((await store.read()).apiKey, "secret-bedrock-key");
 });
 
+test("desktop upgrades preserve compatible settings and encrypted provider credentials", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-settings-upgrade-"));
+  const path = join(directory, "settings.json");
+  await writeFile(path, JSON.stringify({
+    version: 2,
+    settings: {
+      ...DEFAULT_DESKTOP_SETTINGS,
+      provider: "openai",
+      model: "gpt-5.6-terra",
+      baseUrl: "https://api.openai.com/v1"
+    },
+    encryptedApiKey: "openai-key",
+    encryptedProviderCredentials: JSON.stringify({
+      openai: "openai-key",
+      xai: "xai-key"
+    })
+  }));
+  const store = new DesktopSettingsStore({
+    filePath: path,
+    encrypt: (value) => value,
+    decrypt: (value) => value
+  });
+
+  const settings = await store.read();
+  assert.equal(settings.provider, "openai");
+  assert.equal(settings.model, "gpt-5.6-terra");
+  assert.equal(settings.apiKey, "openai-key");
+  assert.deepEqual(settings.providerCredentials, {
+    openai: "openai-key",
+    xai: "xai-key"
+  });
+});
+
 test("trusted Desktop workspace projects local approval flags into the runtime environment", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-desktop-trust-"));
   const path = join(directory, "settings.json");

@@ -76,9 +76,15 @@ export class DesktopSettingsStore {
       }
     }
 
+    const storedSettings = stored.settings && typeof stored.settings === "object" && !Array.isArray(stored.settings)
+      ? stored.settings
+      : {};
     const settings = {
       ...DEFAULT_DESKTOP_SETTINGS,
-      ...(stored.version === VERSION ? stored.settings : {})
+      // Settings fields are sanitized on every write and additive across
+      // releases. Do not discard an otherwise valid settings object merely
+      // because a newer Desktop release advances the envelope version.
+      ...storedSettings
     };
     if (stored.encryptedApiKey) {
       settings.apiKey = this.decrypt(stored.encryptedApiKey);
