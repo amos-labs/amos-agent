@@ -60,6 +60,7 @@ const providerDefaults = {
 };
 
 const LIVE_EVENT_VISIBLE_COUNT = 3;
+const LIST_PAGE_SIZE = 15;
 let state = null;
 let currentView = "operator";
 let currentWorkTab = "open";
@@ -84,7 +85,11 @@ let automationSetupDraft = null;
 let automationSetupOperations = null;
 let automationSetupBusy = false;
 let selectedProjectId = "";
+let taskStatusFilter = "all";
+const listPages = { tasks: 1, projects: 1, briefings: 1 };
+const listQueryKeys = { tasks: "", projects: "", briefings: "" };
 const expandedProjectAccordions = new Set();
+const projectActivityFilters = new Map();
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
@@ -108,7 +113,7 @@ const elements = Object.fromEntries(
     "personalIntelligenceCallout",
     "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
     "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
-    "newConversationButton", "forkConversationButton",
+    "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
     "canvasSidecar", "contextResizeHandle",
     "attachmentList", "attachButton",
@@ -158,9 +163,9 @@ const elements = Object.fromEntries(
     "automationSetupSurface", "automationSetupTitle", "automationSetupSubtitle",
     "automationSetupPhases", "automationSetupBody", "automationSetupError",
     "automationSetupBack", "automationSetupNext", "automationSetupClose", "canvasSurface",
-    "taskSummary", "taskSearchInput", "taskFilterInput", "taskPlatformNotice", "taskEmpty",
-    "taskList", "newTaskButton", "conversationRecovery", "conversationRecoveryList",
-    "projectUnavailable", "projectSearchInput", "projectEmpty", "projectList",
+    "taskSummary", "taskSearchInput", "taskProjectFilterInput", "taskStatusFilters", "taskPlatformNotice", "taskEmpty",
+    "taskList", "taskPager", "newTaskButton", "conversationRecovery", "conversationRecoveryList",
+    "projectUnavailable", "projectSearchInput", "projectEmpty", "projectList", "projectPager",
     "refreshProjectsButton", "newProjectButton", "projectModal", "projectForm",
     "projectModalTitle", "projectModalClose", "projectIdInput", "projectNameInput",
     "projectInstructionsInput", "projectCostInput", "projectModalError", "projectCancelButton",
@@ -174,7 +179,8 @@ const elements = Object.fromEntries(
     "capsulePreviewItems", "capsulePreviewWarning", "capsulePreviewCancelButton",
     "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton", "canvasSaveButton", "canvasScheduleButton",
     "canvasCloseButton", "canvasToggleButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasEmptyTitle",
-    "canvasEmptyMessage", "canvasBlocks", "briefingLibrary", "savedViewList", "briefingTemplateList",
+    "canvasEmptyMessage", "canvasBlocks", "briefingSearchInput", "briefingLibrary", "savedViewList", "briefingPager", "briefingTemplateList",
+    "newBriefingButton",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
     "offlineSetupSteps", "offlineSetupRuntime", "offlineSetupModel", "offlineSetupActivate",
@@ -331,9 +337,23 @@ function bindActions() {
   elements.newTaskButton.addEventListener("click", () => createNewConversation(elements.newTaskButton));
   elements.newConversationButton.addEventListener("click", () => createNewConversation(elements.newConversationButton));
   elements.forkConversationButton.addEventListener("click", forkCurrentConversation);
-  elements.taskSearchInput.addEventListener("input", renderTasks);
-  elements.taskFilterInput.addEventListener("change", renderTasks);
-  elements.projectSearchInput.addEventListener("input", renderProjects);
+  elements.taskSearchInput.addEventListener("input", () => {
+    listPages.tasks = 1;
+    renderTasks();
+  });
+  elements.taskProjectFilterInput.addEventListener("change", () => {
+    listPages.tasks = 1;
+    renderTasks();
+  });
+  elements.projectSearchInput.addEventListener("input", () => {
+    listPages.projects = 1;
+    renderProjects();
+  });
+  elements.briefingSearchInput.addEventListener("input", () => {
+    listPages.briefings = 1;
+    renderBriefingLibrary();
+  });
+  elements.newBriefingButton.addEventListener("click", startNewBriefingFromScratch);
   elements.refreshProjectsButton.addEventListener("click", refreshProjects);
   elements.newProjectButton.addEventListener("click", () => openProjectModal());
   elements.projectForm.addEventListener("submit", submitProject);
@@ -2612,6 +2632,75 @@ function automationStepSummary(steps) {
     .join(" → ");
 }
 
+function conversationProject(task) {
+  if (!task?.projectId) return null;
+  return (state?.projects?.projects || []).find((item) => item.id === task.projectId) || null;
+}
+
+function conversationProjectName(task) {
+  return conversationProject(task)?.name || "";
+}
+
+function conversationStatusBucket(task) {
+  const archived = Boolean(task.archivedAt || task.archived);
+  if (archived) return "archived";
+  const activeRun = (state?.activeRuns || []).find((run) =>
+    run.taskRecordId === task.id || (task.remoteId && run.remoteTaskId === task.remoteId)
+  );
+  if (task.running || activeRun || ["running", "scheduled"].includes(task.status)) return "running";
+  if (["failed", "interrupted", "blocked", "cancel_requested"].includes(task.status)) return "failed";
+  if (["completed", "cancelled"].includes(task.status)) return "completed";
+  return "active";
+}
+
+function paginateItems(items, key, pageSize = LIST_PAGE_SIZE) {
+  const total = items.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1);
+  const current = Math.min(Math.max(1, Number(listPages[key]) || 1), pageCount);
+  listPages[key] = current;
+  const start = (current - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    page: current,
+    pageCount,
+    total,
+    start: total === 0 ? 0 : start + 1,
+    end: Math.min(start + pageSize, total)
+  };
+}
+
+function renderListPager(host, page, onPage) {
+  if (!host) return;
+  host.replaceChildren();
+  if (!page || page.total <= LIST_PAGE_SIZE) {
+    host.classList.add("hidden");
+    return;
+  }
+  host.classList.remove("hidden");
+  const summary = document.createElement("span");
+  summary.textContent = `${page.start}–${page.end} of ${page.total}`;
+  const previous = document.createElement("button");
+  previous.type = "button";
+  previous.className = "button ghost";
+  previous.textContent = "Previous";
+  previous.disabled = page.page <= 1;
+  previous.addEventListener("click", () => onPage(page.page - 1));
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "button ghost";
+  next.textContent = "Next";
+  next.disabled = page.page >= page.pageCount;
+  next.addEventListener("click", () => onPage(page.page + 1));
+  host.append(summary, previous, next);
+}
+
+function resetListPageIfQueryChanged(key, query) {
+  if (listQueryKeys[key] !== query) {
+    listQueryKeys[key] = query;
+    listPages[key] = 1;
+  }
+}
+
 function renderProjects() {
   if (!state) return;
   const library = state.projects || { supported: false, projects: [], inbox: [] };
@@ -2621,7 +2710,8 @@ function renderProjects() {
     ? state.tasks.tasks.filter((task) => task.projectId && !task.archivedAt && !task.archived)
     : [];
   const query = elements.projectSearchInput.value.trim().toLowerCase();
-  const visibleProjects = projects.filter((project) => {
+  resetListPageIfQueryChanged("projects", query);
+  const matchingProjects = projects.filter((project) => {
     if (!query) return true;
     if (`${project.name}\n${project.instructions}`.toLowerCase().includes(query)) return true;
     return conversations.some((task) =>
@@ -2629,6 +2719,8 @@ function renderProjects() {
       `${task.title}\n${task.objective}`.toLowerCase().includes(query)
     );
   });
+  const page = paginateItems(matchingProjects, "projects");
+  const visibleProjects = page.items;
   if (selectedProjectId && !projects.some((project) => project.id === selectedProjectId)) {
     selectedProjectId = "";
   }
@@ -2647,7 +2739,7 @@ function renderProjects() {
     "hidden",
     attentionRuns.length + waitingDecisions + activeRuns.length === 0
   );
-  elements.projectEmpty.classList.toggle("hidden", visibleProjects.length > 0);
+  elements.projectEmpty.classList.toggle("hidden", page.total > 0);
 
   elements.projectList.replaceChildren();
   for (const project of visibleProjects) {
@@ -2657,6 +2749,10 @@ function renderProjects() {
       inbox.filter((run) => run.projectId === project.id)
     ));
   }
+  renderListPager(elements.projectPager, page, (next) => {
+    listPages.projects = next;
+    renderProjects();
+  });
 }
 
 function projectDecisionItems(project = null) {
@@ -2801,7 +2897,7 @@ function projectCard(project, conversations, runs) {
       project.id,
       "conversations",
       `Conversations · ${conversations.length}`,
-      projectConversationList(conversations),
+      projectConversationList(project.id, conversations),
       true
     ));
   }
@@ -2810,8 +2906,8 @@ function projectCard(project, conversations, runs) {
       project.id,
       "activity",
       `Activity · ${runs.length}`,
-      projectActivityList(runs),
-      attentionCount > 0
+      projectActivityList(project.id, runs),
+      false
     ));
   }
   if (decisionItems.length > 0) {
@@ -2863,7 +2959,7 @@ function projectAccordion(projectId, section, label, body, fallbackOpen = false)
   return details;
 }
 
-function projectConversationList(conversations) {
+function projectConversationList(projectId, conversations) {
   const section = document.createElement("section");
   section.className = "project-conversations";
   if (conversations.length === 0) {
@@ -2873,9 +2969,12 @@ function projectConversationList(conversations) {
     section.append(empty);
     return section;
   }
+  const pageKey = `project-conversations:${projectId}`;
+  if (!Object.hasOwn(listPages, pageKey)) listPages[pageKey] = 1;
+  const page = paginateItems(conversations, pageKey);
   const list = document.createElement("div");
   list.className = "project-conversation-list";
-  for (const task of conversations) {
+  for (const task of page.items) {
     const row = document.createElement("article");
     row.className = "project-conversation-row";
     const copy = document.createElement("div");
@@ -2900,15 +2999,40 @@ function projectConversationList(conversations) {
     rowActions.className = "project-conversation-actions";
     const open = actionButton(task.active ? "Open" : "Continue", "ghost");
     open.addEventListener("click", () => openManagedTask(task, open));
-    rowActions.append(open);
+    const browse = actionButton("In Conversations", "ghost");
+    browse.addEventListener("click", () => {
+      elements.taskSearchInput.value = "";
+      elements.taskProjectFilterInput.value = projectId;
+      taskStatusFilter = "all";
+      listPages.tasks = 1;
+      renderTasks();
+      showView("tasks");
+    });
+    rowActions.append(open, browse);
     row.append(copy, rowActions);
     list.append(row);
   }
-  section.append(list);
+  const pager = document.createElement("div");
+  pager.className = "list-pager compact";
+  renderListPager(pager, page, (next) => {
+    listPages[pageKey] = next;
+    renderProjects();
+  });
+  section.append(list, pager);
   return section;
 }
 
-function projectActivityList(runs) {
+function projectActivityOutcome(run) {
+  if (run.stalled || ["failed", "blocked", "cancel_requested"].includes(run.status)) {
+    return "failed";
+  }
+  if (["completed", "cancelled", "interrupted"].includes(run.status)) {
+    return "succeeded";
+  }
+  return "active";
+}
+
+function projectActivityList(projectId, runs) {
   const section = document.createElement("section");
   section.className = "project-activity";
   if (runs.length === 0) {
@@ -2918,10 +3042,60 @@ function projectActivityList(runs) {
     section.append(empty);
     return section;
   }
+  const selected = projectActivityFilters.get(projectId) || "all";
+  const failedCount = runs.filter((run) => projectActivityOutcome(run) === "failed").length;
+  const succeededCount = runs.filter((run) => projectActivityOutcome(run) === "succeeded").length;
+  const filters = document.createElement("div");
+  filters.className = "project-activity-filters";
+  filters.setAttribute("role", "tablist");
+  filters.setAttribute("aria-label", "Filter Project activity");
   const list = document.createElement("div");
   list.className = "project-activity-list";
-  for (const run of runs) list.append(activityRunCard(run));
-  section.append(list);
+  const pager = document.createElement("div");
+  pager.className = "list-pager compact";
+  const empty = document.createElement("p");
+  empty.className = "project-conversations-empty";
+  const renderFiltered = (next) => {
+    projectActivityFilters.set(projectId, next);
+    for (const button of filters.querySelectorAll("button")) {
+      button.classList.toggle("active", button.dataset.filter === next);
+    }
+    const visible = runs.filter((run) => next === "all" || projectActivityOutcome(run) === next);
+    const pageKey = `project-activity:${projectId}:${next}`;
+    if (!Object.hasOwn(listPages, pageKey)) listPages[pageKey] = 1;
+    const page = paginateItems(visible, pageKey);
+    list.replaceChildren();
+    for (const run of page.items) list.append(activityRunCard(run));
+    empty.textContent = next === "failed"
+      ? "No failed work in this Project."
+      : next === "succeeded"
+        ? "No succeeded work in this Project."
+        : "No background work yet. Leave a goal when you want AMOS to keep going.";
+    empty.classList.toggle("hidden", page.total > 0);
+    renderListPager(pager, page, (pageNumber) => {
+      listPages[pageKey] = pageNumber;
+      renderFiltered(next);
+    });
+  };
+  for (const option of [
+    { id: "all", label: `All · ${runs.length}` },
+    { id: "failed", label: `Failed · ${failedCount}` },
+    { id: "succeeded", label: `Succeeded · ${succeededCount}` }
+  ]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "project-activity-filter";
+    button.dataset.filter = option.id;
+    button.textContent = option.label;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      renderFiltered(option.id);
+    });
+    filters.append(button);
+  }
+  section.append(filters, list, pager, empty);
+  renderFiltered(selected);
   return section;
 }
 
@@ -3129,12 +3303,14 @@ async function createTaskInProject(project, button) {
   try {
     const response = await api.startNewConversation({
       kind: "general",
-      projectId: project.id
+      projectId: project.id,
+      title: `Talk in ${project.name}`,
+      objective: `Start a conversation in the ${project.name} Project.`
     });
     adoptOpenedTask(response);
     elements.promptInput.value = "";
     elements.promptInput.focus();
-    toast(`Started a conversation in ${project.name}.`);
+    toast(`Opened Talk in ${project.name}. This conversation stays with that Project.`);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -3173,39 +3349,102 @@ function formatUsdMicros(value) {
   }).format(amount);
 }
 
+function renderTaskProjectFilterOptions(tasks) {
+  const selected = elements.taskProjectFilterInput.value || "all";
+  const known = new Map();
+  for (const project of state.projects?.projects || []) {
+    known.set(project.id, project.name);
+  }
+  for (const task of tasks) {
+    if (task.projectId && !known.has(task.projectId)) {
+      known.set(task.projectId, conversationProjectName(task) || "Project");
+    }
+  }
+  elements.taskProjectFilterInput.replaceChildren();
+  const options = [
+    ["all", "All conversations"],
+    ["in_project", "In a Project"],
+    ["none", "No Project"],
+    ...[...known.entries()].map(([id, name]) => [id, name])
+  ];
+  for (const [value, label] of options) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    elements.taskProjectFilterInput.append(option);
+  }
+  elements.taskProjectFilterInput.value = options.some(([value]) => value === selected) ? selected : "all";
+}
+
+function renderTaskStatusFilters(tasks) {
+  const counts = {
+    all: tasks.length,
+    running: tasks.filter((task) => conversationStatusBucket(task) === "running").length,
+    failed: tasks.filter((task) => conversationStatusBucket(task) === "failed").length,
+    completed: tasks.filter((task) => conversationStatusBucket(task) === "completed").length,
+    archived: tasks.filter((task) => conversationStatusBucket(task) === "archived").length
+  };
+  if (!Object.hasOwn(counts, taskStatusFilter)) taskStatusFilter = "all";
+  elements.taskStatusFilters.replaceChildren();
+  for (const option of [
+    { id: "all", label: `All · ${counts.all}` },
+    { id: "running", label: `Running · ${counts.running}` },
+    { id: "failed", label: `Failed · ${counts.failed}` },
+    { id: "completed", label: `Completed · ${counts.completed}` },
+    { id: "archived", label: `Archived · ${counts.archived}` }
+  ]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "project-activity-filter";
+    button.dataset.filter = option.id;
+    button.classList.toggle("active", taskStatusFilter === option.id);
+    button.textContent = option.label;
+    button.addEventListener("click", () => {
+      taskStatusFilter = option.id;
+      listPages.tasks = 1;
+      renderTasks();
+    });
+    elements.taskStatusFilters.append(button);
+  }
+}
+
 function renderTasks() {
   if (!state) return;
   const library = state.tasks || { supported: false, tasks: [] };
   const tasks = Array.isArray(library.tasks) ? library.tasks : [];
   const checkpoints = Array.isArray(state.taskCheckpoints) ? state.taskCheckpoints : [];
   const query = elements.taskSearchInput.value.trim().toLowerCase();
-  const filter = elements.taskFilterInput.value || "current";
-  const visible = tasks.filter((task) => {
-    const matchesQuery = !query || `${task.title}\n${task.objective}`.toLowerCase().includes(query);
-    if (!matchesQuery) return false;
-    const archived = Boolean(task.archivedAt || task.archived);
-    if (filter === "archived") return archived;
-    if (filter === "forks") return !archived && Boolean(task.parentTaskId || task.kind === "fork");
-    if (filter === "current") {
-      return !archived && ["active", "waiting", "interrupted", "failed"].includes(task.status);
-    }
-    if (filter === "recent") return !archived;
+  resetListPageIfQueryChanged("tasks", `${query}|${elements.taskProjectFilterInput.value}|${taskStatusFilter}`);
+  renderTaskProjectFilterOptions(tasks);
+  const projectFilter = elements.taskProjectFilterInput.value || "all";
+  const matching = tasks.filter((task) => {
+    const projectName = conversationProjectName(task);
+    const haystack = `${task.title}\n${task.objective}\n${projectName}`.toLowerCase();
+    if (query && !haystack.includes(query)) return false;
+    if (projectFilter === "none") return !task.projectId;
+    if (projectFilter === "in_project") return Boolean(task.projectId);
+    if (projectFilter !== "all") return task.projectId === projectFilter;
     return true;
   });
+  renderTaskStatusFilters(matching);
+  const visible = matching.filter((task) => (
+    taskStatusFilter === "all" || conversationStatusBucket(task) === taskStatusFilter
+  ));
+  const page = paginateItems(visible, "tasks");
   const current = tasks.filter((task) => !task.archivedAt && !task.archived);
   const waiting = current.filter((task) => task.status === "waiting").length;
-  const forks = current.filter((task) => task.parentTaskId || task.kind === "fork").length;
-  const active = current.filter((task) => task.status === "active").length;
-  const visibleCheckpoints = ["current", "recent", "all"].includes(filter)
+  const inProject = current.filter((task) => task.projectId).length;
+  const running = current.filter((task) => conversationStatusBucket(task) === "running").length;
+  const visibleCheckpoints = taskStatusFilter === "all" || taskStatusFilter === "failed"
     ? checkpoints.filter((checkpoint) => (
         !query || `${checkpoint.title}\n${checkpoint.objective}`.toLowerCase().includes(query)
       ))
     : [];
 
-  elements.taskBadge.textContent = String(waiting + checkpoints.length || active);
-  elements.taskBadge.classList.toggle("hidden", waiting + active + checkpoints.length === 0);
+  elements.taskBadge.textContent = String(waiting + checkpoints.length || running);
+  elements.taskBadge.classList.toggle("hidden", waiting + running + checkpoints.length === 0);
   elements.taskPlatformNotice.classList.toggle("hidden", library.platformSupported !== false);
-  elements.taskEmpty.classList.toggle("hidden", visible.length + visibleCheckpoints.length > 0);
+  elements.taskEmpty.classList.toggle("hidden", page.total + visibleCheckpoints.length > 0);
   elements.conversationRecovery.classList.toggle("hidden", visibleCheckpoints.length === 0);
   elements.conversationRecoveryList.replaceChildren();
   for (const checkpoint of visibleCheckpoints) {
@@ -3213,9 +3452,9 @@ function renderTasks() {
   }
   elements.taskSummary.replaceChildren();
   for (const [label, value, detail] of [
-    ["Open", active, "conversation lanes ready to continue"],
-    ["Waiting", waiting + checkpoints.length, "conversations waiting for attention"],
-    ["Forks", forks, "bounded branches with visible lineage"]
+    ["Open", current.length, "durable conversations you can continue"],
+    ["In a Project", inProject, "threads that belong to a named workspace"],
+    ["Running", running + checkpoints.length, "live work or conversations waiting for attention"]
   ]) {
     const item = document.createElement("article");
     const number = document.createElement("strong");
@@ -3229,7 +3468,11 @@ function renderTasks() {
   }
 
   elements.taskList.replaceChildren();
-  for (const task of visible) elements.taskList.append(taskCard(task));
+  for (const task of page.items) elements.taskList.append(taskCard(task));
+  renderListPager(elements.taskPager, page, (next) => {
+    listPages.tasks = next;
+    renderTasks();
+  });
 }
 
 function taskCard(task) {
@@ -3249,6 +3492,19 @@ function taskCard(task) {
   status.className = `task-status ${task.status || "active"}`;
   status.textContent = String(task.status || "active").replaceAll("_", " ").toUpperCase();
   meta.append(status);
+  const project = conversationProject(task);
+  if (project || task.projectId) {
+    const projectChip = document.createElement("span");
+    projectChip.className = "task-lineage-chip project";
+    projectChip.textContent = `PROJECT · ${(project?.name || "Assigned").toUpperCase()}`;
+    meta.append(projectChip);
+    card.classList.add("in-project");
+  } else {
+    const standalone = document.createElement("span");
+    standalone.className = "task-lineage-chip";
+    standalone.textContent = "NO PROJECT";
+    meta.append(standalone);
+  }
   if (task.pinned) {
     const pinned = document.createElement("span");
     pinned.className = "task-lineage-chip";
@@ -3289,6 +3545,9 @@ function taskCard(task) {
   const details = document.createElement("div");
   details.className = "task-card-details";
   for (const value of [
+    project
+      ? `Project · ${project.name}`
+      : task.projectId ? "Assigned to a Project" : "Standalone conversation",
     task.kind === "goal_pursuit"
       ? "Autonomous goal"
       : task.kind === "automation_builder" ? "Automation build" : humanizeTool(task.kind || "general"),
@@ -3805,6 +4064,17 @@ function renderBriefingLibrary() {
   const platformBriefings = Array.isArray(platformLibrary.briefings) ? platformLibrary.briefings : [];
   const templates = Array.isArray(platformLibrary.templates) ? platformLibrary.templates : [];
   const canvases = Array.isArray(state.canvases) ? state.canvases : [];
+  const query = (elements.briefingSearchInput?.value || "").trim().toLowerCase();
+  resetListPageIfQueryChanged("briefings", query);
+  const saved = [
+    ...platformBriefings.map((view) => ({ kind: "platform", view })),
+    ...localSavedViews.map((view) => ({ kind: "local", view }))
+  ].filter((item) => {
+    if (!query) return true;
+    const view = item.view;
+    return `${view.title || ""}\n${view.objective || ""}\n${view.prompt || ""}\n${view.description || ""}`.toLowerCase().includes(query);
+  });
+  const page = paginateItems(saved, "briefings");
   elements.liveCanvasList.replaceChildren();
   elements.savedViewList.replaceChildren();
   elements.briefingTemplateList.replaceChildren();
@@ -3823,38 +4093,42 @@ function renderBriefingLibrary() {
     }
   }
 
-  if (platformBriefings.length === 0 && localSavedViews.length === 0) {
+  if (page.total === 0) {
     const empty = document.createElement("p");
     empty.className = "briefing-library-empty";
-    empty.textContent = state.connectionMode === "user"
-      ? "Save any live briefing to reopen and refresh it here."
-      : "Connect your company to save identity-pinned live briefings.";
+    empty.textContent = query
+      ? "No Briefings match that search."
+      : state.connectionMode === "user"
+        ? "Save any live briefing to reopen and refresh it here."
+        : "Connect your company to save identity-pinned live briefings.";
     elements.savedViewList.append(empty);
   } else {
-    for (const view of platformBriefings) {
-      const schedules = Array.isArray(view.schedules) ? view.schedules : [];
-      const active = schedules.find((schedule) => schedule.status === "active");
-      const paused = schedules.find((schedule) => schedule.status === "paused");
-      const schedule = active || paused;
-      elements.savedViewList.append(briefingCard({
-        title: view.title,
-        description: briefingDefinitionDescription(view, schedule),
-        actionLabel: "Run",
-        onAction: () => runPlatformBriefing({ briefingId: view.id, title: view.title }),
-        onRemove: () => removeSavedBriefing(view.id),
-        extraActions: [
-          ...(view.latest_run?.id ? [{
-            label: "Open latest",
-            onAction: () => openPlatformBriefingRun(view.latest_run.id)
-          }] : []),
-          ...(schedule ? [{
-            label: schedule.status === "active" ? "Pause" : "Resume",
-            onAction: () => changeBriefingScheduleStatus(schedule.id, schedule.status !== "active")
-          }] : [])
-        ]
-      }));
-    }
-    for (const view of localSavedViews) {
+    for (const item of page.items) {
+      const view = item.view;
+      if (item.kind === "platform") {
+        const schedules = Array.isArray(view.schedules) ? view.schedules : [];
+        const active = schedules.find((schedule) => schedule.status === "active");
+        const paused = schedules.find((schedule) => schedule.status === "paused");
+        const schedule = active || paused;
+        elements.savedViewList.append(briefingCard({
+          title: view.title,
+          description: briefingDefinitionDescription(view, schedule),
+          actionLabel: "Run",
+          onAction: () => runPlatformBriefing({ briefingId: view.id, title: view.title }),
+          onRemove: () => removeSavedBriefing(view.id),
+          extraActions: [
+            ...(view.latest_run?.id ? [{
+              label: "Open latest",
+              onAction: () => openPlatformBriefingRun(view.latest_run.id)
+            }] : []),
+            ...(schedule ? [{
+              label: schedule.status === "active" ? "Pause" : "Resume",
+              onAction: () => changeBriefingScheduleStatus(schedule.id, schedule.status !== "active")
+            }] : [])
+          ]
+        }));
+        continue;
+      }
       elements.savedViewList.append(briefingCard({
         title: view.title,
         description: `Private local definition updated ${relativeTime(view.updatedAt)} · live data refreshes when opened`,
@@ -3864,6 +4138,10 @@ function renderBriefingLibrary() {
       }));
     }
   }
+  renderListPager(elements.briefingPager, page, (next) => {
+    listPages.briefings = next;
+    renderBriefingLibrary();
+  });
 
   for (const template of templates) {
     elements.briefingTemplateList.append(briefingCard({
@@ -3924,6 +4202,12 @@ function stageBriefingPrompt(prompt) {
   showView("operator");
   elements.promptInput.value = prompt;
   elements.promptInput.focus();
+}
+
+function startNewBriefingFromScratch() {
+  stageBriefingPrompt(
+    "Create a reusable Briefing from scratch. I will describe the operating question; do not force a template if none fits."
+  );
 }
 
 async function saveActiveBriefing() {
@@ -5931,15 +6215,30 @@ async function executeStarterAction(action, button) {
   });
 }
 
+function activeConversationProject() {
+  const task = activeDurableTask();
+  if (!task?.projectId) return null;
+  return (state?.projects?.projects || []).find((item) => item.id === task.projectId) || null;
+}
+
 function renderConversationChrome() {
   const hasConversation = Boolean(
     elements.messages.querySelector(".message.user, .message.assistant, .message.error")
   );
+  const project = activeConversationProject();
   elements.conversation.classList.toggle("has-history", hasConversation);
-  elements.conversationHeading.classList.toggle("hidden", hasConversation);
+  elements.conversation.classList.toggle("has-project", Boolean(project));
+  elements.conversationHeading.classList.toggle("hidden", hasConversation || Boolean(project));
   elements.welcomeMessage.classList.toggle("hidden", hasConversation);
-  elements.starterActions.classList.toggle("hidden", hasConversation);
+  elements.starterActions.classList.toggle("hidden", hasConversation || Boolean(project));
   elements.clearButton.classList.toggle("hidden", !hasConversation);
+  if (project) {
+    elements.readyTitle.textContent = `Talking in ${project.name}.`;
+    elements.readyDescription.textContent = project.instructions
+      ? `This conversation stays with ${project.name}. Shared Project instructions orient AMOS; they do not grant extra authority.`
+      : `This conversation stays with ${project.name}. Ask, attach work, or leave a next step.`;
+    elements.promptInput.placeholder = `Talk in ${project.name}…`;
+  }
   renderConversationActions();
 }
 
@@ -5951,6 +6250,21 @@ function renderConversationActions() {
   };
   elements.forkConversationButton.disabled = !capability.canFork;
   elements.forkConversationButton.title = conversationForkCapabilityMessage(capability);
+  renderComposerProjectChip();
+}
+
+function renderComposerProjectChip() {
+  const chip = elements.composerProjectChip;
+  if (!chip) return;
+  const project = activeConversationProject();
+  if (!project) {
+    chip.textContent = "";
+    chip.classList.add("hidden");
+    return;
+  }
+  chip.textContent = `PROJECT · ${project.name.toUpperCase()}`;
+  chip.title = `This conversation stays with ${project.name}.`;
+  chip.classList.remove("hidden");
 }
 
 function renderDecisions() {

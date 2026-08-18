@@ -326,6 +326,7 @@
                       <span>＋</span> Attach
                     </button>
                     <div class="conversation-actions" role="group" aria-label="Conversation actions">
+                      <span id="composerProjectChip" class="composer-project-chip hidden" aria-live="polite"></span>
                       <button id="newConversationButton" class="conversation-action" type="button">
                         <span aria-hidden="true">＋</span> New conversation
                       </button>
@@ -404,7 +405,7 @@
               <h1>Projects</h1>
               <p>
                 A named workspace with instructions and a dollar cap.
-                Talk in it, or give it a goal and leave.
+                Talk in it, or give it a goal and leave. The threads themselves live on Conversations.
               </p>
             </div>
             <div class="project-heading-actions">
@@ -427,17 +428,17 @@
             <p>Create one to share instructions, set a dollar cap, and start talking or give AMOS a goal.</p>
           </div>
           <div id="projectList" class="project-list"></div>
+          <div id="projectPager" class="list-pager hidden"></div>
         </section>
 
         <section id="tasksView" class="view tasks-view hidden">
           <div class="section-heading tasks-heading">
             <div>
-              <span class="eyebrow">CONVERSATIONS &amp; LINEAGE</span>
-              <h1>Conversations that keep their place.</h1>
+              <span class="eyebrow">CONVERSATIONS</span>
+              <h1>Conversations</h1>
               <p>
-                Continue a durable conversation, reopen its work surface, or fork from an exact
-                milestone. AMOS revalidates identity, sources, policy, approvals, and receipts;
-                it never silently replays a model request or tool call.
+                Every durable thread. Project conversations are labeled so they are not confused
+                with standalone chat. Continue, search, filter, or fork; AMOS revalidates before it acts.
               </p>
             </div>
             <button id="newTaskButton" class="button primary" type="button">New conversation <span>→</span></button>
@@ -446,19 +447,17 @@
           <div class="task-toolbar">
             <label class="task-search">
               <span aria-hidden="true">⌕</span>
-              <input id="taskSearchInput" type="search" maxlength="160" placeholder="Search conversations and objectives" autocomplete="off" />
+              <input id="taskSearchInput" type="search" maxlength="160" placeholder="Search conversations, Projects, and objectives" autocomplete="off" />
             </label>
             <label class="task-filter-label">
-              <span>Show</span>
-              <select id="taskFilterInput">
-                <option value="current">Active &amp; waiting</option>
-                <option value="recent">Recent</option>
-                <option value="forks">Forks</option>
-                <option value="archived">Archived</option>
+              <span>Project</span>
+              <select id="taskProjectFilterInput" aria-label="Filter by Project">
                 <option value="all">All conversations</option>
+                <option value="none">No Project</option>
               </select>
             </label>
           </div>
+          <div id="taskStatusFilters" class="list-filters" role="tablist" aria-label="Filter conversations by status"></div>
           <div id="taskPlatformNotice" class="task-platform-notice hidden">
             Conversations are encrypted on this computer. Cross-client sync will turn on when the connected AMOS Platform advertises the conversation-resource contract.
           </div>
@@ -472,9 +471,10 @@
           <div id="taskEmpty" class="automation-empty hidden">
             <span>☷</span>
             <strong>No matching conversations</strong>
-            <p>Start a conversation in Operator, then return here to continue, organize, or fork it.</p>
+            <p>Start a conversation in Operator or Talk inside a Project, then return here to continue or fork it.</p>
           </div>
           <div id="taskList" class="task-list"></div>
+          <div id="taskPager" class="list-pager hidden"></div>
         </section>
 
         <section id="canvasView" class="view canvas-view hidden">
@@ -488,18 +488,32 @@
                   Company Briefing definitions and schedules live in governed AMOS state.
                 </p>
               </div>
+              <div class="project-heading-actions">
+                <button id="newBriefingButton" class="button primary" type="button">New Briefing <span>→</span></button>
+              </div>
+            </div>
+            <div class="project-toolbar briefing-toolbar">
+              <label class="task-search project-search">
+                <span aria-hidden="true">⌕</span>
+                <input id="briefingSearchInput" type="search" maxlength="160" placeholder="Search Briefings" autocomplete="off" />
+              </label>
             </div>
             <section id="briefingLibrary" class="briefing-library">
+              <section class="briefing-templates" aria-labelledby="briefingTemplatesHeading">
+                <div class="briefing-templates-heading">
+                  <div>
+                    <h2 id="briefingTemplatesHeading">Start from a template</h2>
+                    <p>Choose a useful operating question; AMOS selects the governed sources and representation.</p>
+                  </div>
+                </div>
+                <div id="briefingTemplateList" class="briefing-card-list"></div>
+              </section>
               <div class="briefing-open-now hidden">
                 <span class="eyebrow accent">OPEN NOW</span>
                 <div id="liveCanvasList" class="briefing-card-list"></div>
               </div>
               <div id="savedViewList" class="briefing-card-list"></div>
-              <details class="briefing-templates">
-                <summary>Start from a template</summary>
-                <p>Choose a useful operating question; AMOS selects the governed sources and representation.</p>
-                <div id="briefingTemplateList" class="briefing-card-list"></div>
-              </details>
+              <div id="briefingPager" class="list-pager hidden"></div>
             </section>
           </div>
         </section>
