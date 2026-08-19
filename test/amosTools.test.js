@@ -15,12 +15,13 @@ function engineSchemas(engine) {
     tools: [{
       name: `read_${engine}`,
       description: `Read ${engine}`,
+      annotations: { readOnlyHint: true },
       inputSchema: { type: "object", properties: {}, additionalProperties: false }
     }]
   });
 }
 
-test("AMOS engine loading returns a compact receipt and exposes one bounded engine at a time", async () => {
+test("AMOS engine loading retains bounded engine toolkits and marks read operations parallel-safe", async () => {
   const registry = new ToolRegistry({ progressive: true });
   for (const tool of createAmosTools()) registry.register(tool);
   const calls = [];
@@ -56,9 +57,13 @@ test("AMOS engine loading returns a compact receipt and exposes one bounded engi
 
   const connections = await registry.execute("amos_load_engine_tools", { engine: "connections" }, context);
   assert.equal(connections.ok, true);
-  assert.deepEqual(connections.deactivated_toolkits, ["amos-engine:finance"]);
-  assert.equal(connections.removed_prior_engine_tools, 1);
-  assert.equal(registry.list().some((tool) => tool.name === "amos_finance_read_finance"), false);
+  assert.deepEqual(connections.deactivated_toolkits, []);
+  assert.equal(connections.removed_prior_engine_tools, 0);
+  assert.equal(registry.list().some((tool) => tool.name === "amos_finance_read_finance"), true);
+  assert.deepEqual(registry.executionPolicy("amos_finance_read_finance"), {
+    readOnly: true,
+    parallelSafe: true
+  });
   assert.equal(calls.length, 3);
 });
 

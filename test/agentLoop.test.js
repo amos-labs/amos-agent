@@ -725,7 +725,7 @@ test("agent selects a visible skill-backed workflow and injects bounded guidance
   );
 });
 
-test("agent loop exposes streaming progress and cancels an active tool", async () => {
+test("agent loop hides internal tool-turn narration and cancels an active tool", async () => {
   const registry = new ToolRegistry();
   registry.register({
     name: "long_work",
@@ -775,8 +775,127 @@ test("agent loop exposes streaming progress and cancels an active tool", async (
     }
   });
   await assert.rejects(pending, { name: "AbortError" });
-  assert.ok(events.some((event) => event.type === "assistant_delta" && event.text === "Working"));
+  assert.equal(events.some((event) => event.type === "assistant_delta" && event.text === "Working"), false);
   assert.ok(events.some((event) => event.type === "phase" && event.phase === "acting"));
+});
+
+test("parallel-safe read-only tools execute concurrently and preserve transcript order", async () => {
+  const registry = new ToolRegistry();
+  let active = 0;
+  let maximum = 0;
+  for (const name of ["read_one", "read_two"]) {
+    registry.register({
+      name,
+      readOnly: true,
+      parallelSafe: true,
+      async handler() {
+        active += 1;
+        maximum = Math.max(maximum, active);
+        await new Promise((resolve) => setImmediate(resolve));
+        active -= 1;
+        return { ok: true, name };
+      }
+    });
+  }
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        turn += 1;
+        return turn === 1
+          ? {
+              message: {
+                role: "assistant",
+                content: "I will read both sources now.",
+                tool_calls: [
+                  { id: "one", function: { name: "read_one", arguments: "{}" } },
+                  { id: "two", function: { name: "read_two", arguments: "{}" } }
+                ]
+              }
+            }
+          : { message: { role: "assistant", content: "Done." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("read both"), "Done.");
+  assert.equal(maximum, 2);
+  assert.deepEqual(
+    loop.messages.filter((message) => message.role === "tool").map((message) => message.tool_call_id),
+    ["one", "two"]
+  );
+});
+
+test("task routing is reused across continuation turns", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "inspect", handler: () => ({ ok: true }) });
+  const routed = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ preclassifiedRouting }) {
+        routed.push(preclassifiedRouting);
+        turn += 1;
+        return turn === 1
+          ? {
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [{ id: "inspect", function: { name: "inspect", arguments: "{}" } }]
+              }
+            }
+          : { message: { role: "assistant", content: "Done." } };
+      }
+    }
+  });
+  const routingDecision = { minimumClass: "balanced", workflow: "outcome-execution" };
+
+  await loop.run("inspect", { routingDecision });
+  assert.deepEqual(routed, [routingDecision, routingDecision]);
+});
+
+test("older raw tool evidence is compacted while the two newest result blocks remain exact", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "large_read", handler: (args) => ({ ok: true, id: args.id, body: "x".repeat(9_000) }) });
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: { maxRawToolEvidenceChars: 8_000 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        turn += 1;
+        return turn <= 3
+          ? {
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [{
+                  id: `large-${turn}`,
+                  function: { name: "large_read", arguments: JSON.stringify({ id: turn }) }
+                }]
+              }
+            }
+          : { message: { role: "assistant", content: "Done." } };
+      }
+    }
+  });
+
+  await loop.run("read the large sources");
+  assert.equal(loop.messages.filter((message) => message.role === "tool").length, 2);
+  assert.ok(loop.messages.some((message) =>
+    message.role === "assistant" && /Earlier tool activity was compacted/.test(message.content)
+  ));
+  assertCompleteToolBlocks(loop.messages);
 });
 
 test("productive work continues beyond the former eight-cycle limit", async () => {
@@ -1221,7 +1340,7 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   registry.register({
     name: "inspect_issue",
     async handler() {
-      return { ok: true, state: "unchanged" };
+      return { ok: true, state: "unchanged", updated_at: `volatile-${calls}` };
     }
   });
   const loop = new AgentLoop({

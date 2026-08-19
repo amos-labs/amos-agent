@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+test("Electron suspend interrupts active work and resume refreshes recoverable state", async () => {
+  const main = await readFile(new URL("../desktop/main.js", import.meta.url), "utf8");
+  assert.match(main, /powerMonitor\.on\("suspend"[\s\S]*?interruptForSystemSleep/);
+  assert.match(main, /powerMonitor\.on\("resume"[\s\S]*?refreshRemote/);
+});
+
 test("every renderer element reference is registered and present in the HTML shell", async () => {
   const [javascript, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),

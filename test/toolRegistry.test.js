@@ -109,3 +109,20 @@ test("ToolRegistry progressively activates bounded specialized toolkits", () => 
     ["core_tool", "code_tool"]
   );
 });
+
+test("ToolRegistry evicts the least recently used matching toolkit when a bounded set is full", () => {
+  const registry = new ToolRegistry({ progressive: true, maxActiveTools: 4, maxActiveToolkits: 2 });
+  registry.register({ name: "core_tool", toolkit: "core", handler: () => ({ ok: true }) });
+  registry.register({ name: "finance", toolkit: "amos-engine:finance", handler: () => ({ ok: true }) });
+  registry.register({ name: "connections", toolkit: "amos-engine:connections", handler: () => ({ ok: true }) });
+  registry.register({ name: "website", toolkit: "amos-engine:website", handler: () => ({ ok: true }) });
+
+  registry.activateToolkit("amos-engine:finance", { evictPrefix: "amos-engine:" });
+  registry.activateToolkit("amos-engine:connections", { evictPrefix: "amos-engine:" });
+  registry.activateToolkit("amos-engine:finance", { evictPrefix: "amos-engine:" });
+  const activation = registry.activateToolkit("amos-engine:website", { evictPrefix: "amos-engine:" });
+
+  assert.equal(activation.ok, true);
+  assert.deepEqual(activation.evicted_toolkits, ["amos-engine:connections"]);
+  assert.deepEqual(activation.active_toolkits, ["amos-engine:finance", "amos-engine:website", "core"]);
+});

@@ -2545,6 +2545,59 @@ export class DesktopController {
           offlineProposals: await this.offlineProposalState()
         };
       }
+      if (supervisionStopReason === "system_sleep") {
+        const recoveryNote = [
+          "This task was interrupted when the computer went to sleep.",
+          "Completed work remains intact and no action was replayed.",
+          "Reopen this conversation to revalidate current context and continue only the remaining work."
+        ].join(" ");
+        const lifecycle = this.interruptCodingLifecycle("system_suspended", recoveryNote);
+        await this.finishRunSupervision("interrupted", recoveryNote);
+        if (this.activeTask?.checkpointed) {
+          await this.queueCheckpointUpdate(taskId, {
+            status: "interrupted",
+            phase: "interrupted",
+            summary: recoveryNote
+          }).catch(() => {});
+          await this.sendTaskCheckpoints();
+        }
+        await this.recordLocalReceipt({
+          taskId,
+          status: "interrupted",
+          boundary,
+          settings,
+          prompt: objective,
+          startedAt: this.activeTask?.startedAt,
+          receiptEvents,
+          error: "system_sleep",
+          usage: this.activeTask?.usage
+        });
+        if (this.taskStore && this.activeTaskRecordId) {
+          const scope = this.taskScope(settings);
+          if (scope) {
+            await this.taskStore.update(scope, this.activeTaskRecordId, {
+              status: "interrupted",
+              canvasState: this.canvases.state()
+            }).catch(() => {});
+          }
+        }
+        return {
+          answer: recoveryNote,
+          interrupted: true,
+          recovery: { reason: "system_sleep", replayed: false },
+          codingLifecycle: lifecycle.state,
+          taskId,
+          taskEventId: `run:${taskId}`,
+          activity: this.activity.slice(-100),
+          attachments: this.attachments.list(),
+          ...this.canvases.state(),
+          memory: [],
+          privateMemory: this.privateMemoryStore
+            ? await this.privateMemoryStore.list(privateMemoryScope(this.identity))
+            : [],
+          offlineProposals: await this.offlineProposalState()
+        };
+      }
       if (!canceled && error?.code === "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS") {
         const completedToolActions = Math.max(0, Number(error.completedToolActions || 0));
         const recordedSteps = receiptEvents.length;
@@ -2862,6 +2915,31 @@ export class DesktopController {
       active?.abortController.abort();
     })));
     return true;
+  }
+
+  interruptForSystemSleep() {
+    const lanes = this.runManager.nonTerminal();
+    if (lanes.length === 0) return 0;
+    for (const lane of lanes) {
+      this.runManager.withLane(lane, () => {
+        const active = this.activeTask;
+        if (active) {
+          active.acceptingSteering = false;
+          active.phase = "interrupted";
+          active.summary = "Computer sleep interrupted this task; reopen it to revalidate and continue";
+        }
+        this.approvals.cancelAll();
+        active?.abortController.abort("system_sleep");
+      });
+      this.runManager.transition(lane.id, "interrupted", {
+        phase: "interrupted",
+        summary: "Computer sleep interrupted this task; reopen it to revalidate and continue"
+      });
+    }
+    this.runManager.select(null);
+    this.send("desktop-runs:changed", this.runManager.active());
+    this.send("agent:status", { running: false, reason: "system_sleep" });
+    return lanes.length;
   }
 
   resolveApproval(id, approved) {

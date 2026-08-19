@@ -59,7 +59,7 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
     agent: {
       maxRepeatedToolCycles: intFromEnv(
         env.AMOS_AGENT_MAX_REPEATED_TOOL_CYCLES,
-        5,
+        3,
         2,
         12
       ),
