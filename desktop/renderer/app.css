@@ -3785,7 +3785,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .offline-model-progress { height: 5px; margin: auto 0 9px; overflow: hidden; border-radius: 999px; background: var(--progress-track); }
 .offline-model-progress i { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
 .offline-model-progress-label { margin: 0 0 10px; color: var(--muted-2); font-size: 9px; }
-.offline-model-actions { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+.offline-model-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: auto; }
 .offline-model-actions .button { flex: 1; min-width: 0; padding: 9px 8px; font-size: 9px; }
 .offline-trust-note { display: flex; justify-content: space-between; gap: 18px; margin-top: 18px; color: var(--muted-2); font-size: 8px; }
 .offline-trust-note code { max-width: 340px; overflow: hidden; color: var(--muted-2); text-overflow: ellipsis; white-space: nowrap; }

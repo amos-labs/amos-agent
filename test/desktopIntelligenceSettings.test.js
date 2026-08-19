@@ -120,7 +120,7 @@ test("Desktop warms only the installed local model selected for active intellige
       },
       async preload(modelId) {
         calls.push(`preload:${modelId}`);
-        return { model: modelId, keepAlive: "30m" };
+        return { model: modelId, keepAlive: "30m", runtime: "ollama" };
       }
     },
     openBrowser() {},

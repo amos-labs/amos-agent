@@ -595,9 +595,15 @@ export class DesktopController {
     const model = offline.models?.find((item) => item.id === requestedModel);
     if (!model?.installed) return null;
     const preload = await this.offlineManager.preload(requestedModel, {
-      system: systemProfile()
+      system: systemProfile(),
+      runtime: selectedSettings.localRuntime
     });
-    this.record("model", `Warmed local intelligence ${requestedModel} for the next task`);
+    this.record(
+      "model",
+      preload.fallback
+        ? `MTPLX was unavailable; warmed ${requestedModel} with Ollama: ${preload.fallbackReason}`
+        : `Warmed local intelligence ${requestedModel} with ${preload.runtime || "ollama"} for the next task`
+    );
     return preload;
   }
 
@@ -623,7 +629,7 @@ export class DesktopController {
     return result;
   }
 
-  async activateLocalModel(modelId, operatingMode = "offline") {
+  async activateLocalModel(modelId, operatingMode = "offline", localRuntime = "ollama") {
     if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
     if (!["online", "personal", "offline"].includes(operatingMode)) {
       throw new Error("Choose online company, personal workspace, or local-only mode");
@@ -631,25 +637,36 @@ export class DesktopController {
     const offline = await this.offlineManager.refresh(systemProfile());
     const model = offline.models.find((item) => item.id === modelId);
     if (!model?.installed) throw new Error("Download this model before activating it");
+    const requestedRuntime = localRuntime === "mtplx" ? "mtplx" : "ollama";
     const settings = await this.settingsStore.read();
+    const preload = await this.offlineManager.preload?.(modelId, {
+      system: systemProfile(),
+      runtime: requestedRuntime
+    });
+    const target = this.offlineManager.inferenceTarget?.(modelId, requestedRuntime) || {
+      model: modelId,
+      baseUrl: this.offlineManager.openAiBaseUrl(),
+      runtime: "ollama"
+    };
     await this.settingsStore.write({
       ...settings,
       provider: "ollama",
       model: modelId,
-      baseUrl: this.offlineManager.openAiBaseUrl(),
+      baseUrl: target.baseUrl,
       apiKey: "",
+      localRuntime: requestedRuntime,
+      // The release qualification baseline runs Qwen with hidden thinking
+      // disabled. It is both faster and avoids spending the whole completion
+      // budget on an invisible chain before returning code.
+      reasoningEffort: requestedRuntime === "mtplx" ? "none" : settings.reasoningEffort,
       operatingMode
-    });
-    await this.offlineManager.preload?.(modelId, { system: systemProfile() }).catch((error) => {
-      this.record(
-        "model",
-        `Activated ${modelId}; background preload was unavailable: ${error.message}`
-      );
     });
     this.resetRuntime();
     this.record(
       "settings",
-      `${operatingMode === "offline" ? "Local-only mode" : "Local intelligence"} activated with ${modelId}`
+      preload?.fallback
+        ? `${operatingMode === "offline" ? "Local-only mode" : "Local intelligence"} activated with ${modelId}; MTPLX fell back to Ollama: ${preload.fallbackReason}`
+        : `${operatingMode === "offline" ? "Local-only mode" : "Local intelligence"} activated with ${modelId} through ${target.runtime}`
     );
     return this.state();
   }
@@ -6326,6 +6343,7 @@ export class DesktopController {
       workspace: settings.workspace || "",
       provider: settings.provider,
       model: settings.model,
+      localRuntime: settings.localRuntime,
       intelligenceRoles: sanitizeIntelligenceRoles(settings.intelligenceRoles),
       activeTaskId: this.activeTaskRecordId,
       running: Boolean(this.activeTask),
@@ -6365,16 +6383,19 @@ export class DesktopController {
   }
 
   configFrom(settings, { workspaceFocus = "" } = {}) {
+    const localTarget = settings.provider === "ollama"
+      ? this.offlineManager?.inferenceTarget?.(settings.model, settings.localRuntime)
+      : null;
     const env = {
       ...process.env,
       AMOS_MODEL_PROVIDER: settings.provider,
-      AMOS_MODEL: settings.model,
-      AMOS_MODEL_BASE_URL: settings.baseUrl,
+      AMOS_MODEL: localTarget?.model || settings.model,
+      AMOS_MODEL_BASE_URL: localTarget?.baseUrl || settings.baseUrl,
       AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
       AMOS_BEDROCK_AUTH_MODE: settings.bedrockAuthMode,
       AMOS_MODEL_REASONING_EFFORT: settings.reasoningEffort,
       AMOS_MODEL_CONTEXT_TOKENS: settings.provider === "ollama"
-        ? String(this.offlineManager?.state?.().contextLength || "")
+        ? String(localTarget?.contextLength || this.offlineManager?.state?.().runtime?.contextLength || "")
         : "",
       AMOS_AGENT_WORKSPACE: settings.workspace || homedir(),
       AMOS_AGENT_AUTO_APPROVE_BASH: localAutoApproveEnabled(settings) ? "true" : "false",
@@ -6383,6 +6404,16 @@ export class DesktopController {
       AMOS_MCP_URL: settings.amosMcpUrl
     };
     const config = loadConfig(env, settings.workspace || homedir());
+    if (localTarget?.runtime === "mtplx") {
+      const fallback = this.offlineManager?.inferenceTarget?.(settings.model, "ollama");
+      if (fallback?.baseUrl && fallback?.model) {
+        config.model.localFallback = {
+          runtime: "ollama",
+          baseUrl: fallback.baseUrl,
+          model: fallback.model
+        };
+      }
+    }
     if (workspaceFocus) config.safety.workspaceFocus = workspaceFocus;
     return config;
   }
@@ -6960,6 +6991,7 @@ function runtimeSettingsChanged(previous, next) {
     "bedrockAuthMode",
     "intelligenceProfile",
     "reasoningEffort",
+    "localRuntime",
     "operatingMode",
     "workspace",
     "amosMcpUrl",
@@ -6977,6 +7009,7 @@ function intelligenceSettingsRequested(input = {}) {
     "bedrockAuthMode",
     "intelligenceProfile",
     "reasoningEffort",
+    "localRuntime",
     "operatingMode",
     "intelligenceRoles",
     "hybridRouting"

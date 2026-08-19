@@ -9,6 +9,7 @@ import {
   INTELLIGENCE_ROUTER_ARTIFACT,
   INTELLIGENCE_ROUTER_MODEL
 } from "../model/intelligenceRouter.js";
+import { MTPLX_SERVED_MODEL_ID } from "./mtplxRuntimeManifest.js";
 
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -469,6 +470,7 @@ export class OllamaModelManager {
     baseUrl = OLLAMA_BASE_URL,
     emit = () => {},
     runtimeManager = null,
+    acceleratorManager = null,
     routerBundlePath = "",
     digestFileImpl = sha256File,
     startupTimeoutMs = RUNTIME_STARTUP_TIMEOUT_MS,
@@ -477,6 +479,7 @@ export class OllamaModelManager {
   } = {}) {
     this.fetch = fetchImpl;
     this.runtimeManager = runtimeManager;
+    this.acceleratorManager = acceleratorManager;
     this.routerBundlePath = routerBundlePath ? resolve(routerBundlePath) : "";
     this.digestFile = digestFileImpl;
     this.baseUrl = String(runtimeManager?.baseUrl || baseUrl).replace(/\/$/, "");
@@ -503,6 +506,8 @@ export class OllamaModelManager {
     this.routerPreparation = null;
     this.performance = {
       lastPreload: null,
+      lastAcceleratorPreload: null,
+      lastAcceleratorFallback: null,
       loadedModels: []
     };
   }
@@ -518,6 +523,9 @@ export class OllamaModelManager {
         updatedAt: manifest.updatedAt
       },
       runtime: { ...this.runtime },
+      accelerator: this.acceleratorManager
+        ? { ...this.acceleratorManager.state() }
+        : null,
       router: { ...this.router },
       performance: structuredClone(this.performance),
       system,
@@ -660,8 +668,11 @@ export class OllamaModelManager {
     return this.refresh(system);
   }
 
-  async preload(modelId, { keepAlive = "30m", system = null } = {}) {
+  async preload(modelId, { keepAlive = "30m", system = null, runtime = "ollama" } = {}) {
     const model = curatedModel(modelId);
+    if (runtime === "mtplx") {
+      return this.preloadAccelerator(model, { keepAlive, system });
+    }
     if (!this.runtime.available) await this.requireRuntime();
     if (!this.installed.some((item) => item.name === model.id)) {
       throw new Error("Download this model before preloading it");
@@ -689,6 +700,45 @@ export class OllamaModelManager {
     await this.refreshLoadedModels();
     this.publish(system);
     return structuredClone(this.performance.lastPreload);
+  }
+
+  async preloadAccelerator(model, { keepAlive = "30m", system = null } = {}) {
+    const startedAt = performance.now();
+    try {
+      if (!this.acceleratorManager?.supportsModel?.(model.id)) {
+        throw new Error("MTPLX Preview does not support this model");
+      }
+      const state = await this.acceleratorManager.start(model.id);
+      this.performance.lastAcceleratorPreload = {
+        model: model.id,
+        servedModel: MTPLX_SERVED_MODEL_ID,
+        runtime: "mtplx",
+        observedAt: new Date().toISOString(),
+        elapsedMs: Math.round(performance.now() - startedAt),
+        persistentSessionCache: state.persistentSessionCache === true,
+        fallback: false,
+        keepAlive
+      };
+      this.performance.lastAcceleratorFallback = null;
+      this.publish(system);
+      return structuredClone(this.performance.lastAcceleratorPreload);
+    } catch (error) {
+      this.performance.lastAcceleratorFallback = {
+        model: model.id,
+        requestedRuntime: "mtplx",
+        fallbackRuntime: "ollama",
+        observedAt: new Date().toISOString(),
+        reason: clean(error?.message, 1_000) || "MTPLX Preview was unavailable"
+      };
+      this.publish(system);
+      const fallback = await this.preload(model.id, { keepAlive, system, runtime: "ollama" });
+      return {
+        ...fallback,
+        runtime: "ollama",
+        fallback: true,
+        fallbackReason: this.performance.lastAcceleratorFallback.reason
+      };
+    }
   }
 
   async refreshLoadedModels() {
@@ -771,8 +821,43 @@ export class OllamaModelManager {
     return `${this.baseUrl}/v1`;
   }
 
+  inferenceTarget(modelId, runtime = "ollama") {
+    const accelerator = this.acceleratorManager?.state?.() || null;
+    if (
+      runtime === "mtplx" &&
+      this.acceleratorManager?.supportsModel?.(modelId) &&
+      accelerator?.status === "ready"
+    ) {
+      return {
+        runtime: "mtplx",
+        model: MTPLX_SERVED_MODEL_ID,
+        baseUrl: accelerator.openAiBaseUrl,
+        contextLength: accelerator.contextLength,
+        fallback: false
+      };
+    }
+    return {
+      runtime: "ollama",
+      model: modelId,
+      baseUrl: this.openAiBaseUrl(),
+      contextLength: this.runtime.contextLength || null,
+      fallback: runtime === "mtplx",
+      fallbackReason: runtime === "mtplx"
+        ? this.performance.lastAcceleratorFallback?.reason || accelerator?.error || "MTPLX Preview is not ready"
+        : null
+    };
+  }
+
+  async prepareForSystemSleep() {
+    await this.acceleratorManager?.suspend?.();
+    return this.publish();
+  }
+
   async shutdown() {
-    await this.runtimeManager?.stop?.();
+    await Promise.all([
+      this.acceleratorManager?.stop?.(),
+      this.runtimeManager?.stop?.()
+    ]);
   }
 
   publish(system = null) {

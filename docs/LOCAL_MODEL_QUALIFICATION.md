@@ -122,24 +122,55 @@ seconds at measured decode rates of 6.4, 5.9, and 5.8 tok/s. Those uncached
 quality runs are kept separate from the cache latency probe below: prefix
 caching reduces repeated prefill work, but it does not raise raw decode speed.
 
+The opt-in MTPLX runtime then ran that same contract three times with hidden
+thinking disabled, which is the production policy for this profile. AMOS pins
+the tested runtime to MTPLX 2.8.3 and fails back to the qualified Ollama path
+when the runtime is absent, has another version, fails during startup, or
+returns a transport/server failure before response streaming begins.
+
+| Runtime run | Score | Wall time | Decode throughput |
+|---|---:|---:|---:|
+| MTPLX 1 | 35/35 | 600.7 s | 9.5 tok/s |
+| MTPLX 2 | 35/35 | 631.6 s | 8.7 tok/s |
+| MTPLX 3 | 35/35 | 620.7 s | 8.8 tok/s |
+| **MTPLX average** | **35/35** | **617.7 s** | **9.0 tok/s** |
+| Ollama average | 35/35 | 669.8 s | 6.0 tok/s |
+
+MTPLX therefore improved sustained decode throughput by **1.49×** and reduced
+the complete uncached suite's wall time by **7.8%**, without changing the
+35/35 result. The wall-time gain is smaller than the decode gain because the
+suite also includes prompt ingestion, tool execution, evaluators, and code
+verification. Short answers can burst above this average; they are not used as
+the release throughput claim.
+
 On 2026-08-19, the `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed-FP16`
 artifact was tested on the same M1 Max with MTPLX 2.8.3, Turbo speculation at
 depth 2, and the SSD session cache enabled. The repeatable harness uses a
 unique prefix per run so an older global-cache entry cannot warm the cold
-control. Its realistic appended-turn case produced these results:
+control. A clean 2.7K-token probe produced these results:
 
 | Request | Input | Cached | New prefill | Prompt state | End to end |
 |---|---:|---:|---:|---:|---:|
-| Cold appended turn | 769 tokens | 0 | 769 | 11.982 s | 12.812 s |
-| Warm appended turn | 767 tokens | 740 | 27 | 0.594 s | 4.242 s |
+| Cold identical turn | 2,679 tokens | 0 | 2,679 | 49.575 s | 51.674 s |
+| Warm identical turn | 2,679 tokens | 2,678 | 1 | 0.127 s | 3.063 s |
+| Cold appended turn | 2,703 tokens | 0 | 2,703 | 50.825 s | 53.273 s |
+| Warm appended turn | 2,702 tokens | 2,675 | 27 | 0.332 s | 2.548 s |
 
-That is a **20.17× prompt-state speedup** and a **3.02× end-to-end speedup**
-for this synthetic 740-token stable prefix with an eight-token answer. The
-number does not imply a universal 3× improvement: longer answers remain
+The identical request was **390.35× faster in prompt-state work** and
+**16.87× faster end to end**. The appended turn was **153.09× faster in
+prompt-state work** and **20.91× faster end to end**. These numbers do not
+imply a universal 17–21× improvement: longer answers remain
 decode-bound, and changing any byte in the stable system/tool prefix can
 invalidate reuse. It does establish that deterministic prompt contracts,
 task-stable session affinity, and cache-aware compaction can remove most
 repeat-prefill cost without changing model output or verification.
+
+Under sustained memory pressure MTPLX may intentionally report
+`background_bypass` and skip global-prefix reuse; a clean runtime restart
+restored the measured cache path. AMOS therefore treats cache acceleration as
+an optimization rather than a correctness dependency. System suspend stops
+the child runtime while retaining the SSD session directory, and resume starts
+a fresh process instead of waiting on a stale startup promise.
 
 Run the benchmark against a compatible local endpoint with:
 

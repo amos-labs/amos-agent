@@ -441,6 +441,81 @@ test("Ollama canonicalizes system messages for strict Qwen templates", async () 
   assert.equal(body.messages[0].content, "Primary policy\n\nStop using tools");
 });
 
+test("AMOS Local translates none into Qwen-compatible thinking controls", async () => {
+  let body;
+  const client = new OpenAICompatibleClient({
+    provider: "ollama",
+    displayName: "AMOS Local",
+    baseUrl: "http://127.0.0.1:18081/v1",
+    model: "amos-local-qwen38-mtplx",
+    reasoningEffort: "none",
+    requestTimeoutMs: 1_000,
+    capabilities: { reasoning: true }
+  }, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonModelResponse("ready");
+  });
+
+  await client.chat({ messages: [{ role: "user", content: "return code" }] });
+
+  assert.equal(body.reasoning_effort, undefined);
+  assert.equal(body.enable_thinking, false);
+  assert.deepEqual(body.chat_template_kwargs, { enable_thinking: false });
+});
+
+test("AMOS Local preserves the native none effort for non-Qwen models", async () => {
+  let body;
+  const client = new OpenAICompatibleClient({
+    provider: "ollama",
+    displayName: "AMOS Local",
+    baseUrl: "http://127.0.0.1:11434/v1",
+    model: "gpt-oss:20b",
+    reasoningEffort: "none",
+    requestTimeoutMs: 1_000,
+    capabilities: { reasoning: true }
+  }, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonModelResponse("ready");
+  });
+
+  await client.chat({ messages: [{ role: "user", content: "return code" }] });
+
+  assert.equal(body.reasoning_effort, "none");
+  assert.equal(body.enable_thinking, undefined);
+  assert.equal(body.chat_template_kwargs, undefined);
+});
+
+test("MTPLX transport failure retries once through its qualified Ollama fallback", async () => {
+  const requests = [];
+  const client = new OpenAICompatibleClient({
+    provider: "ollama",
+    displayName: "AMOS Local",
+    baseUrl: "http://127.0.0.1:18081/v1",
+    model: "amos-local-qwen38-mtplx",
+    reasoningEffort: "none",
+    requestTimeoutMs: 1_000,
+    capabilities: { reasoning: true },
+    localFallback: {
+      runtime: "ollama",
+      baseUrl: "http://127.0.0.1:11435/v1",
+      model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
+    }
+  }, async (url, options) => {
+    requests.push({ url, body: JSON.parse(options.body) });
+    if (requests.length === 1) throw new Error("MTPLX connection closed");
+    return jsonModelResponse("recovered");
+  });
+
+  const result = await client.chat({ messages: [{ role: "user", content: "continue" }] });
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].url, "http://127.0.0.1:18081/v1/chat/completions");
+  assert.equal(requests[0].body.model, "amos-local-qwen38-mtplx");
+  assert.equal(requests[1].url, "http://127.0.0.1:11435/v1/chat/completions");
+  assert.equal(requests[1].body.model, "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M");
+  assert.equal(result.message.content, "recovered");
+});
+
 test("Ollama retries and remembers a Qwen template's advertised reasoning vocabulary", async () => {
   const bodies = [];
   const client = new OpenAICompatibleClient({

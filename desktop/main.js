@@ -24,6 +24,7 @@ import { CompanyCacheStore } from "../src/desktop/companyCache.js";
 import { OfflineProposalStore } from "../src/desktop/offlineProposal.js";
 import { OllamaModelManager } from "../src/desktop/offlineIntelligence.js";
 import { ManagedOllamaRuntime } from "../src/desktop/managedOllamaRuntime.js";
+import { ManagedMtplxRuntime } from "../src/desktop/managedMtplxRuntime.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
 import { TaskCheckpointStore } from "../src/desktop/taskCheckpoint.js";
 import { LocalReceiptStore } from "../src/desktop/localReceiptStore.js";
@@ -478,7 +479,7 @@ function registerIpc() {
     controller.activateOfflineModel(id)
   );
   ipcMain.handle("desktop:activate-local-model", (_event, input) =>
-    controller.activateLocalModel(input?.id, input?.operatingMode)
+    controller.activateLocalModel(input?.id, input?.operatingMode, input?.localRuntime)
   );
   ipcMain.handle("desktop:run", (_event, input) => controller.run(input));
   ipcMain.handle("desktop:steer-task", (_event, input) =>
@@ -861,8 +862,15 @@ app.whenReady().then(async () => {
     resourcesPath: localResourcesPath,
     userDataPath: app.getPath("userData")
   });
+  const managedMtplxRuntime = new ManagedMtplxRuntime({
+    platform: process.platform,
+    arch: process.arch,
+    resourcesPath: localResourcesPath,
+    userDataPath: app.getPath("userData")
+  });
   offlineManager = new OllamaModelManager({
     runtimeManager: managedOllamaRuntime,
+    acceleratorManager: managedMtplxRuntime,
     routerBundlePath: join(localResourcesPath, "router"),
     emit: (payload) => send("offline:changed", payload)
   });
@@ -943,6 +951,7 @@ app.whenReady().then(async () => {
   });
   powerMonitor.on("suspend", () => {
     controller?.interruptForSystemSleep();
+    offlineManager?.prepareForSystemSleep().catch(() => {});
   });
   powerMonitor.on("resume", () => {
     controller?.refreshRemote().catch(() => {});
