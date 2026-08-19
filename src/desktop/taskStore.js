@@ -336,7 +336,14 @@ function normalizeTaskOutcome(value) {
       inputTokens: Number(value.usage.inputTokens) || 0,
       outputTokens: Number(value.usage.outputTokens) || 0,
       totalTokens: Number(value.usage.totalTokens) || 0,
-      costUsedMicrousd: Number(value.usage.costUsedMicrousd) || 0
+      costUsedMicrousd: Number(value.usage.costUsedMicrousd) || 0,
+      requestedRuntime: cleanText(value.usage.requestedRuntime, 32),
+      runtime: cleanText(value.usage.runtime, 32),
+      runtimeFallbacks: Math.max(0, Number(value.usage.runtimeFallbacks) || 0),
+      fallbackReason: cleanText(value.usage.fallbackReason, 500) || null,
+      performance: value.usage.performance && typeof value.usage.performance === "object"
+        ? JSON.parse(JSON.stringify(value.usage.performance))
+        : null
     } : null,
     finishedAt: optionalTimestamp(value.finishedAt),
     error: cleanText(value.error, 1_000) || null

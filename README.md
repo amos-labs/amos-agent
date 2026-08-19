@@ -176,9 +176,11 @@ remain visible only so users can switch away from or remove them; new 3.6
 downloads are blocked.
 
 On Apple Silicon systems with at least 32 GB of unified memory, Qwen 3.8 can
-also use the opt-in **MTPLX Preview**. AMOS discovers MTPLX 2.8.3 from a
-bundled or app-managed runtime, `~/.local/bin/mtplx`, Homebrew's common binary
-paths, or `AMOS_MTPLX_BINARY`; the optimized artifact can be selected with
+also use **MTPLX Preview**. When its optimized artifact is available, AMOS
+prefers MTPLX for one-click activation while keeping Ollama selectable. AMOS
+discovers MTPLX 2.8.3 from a bundled or app-managed runtime,
+`~/.local/bin/mtplx`, Homebrew's common binary paths, or
+`AMOS_MTPLX_BINARY`; the optimized artifact can be selected with
 `AMOS_MTPLX_MODEL`. The preview uses native multi-token prediction, stable
 prompt sessions, and a persistent SSD session cache. It is never required for
 correctness: startup or pre-response transport failures automatically use the

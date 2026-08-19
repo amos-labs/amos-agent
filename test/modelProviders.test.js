@@ -514,6 +514,11 @@ test("MTPLX transport failure retries once through its qualified Ollama fallback
   assert.equal(requests[1].url, "http://127.0.0.1:11435/v1/chat/completions");
   assert.equal(requests[1].body.model, "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M");
   assert.equal(result.message.content, "recovered");
+  assert.equal(result.usage.requested_runtime, "mtplx");
+  assert.equal(result.usage.runtime, "ollama");
+  assert.equal(result.usage.fallback_used, true);
+  assert.equal(result.usage.fallback_reason, "primary_transport_failed");
+  assert.ok(result.usage.latency_ms >= 0);
 });
 
 test("Ollama retries and remembers a Qwen template's advertised reasoning vocabulary", async () => {

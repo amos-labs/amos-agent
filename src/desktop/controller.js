@@ -629,7 +629,7 @@ export class DesktopController {
     return result;
   }
 
-  async activateLocalModel(modelId, operatingMode = "offline", localRuntime = "ollama") {
+  async activateLocalModel(modelId, operatingMode = "offline", localRuntime = "auto") {
     if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
     if (!["online", "personal", "offline"].includes(operatingMode)) {
       throw new Error("Choose online company, personal workspace, or local-only mode");
@@ -637,7 +637,14 @@ export class DesktopController {
     const offline = await this.offlineManager.refresh(systemProfile());
     const model = offline.models.find((item) => item.id === modelId);
     if (!model?.installed) throw new Error("Download this model before activating it");
-    const requestedRuntime = localRuntime === "mtplx" ? "mtplx" : "ollama";
+    const accelerator = offline.accelerator || null;
+    const preferredRuntime =
+      accelerator?.available === true && accelerator?.sourceModelId === modelId
+        ? "mtplx"
+        : "ollama";
+    const requestedRuntime = localRuntime === "mtplx" || localRuntime === "ollama"
+      ? localRuntime
+      : preferredRuntime;
     const settings = await this.settingsStore.read();
     const preload = await this.offlineManager.preload?.(modelId, {
       system: systemProfile(),
@@ -2135,6 +2142,7 @@ export class DesktopController {
     const settings = input?.settings
       ? { ...stored, ...input.settings, apiKey: input.settings.apiKey || stored.apiKey }
       : stored;
+    input = await this.automaticCheckpointResumeInput(input, settings);
     if (input?.select !== false) {
       await this.ensureActiveConversation(conversationObjectiveFromInput(input), settings);
     }
@@ -2236,6 +2244,41 @@ export class DesktopController {
       };
     }
     return finish();
+  }
+
+  async automaticCheckpointResumeInput(input, settings) {
+    if (
+      !this.taskCheckpointStore ||
+      input?.resumeTaskId ||
+      input?.select === false ||
+      (Array.isArray(input?.attachments) && input.attachments.length > 0) ||
+      !isGenericContinuationPrompt(typeof input === "string" ? input : input?.text)
+    ) {
+      return input;
+    }
+    const taskRecordId = String(input?.taskRecordId || this.activeTaskRecordId || "").trim();
+    const contextKey = String(this.activeContextKey || "").trim();
+    if (!taskRecordId && !contextKey) return input;
+    const candidates = (await this.taskCheckpointState())
+      .filter((checkpoint) => checkpoint.status === "interrupted")
+      .filter((checkpoint) => taskRecordId
+        ? checkpoint.conversation?.taskRecordId === taskRecordId
+        : checkpoint.conversation?.contextKey === contextKey)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const checkpoint = candidates[0];
+    if (!checkpoint) return input;
+    const prepared = await this.prepareTaskCheckpoint(checkpoint.id);
+    this.record("task", `Attached the continuation to interrupted work: ${checkpoint.title}`, {
+      task_id: checkpoint.id,
+      automatic_resume: true,
+      replay_allowed: false
+    });
+    return {
+      ...(typeof input === "object" && input ? input : {}),
+      text: prepared.prompt,
+      resumeTaskId: checkpoint.id,
+      automaticResume: true
+    };
   }
 
   async executeRun(input, taskId = randomUUID()) {
@@ -2603,7 +2646,7 @@ export class DesktopController {
         const recoveryNote = [
           "This task was interrupted when the computer went to sleep.",
           "Completed work remains intact and no action was replayed.",
-          "Reopen this conversation to revalidate current context and continue only the remaining work."
+          "Reopen this conversation and choose Revalidate & reopen in Decisions, or type Continue here; AMOS will attach the encrypted checkpoint, revalidate current context, and continue only the remaining work."
         ].join(" ");
         const lifecycle = this.interruptCodingLifecycle("system_suspended", recoveryNote);
         await this.finishRunSupervision("interrupted", recoveryNote);
@@ -2991,14 +3034,14 @@ export class DesktopController {
         if (active) {
           active.acceptingSteering = false;
           active.phase = "interrupted";
-          active.summary = "Computer sleep interrupted this task; reopen it to revalidate and continue";
+          active.summary = "Computer sleep interrupted this task; reopen it and choose Revalidate & reopen, or type Continue in the same conversation";
         }
         this.approvals.cancelAll();
         active?.abortController.abort("system_sleep");
       });
       this.runManager.transition(lane.id, "interrupted", {
         phase: "interrupted",
-        summary: "Computer sleep interrupted this task; reopen it to revalidate and continue"
+        summary: "Computer sleep interrupted this task; reopen it and choose Revalidate & reopen, or type Continue in the same conversation"
       });
     }
     this.runManager.select(null);
@@ -4907,18 +4950,21 @@ export class DesktopController {
   async getRuntime({ requireAmos, offline = false, boundary = null }) {
     const requestedBoundary = boundary || (offline ? "offline" : "online");
     const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    await this.ensureSelectedLocalRuntime(settings);
     const contextOnly = await this.activeTaskIsContextOnly(settings);
     const taskRecord = await this.activeTaskRecord(settings);
     const workspaceFocus = taskWorkspaceFocus(taskRecord, settings);
+    const config = this.configFrom(settings, { workspaceFocus });
     if (
       this.runtime?.boundary === requestedBoundary &&
       this.runtime?.contextOnly === contextOnly &&
-      this.runtime?.workspaceFocus === workspaceFocus
+      this.runtime?.workspaceFocus === workspaceFocus &&
+      this.runtime?.config?.model?.baseUrl === config.model.baseUrl &&
+      this.runtime?.config?.model?.model === config.model.model
     ) {
       return this.runtime;
     }
     if (this.runtime) this.resetRuntime();
-    const config = this.configFrom(settings, { workspaceFocus });
     const missing = validateConfig(config);
     if (missing.length > 0) {
       throw new Error(`Finish intelligence setup: ${missing.join(", ")}`);
@@ -5135,6 +5181,79 @@ export class DesktopController {
     };
     await this.hydrateSessionContinuity(settings, requestedBoundary, this.runtime);
     return this.runtime;
+  }
+
+  async ensureSelectedLocalRuntime(settings) {
+    if (
+      settings?.provider !== "ollama" ||
+      settings?.localRuntime !== "mtplx" ||
+      !settings?.model ||
+      !this.offlineManager
+    ) {
+      return null;
+    }
+    const current = this.offlineManager.inferenceTarget?.(settings.model, "mtplx");
+    if (current?.runtime === "mtplx") {
+      this.captureLocalRuntimeSelection({
+        requestedRuntime: "mtplx",
+        selectedRuntime: "mtplx",
+        model: current.model,
+        fallback: false,
+        reason: null
+      });
+      return current;
+    }
+    const restoring = {
+      type: "runtime",
+      phase: "restoring",
+      requestedRuntime: "mtplx",
+      selectedRuntime: "",
+      model: settings.model,
+      fallback: false,
+      reason: current?.fallbackReason || "MTPLX Preview is not ready",
+      summary: "Restoring MTPLX before this local task begins"
+    };
+    this.send("agent:event", restoring);
+    if (this.activeTask) {
+      this.activeTask.phase = "starting";
+      this.activeTask.summary = restoring.summary;
+    }
+    const preload = await this.warmLocalIntelligence(settings);
+    const selected = this.offlineManager.inferenceTarget?.(settings.model, "mtplx");
+    const fallback = selected?.runtime !== "mtplx";
+    const selection = {
+      requestedRuntime: "mtplx",
+      selectedRuntime: selected?.runtime || preload?.runtime || "ollama",
+      model: selected?.model || settings.model,
+      fallback,
+      reason: fallback
+        ? preload?.fallbackReason || selected?.fallbackReason || "MTPLX Preview was unavailable"
+        : null
+    };
+    this.captureLocalRuntimeSelection(selection);
+    this.send("agent:event", {
+      type: "runtime",
+      phase: fallback ? "fallback" : "ready",
+      ...selection,
+      summary: fallback
+        ? `MTPLX could not become ready; using Ollama for this task: ${selection.reason}`
+        : "MTPLX is ready for this local task"
+    });
+    return selected;
+  }
+
+  captureLocalRuntimeSelection(selection) {
+    if (!this.activeTask || !selection) return;
+    this.activeTask.usage = {
+      ...(this.activeTask.usage || {}),
+      requestedRuntime: String(selection.requestedRuntime || "").slice(0, 32),
+      runtime: String(selection.selectedRuntime || "").slice(0, 32),
+      runtimeFallbacks: Math.max(
+        Number(this.activeTask.usage?.runtimeFallbacks || 0),
+        selection.fallback ? 1 : 0
+      ),
+      fallbackReason: selection.reason ? String(selection.reason).slice(0, 500) : null
+    };
   }
 
   async classifyTaskRouting({
@@ -7304,6 +7423,15 @@ function sanitizeAgentEvent(event) {
       costUsedMicrousd: Number(event.costUsedMicrousd || 0),
       estimated: event.estimated === true,
       model: event.model ? String(event.model).slice(0, 256) : null,
+      requestedModel: event.requestedModel ? String(event.requestedModel).slice(0, 256) : null,
+      runtime: event.runtime ? String(event.runtime).slice(0, 32) : null,
+      requestedRuntime: event.requestedRuntime
+        ? String(event.requestedRuntime).slice(0, 32)
+        : null,
+      fallbackUsed: event.fallbackUsed === true,
+      fallbackReason: event.fallbackReason
+        ? String(event.fallbackReason).slice(0, 160)
+        : null,
       models: (Array.isArray(event.models) ? event.models : [])
         .slice(0, 12)
         .map((model) => String(model).slice(0, 256)),
@@ -7332,6 +7460,18 @@ function sanitizeAgentEvent(event) {
             : Math.max(0, Number(item.generationMs)),
           estimated: item.estimated === true
         }))
+    };
+  }
+  if (event.type === "runtime") {
+    return {
+      type: "runtime",
+      phase: String(event.phase || "ready").slice(0, 32),
+      requestedRuntime: String(event.requestedRuntime || "").slice(0, 32),
+      selectedRuntime: String(event.selectedRuntime || "").slice(0, 32),
+      model: String(event.model || "").slice(0, 256),
+      fallback: event.fallback === true,
+      reason: event.reason ? String(event.reason).slice(0, 500) : null,
+      summary: String(event.summary || "Local runtime updated").slice(0, 500)
     };
   }
   if (event.type === "intelligence") {
@@ -7404,6 +7544,16 @@ function conversationObjectiveFromInput(input) {
       ? "Review the attached material and tell me what is important."
       : NEW_CONVERSATION_OBJECTIVE
   );
+}
+
+export function isGenericContinuationPrompt(value) {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[.!?,;:…]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized || normalized.length > 96) return false;
+  return /^(?:(?:ok|okay|great|yes|yep|sure)\s+)*(?:continue|resume|keep going|carry on|pick up where (?:we|you) left off|continue where (?:we|you) left off|where were we)$/.test(normalized);
 }
 
 export function recoveryModelIdentity({ settings = {}, modelConfig = null } = {}) {
@@ -7527,6 +7677,29 @@ function receiptEvent(event) {
       type: "routing",
       name: event.minimumClass || event.reason || "hosted_fallback",
       outcome: `${event.rolloutMode}:${event.status}${comparison}${event.strategy ? `:${event.strategy}` : ""}${event.selectedProvider ? `:${event.selectedProvider}/${event.selectedModel || "auto"}` : ""}`
+    };
+  }
+  if (event.type === "runtime") {
+    return {
+      type: "runtime",
+      name: event.selectedRuntime || event.requestedRuntime || "local",
+      outcome: event.fallback
+        ? `fallback:${event.reason || "primary runtime unavailable"}`
+        : event.phase || "ready"
+    };
+  }
+  if (event.type === "usage") {
+    return {
+      type: "usage",
+      name: event.runtime || event.model || "model",
+      outcome: [
+        `${Math.max(0, Number(event.latencyMs || 0))}ms`,
+        event.timeToFirstOutputMs == null ? null : `ttfo:${Math.max(0, Number(event.timeToFirstOutputMs))}ms`,
+        event.generationTokensPerSecond == null
+          ? null
+          : `${Math.max(0, Number(event.generationTokensPerSecond))}tok/s`,
+        event.fallbackUsed ? `fallback:${event.fallbackReason || "yes"}` : null
+      ].filter(Boolean).join(":")
     };
   }
   if (event.type === "tool_start") {

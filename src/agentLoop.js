@@ -216,6 +216,7 @@ export class AgentLoop {
       let completedToolActions = 0;
       let failedToolActions = 0;
       let rejectedCompletions = 0;
+      let rejectedInternalCompletions = 0;
       let transientRetries = 0;
       let pendingRoutingDecision = routingDecision?.minimumClass
         ? routingDecision
@@ -313,7 +314,20 @@ export class AgentLoop {
         transientRetries = 0;
         this.observeLocalPromptPerformance(response.usage);
         this.observePromptCacheUsage(response.usage);
-        onEvent(usageEventFromResponse(response.usage, turn));
+        const usageEvent = usageEventFromResponse(response.usage, turn);
+        if (usageEvent.fallbackUsed) {
+          onEvent({
+            type: "runtime",
+            phase: "fallback",
+            requestedRuntime: usageEvent.requestedRuntime,
+            selectedRuntime: usageEvent.runtime,
+            model: usageEvent.model,
+            fallback: true,
+            reason: usageEvent.fallbackReason,
+            summary: `The ${usageEvent.requestedRuntime || "selected"} runtime request failed; AMOS continued through ${usageEvent.runtime || "the configured fallback"}`
+          });
+        }
+        onEvent(usageEvent);
 
         throwIfAborted(signal);
         const assistantMessage = response.message;
@@ -321,14 +335,6 @@ export class AgentLoop {
 
         const toolCalls = assistantMessage.tool_calls || [];
         if (toolCalls.length === 0) {
-          if (partialResponse) {
-            onEvent({
-              type: "assistant_delta",
-              turn,
-              delta: partialResponse,
-              text: partialResponse
-            });
-          }
           const steeringAfterResponse = this.applySteering(takeSteering, onEvent, turn);
           if (steeringAfterResponse > 0) {
             previousToolFingerprint = null;
@@ -336,6 +342,42 @@ export class AgentLoop {
             consecutiveToolErrorCycles = 0;
             turn += 1;
             continue;
+          }
+          if (invalidTaskCompletion(assistantMessage.content, completedToolActions)) {
+            rejectedInternalCompletions += 1;
+            if (rejectedInternalCompletions >= 2) {
+              const error = new Error(
+                "The model ended twice without a user-facing result after completing tool work"
+              );
+              error.code = "AMOS_MODEL_INVALID_COMPLETION";
+              error.completedToolActions = completedToolActions;
+              throw error;
+            }
+            onEvent({
+              type: "phase",
+              phase: "retrying",
+              turn,
+              summary: "The model returned internal context instead of a user-facing result; requesting the actual outcome"
+            });
+            this.messages.push({
+              role: "user",
+              content: [
+                "<amos_user_facing_result_required>",
+                "The previous response repeated internal continuity or compaction context and is not a completed answer.",
+                "Return the actual result for the user's current objective. Summarize what was established, what remains, and the next concrete action. Do not repeat internal context markers or raw tool payloads.",
+                "</amos_user_facing_result_required>"
+              ].join("\n")
+            });
+            turn += 1;
+            continue;
+          }
+          if (partialResponse) {
+            onEvent({
+              type: "assistant_delta",
+              turn,
+              delta: partialResponse,
+              text: partialResponse
+            });
           }
           if (typeof completionGate === "function") {
             const completion = await completionGate({
@@ -1165,6 +1207,11 @@ function usageEventFromResponse(usage, turn) {
     type: "usage",
     turn,
     model: String(usage?.model || "").slice(0, 256),
+    requestedModel: String(usage?.requested_model || "").slice(0, 256),
+    runtime: String(usage?.runtime || "").slice(0, 32) || null,
+    requestedRuntime: String(usage?.requested_runtime || "").slice(0, 32) || null,
+    fallbackUsed: usage?.fallback_used === true,
+    fallbackReason: String(usage?.fallback_reason || "").slice(0, 160) || null,
     modelUsage: (Array.isArray(usage?.model_usage) ? usage.model_usage : [])
       .slice(0, 8)
       .map((item) => ({
@@ -1228,6 +1275,13 @@ function usageEventFromResponse(usage, turn) {
       ? null
       : Math.max(0, Number(usage.generation_ms))
   };
+}
+
+function invalidTaskCompletion(content, completedToolActions) {
+  const answer = String(content || "").trim();
+  if (!answer) return true;
+  if (completedToolActions <= 0) return false;
+  return /^(?:Earlier tool evidence was compacted to fit this model's context window\.|Earlier task context was compacted to fit this model's context window\.|Earlier tool activity was compacted to keep this task within the model message limit\.|Earlier task activity was compacted to keep this task within the model message limit\.)/i.test(answer);
 }
 
 function boundedInteger(value, fallback, minimum, maximum) {

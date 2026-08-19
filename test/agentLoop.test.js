@@ -1187,6 +1187,71 @@ test("a stalled empty model response retries the same turn without replaying com
   assert.equal(events.filter((event) => event.type === "phase" && event.phase === "retrying").length, 2);
 });
 
+test("internal compaction evidence cannot masquerade as the completed user result", async () => {
+  const registry = new ToolRegistry();
+  let reads = 0;
+  registry.register({
+    name: "inspect_current_state",
+    async handler() {
+      reads += 1;
+      return { ok: true, status: "current" };
+    }
+  });
+  let turn = 0;
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "inspect-1",
+                function: { name: "inspect_current_state", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        if (turn === 2) {
+          return {
+            message: {
+              role: "assistant",
+              content: "Earlier tool evidence was compacted to fit this model's context window. - inspect_current_state: current"
+            }
+          };
+        }
+        assert.ok(messages.some((message) =>
+          String(message.content || "").includes("amos_user_facing_result_required")
+        ));
+        return {
+          message: {
+            role: "assistant",
+            content: "The current state is verified. The next step is to implement the remaining portal route."
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("Finish the portal plan", {
+    onEvent: (event) => events.push(event)
+  });
+
+  assert.equal(reads, 1);
+  assert.equal(turn, 3);
+  assert.match(answer, /current state is verified/i);
+  assert.ok(events.some((event) =>
+    event.type === "phase" && event.phase === "retrying" && /internal context/i.test(event.summary)
+  ));
+});
+
 test("exhausted transient retries after progress surface recoverable progress", async () => {
   const registry = new ToolRegistry();
   let writes = 0;

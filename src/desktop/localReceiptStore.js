@@ -667,6 +667,25 @@ function isIsoInstant(value) {
 
 function normalizeUsage(input) {
   if (!input || typeof input !== "object") return null;
+  const performance = input.performance && typeof input.performance === "object"
+    ? {
+        requestCount: boundedCount(input.performance.requestCount),
+        totalLatencyMs: boundedCount(input.performance.totalLatencyMs),
+        averageLatencyMs: boundedCount(input.performance.averageLatencyMs),
+        maxLatencyMs: boundedCount(input.performance.maxLatencyMs),
+        totalTimeToFirstOutputMs: boundedCount(input.performance.totalTimeToFirstOutputMs),
+        timeToFirstOutputSamples: boundedCount(input.performance.timeToFirstOutputSamples),
+        averageTimeToFirstOutputMs: input.performance.averageTimeToFirstOutputMs == null
+          ? null
+          : boundedCount(input.performance.averageTimeToFirstOutputMs),
+        totalPromptEvalMs: boundedCount(input.performance.totalPromptEvalMs),
+        promptEvalSamples: boundedCount(input.performance.promptEvalSamples),
+        totalGenerationMs: boundedCount(input.performance.totalGenerationMs),
+        generationSamples: boundedCount(input.performance.generationSamples),
+        generationOutputTokens: boundedCount(input.performance.generationOutputTokens),
+        generationTokensPerSecond: boundedRate(input.performance.generationTokensPerSecond)
+      }
+    : null;
   const usage = {
     inputTokens: boundedCount(input.inputTokens),
     outputTokens: boundedCount(input.outputTokens),
@@ -676,11 +695,28 @@ function normalizeUsage(input) {
     estimated: input.estimated === true,
     models: Array.isArray(input.models)
       ? input.models.map((item) => String(item || "").slice(0, 256)).filter(Boolean).slice(0, 12)
-      : []
+      : [],
+    requestedRuntime: clean(input.requestedRuntime, 32),
+    runtime: clean(input.runtime, 32),
+    runtimeFallbacks: boundedCount(input.runtimeFallbacks),
+    fallbackReason: clean(input.fallbackReason, 500) || null,
+    performance
   };
   if (input.model) usage.model = String(input.model).slice(0, 256);
-  if (usage.totalTokens === 0 && usage.costUsedMicrousd === 0 && !usage.model) return null;
+  if (
+    usage.totalTokens === 0 &&
+    usage.costUsedMicrousd === 0 &&
+    !usage.model &&
+    !usage.runtime &&
+    !usage.performance
+  ) return null;
   return usage;
+}
+
+function boundedRate(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.min(parsed, 1_000_000);
 }
 
 function boundedCount(value) {

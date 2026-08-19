@@ -7441,11 +7441,14 @@ function renderOfflineModels() {
         : state.mode?.personal || !state.connected
           ? "personal"
           : "online";
+      const preferredRuntime = mtplxEligible && accelerator.available
+        ? "mtplx"
+        : "ollama";
       const useNowActive =
         state.settings.provider === "ollama" &&
         state.settings.model === model.id &&
         state.settings.operatingMode === currentBoundary &&
-        state.settings.localRuntime !== "mtplx";
+        state.settings.localRuntime === preferredRuntime;
       const activate = actionButton(
         useNowActive
           ? "Active"
@@ -7460,7 +7463,7 @@ function renderOfflineModels() {
       activate.title = currentBoundary === "offline"
         ? `Select ${model.modelDisplayName || model.id}, switch Intelligence to AMOS Local, and use local-only mode`
         : `Select ${model.modelDisplayName || model.id} and switch Intelligence to AMOS Local without changing your ${currentBoundary === "online" ? "company" : "personal workspace"} boundary`;
-      activate.addEventListener("click", () => activateLocalModel(model.id, currentBoundary, "ollama"));
+      activate.addEventListener("click", () => activateLocalModel(model.id, currentBoundary, preferredRuntime));
       const remove = actionButton("Remove", "danger");
       remove.disabled = active;
       remove.addEventListener("click", () => removeOfflineModel(model.id));
@@ -7469,7 +7472,7 @@ function renderOfflineModels() {
         const offline = actionButton(active ? "Active local-only" : "Use local-only", "secondary");
         offline.disabled = active;
         offline.title = `Select ${model.modelDisplayName || model.id}, switch Intelligence to AMOS Local, and disable company and public-network tools`;
-        offline.addEventListener("click", () => activateLocalModel(model.id, "offline", "ollama"));
+        offline.addEventListener("click", () => activateLocalModel(model.id, "offline", preferredRuntime));
         actions.append(offline);
       }
       if (mtplxEligible) {
@@ -7478,15 +7481,24 @@ function renderOfflineModels() {
           state.settings.model === model.id &&
           state.settings.operatingMode === currentBoundary &&
           state.settings.localRuntime === "mtplx";
-        const accelerate = actionButton(mtplxActive ? "MTPLX active" : "Use MTPLX Preview", "secondary");
-        accelerate.disabled = mtplxActive || !accelerator.available;
-        accelerate.title = accelerator.status === "failed"
-          ? accelerator.error || "MTPLX failed and AMOS used Ollama"
-          : accelerator.available
-          ? "Use native multi-token prediction, persistent prompt sessions, and automatic Ollama fallback"
-          : accelerator.error || "Install the MTPLX runtime and optimized Qwen artifact first";
-        accelerate.addEventListener("click", () => activateLocalModel(model.id, currentBoundary, "mtplx"));
-        actions.append(accelerate);
+        const runtimeChoice = actionButton(
+          mtplxActive ? "Use Ollama instead" : "Use MTPLX Preview",
+          "secondary"
+        );
+        runtimeChoice.disabled = !mtplxActive && !accelerator.available;
+        runtimeChoice.title = mtplxActive
+          ? "Switch this model to the qualified Ollama runtime"
+          : accelerator.status === "failed"
+            ? accelerator.error || "MTPLX failed and AMOS used Ollama"
+            : accelerator.available
+              ? "Use native multi-token prediction, persistent prompt sessions, and automatic Ollama fallback"
+              : accelerator.error || "Install the MTPLX runtime and optimized Qwen artifact first";
+        runtimeChoice.addEventListener("click", () => activateLocalModel(
+          model.id,
+          currentBoundary,
+          mtplxActive ? "ollama" : "mtplx"
+        ));
+        actions.append(runtimeChoice);
       }
       actions.append(remove);
     }
@@ -8010,7 +8022,7 @@ async function activateOfflineModel(modelId) {
   return activateLocalModel(modelId, "offline");
 }
 
-async function activateLocalModel(modelId, operatingMode, localRuntime = "ollama") {
+async function activateLocalModel(modelId, operatingMode, localRuntime = "auto") {
   try {
     const modelName = state.offline?.models?.find((model) => model.id === modelId)?.modelDisplayName || modelId;
     state = await api.activateLocalModel(modelId, operatingMode, localRuntime);

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DesktopController,
+  isGenericContinuationPrompt,
   recoveryModelIdentity
 } from "../src/desktop/controller.js";
 import {
@@ -125,6 +126,121 @@ test("desktop revalidates interrupted work and only loads a continuation prompt"
   assert.deepEqual(result.checkpoint.reconciliation.changedSections, ["company_state"]);
   assert.equal(result.checkpoint.reconciliation.pendingApprovalCount, 1);
   assert.ok(emitted.some((event) => event.channel === "task-checkpoints:changed"));
+});
+
+test("a short continuation in the interrupted conversation automatically attaches its checkpoint", async () => {
+  const checkpoints = await checkpointStore();
+  const checkpoint = await checkpoints.start({
+    objective: "Plan the affiliate portal and Stripe disbursements",
+    conversation: {
+      taskRecordId: "partner-conversation",
+      contextKey: "task:partner-conversation"
+    },
+    source: onlineTaskSource({ identity: identity(), snapshot: snapshot() })
+  });
+  await checkpoints.update(checkpoint.id, { status: "interrupted" });
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-auto-checkpoint",
+    settingsStore: settingsStore(),
+    taskCheckpointStore: checkpoints,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.activeTaskRecordId = "partner-conversation";
+  controller.activeContextKey = "task:partner-conversation";
+  controller.personalRemote = async () => ({
+    identity: async () => identity(),
+    companySnapshot: async () => snapshot(),
+    approvals: async () => ({ available: true, pending_operations: [] })
+  });
+
+  const resolved = await controller.automaticCheckpointResumeInput(
+    { text: "ok....continue" },
+    await settingsStore().read()
+  );
+
+  assert.equal(resolved.resumeTaskId, checkpoint.id);
+  assert.equal(resolved.automaticResume, true);
+  assert.match(resolved.text, /Original objective: Plan the affiliate portal/);
+  assert.match(resolved.text, /Do not load broad company summaries/);
+  assert.ok((await checkpoints.get(checkpoint.id)).reconciliation?.checkedAt);
+});
+
+test("automatic checkpoint attachment is limited to unambiguous continuation prompts", () => {
+  assert.equal(isGenericContinuationPrompt("Continue"), true);
+  assert.equal(isGenericContinuationPrompt("ok...great...continue"), true);
+  assert.equal(isGenericContinuationPrompt("pick up where we left off"), true);
+  assert.equal(isGenericContinuationPrompt("continue, but change the payout design"), false);
+  assert.equal(isGenericContinuationPrompt("build a different portal"), false);
+});
+
+test("automatic checkpoint attachment never crosses task records that share a context key", async () => {
+  const checkpoints = await checkpointStore();
+  const checkpoint = await checkpoints.start({
+    objective: "Continue the original task",
+    conversation: {
+      taskRecordId: "original-task",
+      contextKey: "shared-context"
+    },
+    source: onlineTaskSource({ identity: identity(), snapshot: snapshot() })
+  });
+  await checkpoints.update(checkpoint.id, { status: "interrupted" });
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-cross-task-checkpoint",
+    settingsStore: settingsStore(),
+    taskCheckpointStore: checkpoints,
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.identity = identity();
+  controller.activeTaskRecordId = "different-task";
+  controller.activeContextKey = "shared-context";
+
+  const input = { text: "continue" };
+  assert.equal(
+    await controller.automaticCheckpointResumeInput(input, await settingsStore().read()),
+    input
+  );
+});
+
+test("selected MTPLX waits for readiness before runtime configuration", async () => {
+  let ready = false;
+  let warmCalls = 0;
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-mtplx-ready",
+    settingsStore: settingsStore(),
+    offlineManager: {
+      inferenceTarget() {
+        return ready
+          ? { runtime: "mtplx", model: "amos-local-qwen38-mtplx" }
+          : { runtime: "ollama", model: "qwen", fallbackReason: "waking" };
+      }
+    },
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.activeTask = {
+    usage: {},
+    phase: "starting",
+    summary: "Preparing the task"
+  };
+  controller.warmLocalIntelligence = async () => {
+    warmCalls += 1;
+    ready = true;
+    return { runtime: "mtplx", fallback: false };
+  };
+
+  const selected = await controller.ensureSelectedLocalRuntime({
+    provider: "ollama",
+    localRuntime: "mtplx",
+    model: "qwen"
+  });
+
+  assert.equal(warmCalls, 1);
+  assert.equal(selected.runtime, "mtplx");
+  assert.equal(controller.activeTask.usage.runtime, "mtplx");
+  assert.equal(controller.activeTask.usage.runtimeFallbacks, 0);
 });
 
 test("desktop reopens a checkpoint in its recorded conversation instead of the current lane", async () => {
