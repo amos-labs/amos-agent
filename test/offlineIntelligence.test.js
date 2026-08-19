@@ -394,6 +394,76 @@ test("Ollama manager preloads a selected model and exposes native residency metr
   );
 });
 
+test("local inference selects ready MTPLX and falls back to Ollama without changing the catalog model", async () => {
+  let acceleratorReady = false;
+  const acceleratorManager = {
+    supportsModel: (modelId) => modelId === QWEN38_MODEL_ID,
+    state: () => ({
+      status: acceleratorReady ? "ready" : "stopped",
+      openAiBaseUrl: "http://127.0.0.1:18081/v1",
+      contextLength: 32_768,
+      error: acceleratorReady ? null : "not started"
+    }),
+    start: async () => {
+      acceleratorReady = true;
+      return { persistentSessionCache: true };
+    }
+  };
+  const manager = new OllamaModelManager({ acceleratorManager });
+  assert.deepEqual(manager.inferenceTarget(QWEN38_MODEL_ID, "mtplx"), {
+    runtime: "ollama",
+    model: QWEN38_MODEL_ID,
+    baseUrl: "http://127.0.0.1:11434/v1",
+    contextLength: null,
+    fallback: true,
+    fallbackReason: "not started"
+  });
+  const preload = await manager.preload(QWEN38_MODEL_ID, { runtime: "mtplx" });
+  assert.equal(preload.runtime, "mtplx");
+  assert.equal(preload.fallback, false);
+  assert.deepEqual(manager.inferenceTarget(QWEN38_MODEL_ID, "mtplx"), {
+    runtime: "mtplx",
+    model: "amos-local-qwen38-mtplx",
+    baseUrl: "http://127.0.0.1:18081/v1",
+    contextLength: 32_768,
+    fallback: false
+  });
+});
+
+test("MTPLX startup failures preload the same qualified model through Ollama", async () => {
+  let generated = false;
+  const acceleratorManager = {
+    supportsModel: () => true,
+    state: () => ({ status: "failed", error: "MTP head failed validation" }),
+    start: async () => { throw new Error("MTP head failed validation"); }
+  };
+  const manager = new OllamaModelManager({
+    acceleratorManager,
+    fetchImpl: async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      if (path === "/api/tags") return jsonResponse({ models: [{
+        name: QWEN38_MODEL_ID,
+        size: 19_603_117_919,
+        digest: `sha256:${QWEN38_MANIFEST_DIGEST}`
+      }] });
+      if (path === "/api/generate" && options.method === "POST") {
+        generated = true;
+        return jsonResponse({ load_duration: 1, total_duration: 1 });
+      }
+      if (path === "/api/ps") return jsonResponse({ models: [] });
+      return new Response("not found", { status: 404 });
+    }
+  });
+  await manager.refresh();
+  const preload = await manager.preload(QWEN38_MODEL_ID, { runtime: "mtplx" });
+  assert.equal(preload.fallback, true);
+  assert.equal(preload.runtime, "ollama");
+  assert.match(preload.fallbackReason, /MTP head failed validation/);
+  assert.equal(generated, true);
+  assert.match(manager.state().performance.lastAcceleratorFallback.reason, /MTP head/);
+});
+
 test("Qwen 3.8 replaces Qwen 3.6 while existing legacy installs remain removable", async () => {
   let legacyInstalled = true;
   let removedModel = null;

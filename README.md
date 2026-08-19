@@ -174,6 +174,18 @@ a new signed AMOS Desktop release—it cannot be introduced by model output.
 Qwen 3.8 replaces the former Qwen 3.6 profiles. Existing 3.6 installations
 remain visible only so users can switch away from or remove them; new 3.6
 downloads are blocked.
+
+On Apple Silicon systems with at least 32 GB of unified memory, Qwen 3.8 can
+also use the opt-in **MTPLX Preview**. AMOS discovers MTPLX 2.8.3 from a
+bundled or app-managed runtime, `~/.local/bin/mtplx`, Homebrew's common binary
+paths, or `AMOS_MTPLX_BINARY`; the optimized artifact can be selected with
+`AMOS_MTPLX_MODEL`. The preview uses native multi-token prediction, stable
+prompt sessions, and a persistent SSD session cache. It is never required for
+correctness: startup or pre-response transport failures automatically use the
+same qualified Qwen model through Ollama. See the
+[qualification report](docs/LOCAL_MODEL_QUALIFICATION.md#prompt-cache-benchmark)
+for the exact runtime policy and measured results.
+
 AMOS selects a default local context from installed memory: 16K below 16 GB,
 32K on 16 GB systems, 64K on 32 GB systems, and 128K on 64 GB systems. Advanced
 users can explicitly raise the bounded limit to 262K on a model and machine

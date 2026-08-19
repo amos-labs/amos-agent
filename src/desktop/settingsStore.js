@@ -42,6 +42,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   bedrockAuthMode: "auto",
   intelligenceProfile: "auto",
   reasoningEffort: "",
+  localRuntime: "ollama",
   operatingMode: "online",
   appearance: "system",
   workspace: "",
@@ -206,6 +207,7 @@ export function sanitizeSettings(input = {}) {
       : ["none", "low", "medium", "high", "max", "xhigh"].includes(input.reasoningEffort)
         ? input.reasoningEffort
         : "medium",
+    localRuntime: input.localRuntime === "mtplx" ? "mtplx" : "ollama",
     operatingMode,
     appearance: ["system", "light", "dark"].includes(input.appearance)
       ? input.appearance

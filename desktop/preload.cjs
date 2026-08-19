@@ -58,8 +58,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   installOfflineModel: (id) => ipcRenderer.invoke("desktop:install-offline-model", id),
   removeOfflineModel: (id) => ipcRenderer.invoke("desktop:remove-offline-model", id),
   activateOfflineModel: (id) => ipcRenderer.invoke("desktop:activate-offline-model", id),
-  activateLocalModel: (id, operatingMode) =>
-    ipcRenderer.invoke("desktop:activate-local-model", { id, operatingMode }),
+  activateLocalModel: (id, operatingMode, localRuntime = "ollama") =>
+    ipcRenderer.invoke("desktop:activate-local-model", { id, operatingMode, localRuntime }),
   run: (input) => ipcRenderer.invoke("desktop:run", input),
   steerTask: (id, content) =>
     ipcRenderer.invoke("desktop:steer-task", { id, content }),

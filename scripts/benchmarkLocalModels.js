@@ -58,7 +58,7 @@ if (models.length === 0) {
     "Usage: npm run benchmark:local -- <model> [model...] " +
     "[--suite smoke|qualification|production|all] [--url URL] [--context TOKENS] " +
     "[--request-timeout-seconds SECONDS] [--max-tokens TOKENS] " +
-    "[--reasoning-effort low|medium|high] " +
+    "[--reasoning-effort none|low|medium|high|xhigh] " +
     "[--protocol ollama|openai] [--only SCENARIO,...] [--output REPORT.json]"
   );
   process.exit(2);
@@ -828,9 +828,14 @@ async function chat(model, messages, tools = []) {
     stream: false,
     temperature: 0,
     max_tokens: maxTokens,
-    reasoning_effort: reasoningEffort || undefined,
+    enable_thinking: reasoningEffort === "none" ? false : undefined,
+    reasoning_effort: reasoningEffort && reasoningEffort !== "none"
+      ? reasoningEffort
+      : undefined,
     chat_template_kwargs: reasoningEffort
-      ? { reasoning_effort: reasoningEffort }
+      ? reasoningEffort === "none"
+        ? { enable_thinking: false }
+        : { reasoning_effort: reasoningEffort }
       : undefined
   } : {
     model,
@@ -937,6 +942,16 @@ function skipOptionValue(values, index) {
 }
 
 async function scenario(name, weight, run) {
+  if (onlyScenarios.size > 0 && !onlyScenarios.has(name)) {
+    return {
+      name,
+      weight: 0,
+      passed: true,
+      skipped: true,
+      detail: "skipped by --only",
+      wallSeconds: 0
+    };
+  }
   const started = performance.now();
   try {
     const [passed, detail] = await run();
@@ -997,7 +1012,7 @@ function normalizeProtocol(value) {
 function normalizeReasoningEffort(value) {
   if (value === undefined || value === null || value === "") return null;
   const normalized = String(value).trim().toLowerCase();
-  if (["low", "medium", "high"].includes(normalized)) return normalized;
+  if (["none", "low", "medium", "high", "xhigh"].includes(normalized)) return normalized;
   throw new Error(`Unsupported reasoning effort: ${value}`);
 }
 

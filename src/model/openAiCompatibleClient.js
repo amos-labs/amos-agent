@@ -54,7 +54,19 @@ export class OpenAICompatibleClient {
     throwIfAborted(signal);
 
     if (this.config.reasoningEffort && this.config.capabilities?.reasoning !== false) {
-      body.reasoning_effort = this.config.reasoningEffort;
+      if (
+        this.config.provider === "ollama" &&
+        this.config.reasoningEffort === "none" &&
+        /qwen3/i.test(this.config.model)
+      ) {
+        // Qwen-compatible local servers use the vLLM/SGLang thinking control.
+        // Do not send `none` as an effort label: MTPLX correctly rejects it
+        // because effort applies only when thinking is enabled.
+        body.enable_thinking = false;
+        body.chat_template_kwargs = { enable_thinking: false };
+      } else {
+        body.reasoning_effort = this.config.reasoningEffort;
+      }
     }
     if (this.config.maxCompletionTokens > 0) {
       body.max_completion_tokens = this.config.maxCompletionTokens;
@@ -83,10 +95,20 @@ export class OpenAICompatibleClient {
     const unlink = linkAbortSignal(signal, controller);
     let response;
     let sendRequest;
+    let requestConfig = this.config;
+    let usedLocalFallback = false;
+    const activateLocalFallback = () => {
+      const fallback = this.config.localFallback;
+      if (!fallback?.baseUrl || !fallback?.model || usedLocalFallback) return false;
+      usedLocalFallback = true;
+      requestConfig = { ...this.config, ...fallback };
+      body.model = fallback.model;
+      return true;
+    };
     try {
       const apiKey = this.config.apiKey || (await this.config.getAccessToken?.());
       throwIfAborted(signal);
-      sendRequest = () => this.fetch(`${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      sendRequest = () => this.fetch(`${requestConfig.baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: compactObject({
           Authorization: apiKey ? `Bearer ${apiKey}` : null,
@@ -100,7 +122,12 @@ export class OpenAICompatibleClient {
         signal: controller.signal,
         body: JSON.stringify(body)
       });
-      response = await sendRequest();
+      try {
+        response = await sendRequest();
+      } catch (error) {
+        if (signal?.aborted || timedOut || isAbortError(error) || !activateLocalFallback()) throw error;
+        response = await sendRequest();
+      }
       refreshTimeout();
     } catch (error) {
       if (signal?.aborted) throw createAbortError();
@@ -111,6 +138,11 @@ export class OpenAICompatibleClient {
     }
 
     try {
+      if (!response.ok && response.status >= 500 && activateLocalFallback()) {
+        refreshTimeout();
+        response = await sendRequest();
+        refreshTimeout();
+      }
       if (!response.ok) {
         let failure = await modelFailure(response);
         const fallbackEffort = this.config.provider === "ollama"
@@ -140,7 +172,7 @@ export class OpenAICompatibleClient {
           onActivity: refreshTimeout
         });
         result.usage = withRequestMetrics(result.usage, {
-          config: this.config,
+          config: requestConfig,
           requestStartedAt,
           firstOutputAt: result.timing?.firstOutputAt || null,
           completedAt: performance.now(),
@@ -165,7 +197,7 @@ export class OpenAICompatibleClient {
       const result = {
         message: choice.message,
         usage: withRequestMetrics(normalizedUsage(payload.usage), {
-          config: this.config,
+          config: requestConfig,
           requestStartedAt,
           firstOutputAt: null,
           completedAt: performance.now(),
