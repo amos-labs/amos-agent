@@ -275,14 +275,50 @@ async function benchmarkModel(model) {
   const maximum = scenarios.reduce((sum, item) => sum + item.weight, 0);
   const evalCount = stats.reduce((sum, item) => sum + Number(item.eval_count || 0), 0);
   const evalDuration = stats.reduce((sum, item) => sum + Number(item.eval_duration || 0), 0);
+  const promptEvalCount = stats.reduce(
+    (sum, item) => sum + Number(item.prompt_eval_count || item.usage?.prompt_tokens || 0),
+    0
+  );
+  const promptEvalDuration = stats.reduce(
+    (sum, item) => sum + Number(item.prompt_eval_duration || 0),
+    0
+  );
+  const loadDuration = stats.reduce(
+    (sum, item) => sum + Number(item.load_duration || 0),
+    0
+  );
+  const totalDuration = stats.reduce(
+    (sum, item) => sum + Number(item.total_duration || 0),
+    0
+  );
   return {
     model,
     score,
     maximum,
     wallSeconds: (performance.now() - started) / 1_000,
     tokensPerSecond: evalDuration > 0 ? evalCount / (evalDuration / 1_000_000_000) : 0,
+    timing: {
+      requests: stats.length,
+      inputTokens: promptEvalCount,
+      outputTokens: evalCount,
+      loadSeconds: nanosecondsToSeconds(loadDuration),
+      promptEvalSeconds: nanosecondsToSeconds(promptEvalDuration),
+      generationSeconds: nanosecondsToSeconds(evalDuration),
+      nativeTotalSeconds: nanosecondsToSeconds(totalDuration),
+      promptTokensPerSecond: promptEvalDuration > 0
+        ? promptEvalCount / (promptEvalDuration / 1_000_000_000)
+        : 0,
+      generationTokensPerSecond: evalDuration > 0
+        ? evalCount / (evalDuration / 1_000_000_000)
+        : 0
+    },
     scenarios
   };
+}
+
+function nanosecondsToSeconds(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed / 1_000_000_000 : 0;
 }
 
 async function qualificationProgressiveToolkit(model, stats) {
@@ -813,13 +849,22 @@ async function chat(model, messages, tools = []) {
   const completionTokens = payload?.timings?.predicted_n ||
     payload?.usage?.completion_tokens ||
     0;
+  const promptTokens = payload?.timings?.prompt_n ||
+    payload?.usage?.prompt_tokens ||
+    0;
   const generationNanoseconds = payload?.timings?.predicted_ms > 0
     ? payload.timings.predicted_ms * 1_000_000
     : elapsedNanoseconds;
+  const promptNanoseconds = payload?.timings?.prompt_ms > 0
+    ? payload.timings.prompt_ms * 1_000_000
+    : 0;
   return {
     message: payload?.choices?.[0]?.message,
+    prompt_eval_count: promptTokens,
+    prompt_eval_duration: promptNanoseconds,
     eval_count: completionTokens,
     eval_duration: generationNanoseconds,
+    total_duration: elapsedNanoseconds,
     usage: payload?.usage,
     timings: payload?.timings
   };
