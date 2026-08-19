@@ -1,4 +1,6 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
+import { canonicalizeJson, canonicalJson } from "../util/canonicalJson.js";
 import { inferToolToolkit, toolkitDefinition } from "./toolkitCatalog.js";
 
 const MAX_GRAMMAR_ARRAY_BOUND = 100;
@@ -12,12 +14,13 @@ export function sanitizeToolName(name) {
 
 export function measureToolSurface(definitions = []) {
   const tools = Array.isArray(definitions) ? definitions : [];
-  const serialized = JSON.stringify(tools);
+  const serialized = canonicalJson(tools);
   const schemaBytes = Buffer.byteLength(serialized, "utf8");
   return {
     toolCount: tools.length,
     schemaBytes,
-    estimatedSchemaTokens: Math.ceil(schemaBytes / 4)
+    estimatedSchemaTokens: Math.ceil(schemaBytes / 4),
+    schemaSha256: createHash("sha256").update(serialized).digest("hex")
   };
 }
 
@@ -117,7 +120,12 @@ export class ToolRegistry {
       // can fail before inference. Keep exact high-volume ceilings in the
       // deterministic handler/server while giving every model a compilable
       // schema. Small bounds remain useful and are preserved.
-      definition: normalizeModelToolDefinition(tool.definition || asOpenAiTool(tool))
+      // Freeze one canonical model-facing definition at registration time. The
+      // request path can now reuse byte-identical schema objects instead of
+      // rebuilding property order and invalidating a local prompt prefix.
+      definition: deepFreeze(canonicalizeJson(
+        normalizeModelToolDefinition(tool.definition || asOpenAiTool(tool))
+      ))
     };
     const existing = this.tools.get(tool.name);
     if (existing) {
@@ -271,7 +279,13 @@ function sameRegistration(existing, candidate) {
     existing.readOnly === candidate.readOnly &&
     existing.parallelSafe === candidate.parallelSafe &&
     String(existing.remoteName || "") === String(candidate.remoteName || "") &&
-    JSON.stringify(existing.definition) === JSON.stringify(candidate.definition);
+    canonicalJson(existing.definition) === canonicalJson(candidate.definition);
+}
+
+function deepFreeze(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const item of Object.values(value)) deepFreeze(item);
+  return Object.freeze(value);
 }
 
 function positiveInteger(value, fallback) {

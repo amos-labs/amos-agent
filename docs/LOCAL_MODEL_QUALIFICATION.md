@@ -112,6 +112,41 @@ advertised 262K context. AMOS still compiles a smaller information-dense
 working set for routine turns because capacity does not remove prefill latency,
 attention dilution, or evidence-selection risk.
 
+### Prompt-cache benchmark
+
+The deterministic tool-schema and prompt-contract changes were regression
+tested first with three fresh runs of the current 35-point
+`amos-local-qualification-v4` suite through the pinned Q4_K_M Ollama artifact.
+All three runs scored **35/35**. They completed in 649.3, 678.0, and 682.0
+seconds at measured decode rates of 6.4, 5.9, and 5.8 tok/s. Those uncached
+quality runs are kept separate from the cache latency probe below: prefix
+caching reduces repeated prefill work, but it does not raise raw decode speed.
+
+On 2026-08-19, the `Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed-FP16`
+artifact was tested on the same M1 Max with MTPLX 2.8.3, Turbo speculation at
+depth 2, and the SSD session cache enabled. The repeatable harness uses a
+unique prefix per run so an older global-cache entry cannot warm the cold
+control. Its realistic appended-turn case produced these results:
+
+| Request | Input | Cached | New prefill | Prompt state | End to end |
+|---|---:|---:|---:|---:|---:|
+| Cold appended turn | 769 tokens | 0 | 769 | 11.982 s | 12.812 s |
+| Warm appended turn | 767 tokens | 740 | 27 | 0.594 s | 4.242 s |
+
+That is a **20.17× prompt-state speedup** and a **3.02× end-to-end speedup**
+for this synthetic 740-token stable prefix with an eight-token answer. The
+number does not imply a universal 3× improvement: longer answers remain
+decode-bound, and changing any byte in the stable system/tool prefix can
+invalidate reuse. It does establish that deterministic prompt contracts,
+task-stable session affinity, and cache-aware compaction can remove most
+repeat-prefill cost without changing model output or verification.
+
+Run the benchmark against a compatible local endpoint with:
+
+```sh
+npm run benchmark:prompt-cache -- <model> --url http://127.0.0.1:18081/v1
+```
+
 The runtime defaults are now adaptive:
 
 - under 16 GB: 16K;

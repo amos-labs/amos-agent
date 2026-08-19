@@ -18,6 +18,8 @@ test("ToolRegistry executes registered tools", async () => {
   });
 
   assert.equal(registry.openAiTools()[0].function.name, "echo");
+  assert.equal(Object.isFrozen(registry.openAiTools()[0]), true);
+  assert.equal(Object.isFrozen(registry.openAiTools()[0].function.parameters), true);
   assert.deepEqual(await registry.execute("echo", { value: "hi" }, {}), { value: "hi" });
 });
 
@@ -83,7 +85,8 @@ test("ToolRegistry reports model-facing schema burden and active toolkits", () =
   assert.deepEqual(measureToolSurface([]), {
     toolCount: 0,
     schemaBytes: 2,
-    estimatedSchemaTokens: 1
+    estimatedSchemaTokens: 1,
+    schemaSha256: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   });
 });
 

@@ -71,3 +71,22 @@ test("context compiler compacts to a preferred local input budget before the har
   assert.ok(compiled.plan.estimatedInputTokens <= 4_096);
   assert.match(compiled.messages[1].content, /current objective/);
 });
+
+test("hard context pressure takes precedence over the preferred local budget", () => {
+  const task = { role: "user", content: "Keep this task" };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      task,
+      { role: "assistant", content: "x".repeat(24_000) }
+    ],
+    contextTokens: 4_096,
+    maxOutputTokens: 1_024,
+    preferredInputTokens: 1_024,
+    activeTask: task
+  });
+
+  assert.equal(compiled.plan.compacted, true);
+  assert.equal(compiled.plan.preferredBudgetExceeded, true);
+  assert.equal(compiled.plan.compactionReason, "context_limit");
+});

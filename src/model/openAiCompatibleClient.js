@@ -27,6 +27,8 @@ export class OpenAICompatibleClient {
     onDelta = null,
     onRoutingDecision = null,
     signal = null,
+    promptSessionId = null,
+    promptContractHash = null,
     preclassifiedRouting = null,
     skipLocalRouting = false
   }) {
@@ -89,6 +91,10 @@ export class OpenAICompatibleClient {
         headers: compactObject({
           Authorization: apiKey ? `Bearer ${apiKey}` : null,
           "Content-Type": "application/json",
+          ...localPromptCacheHeaders(this.config, {
+            promptSessionId,
+            promptContractHash
+          }),
           ...this.config.headers
         }),
         signal: controller.signal,
@@ -486,13 +492,23 @@ function withRequestMetrics(usage, {
   raw
 }) {
   const normalized = usage || {};
+  const stats = raw?.mtplx_stats && typeof raw.mtplx_stats === "object"
+    ? raw.mtplx_stats
+    : {};
   const totalLatencyMs = Math.max(0, Math.round(completedAt - requestStartedAt));
   const generationMs = firstOutputAt
     ? Math.max(1, Math.round(completedAt - firstOutputAt))
     : null;
   const outputTokens = Number(normalized.output_tokens || 0);
+  const cachedInputTokens = firstFinite(
+    normalized.cache_read_input_tokens,
+    normalized.input_tokens_details?.cached_tokens,
+    normalized.prompt_tokens_details?.cached_tokens,
+    stats.cached_tokens
+  );
   return {
     ...normalized,
+    ...(cachedInputTokens == null ? {} : { cache_read_input_tokens: cachedInputTokens }),
     model: String(config?.model || ""),
     latency_ms: totalLatencyMs,
     time_to_first_output_ms: firstOutputAt
@@ -503,8 +519,53 @@ function withRequestMetrics(usage, {
       : null,
     load_ms: nanosecondsToMilliseconds(raw?.load_duration),
     prompt_eval_ms: nanosecondsToMilliseconds(raw?.prompt_eval_duration),
-    generation_ms: nanosecondsToMilliseconds(raw?.eval_duration) ?? generationMs
+    generation_ms: nanosecondsToMilliseconds(raw?.eval_duration) ?? generationMs,
+    session_cache_hit: booleanOrNull(stats.session_cache_hit),
+    cache_source: textOrNull(stats.cache_source),
+    cache_miss_reason: textOrNull(stats.cache_miss_reason),
+    request_session_source: textOrNull(stats.request_session_source),
+    new_prefill_tokens: firstFinite(stats.new_prefill_tokens),
+    ssd_cache_hit: booleanOrNull(stats.ssd_cache_hit),
+    ssd_cached_tokens: firstFinite(stats.ssd_cached_tokens),
+    ssd_restore_s: firstFinite(stats.ssd_restore_s),
+    session_restore_mode: textOrNull(stats.session_restore_mode)
   };
+}
+
+function localPromptCacheHeaders(config, { promptSessionId, promptContractHash }) {
+  if (!promptSessionId || !isLocalModelEndpoint(config)) return {};
+  return {
+    "X-MTPLX-Session-ID": String(promptSessionId).slice(0, 128),
+    ...(promptContractHash
+      ? { "X-AMOS-Prompt-Contract": String(promptContractHash).slice(0, 128) }
+      : {})
+  };
+}
+
+function isLocalModelEndpoint(config) {
+  if (config?.deployment === "local") return true;
+  try {
+    return ["127.0.0.1", "localhost", "::1"].includes(new URL(config?.baseUrl).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function firstFinite(...values) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function booleanOrNull(value) {
+  return typeof value === "boolean" ? value : null;
+}
+
+function textOrNull(value) {
+  const text = String(value || "").trim();
+  return text ? text.slice(0, 256) : null;
 }
 
 function nanosecondsToMilliseconds(value) {

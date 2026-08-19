@@ -2279,13 +2279,14 @@ export class DesktopController {
     }
     this.activeTask.workspace = settings.workspace || homedir();
     const boundary = settings.operatingMode;
+    const taskGrantKey = localTaskGrantScope({
+      contextKey: this.activeContextKey,
+      taskRecordId: this.activeTaskRecordId,
+      boundary,
+      identity: this.identity
+    });
     this.approvals.setTaskScope({
-      key: localTaskGrantScope({
-        contextKey: this.activeContextKey,
-        taskRecordId: this.activeTaskRecordId,
-        boundary,
-        identity: this.identity
-      }),
+      key: taskGrantKey,
       workspace: this.activeTask.workspace
     });
     const offline = boundary === "offline";
@@ -2402,6 +2403,21 @@ export class DesktopController {
         presentationIntent: objective,
         canvasActive: Boolean(this.canvases.state().activeCanvasId),
         completionGate: () => this.codingLifecycleCompletionGate(),
+        promptSession: {
+          key: this.activeTaskRecordId || this.activeContextKey || resumeTaskId || taskId,
+          tenantBoundary: {
+            principalType: this.identity?.principal_type || "local",
+            subjectId: this.identity?.sub || this.identity?.user?.id || "",
+            tenantId: this.identity?.tenant_id || "",
+            operatingMode: boundary
+          },
+          authorityBoundary: {
+            taskGrantKey,
+            workspace: this.activeTask.workspace,
+            contextKey: this.activeContextKey || "active",
+            operatingMode: boundary
+          }
+        },
         takeSteering: () => {
           const active = this.activeTask;
           if (!active || active.id !== taskId || active.steeringQueue.length === 0) return [];

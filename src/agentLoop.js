@@ -6,7 +6,23 @@ import {
   selectTaskWorkflow
 } from "./workflows.js";
 import { takeModelEvidence } from "./model/evidence.js";
-import { compileModelContext, modelContentLength } from "./model/contextCompiler.js";
+import {
+  compileModelContext,
+  estimateMessageTokens,
+  modelContentLength
+} from "./model/contextCompiler.js";
+import {
+  evaluateCompactionEconomics,
+  evaluatePreferredCompaction,
+  sharedMessagePrefix,
+  sharedMessagePrefixTokens
+} from "./model/promptCachePolicy.js";
+import {
+  buildPromptContract,
+  canonicalizePromptTools,
+  derivePromptSessionId,
+  promptContractConfig
+} from "./model/promptContract.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
 // Leave headroom below AMOS Hosted's 256-message boundary while allowing long
@@ -52,6 +68,13 @@ export class AgentLoop {
     this.pendingHandoff = null;
     this.canvasToolState = emptyCanvasToolState();
     this.localPromptTokensPerSecond = null;
+    this.activePromptSessionId = null;
+    this.promptBoundary = null;
+    this.pendingPromptContract = null;
+    this.currentPromptCacheState = null;
+    this.lastPromptCacheState = null;
+    this.lastPromptCacheUsage = null;
+    this.lastCompactionDecision = null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -65,6 +88,13 @@ export class AgentLoop {
     this.pendingHandoff = null;
     this.canvasToolState = emptyCanvasToolState();
     this.localPromptTokensPerSecond = null;
+    this.activePromptSessionId = null;
+    this.promptBoundary = null;
+    this.pendingPromptContract = null;
+    this.currentPromptCacheState = null;
+    this.lastPromptCacheState = null;
+    this.lastPromptCacheUsage = null;
+    this.lastCompactionDecision = null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -124,10 +154,12 @@ export class AgentLoop {
       routingDecision = null,
       presentationIntent = null,
       canvasActive = false,
-      completionGate = null
+      completionGate = null,
+      promptSession = null
     } = {}
   ) {
     throwIfAborted(signal);
+    this.configurePromptSession(promptSession);
     this.compactCompletedHistory();
     this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
     // The canvas lives in Desktop, not in the model transcript. Preserve its
@@ -219,6 +251,8 @@ export class AgentLoop {
             messages,
             tools,
             signal,
+            promptSessionId: this.activePromptSessionId,
+            promptContractHash: this.pendingPromptContract?.sha256 || null,
             preclassifiedRouting: pendingRoutingDecision,
             onRoutingDecision: (decision) => {
               onEvent({ type: "routing", turn, ...decision });
@@ -278,6 +312,7 @@ export class AgentLoop {
         }
         transientRetries = 0;
         this.observeLocalPromptPerformance(response.usage);
+        this.observePromptCacheUsage(response.usage);
         onEvent(usageEventFromResponse(response.usage, turn));
 
         throwIfAborted(signal);
@@ -549,6 +584,7 @@ export class AgentLoop {
     );
     if (this.messages.length <= limit) return false;
 
+    const previousMessages = this.messages;
     const systemMessage = this.messages.find((message) => message.role === "system") || {
       role: "system",
       content: this.systemPrompt
@@ -558,12 +594,23 @@ export class AgentLoop {
       (message.role === "assistant" && !hasToolCalls(message) && message.content)
     );
     this.messages = [systemMessage, ...milestones.slice(-(limit - 1))];
+    this.lastCompactionDecision = forcedCompactionStatus({
+      scope: "completed_history",
+      reason: "completed_history_message_limit",
+      beforeMessages: previousMessages,
+      afterMessages: this.messages,
+      rebuildMessages: this.messages.slice(1),
+      messageLimit: limit
+    });
     return true;
   }
 
   compactProcessedToolEvidence() {
     const taskIndex = this.messages.indexOf(this.activeTaskMessage);
-    if (taskIndex < 0) return false;
+    if (taskIndex < 0) {
+      this.lastCompactionDecision = compactionStatus("no_active_task");
+      return false;
+    }
     const threshold = boundedInteger(
       this.config.agent?.maxRawToolEvidenceChars,
       32_000,
@@ -579,7 +626,22 @@ export class AgentLoop {
         .filter((message) => message.role === "tool")
         .reduce((sum, message) => sum + modelContentLength(message.content), 0), 0
     );
-    if (rawChars <= threshold || toolBlockIndexes.length <= 2) return false;
+    if (rawChars <= threshold) {
+      this.lastCompactionDecision = compactionStatus("below_evidence_threshold", {
+        rawChars,
+        threshold,
+        toolBlockCount: toolBlockIndexes.length
+      });
+      return false;
+    }
+    if (toolBlockIndexes.length <= 2) {
+      this.lastCompactionDecision = compactionStatus("preserving_recent_evidence", {
+        rawChars,
+        threshold,
+        toolBlockCount: toolBlockIndexes.length
+      });
+      return false;
+    }
 
     const retained = new Set(toolBlockIndexes.slice(-2));
     const compacted = blocks.map((block, index) =>
@@ -587,10 +649,57 @@ export class AgentLoop {
         ? [compactHistoryBlock(block)]
         : block
     );
-    this.messages = [
+    const candidateMessages = [
       ...this.messages.slice(0, taskIndex + 1),
       ...compacted.flat()
     ];
+    const firstCompactedBlock = toolBlockIndexes.find((index) => !retained.has(index));
+    const firstChangedIndex = taskIndex + 1 + blocks
+      .slice(0, firstCompactedBlock)
+      .reduce((total, block) => total + block.length, 0);
+    const tokensSaved = Math.max(
+      0,
+      estimateMessageTokens(this.messages) - estimateMessageTokens(candidateMessages)
+    );
+    // Re-prefill only the replacement suffix. Removed raw evidence does not
+    // need to be encoded again, so charging its old size would systematically
+    // defer compaction even when the compact suffix pays back quickly.
+    const rebuildTokens = estimateMessageTokens(candidateMessages.slice(firstChangedIndex));
+    const hardEvidenceCap = boundedInteger(
+      this.config.agent?.hardRawToolEvidenceChars,
+      Math.min(1_024_000, threshold * 4),
+      threshold,
+      1_024_000
+    );
+    const hardContext = compileModelContext({
+      messages: this.withContinuityContext(this.messages),
+      tools: this.availableToolsForModel(),
+      contextTokens: this.config.model?.contextTokens,
+      maxOutputTokens: this.config.model?.maxCompletionTokens,
+      preferredInputTokens: null,
+      activeTask: this.activeTaskMessage
+    }).plan;
+    const decision = evaluateCompactionEconomics({
+      tokensSaved,
+      rebuildTokens,
+      expectedFutureTurns: this.compactionExpectedFutureTurns(),
+      rebuildMargin: this.compactionRebuildMargin(),
+      force: rawChars >= hardEvidenceCap ||
+        hardContext.originalMessageTokens > hardContext.hardMessageTokenBudget,
+      boundary: true
+    });
+    this.lastCompactionDecision = {
+      ...decision,
+      applied: decision.shouldCompact,
+      scope: "tool_evidence",
+      rawChars,
+      threshold,
+      hardEvidenceCap,
+      toolBlockCount: toolBlockIndexes.length,
+      preservedExactBlocks: 2
+    };
+    if (!decision.shouldCompact) return false;
+    this.messages = candidateMessages;
     return true;
   }
 
@@ -633,25 +742,85 @@ export class AgentLoop {
       remaining -= block.length;
     }
 
+    const previousMessages = this.messages;
     this.messages = [
       systemMessage,
       this.activeTaskMessage,
       ...selected.flat()
     ];
+    this.lastCompactionDecision = forcedCompactionStatus({
+      scope: "active_history",
+      reason: "active_history_message_limit",
+      beforeMessages: previousMessages,
+      afterMessages: this.messages,
+      rebuildMessages: this.messages.slice(2),
+      messageLimit: effectiveLimit
+    });
     return this.compileContext(this.withContinuityContext(this.messages), tools);
   }
 
   compileContext(messages, tools) {
-    const compiled = compileModelContext({
+    const preferredInputTokens = this.preferredInputTokenBudget();
+    const contract = this.promptContractFor(messages, tools);
+    this.pendingPromptContract = contract;
+    let compiled = compileModelContext({
       messages,
       tools,
       contextTokens: this.config.model?.contextTokens,
       maxOutputTokens: this.config.model?.maxCompletionTokens,
-      preferredInputTokens: this.preferredInputTokenBudget(),
+      preferredInputTokens,
       activeTask: this.activeTaskMessage
     });
-    this.lastContextPlan = compiled.plan;
+    let preferredCompaction = null;
+    if (compiled.plan.compactionReason === "preferred_input_budget") {
+      preferredCompaction = evaluatePreferredCompaction({
+        previousMessages: this.lastPromptCacheState?.messages || null,
+        exactMessages: messages,
+        compactedMessages: compiled.messages,
+        contractReused: this.lastPromptCacheState?.contractSha256 === contract.sha256,
+        expectedFutureTurns: this.compactionExpectedFutureTurns(),
+        rebuildMargin: this.compactionRebuildMargin()
+      });
+      if (!preferredCompaction.shouldCompact) {
+        const hardOnly = compileModelContext({
+          messages,
+          tools,
+          contextTokens: this.config.model?.contextTokens,
+          maxOutputTokens: this.config.model?.maxCompletionTokens,
+          preferredInputTokens: null,
+          activeTask: this.activeTaskMessage
+        });
+        compiled = {
+          ...hardOnly,
+          plan: {
+            ...hardOnly.plan,
+            preferredInputTokens,
+            preferredMessageTokenBudget: compiled.plan.messageTokenBudget,
+            preferredBudgetExceeded: true
+          }
+        };
+      }
+    }
+    this.lastContextPlan = {
+      ...compiled.plan,
+      preferredCompaction
+    };
     return compiled.messages;
+  }
+
+  compactionExpectedFutureTurns() {
+    return boundedInteger(
+      this.config.agent?.compactionExpectedFutureTurns,
+      4,
+      1,
+      32
+    );
+  }
+
+  compactionRebuildMargin() {
+    const parsed = Number(this.config.agent?.compactionRebuildMargin);
+    if (!Number.isFinite(parsed)) return 1.25;
+    return Math.min(4, Math.max(1, parsed));
   }
 
   preferredInputTokenBudget() {
@@ -691,6 +860,75 @@ export class AgentLoop {
       : (this.localPromptTokensPerSecond * 0.7) + (measured * 0.3);
   }
 
+  observePromptCacheUsage(usage) {
+    const inputTokens = Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0);
+    const cachedInputTokens = Number(
+      usage?.cache_read_input_tokens ??
+      usage?.input_tokens_details?.cached_tokens ??
+      usage?.prompt_tokens_details?.cached_tokens ??
+      usage?.cached_tokens ??
+      0
+    );
+    this.lastPromptCacheUsage = {
+      inputTokens: Number.isFinite(inputTokens) ? Math.max(0, inputTokens) : 0,
+      cachedInputTokens: Number.isFinite(cachedInputTokens) ? Math.max(0, cachedInputTokens) : 0,
+      hitRatio: inputTokens > 0 && cachedInputTokens > 0
+        ? Number((cachedInputTokens / inputTokens).toFixed(4))
+        : 0,
+      sessionCacheHit: usage?.session_cache_hit ?? null,
+      cacheSource: usage?.cache_source || null,
+      cacheMissReason: usage?.cache_miss_reason || null,
+      requestSessionSource: usage?.request_session_source || null,
+      newPrefillTokens: finiteOrNull(usage?.new_prefill_tokens),
+      ssdCacheHit: usage?.ssd_cache_hit ?? null,
+      ssdRestoreMs: secondsToMilliseconds(usage?.ssd_restore_s)
+    };
+    if (this.currentPromptCacheState) {
+      this.lastPromptCacheState = this.currentPromptCacheState;
+      this.currentPromptCacheState = null;
+    }
+  }
+
+  configurePromptSession(promptSession) {
+    if (!promptSession || typeof promptSession !== "object") {
+      this.activePromptSessionId = null;
+      this.promptBoundary = null;
+      this.currentPromptCacheState = null;
+      this.lastPromptCacheState = null;
+      this.lastPromptCacheUsage = null;
+      return;
+    }
+    const promptBoundary = {
+      authority: promptSession.authorityBoundary ?? null,
+      tenant: promptSession.tenantBoundary ?? null
+    };
+    const promptSessionId = derivePromptSessionId({
+      sessionKey: promptSession.key,
+      tenantBoundary: promptBoundary.tenant,
+      authorityBoundary: promptBoundary.authority
+    });
+    if (this.activePromptSessionId !== promptSessionId) {
+      this.currentPromptCacheState = null;
+      this.lastPromptCacheState = null;
+      this.lastPromptCacheUsage = null;
+    }
+    this.promptBoundary = promptBoundary;
+    this.activePromptSessionId = promptSessionId;
+  }
+
+  promptContractFor(messages, tools) {
+    const surface = this.registry.surfaceMetrics(tools);
+    const system = messages.find((message) => message?.role === "system");
+    return buildPromptContract({
+      ...promptContractConfig(this.config.model),
+      systemPrompt: modelContentText(system?.content),
+      tools,
+      activeToolkits: surface.toolkits,
+      authorityBoundary: this.promptBoundary?.authority,
+      tenantBoundary: this.promptBoundary?.tenant
+    });
+  }
+
   withContinuityContext(messages) {
     const systemMessage = messages.find((message) => message.role === "system") || {
       role: "system",
@@ -721,8 +959,23 @@ export class AgentLoop {
 
   captureContextReceipt({ messages, tools, turn }) {
     const surface = this.registry.surfaceMetrics(tools);
+    const contract = this.promptContractFor(messages, tools);
+    this.pendingPromptContract = contract;
+    const contractReused = this.lastPromptCacheState?.contractSha256 === contract.sha256;
+    const sharedMessages = contractReused
+      ? sharedMessagePrefix(this.lastPromptCacheState?.messages, messages)
+      : 0;
+    const sharedTokens = contractReused
+      ? sharedMessagePrefixTokens(this.lastPromptCacheState?.messages, messages)
+      : 0;
+    const reusableInputTokens = sharedTokens + (contractReused ? surface.estimatedSchemaTokens : 0);
+    const estimatedInputTokens = Number(this.lastContextPlan?.estimatedInputTokens || 0);
+    this.currentPromptCacheState = {
+      contractSha256: contract.sha256,
+      messages: structuredClone(messages)
+    };
     this.lastContextReceipt = {
-      version: 2,
+      version: 3,
       provider: String(this.config.model?.provider || this.config.model?.displayName || "compatible"),
       model: String(this.config.model?.model || ""),
       workflow: this.lastWorkflow?.id || null,
@@ -735,17 +988,32 @@ export class AgentLoop {
       toolCount: surface.toolCount,
       registeredToolCount: surface.registeredToolCount,
       toolSchemaBytes: surface.schemaBytes,
+      toolSchemaSha256: surface.schemaSha256,
       estimatedToolSchemaTokens: surface.estimatedSchemaTokens,
       toolSources: surface.sources,
       activeToolkits: surface.toolkits,
       continuityChars: this.continuityContext?.length || 0,
+      promptContract: contract,
+      promptSessionId: this.activePromptSessionId,
+      prefixCache: {
+        version: 1,
+        contractReused,
+        sharedMessageCount: sharedMessages,
+        sharedMessageTokens: sharedTokens,
+        reusableInputTokens,
+        potentialHitRatio: estimatedInputTokens > 0
+          ? Number((Math.min(estimatedInputTokens, reusableInputTokens) / estimatedInputTokens).toFixed(4))
+          : 0,
+        previousUsage: this.lastPromptCacheUsage
+      },
+      compaction: this.lastCompactionDecision,
       context: this.lastContextPlan || null
     };
     return this.lastContextReceipt;
   }
 
   availableToolsForModel() {
-    return this.registry.openAiTools({ activeOnly: true }).filter((tool) => {
+    return canonicalizePromptTools(this.registry.openAiTools({ activeOnly: true }).filter((tool) => {
       const name = tool?.function?.name;
       if (name === WORK_SURFACE_REQUEST_TOOL) return true;
       if (name === CANVAS_PRESENT_TOOL) return this.canvasToolState.requested;
@@ -754,7 +1022,7 @@ export class AgentLoop {
         return this.canvasToolState.active || this.canvasToolState.updateRequested;
       }
       return true;
-    });
+    }));
   }
 
   observeCanvasToolOutcome({ name, result, failed }) {
@@ -830,6 +1098,8 @@ export class AgentLoop {
       messages,
       tools: [],
       signal,
+      promptSessionId: this.activePromptSessionId,
+      promptContractHash: this.pendingPromptContract?.sha256 || null,
       onRoutingDecision: (decision) => {
         onEvent({ type: "routing", turn: turn + 1, ...decision });
       },
@@ -837,6 +1107,8 @@ export class AgentLoop {
         onEvent({ type: "assistant_delta", turn: turn + 1, delta, text });
       }
     });
+    this.observeLocalPromptPerformance(response.usage);
+    this.observePromptCacheUsage(response.usage);
     onEvent(usageEventFromResponse(response.usage, turn + 1));
     throwIfAborted(signal);
     this.messages.push(response.message);
@@ -925,6 +1197,16 @@ function usageEventFromResponse(usage, turn) {
     inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
     outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
     cachedInputTokens: Number.isFinite(cachedInputTokens) ? cachedInputTokens : 0,
+    cacheHitRatio: inputTokens > 0 && cachedInputTokens > 0
+      ? Number((cachedInputTokens / inputTokens).toFixed(4))
+      : 0,
+    sessionCacheHit: usage?.session_cache_hit ?? null,
+    cacheSource: String(usage?.cache_source || "").slice(0, 128) || null,
+    cacheMissReason: String(usage?.cache_miss_reason || "").slice(0, 256) || null,
+    requestSessionSource: String(usage?.request_session_source || "").slice(0, 128) || null,
+    newPrefillTokens: finiteOrNull(usage?.new_prefill_tokens),
+    ssdCacheHit: usage?.ssd_cache_hit ?? null,
+    ssdRestoreMs: secondsToMilliseconds(usage?.ssd_restore_s),
     totalTokens: Number(
       usage?.total_tokens ??
         ((Number.isFinite(inputTokens) ? inputTokens : 0) +
@@ -952,6 +1234,59 @@ function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
+}
+
+function finiteOrNull(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function secondsToMilliseconds(value) {
+  const parsed = finiteOrNull(value);
+  return parsed == null ? null : Math.max(0, Math.round(parsed * 1_000));
+}
+
+function compactionStatus(reason, details = {}) {
+  return {
+    version: 1,
+    scope: "tool_evidence",
+    shouldCompact: false,
+    applied: false,
+    reason,
+    ...details
+  };
+}
+
+function forcedCompactionStatus({
+  scope,
+  reason,
+  beforeMessages,
+  afterMessages,
+  rebuildMessages,
+  messageLimit
+}) {
+  return {
+    version: 1,
+    scope,
+    shouldCompact: true,
+    applied: true,
+    reason,
+    forced: true,
+    tokensSaved: Math.max(
+      0,
+      estimateMessageTokens(beforeMessages) - estimateMessageTokens(afterMessages)
+    ),
+    rebuildTokens: estimateMessageTokens(rebuildMessages),
+    messageLimit
+  };
+}
+
+function modelContentText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return content == null ? "" : JSON.stringify(content);
+  return content.map((item) => item?.type === "text"
+    ? String(item.text || "")
+    : JSON.stringify(item || {})).join("\n");
 }
 
 function prependContinuityContext(content, continuity) {
