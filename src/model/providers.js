@@ -17,6 +17,10 @@ import {
 const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
 const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 120_000;
+// Large local models can spend more than two minutes evaluating a tool-heavy
+// continuation before emitting their first streamed token. Retrying that same
+// prefill wastes more time than allowing one bounded request to finish.
+const LARGE_LOCAL_MODEL_REQUEST_TIMEOUT_MS = 300_000;
 // Frontier reasoning and coding turns can remain productive for several
 // minutes, especially after a large tool batch. Direct providers need the
 // same long-turn allowance as AMOS Hosted rather than the interactive-chat
@@ -284,9 +288,7 @@ export function resolveModelConfig(env = process.env) {
       env.AMOS_MODEL_REQUEST_TIMEOUT_MS ||
         (provider.id === "kimi" ? env.KIMI_REQUEST_TIMEOUT_MS : "") ||
         (provider.id === "xai" ? env.XAI_REQUEST_TIMEOUT_MS || env.GROK_REQUEST_TIMEOUT_MS : ""),
-      hosted
-        ? HOSTED_MODEL_REQUEST_TIMEOUT_MS
-        : provider.defaultRequestTimeoutMs || DEFAULT_MODEL_REQUEST_TIMEOUT_MS,
+      defaultModelRequestTimeoutMs(provider, model, hosted),
       1_000,
       MAX_MODEL_REQUEST_TIMEOUT_MS
     ),
@@ -306,6 +308,17 @@ export function resolveModelConfig(env = process.env) {
         : booleanValue(env.AMOS_MODEL_SUPPORTS_TOOLS)
     }
   };
+}
+
+function defaultModelRequestTimeoutMs(provider, model, hosted) {
+  if (hosted) return HOSTED_MODEL_REQUEST_TIMEOUT_MS;
+  if (
+    provider.id === "ollama" &&
+    /^hf\.co\/ggml-org\/Qwen3\.8-27B-GGUF:/i.test(String(model || ""))
+  ) {
+    return LARGE_LOCAL_MODEL_REQUEST_TIMEOUT_MS;
+  }
+  return provider.defaultRequestTimeoutMs || DEFAULT_MODEL_REQUEST_TIMEOUT_MS;
 }
 
 function normalizeReasoningEffort(provider, model, requested, modelProfile = null) {

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DesktopController } from "../src/desktop/controller.js";
+import {
+  DesktopController,
+  recoveryModelIdentity
+} from "../src/desktop/controller.js";
 import {
   onlineTaskSource,
   TaskCheckpointStore
@@ -54,6 +57,29 @@ function snapshot(customers = 12) {
     authority: { role: "owner" }
   };
 }
+
+test("timeout recovery identifies the selected qualified local model", () => {
+  assert.deepEqual(recoveryModelIdentity({
+    settings: {
+      provider: "ollama",
+      model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M"
+    }
+  }), {
+    provider: "ollama",
+    model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
+    label: "AMOS Local · Capable (Qwen3.8 27B · Q4_K_M)"
+  });
+});
+
+test("timeout recovery identifies a direct provider instead of hardcoding Grok", () => {
+  assert.deepEqual(recoveryModelIdentity({
+    settings: { provider: "anthropic", model: "claude-sonnet-5" }
+  }), {
+    provider: "anthropic",
+    model: "claude-sonnet-5",
+    label: "Anthropic (Claude Sonnet 5)"
+  });
+});
 
 async function checkpointStore() {
   const root = await mkdtemp(join(tmpdir(), "amos-controller-task-"));

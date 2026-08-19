@@ -68,7 +68,7 @@ import {
   evidencePackDecision,
   MEMORY_CLASSES
 } from "./memoryContract.js";
-import { assessHardware } from "./offlineIntelligence.js";
+import { assessHardware, OFFLINE_MODEL_MANIFEST } from "./offlineIntelligence.js";
 import {
   buildReauthorizationPrompt,
   proposalSourceFromGrant,
@@ -2291,6 +2291,7 @@ export class DesktopController {
     const offline = boundary === "offline";
     const company = boundary === "online";
     const receiptEvents = this.activeTask.receiptEvents;
+    let modelIdentity = recoveryModelIdentity({ settings });
     try {
       await this.startRunSupervision(settings, abortController);
       const pairing = sanitizeIntelligenceRoles(settings.intelligenceRoles);
@@ -2340,6 +2341,7 @@ export class DesktopController {
         requireAmos: company,
         boundary
       });
+      modelIdentity = recoveryModelIdentity({ settings, modelConfig: config.model });
       if (!company && references.some((reference) => reference?.retention === "company")) {
         throw new Error(
           "Company memory is unavailable in this personal boundary. Use this task only, keep it private, or connect a company."
@@ -2623,7 +2625,7 @@ export class DesktopController {
         const recoveredPartial = String(error.partialResponse || "").trim();
         const lifecycle = this.interruptCodingLifecycle("provider_failed", error.message);
         const recoveryNote = [
-          `xAI / Grok stopped responding after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
+          `${modelIdentity.label} stopped responding after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
           "The completed work and files remain intact; AMOS did not replay or roll back any action.",
           lifecycle.note,
           "Continue in this conversation and ask AMOS to inspect the current workspace, verify what completed, and finish only the remaining work."
@@ -2643,7 +2645,8 @@ export class DesktopController {
         }
         this.record("assistant", answer, {
           interrupted: true,
-          provider: "xai",
+          provider: modelIdentity.provider,
+          model: modelIdentity.model,
           completed_tool_actions: completedToolActions,
           recorded_steps: recordedSteps
         });
@@ -2684,7 +2687,9 @@ export class DesktopController {
           interrupted: true,
           recovery: {
             reason: "model_timeout_after_progress",
-            provider: "xai",
+            provider: modelIdentity.provider,
+            model: modelIdentity.model,
+            modelLabel: modelIdentity.label,
             completedToolActions,
             recordedSteps,
             verificationPending: lifecycle.state?.verification === "pending",
@@ -7333,6 +7338,30 @@ function conversationObjectiveFromInput(input) {
       ? "Review the attached material and tell me what is important."
       : NEW_CONVERSATION_OBJECTIVE
   );
+}
+
+export function recoveryModelIdentity({ settings = {}, modelConfig = null } = {}) {
+  const provider = String(modelConfig?.provider || settings.provider || "unknown").trim() || "unknown";
+  const model = String(modelConfig?.model || settings.model || "").trim();
+  const providerEntry = listModelProviders().find((entry) => entry.id === provider);
+  const providerLabel = String(
+    modelConfig?.displayName || providerEntry?.displayName || "Selected model"
+  ).trim();
+  const localModel = provider === "ollama"
+    ? OFFLINE_MODEL_MANIFEST.models.find((entry) => entry.id === model)
+    : null;
+  const modelLabel = String(
+    localModel?.modelDisplayName ||
+    modelConfig?.modelProfile?.label ||
+    providerEntry?.models?.find((entry) => entry.id === model)?.label ||
+    model
+  ).trim();
+  const label = localModel
+    ? `${localModel.name} (${modelLabel})`
+    : provider === "amos-hosted" || !modelLabel || modelLabel === "auto"
+      ? providerLabel
+      : `${providerLabel} (${modelLabel})`;
+  return { provider, model, label };
 }
 
 function emptyChildWorkspace() {

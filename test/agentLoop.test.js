@@ -957,7 +957,7 @@ test("a model timeout after completed tools exposes recoverable progress", async
   let turn = 0;
   const events = [];
   const loop = new AgentLoop({
-    config: { agent: {} },
+    config: { agent: {}, model: { deployment: "local" } },
     registry,
     approvals: {},
     amosClient: {},
@@ -991,6 +991,7 @@ test("a model timeout after completed tools exposes recoverable progress", async
       return true;
     }
   );
+  assert.equal(turn, 2);
   assert.ok(events.some((event) => event.type === "phase" && event.phase === "interrupted"));
 });
 

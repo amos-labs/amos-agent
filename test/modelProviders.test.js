@@ -192,7 +192,9 @@ test("reasoning effort is normalized to each provider or model contract", () => 
     AMOS_MODEL: "qwen3:8b"
   });
   assert.equal(localExtraHigh.reasoningEffort, "high");
+  assert.equal(localExtraHigh.requestTimeoutMs, 300_000);
   assert.equal(localDefault.reasoningEffort, "medium");
+  assert.equal(localDefault.requestTimeoutMs, 120_000);
 
   const bedrockFable = resolveModelConfig({
     AMOS_MODEL_PROVIDER: "bedrock",

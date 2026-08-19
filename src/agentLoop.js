@@ -223,7 +223,15 @@ export class AgentLoop {
         } catch (error) {
           if (isAbortError(error) || signal?.aborted) throw error;
           const retryBudget = this.config.agent?.maxModelTransientRetries ?? 2;
-          if (isTransientModelFailure(error) && transientRetries < retryBudget) {
+          const preserveExpensiveLocalProgress =
+            completedToolActions > 0 &&
+            isModelTimeout(error) &&
+            this.config.model?.deployment === "local";
+          if (
+            !preserveExpensiveLocalProgress &&
+            isTransientModelFailure(error) &&
+            transientRetries < retryBudget
+          ) {
             transientRetries += 1;
             onEvent({
               type: "phase",
