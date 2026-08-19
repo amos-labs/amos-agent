@@ -2648,7 +2648,11 @@ export class DesktopController {
           provider: modelIdentity.provider,
           model: modelIdentity.model,
           completed_tool_actions: completedToolActions,
-          recorded_steps: recordedSteps
+          recorded_steps: recordedSteps,
+          timeout_phase: String(error.phase || "unknown").slice(0, 64),
+          timeout_ms: Math.max(0, Number(error.timeoutMs || 0)),
+          timeout_elapsed_ms: Math.max(0, Number(error.elapsedMs || 0)),
+          timeout_inactive_ms: Math.max(0, Number(error.inactiveMs || 0))
         });
         const localReceipt = await this.recordLocalReceipt({
           taskId,
@@ -2692,6 +2696,10 @@ export class DesktopController {
             modelLabel: modelIdentity.label,
             completedToolActions,
             recordedSteps,
+            timeoutPhase: String(error.phase || "unknown").slice(0, 64),
+            timeoutMs: Math.max(0, Number(error.timeoutMs || 0)),
+            elapsedMs: Math.max(0, Number(error.elapsedMs || 0)),
+            inactiveMs: Math.max(0, Number(error.inactiveMs || 0)),
             verificationPending: lifecycle.state?.verification === "pending",
             replayed: false
           },
@@ -7202,8 +7210,17 @@ function sanitizeAgentEvent(event) {
         .map((toolkit) => String(toolkit).slice(0, 80)),
       contextTokens: Math.max(0, Number(event.context?.contextTokens || 0)),
       estimatedInputTokens: Math.max(0, Number(event.context?.estimatedInputTokens || 0)),
+      preferredInputTokens: event.context?.preferredInputTokens == null
+        ? null
+        : Math.max(0, Number(event.context.preferredInputTokens)),
+      preferredInputUtilization: event.context?.preferredInputUtilization == null
+        ? null
+        : Math.max(0, Number(event.context.preferredInputUtilization)),
       reservedOutputTokens: Math.max(0, Number(event.context?.reservedOutputTokens || 0)),
       compacted: event.context?.compacted === true,
+      compactionReason: event.context?.compactionReason
+        ? String(event.context.compactionReason).slice(0, 64)
+        : null,
       utilization: Math.max(0, Number(event.context?.utilization || 0))
     };
   }

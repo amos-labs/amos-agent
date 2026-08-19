@@ -18,6 +18,10 @@ const COMPANY_VIEW_TOOL = "desktop_present_company_view";
 const CANVAS_UPDATE_TOOL = "desktop_update_canvas";
 const WORK_SURFACE_REQUEST_TOOL = "desktop_request_work_surface";
 const CODE_WORKSPACE_TOOL = "desktop_present_code_workspace";
+const DEFAULT_LOCAL_PREFERRED_INPUT_TOKENS = 8_192;
+const DEFAULT_LOCAL_PROMPT_TARGET_MS = 60_000;
+const MIN_LOCAL_PREFERRED_INPUT_TOKENS = 4_096;
+const MAX_LOCAL_PREFERRED_INPUT_TOKENS = 12_288;
 
 export class AgentLoop {
   constructor({
@@ -47,6 +51,7 @@ export class AgentLoop {
     this.pendingExternalOutcomes = [];
     this.pendingHandoff = null;
     this.canvasToolState = emptyCanvasToolState();
+    this.localPromptTokensPerSecond = null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -59,6 +64,7 @@ export class AgentLoop {
     this.pendingExternalOutcomes = [];
     this.pendingHandoff = null;
     this.canvasToolState = emptyCanvasToolState();
+    this.localPromptTokensPerSecond = null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -93,6 +99,7 @@ export class AgentLoop {
   applyHandoff(handoff = this.pendingHandoff, onEvent = () => {}) {
     if (!handoff) return false;
     this.pendingHandoff = null;
+    if (handoff.modelClient || handoff.config) this.localPromptTokensPerSecond = null;
     if (handoff.modelClient) this.modelClient = handoff.modelClient;
     if (handoff.config) this.config = handoff.config;
     const content = String(handoff.message || "").trim();
@@ -270,6 +277,7 @@ export class AgentLoop {
           throw error;
         }
         transientRetries = 0;
+        this.observeLocalPromptPerformance(response.usage);
         onEvent(usageEventFromResponse(response.usage, turn));
 
         throwIfAborted(signal);
@@ -639,10 +647,48 @@ export class AgentLoop {
       tools,
       contextTokens: this.config.model?.contextTokens,
       maxOutputTokens: this.config.model?.maxCompletionTokens,
+      preferredInputTokens: this.preferredInputTokenBudget(),
       activeTask: this.activeTaskMessage
     });
     this.lastContextPlan = compiled.plan;
     return compiled.messages;
+  }
+
+  preferredInputTokenBudget() {
+    if (this.config.model?.deployment !== "local") return null;
+    const contextTokens = boundedInteger(
+      this.config.model?.contextTokens,
+      32_768,
+      4_096,
+      1_048_576
+    );
+    const configured = Number(this.config.agent?.localPreferredInputTokens);
+    const targetMs = boundedInteger(
+      this.config.agent?.localPromptTargetMs,
+      DEFAULT_LOCAL_PROMPT_TARGET_MS,
+      15_000,
+      180_000
+    );
+    const learned = this.localPromptTokensPerSecond == null
+      ? null
+      : Math.round(this.localPromptTokensPerSecond * (targetMs / 1_000));
+    const desired = Number.isFinite(configured) && configured > 0
+      ? configured
+      : learned ?? DEFAULT_LOCAL_PREFERRED_INPUT_TOKENS;
+    const maximum = Math.min(MAX_LOCAL_PREFERRED_INPUT_TOKENS, Math.floor(contextTokens * 0.5));
+    return Math.min(maximum, Math.max(MIN_LOCAL_PREFERRED_INPUT_TOKENS, Math.round(desired)));
+  }
+
+  observeLocalPromptPerformance(usage) {
+    if (this.config.model?.deployment !== "local") return;
+    const inputTokens = Number(usage?.input_tokens ?? usage?.prompt_tokens ?? 0);
+    const promptEvalMs = Number(usage?.prompt_eval_ms ?? 0);
+    if (!(inputTokens > 0) || !(promptEvalMs > 0)) return;
+    const measured = inputTokens / (promptEvalMs / 1_000);
+    if (!Number.isFinite(measured) || measured <= 0) return;
+    this.localPromptTokensPerSecond = this.localPromptTokensPerSecond == null
+      ? measured
+      : (this.localPromptTokensPerSecond * 0.7) + (measured * 0.3);
   }
 
   withContinuityContext(messages) {
