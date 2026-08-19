@@ -629,7 +629,7 @@ export class DesktopController {
     return result;
   }
 
-  async activateLocalModel(modelId, operatingMode = "offline", localRuntime = "ollama") {
+  async activateLocalModel(modelId, operatingMode = "offline", localRuntime = "auto") {
     if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
     if (!["online", "personal", "offline"].includes(operatingMode)) {
       throw new Error("Choose online company, personal workspace, or local-only mode");
@@ -637,7 +637,14 @@ export class DesktopController {
     const offline = await this.offlineManager.refresh(systemProfile());
     const model = offline.models.find((item) => item.id === modelId);
     if (!model?.installed) throw new Error("Download this model before activating it");
-    const requestedRuntime = localRuntime === "mtplx" ? "mtplx" : "ollama";
+    const accelerator = offline.accelerator || null;
+    const preferredRuntime =
+      accelerator?.available === true && accelerator?.sourceModelId === modelId
+        ? "mtplx"
+        : "ollama";
+    const requestedRuntime = localRuntime === "mtplx" || localRuntime === "ollama"
+      ? localRuntime
+      : preferredRuntime;
     const settings = await this.settingsStore.read();
     const preload = await this.offlineManager.preload?.(modelId, {
       system: systemProfile(),

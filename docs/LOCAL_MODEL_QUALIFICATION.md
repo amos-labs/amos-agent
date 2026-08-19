@@ -122,7 +122,7 @@ seconds at measured decode rates of 6.4, 5.9, and 5.8 tok/s. Those uncached
 quality runs are kept separate from the cache latency probe below: prefix
 caching reduces repeated prefill work, but it does not raise raw decode speed.
 
-The opt-in MTPLX runtime then ran that same contract three times with hidden
+The selectable MTPLX runtime then ran that same contract three times with hidden
 thinking disabled, which is the production policy for this profile. AMOS pins
 the tested runtime to MTPLX 2.8.3 and fails back to the qualified Ollama path
 when the runtime is absent, has another version, fails during startup, or

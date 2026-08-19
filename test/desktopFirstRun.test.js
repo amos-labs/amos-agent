@@ -255,6 +255,54 @@ test("selecting an installed model atomically switches provider, model, and boun
   assert.equal(offline.operatingMode, "offline");
 });
 
+test("capable Qwen prefers available MTPLX while preserving an explicit Ollama choice", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-local-runtime-choice-"));
+  const settingsStore = new DesktopSettingsStore({
+    filePath: join(directory, "settings.json"),
+    ...identityEncrypt()
+  });
+  await settingsStore.write(DEFAULT_DESKTOP_SETTINGS);
+  const modelId = "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M";
+  const offlineState = {
+    runtime: { available: true },
+    accelerator: {
+      available: true,
+      status: "ready",
+      sourceModelId: modelId
+    },
+    models: [{ id: modelId, modelDisplayName: "AMOS Local · Capable", installed: true }]
+  };
+  const preloadCalls = [];
+  const controller = new DesktopController({
+    userDataPath: directory,
+    settingsStore,
+    offlineManager: {
+      async refresh() { return offlineState; },
+      state() { return offlineState; },
+      async preload(id, options) {
+        preloadCalls.push({ id, runtime: options.runtime });
+        return { runtime: options.runtime, fallback: false };
+      },
+      inferenceTarget(id, runtime) {
+        return runtime === "mtplx"
+          ? { runtime: "mtplx", model: "amos-local-qwen38-mtplx", baseUrl: "http://127.0.0.1:18081/v1" }
+          : { runtime: "ollama", model: id, baseUrl: "http://127.0.0.1:11434/v1" };
+      },
+      openAiBaseUrl() { return "http://127.0.0.1:11434/v1"; }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+
+  await controller.activateLocalModel(modelId, "personal");
+  assert.equal((await settingsStore.read()).localRuntime, "mtplx");
+  assert.equal(preloadCalls.at(-1).runtime, "mtplx");
+
+  await controller.activateLocalModel(modelId, "personal", "ollama");
+  assert.equal((await settingsStore.read()).localRuntime, "ollama");
+  assert.equal(preloadCalls.at(-1).runtime, "ollama");
+});
+
 test("a ready existing workspace is not sent back through first-run after upgrading", async () => {
   const { controller, workspace } = await firstRunHarness({ telemetryEnabled: null });
   await controller.settingsStore.write({
