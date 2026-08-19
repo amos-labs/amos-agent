@@ -101,3 +101,34 @@ test("Desktop accepts Bedrock SigV4 without storing a provider credential", asyn
   assert.equal(harness.current().bedrockAuthMode, "sigv4");
   assert.equal(harness.current().apiKey, "");
 });
+
+test("Desktop warms only the installed local model selected for active intelligence", async () => {
+  const calls = [];
+  const settings = {
+    ...DEFAULT_DESKTOP_SETTINGS,
+    provider: "ollama",
+    model: "qwen3:8b",
+    operatingMode: "offline"
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-local-warmup",
+    settingsStore: { read: async () => settings },
+    offlineManager: {
+      async refresh() {
+        calls.push("refresh");
+        return { models: [{ id: "qwen3:8b", installed: true }] };
+      },
+      async preload(modelId) {
+        calls.push(`preload:${modelId}`);
+        return { model: modelId, keepAlive: "30m" };
+      }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+
+  const result = await controller.warmLocalIntelligence();
+
+  assert.deepEqual(calls, ["refresh", "preload:qwen3:8b"]);
+  assert.equal(result.keepAlive, "30m");
+});

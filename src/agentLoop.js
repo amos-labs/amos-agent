@@ -758,7 +758,10 @@ export class AgentLoop {
       summary: "A no-progress safeguard fired; preparing the best supported result"
     });
     const guardInstruction = {
-      role: "system",
+      // This is a turn-local instruction, not a new system prompt. Strict chat
+      // templates (including Qwen) reject system messages anywhere except the
+      // beginning of the transcript.
+      role: "user",
       content: [
         `AMOS detected that ${reason}.`,
         "Do not call another tool in this response.",

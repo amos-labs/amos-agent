@@ -582,6 +582,25 @@ export class DesktopController {
     return this.offlineManager.refresh(systemProfile());
   }
 
+  async warmLocalIntelligence(settings = null) {
+    if (!this.offlineManager) return null;
+    const selectedSettings = settings || await this.settingsStore.read();
+    const requestedModel = selectedSettings.provider === "ollama"
+      ? selectedSettings.model
+      : selectedSettings.hybridRouting?.enabled === true
+        ? selectedSettings.hybridRouting.localModel
+        : "";
+    if (!requestedModel) return null;
+    const offline = await this.offlineManager.refresh(systemProfile());
+    const model = offline.models?.find((item) => item.id === requestedModel);
+    if (!model?.installed) return null;
+    const preload = await this.offlineManager.preload(requestedModel, {
+      system: systemProfile()
+    });
+    this.record("model", `Warmed local intelligence ${requestedModel} for the next task`);
+    return preload;
+  }
+
   async installOfflineModel(modelId) {
     if (!this.offlineManager) throw new Error("Offline intelligence management is unavailable");
     const result = await this.offlineManager.install(modelId, systemProfile());

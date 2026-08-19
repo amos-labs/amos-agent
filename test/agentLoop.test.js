@@ -1336,6 +1336,7 @@ test("steering received during a final model response continues the active task"
 test("a repeating tool loop ends with a useful synthesis instead of a turn-limit error", async () => {
   const registry = new ToolRegistry();
   const events = [];
+  let synthesisMessages = [];
   let calls = 0;
   registry.register({
     name: "inspect_issue",
@@ -1354,9 +1355,10 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
     approvals: {},
     amosClient: {},
     kimiClient: {
-      async chat({ tools }) {
+      async chat({ messages, tools }) {
         calls += 1;
         if (tools.length === 0) {
+          synthesisMessages = messages;
           return {
             message: {
               role: "assistant",
@@ -1387,6 +1389,10 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   assert.ok(events.some((event) => event.phase === "synthesizing"));
   assert.doesNotMatch(answer, /Stopped after/i);
   assert.equal(loop.messages.filter((message) => message.role === "system").length, 1);
+  assert.equal(synthesisMessages[0].role, "system");
+  assert.equal(synthesisMessages.filter((message) => message.role === "system").length, 1);
+  assert.equal(synthesisMessages.at(-1).role, "user");
+  assert.match(synthesisMessages.at(-1).content, /Do not call another tool/);
 });
 
 function toolNames(tools) {

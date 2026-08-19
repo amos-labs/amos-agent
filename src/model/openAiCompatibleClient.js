@@ -32,9 +32,12 @@ export class OpenAICompatibleClient {
   }) {
     throwIfAborted(signal);
     const requestStartedAt = performance.now();
+    const outboundMessages = this.config.provider === "ollama"
+      ? canonicalizeStrictSystemMessages(messages)
+      : messages;
     const body = {
       model: this.config.model,
-      messages: messages.map(({ provider_state: _providerState, ...message }) => message)
+      messages: outboundMessages.map(({ provider_state: _providerState, ...message }) => message)
     };
 
     const localRouting = await this.applyLocalRouting({
@@ -75,10 +78,11 @@ export class OpenAICompatibleClient {
     refreshTimeout();
     const unlink = linkAbortSignal(signal, controller);
     let response;
+    let sendRequest;
     try {
       const apiKey = this.config.apiKey || (await this.config.getAccessToken?.());
       throwIfAborted(signal);
-      response = await this.fetch(`${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      sendRequest = () => this.fetch(`${this.config.baseUrl.replace(/\/$/, "")}/chat/completions`, {
         method: "POST",
         headers: compactObject({
           Authorization: apiKey ? `Bearer ${apiKey}` : null,
@@ -88,6 +92,7 @@ export class OpenAICompatibleClient {
         signal: controller.signal,
         body: JSON.stringify(body)
       });
+      response = await sendRequest();
     } catch (error) {
       if (signal?.aborted) throw createAbortError();
       if (timedOut || isAbortError(error)) {
@@ -98,15 +103,22 @@ export class OpenAICompatibleClient {
 
     try {
       if (!response.ok) {
-        const text = await response.text();
-        let payload;
-        try {
-          payload = text ? JSON.parse(text) : {};
-        } catch {
-          payload = { raw: text };
+        let failure = await modelFailure(response);
+        const fallbackEffort = this.config.provider === "ollama"
+          ? reasoningFallbackFromTemplateError(failure.message, body.reasoning_effort)
+          : null;
+        if (fallbackEffort) {
+          // Some GGUF chat templates expose a narrower effort vocabulary than
+          // the Ollama OpenAI adapter. Learn that live contract once and retain
+          // it for the rest of this Desktop runtime instead of failing every
+          // continuation until the app is redeployed.
+          body.reasoning_effort = fallbackEffort;
+          this.config.reasoningEffort = fallbackEffort;
+          refreshTimeout();
+          response = await sendRequest();
+          if (!response.ok) failure = await modelFailure(response);
         }
-        const message = payload?.error?.message || text || `Model request failed with ${response.status}`;
-        throw new Error(message);
+        if (!response.ok) throw new Error(failure.message);
       }
 
       if (typeof onDelta === "function") {
@@ -274,6 +286,57 @@ export class OpenAICompatibleClient {
         : null
     });
   }
+}
+
+function canonicalizeStrictSystemMessages(messages = []) {
+  const systemMessages = messages.filter((message) => message?.role === "system");
+  if (systemMessages.length === 0) return messages;
+  if (systemMessages.length === 1 && messages[0] === systemMessages[0]) return messages;
+  const leadingSystem = {
+    ...systemMessages[0],
+    content: systemMessages.map((message) => systemContent(message.content)).filter(Boolean).join("\n\n")
+  };
+  return [leadingSystem, ...messages.filter((message) => message?.role !== "system")];
+}
+
+function systemContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return content == null ? "" : JSON.stringify(content);
+  return content.map((item) => item?.type === "text" ? String(item.text || "") : JSON.stringify(item)).join("\n");
+}
+
+async function modelFailure(response) {
+  const text = await response.text();
+  let payload;
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { raw: text };
+  }
+  return {
+    payload,
+    message: payload?.error?.message || text || `Model request failed with ${response.status}`
+  };
+}
+
+function reasoningFallbackFromTemplateError(message, current) {
+  const text = String(message || "");
+  if (!/reasoning effort|reasoning value/i.test(text)) return null;
+  const supportedText = text.match(/supported types? (?:are|:)\s*([^.]*)/i)?.[1] ||
+    text.match(/must be\s*([^)]*)/i)?.[1] || "";
+  const supported = [...new Set(
+    supportedText.toLowerCase().match(/\b(?:xhigh|max|high|medium|low|none)\b/g) || []
+  )];
+  if (supported.length === 0 || supported.includes(current)) return null;
+  const preferences = {
+    xhigh: ["xhigh", "max", "high", "medium", "low", "none"],
+    max: ["max", "xhigh", "high", "medium", "low", "none"],
+    high: ["high", "xhigh", "max", "medium", "low", "none"],
+    medium: ["medium", "high", "low", "xhigh", "max", "none"],
+    low: ["low", "medium", "none", "high", "xhigh", "max"],
+    none: ["none", "low", "medium", "high", "xhigh", "max"]
+  };
+  return (preferences[current] || preferences.medium).find((effort) => supported.includes(effort)) || null;
 }
 
 function routerFailureCode(error) {

@@ -118,6 +118,11 @@ const PROVIDERS = {
     defaultModel: "gpt-oss:20b",
     defaultApiKey: "ollama",
     apiKeyRequired: false,
+    // Ollama's OpenAI-compatible contract accepts these values. Keep local
+    // defaults balanced: large reasoning models can otherwise spend most of a
+    // turn generating hidden thinking tokens.
+    supportedReasoningEfforts: ["none", "low", "medium", "high"],
+    defaultReasoningEffort: "medium",
     capabilities: { tools: true, vision: true, reasoning: true }
   },
   "llama-cpp": {
@@ -309,6 +314,13 @@ function normalizeReasoningEffort(provider, model, requested, modelProfile = nul
     : provider.supportedReasoningEfforts;
   if (requested === "max" && supported?.includes("xhigh") && !supported.includes("max")) {
     return "xhigh";
+  }
+  if (
+    ["max", "xhigh"].includes(requested) &&
+    supported?.includes("high") &&
+    !supported.includes(requested)
+  ) {
+    return "high";
   }
   if (supported?.length && !supported.includes(requested)) {
     return modelProfile?.defaultReasoningEffort || provider.defaultReasoningEffort || supported[0];
