@@ -41,12 +41,35 @@ test("local task receipts are durable and digest-addressed", async () => {
       totalTokens: 1600,
       costUsedMicrousd: 4200,
       estimated: true,
-      model: "grok-4.6"
+      model: "grok-4.6",
+      requestedRuntime: "mtplx",
+      runtime: "ollama",
+      runtimeFallbacks: 1,
+      fallbackReason: "primary_transport_failed",
+      performance: {
+        requestCount: 2,
+        totalLatencyMs: 60_000,
+        averageLatencyMs: 30_000,
+        maxLatencyMs: 40_000,
+        totalTimeToFirstOutputMs: 50_000,
+        timeToFirstOutputSamples: 2,
+        averageTimeToFirstOutputMs: 25_000,
+        totalPromptEvalMs: 14_000,
+        promptEvalSamples: 1,
+        totalGenerationMs: 10_000,
+        generationSamples: 2,
+        generationOutputTokens: 150,
+        generationTokensPerSecond: 15
+      }
     }
   });
   assert.match(receipt.digest, /^[a-f0-9]{64}$/);
   assert.equal(receipt.usage.totalTokens, 1600);
   assert.equal(receipt.usage.model, "grok-4.6");
+  assert.equal(receipt.usage.runtime, "ollama");
+  assert.equal(receipt.usage.runtimeFallbacks, 1);
+  assert.equal(receipt.usage.performance.averageLatencyMs, 30_000);
+  assert.equal(receipt.usage.performance.generationTokensPerSecond, 15);
   assert.deepEqual((await store.list())[0], receipt);
   assert.equal((await readFile(join(directory, "receipts.json"), "utf8")).includes("Inspect the project"), false);
 });

@@ -62,3 +62,41 @@ test("Grok long-context rates double once the prompt reaches 200k tokens", () =>
   assert.ok(long.costUsedMicrousd > short.costUsedMicrousd);
   assert.equal(long.costUsedMicrousd, 812_000);
 });
+
+test("usage accumulation retains wall speed and local runtime fallback evidence", () => {
+  const first = accumulateUsage({}, {
+    inputTokens: 1_000,
+    outputTokens: 100,
+    totalTokens: 1_100,
+    latencyMs: 20_000,
+    timeToFirstOutputMs: 15_000,
+    generationMs: 5_000,
+    promptEvalMs: 14_000,
+    requestedRuntime: "mtplx",
+    runtime: "mtplx",
+    fallbackUsed: false,
+    model: "amos-local-qwen38-mtplx"
+  });
+  const second = accumulateUsage(first, {
+    inputTokens: 500,
+    outputTokens: 50,
+    totalTokens: 550,
+    latencyMs: 40_000,
+    timeToFirstOutputMs: 35_000,
+    generationMs: 5_000,
+    requestedRuntime: "mtplx",
+    runtime: "ollama",
+    fallbackUsed: true,
+    fallbackReason: "primary_transport_failed",
+    model: "qwen-q4"
+  });
+
+  assert.equal(second.runtime, "ollama");
+  assert.equal(second.requestedRuntime, "mtplx");
+  assert.equal(second.runtimeFallbacks, 1);
+  assert.equal(second.performance.requestCount, 2);
+  assert.equal(second.performance.totalLatencyMs, 60_000);
+  assert.equal(second.performance.averageLatencyMs, 30_000);
+  assert.equal(second.performance.averageTimeToFirstOutputMs, 25_000);
+  assert.equal(second.performance.generationTokensPerSecond, 15);
+});

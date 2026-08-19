@@ -173,6 +173,8 @@ export class OpenAICompatibleClient {
         });
         result.usage = withRequestMetrics(result.usage, {
           config: requestConfig,
+          requestedConfig: this.config,
+          fallbackUsed: usedLocalFallback,
           requestStartedAt,
           firstOutputAt: result.timing?.firstOutputAt || null,
           completedAt: performance.now(),
@@ -198,6 +200,8 @@ export class OpenAICompatibleClient {
         message: choice.message,
         usage: withRequestMetrics(normalizedUsage(payload.usage), {
           config: requestConfig,
+          requestedConfig: this.config,
+          fallbackUsed: usedLocalFallback,
           requestStartedAt,
           firstOutputAt: null,
           completedAt: performance.now(),
@@ -518,6 +522,8 @@ function modelTimeoutError(config, requestStartedAt, lastActivityAt, phase) {
 
 function withRequestMetrics(usage, {
   config,
+  requestedConfig = config,
+  fallbackUsed = false,
   requestStartedAt,
   firstOutputAt,
   completedAt,
@@ -542,6 +548,11 @@ function withRequestMetrics(usage, {
     ...normalized,
     ...(cachedInputTokens == null ? {} : { cache_read_input_tokens: cachedInputTokens }),
     model: String(config?.model || ""),
+    requested_model: String(requestedConfig?.model || ""),
+    runtime: localRuntimeName(config),
+    requested_runtime: localRuntimeName(requestedConfig),
+    fallback_used: fallbackUsed === true,
+    fallback_reason: fallbackUsed === true ? "primary_transport_failed" : null,
     latency_ms: totalLatencyMs,
     time_to_first_output_ms: firstOutputAt
       ? Math.max(0, Math.round(firstOutputAt - requestStartedAt))
@@ -562,6 +573,19 @@ function withRequestMetrics(usage, {
     ssd_restore_s: firstFinite(stats.ssd_restore_s),
     session_restore_mode: textOrNull(stats.session_restore_mode)
   };
+}
+
+function localRuntimeName(config) {
+  const explicit = String(config?.runtime || "").trim().toLowerCase();
+  if (explicit) return explicit.slice(0, 32);
+  const model = String(config?.model || "").toLowerCase();
+  if (model.includes("mtplx")) return "mtplx";
+  try {
+    if (new URL(config?.baseUrl).port === "18081") return "mtplx";
+  } catch {
+    // Fall through to the provider label.
+  }
+  return String(config?.provider || "").trim().toLowerCase().slice(0, 32) || null;
 }
 
 function localPromptCacheHeaders(config, { promptSessionId, promptContractHash }) {

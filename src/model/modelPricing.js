@@ -72,6 +72,16 @@ export function estimateUsageCost({
 }
 
 export function accumulateUsage(current = {}, event = {}) {
+  const priorPerformance = normalizeUsagePerformance(current.performance);
+  const latencyMs = boundedDuration(event.latencyMs);
+  const timeToFirstOutputMs = optionalDuration(event.timeToFirstOutputMs);
+  const promptEvalMs = optionalDuration(event.promptEvalMs);
+  const generationMs = optionalDuration(event.generationMs);
+  const outputTokens = boundedTokens(event.outputTokens);
+  const requestCount = priorPerformance.requestCount + 1;
+  const generationOutputTokens = priorPerformance.generationOutputTokens +
+    (generationMs == null ? 0 : outputTokens);
+  const totalGenerationMs = priorPerformance.totalGenerationMs + (generationMs || 0);
   const next = {
     inputTokens: boundedTokens(current.inputTokens) + boundedTokens(event.inputTokens),
     outputTokens: boundedTokens(current.outputTokens) + boundedTokens(event.outputTokens),
@@ -85,10 +95,70 @@ export function accumulateUsage(current = {}, event = {}) {
       current.models,
       event.model,
       ...(Array.isArray(event.models) ? event.models : [])
-    )
+    ),
+    requestedRuntime: String(
+      event.requestedRuntime || current.requestedRuntime || ""
+    ).slice(0, 32),
+    runtime: String(event.runtime || current.runtime || "").slice(0, 32),
+    runtimeFallbacks: boundedTokens(current.runtimeFallbacks) + (event.fallbackUsed === true ? 1 : 0),
+    fallbackReason: event.fallbackReason
+      ? String(event.fallbackReason).slice(0, 500)
+      : current.fallbackReason || null,
+    performance: {
+      requestCount,
+      totalLatencyMs: priorPerformance.totalLatencyMs + latencyMs,
+      averageLatencyMs: Math.round((priorPerformance.totalLatencyMs + latencyMs) / requestCount),
+      maxLatencyMs: Math.max(priorPerformance.maxLatencyMs, latencyMs),
+      totalTimeToFirstOutputMs: priorPerformance.totalTimeToFirstOutputMs +
+        (timeToFirstOutputMs || 0),
+      timeToFirstOutputSamples: priorPerformance.timeToFirstOutputSamples +
+        (timeToFirstOutputMs == null ? 0 : 1),
+      averageTimeToFirstOutputMs: averageMeasured(
+        priorPerformance.totalTimeToFirstOutputMs + (timeToFirstOutputMs || 0),
+        priorPerformance.timeToFirstOutputSamples + (timeToFirstOutputMs == null ? 0 : 1)
+      ),
+      totalPromptEvalMs: priorPerformance.totalPromptEvalMs + (promptEvalMs || 0),
+      promptEvalSamples: priorPerformance.promptEvalSamples + (promptEvalMs == null ? 0 : 1),
+      totalGenerationMs,
+      generationSamples: priorPerformance.generationSamples + (generationMs == null ? 0 : 1),
+      generationOutputTokens,
+      generationTokensPerSecond: totalGenerationMs > 0 && generationOutputTokens > 0
+        ? Number((generationOutputTokens / (totalGenerationMs / 1_000)).toFixed(2))
+        : null
+    }
   };
   if (event.model) next.model = String(event.model).slice(0, 256);
   return next;
+}
+
+function normalizeUsagePerformance(value = {}) {
+  return {
+    requestCount: boundedTokens(value.requestCount),
+    totalLatencyMs: boundedDuration(value.totalLatencyMs),
+    maxLatencyMs: boundedDuration(value.maxLatencyMs),
+    totalTimeToFirstOutputMs: boundedDuration(value.totalTimeToFirstOutputMs),
+    timeToFirstOutputSamples: boundedTokens(value.timeToFirstOutputSamples),
+    totalPromptEvalMs: boundedDuration(value.totalPromptEvalMs),
+    promptEvalSamples: boundedTokens(value.promptEvalSamples),
+    totalGenerationMs: boundedDuration(value.totalGenerationMs),
+    generationSamples: boundedTokens(value.generationSamples),
+    generationOutputTokens: boundedTokens(value.generationOutputTokens)
+  };
+}
+
+function optionalDuration(value) {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.min(Math.round(parsed), 24 * 60 * 60 * 1_000);
+}
+
+function boundedDuration(value) {
+  return optionalDuration(value) || 0;
+}
+
+function averageMeasured(total, samples) {
+  return samples > 0 ? Math.round(total / samples) : null;
 }
 
 export function formatUsdMicros(microusd) {
