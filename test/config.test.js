@@ -10,7 +10,7 @@ test("authentication mode defaults to auto and accepts explicit API-key mode", (
 
 test("agent work has progress guards instead of a productive-cycle ceiling", () => {
   const defaults = loadConfig({}, ".").agent;
-  assert.equal(defaults.maxRepeatedToolCycles, 5);
+  assert.equal(defaults.maxRepeatedToolCycles, 3);
   assert.equal(defaults.maxConsecutiveToolErrorCycles, 3);
   assert.equal(defaults.maxModelTransientRetries, 2);
   assert.equal(Object.hasOwn(defaults, "maxToolTurns"), false);

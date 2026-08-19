@@ -395,6 +395,44 @@ test("desktop cancellation aborts the active task signal and pending local appro
   assert.equal(abortController.signal.aborted, true);
 });
 
+test("desktop sleep interruption aborts active work and releases the selected run immediately", async () => {
+  const emitted = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-sleep",
+    settingsStore: settingsStore(),
+    openBrowser: async () => {},
+    emit: (channel, payload) => emitted.push({ channel, payload })
+  });
+  const abortController = new AbortController();
+  const launched = controller.runManager.launch({
+    id: "sleep-run",
+    taskRecordId: "sleep-task",
+    contextKey: "task:sleep-task",
+    approvals: { cancelAll() {} },
+    activeTask: {
+      id: "sleep-run",
+      abortController,
+      acceptingSteering: true,
+      phase: "acting",
+      summary: "Reading company data"
+    }
+  }, async () => new Promise((_resolve, reject) => {
+    abortController.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), {
+      once: true
+    });
+  }));
+  launched.promise.catch(() => {});
+
+  assert.equal(controller.interruptForSystemSleep(), 1);
+  assert.equal(abortController.signal.aborted, true);
+  assert.equal(abortController.signal.reason, "system_sleep");
+  assert.equal(controller.runManager.selected(), null);
+  assert.deepEqual(controller.runManager.active(), []);
+  assert.ok(emitted.some((event) =>
+    event.channel === "agent:status" && event.payload.reason === "system_sleep"
+  ));
+});
+
 test("desktop manages private Projects and cooperative task-run stops through Platform", async () => {
   const projectId = "11111111-1111-4111-8111-111111111111";
   const runId = "22222222-2222-4222-8222-222222222222";

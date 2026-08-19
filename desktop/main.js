@@ -7,6 +7,7 @@ import {
   Menu,
   nativeImage,
   Notification,
+  powerMonitor,
   safeStorage,
   session,
   shell,
@@ -935,6 +936,13 @@ app.whenReady().then(async () => {
 
   app.on("activate", () => {
     showWindow();
+  });
+  powerMonitor.on("suspend", () => {
+    controller?.interruptForSystemSleep();
+  });
+  powerMonitor.on("resume", () => {
+    controller?.refreshRemote().catch(() => {});
+    controller?.refreshOffline().catch(() => {});
   });
 });
 

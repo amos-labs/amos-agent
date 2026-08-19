@@ -218,7 +218,6 @@ export class AgentLoop {
             },
             onDelta: (delta, text) => {
               partialResponse = String(text || partialResponse);
-              onEvent({ type: "assistant_delta", turn, delta, text });
             }
           });
         } catch (error) {
@@ -263,8 +262,6 @@ export class AgentLoop {
           throw error;
         }
         transientRetries = 0;
-        pendingRoutingDecision = null;
-
         onEvent(usageEventFromResponse(response.usage, turn));
 
         throwIfAborted(signal);
@@ -273,6 +270,14 @@ export class AgentLoop {
 
         const toolCalls = assistantMessage.tool_calls || [];
         if (toolCalls.length === 0) {
+          if (partialResponse) {
+            onEvent({
+              type: "assistant_delta",
+              turn,
+              delta: partialResponse,
+              text: partialResponse
+            });
+          }
           const steeringAfterResponse = this.applySteering(takeSteering, onEvent, turn);
           if (steeringAfterResponse > 0) {
             previousToolFingerprint = null;
@@ -323,59 +328,70 @@ export class AgentLoop {
 
         const outcomes = [];
         const modelEvidence = [];
-        for (const toolCall of toolCalls) {
+        const preparedCalls = toolCalls.map(prepareToolCall);
+        const executableCalls = preparedCalls.filter((call) => !call.result);
+        const parallelReads = executableCalls.length > 1 && executableCalls.every((call) =>
+          this.registry.executionPolicy(call.name).parallelSafe
+        );
+        const executeCall = async (call) => {
           throwIfAborted(signal);
-          const name = toolCall.function?.name;
-          const rawArgs = toolCall.function?.arguments || "{}";
-          let args;
-          try {
-            args = JSON.parse(rawArgs);
-          } catch (error) {
-            const message = `Invalid JSON arguments: ${error.message}`;
-            onEvent({ type: "tool_error", name, error: message });
-            this.messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify({ ok: false, error: message })
-            });
-            outcomes.push({ name, rawArgs, failed: true, result: { ok: false, error: message } });
-            continue;
-          }
-
-          if (!args || Array.isArray(args) || typeof args !== "object") {
-            const message = "Tool arguments must be a JSON object";
-            onEvent({ type: "tool_error", name, error: message });
-            this.messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify({ ok: false, error: message })
-            });
-            outcomes.push({ name, rawArgs, failed: true, result: { ok: false, error: message } });
-            continue;
-          }
-
+          const startedAt = Date.now();
           onEvent({
             type: "phase",
             phase: "acting",
             turn,
-            summary: `Running ${humanizeToolName(name)}`
+            summary: `Running ${humanizeToolName(call.name)}`
           });
-          onEvent({ type: "tool_start", name, args });
-          let result;
-          let failed = false;
+          onEvent({
+            type: "tool_start",
+            name: call.name,
+            args: call.args,
+            executionMode: parallelReads ? "parallel_read" : "serial"
+          });
           try {
-            result = await this.registry.execute(name, args, this.context({ signal, onEvent }));
+            const result = await this.registry.execute(
+              call.name,
+              call.args,
+              this.context({ signal, onEvent })
+            );
             throwIfAborted(signal);
-            modelEvidence.push(...takeModelEvidence(result));
-            failed = result?.ok === false;
-            onEvent({ type: "tool_end", name, result });
+            onEvent({
+              type: "tool_end",
+              name: call.name,
+              result,
+              durationMs: Date.now() - startedAt,
+              executionMode: parallelReads ? "parallel_read" : "serial"
+            });
+            return { ...call, result, failed: result?.ok === false };
           } catch (error) {
             throwIfAborted(signal);
-            failed = true;
-            result = { ok: false, error: error.message };
-            onEvent({ type: "tool_error", name, error: error.message });
+            onEvent({
+              type: "tool_error",
+              name: call.name,
+              error: error.message,
+              durationMs: Date.now() - startedAt,
+              executionMode: parallelReads ? "parallel_read" : "serial"
+            });
+            return { ...call, result: { ok: false, error: error.message }, failed: true };
           }
+        };
+        let executedCalls;
+        if (parallelReads) {
+          executedCalls = await Promise.all(executableCalls.map(executeCall));
+        } else {
+          executedCalls = [];
+          for (const call of executableCalls) executedCalls.push(await executeCall(call));
+        }
+        const executedById = new Map(executedCalls.map((call) => [call.id, call]));
 
+        for (const prepared of preparedCalls) {
+          const call = prepared.result ? prepared : executedById.get(prepared.id);
+          let { result, failed } = call;
+          const { name, rawArgs, args } = call;
+          if (failed && call.parseError) {
+            onEvent({ type: "tool_error", name, error: result.error });
+          }
+          modelEvidence.push(...takeModelEvidence(result));
           if (failed) failedToolActions += 1;
           else completedToolActions += 1;
 
@@ -388,23 +404,20 @@ export class AgentLoop {
                   : { result, desktop_result_ref: reference.result_ref };
               }
             } catch (error) {
-              onEvent({
-                type: "tool_context_error",
-                name,
-                error: error.message
-              });
+              onEvent({ type: "tool_context_error", name, error: error.message });
             }
           }
 
           this.observeCanvasToolOutcome({ name, result, failed });
-
           this.messages.push({
             role: "tool",
-            tool_call_id: toolCall.id,
+            tool_call_id: call.id,
             content: JSON.stringify(result)
           });
           outcomes.push({ name, rawArgs, failed, result });
         }
+
+        this.compactProcessedToolEvidence();
 
         this.applyHandoff(this.pendingHandoff, onEvent);
 
@@ -532,6 +545,39 @@ export class AgentLoop {
     return true;
   }
 
+  compactProcessedToolEvidence() {
+    const taskIndex = this.messages.indexOf(this.activeTaskMessage);
+    if (taskIndex < 0) return false;
+    const threshold = boundedInteger(
+      this.config.agent?.maxRawToolEvidenceChars,
+      32_000,
+      8_000,
+      256_000
+    );
+    const blocks = historyBlocks(this.messages.slice(taskIndex + 1));
+    const toolBlockIndexes = blocks
+      .map((block, index) => hasToolCalls(block[0]) && isCompleteHistoryBlock(block) ? index : -1)
+      .filter((index) => index >= 0);
+    const rawChars = toolBlockIndexes.reduce((total, index) =>
+      total + blocks[index]
+        .filter((message) => message.role === "tool")
+        .reduce((sum, message) => sum + modelContentLength(message.content), 0), 0
+    );
+    if (rawChars <= threshold || toolBlockIndexes.length <= 2) return false;
+
+    const retained = new Set(toolBlockIndexes.slice(-2));
+    const compacted = blocks.map((block, index) =>
+      toolBlockIndexes.includes(index) && !retained.has(index)
+        ? [compactHistoryBlock(block)]
+        : block
+    );
+    this.messages = [
+      ...this.messages.slice(0, taskIndex + 1),
+      ...compacted.flat()
+    ];
+    return true;
+  }
+
   prepareMessagesForModel(tools = []) {
     const limit = boundedInteger(
       this.config.agent?.maxModelMessages,
@@ -647,10 +693,6 @@ export class AgentLoop {
   availableToolsForModel() {
     return this.registry.openAiTools({ activeOnly: true }).filter((tool) => {
       const name = tool?.function?.name;
-      if (
-        name === "amos_call_engine_tool" &&
-        this.registry.hasActiveToolkitPrefix("amos-engine:")
-      ) return false;
       if (name === WORK_SURFACE_REQUEST_TOOL) return true;
       if (name === CANVAS_PRESENT_TOOL) return this.canvasToolState.requested;
       if (name === COMPANY_VIEW_TOOL) return this.canvasToolState.companyOpportunity;
@@ -696,7 +738,7 @@ export class AgentLoop {
   }
 
   guardReason({ repeatedToolCycles, consecutiveToolErrorCycles }) {
-    const repeatedLimit = this.config.agent?.maxRepeatedToolCycles ?? 5;
+    const repeatedLimit = this.config.agent?.maxRepeatedToolCycles ?? 3;
     if (repeatedToolCycles >= repeatedLimit) {
       return "the same tool plan and results repeated without producing new evidence";
     }
@@ -944,6 +986,36 @@ function hasToolCalls(message) {
   return Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
 }
 
+function prepareToolCall(toolCall) {
+  const name = toolCall.function?.name;
+  const rawArgs = toolCall.function?.arguments || "{}";
+  try {
+    const args = JSON.parse(rawArgs);
+    if (!args || Array.isArray(args) || typeof args !== "object") {
+      return {
+        id: toolCall.id,
+        name,
+        rawArgs,
+        args: {},
+        failed: true,
+        parseError: true,
+        result: { ok: false, error: "Tool arguments must be a JSON object" }
+      };
+    }
+    return { id: toolCall.id, name, rawArgs, args };
+  } catch (error) {
+    return {
+      id: toolCall.id,
+      name,
+      rawArgs,
+      args: {},
+      failed: true,
+      parseError: true,
+      result: { ok: false, error: `Invalid JSON arguments: ${error.message}` }
+    };
+  }
+}
+
 function historyBlocks(messages) {
   const blocks = [];
   for (const message of messages) {
@@ -1005,10 +1077,18 @@ function toolCycleFingerprint(outcomes) {
       name,
       rawArgs,
       failed,
-      result
+      result: stableLoopEvidence(result)
     }))
   );
   return createHash("sha256").update(encoded).digest("hex");
+}
+
+function stableLoopEvidence(value) {
+  if (Array.isArray(value)) return value.map(stableLoopEvidence);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !/(?:^|_)(?:timestamp|request_id|trace_id|latency_ms|elapsed_ms|duration_ms|heartbeat_at|updated_at)$/.test(key))
+    .map(([key, item]) => [key, stableLoopEvidence(item)]));
 }
 
 function humanizeToolName(value) {

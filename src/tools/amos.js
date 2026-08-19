@@ -100,6 +100,8 @@ export function createAmosTools() {
               properties: {},
               additionalProperties: true
             },
+            readOnly: schema.annotations?.readOnlyHint === true || schema.readOnlyHint === true,
+            parallelSafe: schema.annotations?.readOnlyHint === true || schema.readOnlyHint === true,
             async handler(toolArgs, innerContext) {
               const remoteResult = await innerContext.amosClient.callTool(
                 "call_engine_tool",
@@ -120,7 +122,7 @@ export function createAmosTools() {
 
         const activation = context.registry.activateToolkit(engineToolkit, {
           mode: "add",
-          replacePrefix: "amos-engine:"
+          evictPrefix: "amos-engine:"
         });
         if (activation.ok === false) {
           if (!context.registry.isToolkitActive(engineToolkit)) {
@@ -128,8 +130,11 @@ export function createAmosTools() {
           }
           return activation;
         }
+        const deactivatedEngineToolkits = new Set(
+          activation.deactivated_toolkits.filter((toolkit) => toolkit.startsWith("amos-engine:"))
+        );
         const removedPriorEngineTools = context.registry.unregisterWhere((tool) =>
-          tool.toolkit.startsWith("amos-engine:") && tool.toolkit !== engineToolkit
+          deactivatedEngineToolkits.has(tool.toolkit)
         );
 
         return {

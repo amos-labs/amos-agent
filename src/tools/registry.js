@@ -94,6 +94,8 @@ export class ToolRegistry {
     this.tools = new Map();
     this.progressive = progressive;
     this.activeToolkits = new Set(["core"]);
+    this.toolkitRecency = new Map([["core", 0]]);
+    this.activationSequence = 0;
     this.maxActiveTools = positiveInteger(maxActiveTools, 96);
     this.maxActiveSchemaBytes = positiveInteger(maxActiveSchemaBytes, 131_072);
     this.maxActiveToolkits = positiveInteger(maxActiveToolkits, 4);
@@ -137,6 +139,14 @@ export class ToolRegistry {
     }));
   }
 
+  executionPolicy(name) {
+    const tool = this.tools.get(String(name || ""));
+    return {
+      readOnly: tool?.readOnly === true,
+      parallelSafe: tool?.parallelSafe === true && tool?.readOnly === true
+    };
+  }
+
   openAiTools({ activeOnly = false } = {}) {
     return [...this.tools.values()]
       .filter((tool) => !activeOnly || !this.progressive || this.activeToolkits.has(tool.toolkit))
@@ -149,7 +159,7 @@ export class ToolRegistry {
       .sort();
   }
 
-  activateToolkit(toolkit, { mode = "add", replacePrefix = "" } = {}) {
+  activateToolkit(toolkit, { mode = "add", replacePrefix = "", evictPrefix = "" } = {}) {
     const requested = String(toolkit || "");
     if (!requested || !this.availableToolkits().includes(requested)) {
       return { ok: false, error: `Toolkit is not available in this workspace: ${requested || "unknown"}` };
@@ -158,38 +168,62 @@ export class ToolRegistry {
       ? ["core"]
       : [...this.activeToolkits].filter((name) => !replacePrefix || !name.startsWith(replacePrefix));
     const next = new Set([...retained, requested]);
-    const deactivated = [...this.activeToolkits].filter((name) => !next.has(name));
-    const selectableCount = [...next].filter((name) => toolkitDefinition(name)?.selectable !== false && name !== "core").length;
-    if (selectableCount > this.maxActiveToolkits) {
-      return {
-        ok: false,
-        error: `The active toolkit limit is ${this.maxActiveToolkits}. Retry with mode replace or choose a smaller working set.`
-      };
+    const evicted = [];
+    let surface = this.toolkitSurface(next);
+    while (!this.toolkitSetFits(next, surface)) {
+      const candidate = [...next]
+        .filter((name) => name !== requested && name.startsWith(evictPrefix))
+        .sort((left, right) =>
+          (this.toolkitRecency.get(left) || 0) - (this.toolkitRecency.get(right) || 0)
+        )[0];
+      if (!evictPrefix || !candidate) break;
+      next.delete(candidate);
+      evicted.push(candidate);
+      surface = this.toolkitSurface(next);
     }
-    const definitions = [...this.tools.values()]
-      .filter((tool) => next.has(tool.toolkit))
-      .map((tool) => tool.definition);
-    const surface = measureToolSurface(definitions);
-    if (surface.toolCount > this.maxActiveTools || surface.schemaBytes > this.maxActiveSchemaBytes) {
+    const selectableCount = this.selectableToolkitCount(next);
+    if (!this.toolkitSetFits(next, surface)) {
       return {
         ok: false,
         error: [
           `Activating ${requested} would expose ${surface.toolCount} tools and ${surface.schemaBytes} schema bytes.`,
-          `The limits are ${this.maxActiveTools} tools and ${this.maxActiveSchemaBytes} schema bytes.`,
+          `The limits are ${this.maxActiveTools} tools, ${this.maxActiveSchemaBytes} schema bytes, and ${this.maxActiveToolkits} active toolkits (requested ${selectableCount}).`,
           "Choose a narrower toolkit or retry with mode replace."
         ].join(" ")
       };
     }
+    const deactivated = [...this.activeToolkits].filter((name) => !next.has(name));
     this.activeToolkits = next;
+    this.activationSequence += 1;
+    this.toolkitRecency.set(requested, this.activationSequence);
     return {
       ok: true,
       activated: requested,
       mode,
       active_toolkits: [...this.activeToolkits].sort(),
       deactivated_toolkits: deactivated.sort(),
+      evicted_toolkits: evicted.sort(),
       tool_count: surface.toolCount,
       schema_bytes: surface.schemaBytes
     };
+  }
+
+  toolkitSurface(toolkits) {
+    return measureToolSurface([...this.tools.values()]
+      .filter((tool) => toolkits.has(tool.toolkit))
+      .map((tool) => tool.definition));
+  }
+
+  selectableToolkitCount(toolkits) {
+    return [...toolkits].filter((name) =>
+      toolkitDefinition(name)?.selectable !== false && name !== "core"
+    ).length;
+  }
+
+  toolkitSetFits(toolkits, surface = this.toolkitSurface(toolkits)) {
+    return this.selectableToolkitCount(toolkits) <= this.maxActiveToolkits &&
+      surface.toolCount <= this.maxActiveTools &&
+      surface.schemaBytes <= this.maxActiveSchemaBytes;
   }
 
   isToolkitActive(toolkit) {
@@ -234,6 +268,8 @@ export class ToolRegistry {
 function sameRegistration(existing, candidate) {
   return existing.source === candidate.source &&
     existing.toolkit === candidate.toolkit &&
+    existing.readOnly === candidate.readOnly &&
+    existing.parallelSafe === candidate.parallelSafe &&
     String(existing.remoteName || "") === String(candidate.remoteName || "") &&
     JSON.stringify(existing.definition) === JSON.stringify(candidate.definition);
 }
