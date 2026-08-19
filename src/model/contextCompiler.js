@@ -8,6 +8,7 @@ export function compileModelContext({
   tools = [],
   contextTokens = DEFAULT_CONTEXT_TOKENS,
   maxOutputTokens = DEFAULT_OUTPUT_TOKENS,
+  preferredInputTokens = null,
   activeTask = null
 } = {}) {
   const context = boundedInteger(contextTokens, DEFAULT_CONTEXT_TOKENS, MIN_CONTEXT_TOKENS, 1_048_576);
@@ -15,7 +16,15 @@ export function compileModelContext({
   const reservedOutputTokens = Math.min(requestedOutput, Math.max(1_024, Math.floor(context * 0.25)));
   const safetyTokens = Math.max(512, Math.floor(context * 0.05));
   const toolTokens = estimateToolTokens(tools);
-  const messageTokenBudget = Math.max(512, context - reservedOutputTokens - safetyTokens - toolTokens);
+  const hardMessageTokenBudget = Math.max(
+    512,
+    context - reservedOutputTokens - safetyTokens - toolTokens
+  );
+  const preferredInput = optionalBoundedInteger(preferredInputTokens, 1_024, context);
+  const preferredMessageTokenBudget = preferredInput == null
+    ? hardMessageTokenBudget
+    : Math.max(512, preferredInput - toolTokens);
+  const messageTokenBudget = Math.min(hardMessageTokenBudget, preferredMessageTokenBudget);
   const originalMessageTokens = estimateMessageTokens(messages);
   const compiledMessages = originalMessageTokens <= messageTokenBudget
     ? messages
@@ -24,16 +33,26 @@ export function compileModelContext({
   return {
     messages: compiledMessages,
     plan: {
-      version: 1,
+      version: 2,
       contextTokens: context,
       reservedOutputTokens,
       safetyTokens,
       toolTokens,
+      hardMessageTokenBudget,
+      preferredInputTokens: preferredInput,
       messageTokenBudget,
       originalMessageTokens,
       compiledMessageTokens,
       estimatedInputTokens: toolTokens + compiledMessageTokens,
       compacted: compiledMessages !== messages,
+      compactionReason: compiledMessages === messages
+        ? null
+        : preferredInput != null && originalMessageTokens + toolTokens > preferredInput
+          ? "preferred_input_budget"
+          : "context_limit",
+      preferredInputUtilization: preferredInput == null
+        ? null
+        : Number(((toolTokens + compiledMessageTokens) / preferredInput).toFixed(4)),
       utilization: Number(((toolTokens + compiledMessageTokens + reservedOutputTokens) / context).toFixed(4))
     }
   };
@@ -163,5 +182,12 @@ function hasToolCalls(message) {
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
+}
+
+function optionalBoundedInteger(value, minimum, maximum) {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
   return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
 }

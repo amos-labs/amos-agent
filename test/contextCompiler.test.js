@@ -47,3 +47,27 @@ test("context estimates image payloads without counting base64 transport bytes a
   }];
   assert.ok(estimateMessageTokens(messages) < 2_000);
 });
+
+test("context compiler compacts to a preferred local input budget before the hard limit", () => {
+  const task = { role: "user", content: "Keep the current objective intact" };
+  const messages = [
+    { role: "system", content: "system" },
+    task,
+    { role: "assistant", content: "x".repeat(28_000) },
+    { role: "user", content: "Use the evidence and continue" },
+    { role: "assistant", content: "y".repeat(12_000) }
+  ];
+  const compiled = compileModelContext({
+    messages,
+    contextTokens: 32_768,
+    maxOutputTokens: 4_096,
+    preferredInputTokens: 4_096,
+    activeTask: task
+  });
+
+  assert.equal(compiled.plan.compacted, true);
+  assert.equal(compiled.plan.compactionReason, "preferred_input_budget");
+  assert.equal(compiled.plan.preferredInputTokens, 4_096);
+  assert.ok(compiled.plan.estimatedInputTokens <= 4_096);
+  assert.match(compiled.messages[1].content, /current objective/);
+});

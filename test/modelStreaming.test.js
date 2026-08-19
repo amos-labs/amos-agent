@@ -102,6 +102,35 @@ test("OpenAI-compatible streaming aborts the actual request", async () => {
   });
 });
 
+test("OpenAI-compatible timeout reports the safe stalled request phase", async () => {
+  const fetchImpl = (_url, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener("abort", () => {
+      const error = new Error("aborted");
+      error.name = "AbortError";
+      reject(error);
+    }, { once: true });
+  });
+  const timeoutClient = client(fetchImpl);
+  timeoutClient.config.requestTimeoutMs = 10;
+  const keepTestAlive = setTimeout(() => {}, 1_000);
+
+  try {
+    await assert.rejects(
+      timeoutClient.chat({ messages: [{ role: "user", content: "hello" }] }),
+      (error) => {
+        assert.equal(error.code, "AMOS_MODEL_TIMEOUT");
+        assert.equal(error.phase, "awaiting_response");
+        assert.equal(error.timeoutMs, 10);
+        assert.ok(error.elapsedMs >= 0);
+        assert.ok(error.inactiveMs >= 0);
+        return true;
+      }
+    );
+  } finally {
+    clearTimeout(keepTestAlive);
+  }
+});
+
 test("OpenAI-compatible streaming timeout measures inactivity rather than total active time", async () => {
   const encoder = new TextEncoder();
   const fetchImpl = async () => new Response(new ReadableStream({
@@ -164,4 +193,28 @@ test("OpenAI-compatible responses retain native local timing diagnostics", async
   assert.equal(result.usage.prompt_eval_ms, 500);
   assert.equal(result.usage.generation_ms, 2_000);
   assert.equal(result.usage.model, "test-model");
+});
+
+test("streaming responses retain native local timing diagnostics from the final event", async () => {
+  const events = [
+    { choices: [{ delta: { role: "assistant", content: "Done" } }] },
+    {
+      choices: [{ delta: {} }],
+      usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+      load_duration: 1_500_000_000,
+      prompt_eval_duration: 500_000_000,
+      eval_duration: 2_000_000_000
+    }
+  ];
+  const result = await client(async () => new Response(
+    `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`,
+    { status: 200, headers: { "content-type": "text/event-stream" } }
+  )).chat({
+    messages: [{ role: "user", content: "hello" }],
+    onDelta: () => {}
+  });
+
+  assert.equal(result.usage.load_ms, 1_500);
+  assert.equal(result.usage.prompt_eval_ms, 500);
+  assert.equal(result.usage.generation_ms, 2_000);
 });

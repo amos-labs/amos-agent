@@ -27,6 +27,25 @@ test("usage events keep OpenAI-compatible prompt and completion token names", as
   assert.equal(usage.totalTokens, 120);
 });
 
+test("local prompt budget learns toward the configured prefill latency target", () => {
+  const loop = new AgentLoop({
+    config: {
+      agent: { localPromptTargetMs: 60_000 },
+      model: { deployment: "local", contextTokens: 32_768 }
+    },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "done" } }) }
+  });
+
+  assert.equal(loop.preferredInputTokenBudget(), 8_192);
+  loop.observeLocalPromptPerformance({ input_tokens: 100, prompt_eval_ms: 1_000 });
+  assert.equal(loop.preferredInputTokenBudget(), 6_000);
+  loop.clear();
+  assert.equal(loop.preferredInputTokenBudget(), 8_192);
+});
+
 test("role handoff waits until after the current tool result", async () => {
   const registry = new ToolRegistry();
   const seen = [];
@@ -957,7 +976,7 @@ test("a model timeout after completed tools exposes recoverable progress", async
   let turn = 0;
   const events = [];
   const loop = new AgentLoop({
-    config: { agent: {} },
+    config: { agent: {}, model: { deployment: "local" } },
     registry,
     approvals: {},
     amosClient: {},
@@ -991,6 +1010,7 @@ test("a model timeout after completed tools exposes recoverable progress", async
       return true;
     }
   );
+  assert.equal(turn, 2);
   assert.ok(events.some((event) => event.type === "phase" && event.phase === "interrupted"));
 });
 

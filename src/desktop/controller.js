@@ -68,7 +68,7 @@ import {
   evidencePackDecision,
   MEMORY_CLASSES
 } from "./memoryContract.js";
-import { assessHardware } from "./offlineIntelligence.js";
+import { assessHardware, OFFLINE_MODEL_MANIFEST } from "./offlineIntelligence.js";
 import {
   buildReauthorizationPrompt,
   proposalSourceFromGrant,
@@ -2291,6 +2291,7 @@ export class DesktopController {
     const offline = boundary === "offline";
     const company = boundary === "online";
     const receiptEvents = this.activeTask.receiptEvents;
+    let modelIdentity = recoveryModelIdentity({ settings });
     try {
       await this.startRunSupervision(settings, abortController);
       const pairing = sanitizeIntelligenceRoles(settings.intelligenceRoles);
@@ -2340,6 +2341,7 @@ export class DesktopController {
         requireAmos: company,
         boundary
       });
+      modelIdentity = recoveryModelIdentity({ settings, modelConfig: config.model });
       if (!company && references.some((reference) => reference?.retention === "company")) {
         throw new Error(
           "Company memory is unavailable in this personal boundary. Use this task only, keep it private, or connect a company."
@@ -2623,7 +2625,7 @@ export class DesktopController {
         const recoveredPartial = String(error.partialResponse || "").trim();
         const lifecycle = this.interruptCodingLifecycle("provider_failed", error.message);
         const recoveryNote = [
-          `xAI / Grok stopped responding after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
+          `${modelIdentity.label} stopped responding after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
           "The completed work and files remain intact; AMOS did not replay or roll back any action.",
           lifecycle.note,
           "Continue in this conversation and ask AMOS to inspect the current workspace, verify what completed, and finish only the remaining work."
@@ -2643,9 +2645,14 @@ export class DesktopController {
         }
         this.record("assistant", answer, {
           interrupted: true,
-          provider: "xai",
+          provider: modelIdentity.provider,
+          model: modelIdentity.model,
           completed_tool_actions: completedToolActions,
-          recorded_steps: recordedSteps
+          recorded_steps: recordedSteps,
+          timeout_phase: String(error.phase || "unknown").slice(0, 64),
+          timeout_ms: Math.max(0, Number(error.timeoutMs || 0)),
+          timeout_elapsed_ms: Math.max(0, Number(error.elapsedMs || 0)),
+          timeout_inactive_ms: Math.max(0, Number(error.inactiveMs || 0))
         });
         const localReceipt = await this.recordLocalReceipt({
           taskId,
@@ -2684,9 +2691,15 @@ export class DesktopController {
           interrupted: true,
           recovery: {
             reason: "model_timeout_after_progress",
-            provider: "xai",
+            provider: modelIdentity.provider,
+            model: modelIdentity.model,
+            modelLabel: modelIdentity.label,
             completedToolActions,
             recordedSteps,
+            timeoutPhase: String(error.phase || "unknown").slice(0, 64),
+            timeoutMs: Math.max(0, Number(error.timeoutMs || 0)),
+            elapsedMs: Math.max(0, Number(error.elapsedMs || 0)),
+            inactiveMs: Math.max(0, Number(error.inactiveMs || 0)),
             verificationPending: lifecycle.state?.verification === "pending",
             replayed: false
           },
@@ -7197,8 +7210,17 @@ function sanitizeAgentEvent(event) {
         .map((toolkit) => String(toolkit).slice(0, 80)),
       contextTokens: Math.max(0, Number(event.context?.contextTokens || 0)),
       estimatedInputTokens: Math.max(0, Number(event.context?.estimatedInputTokens || 0)),
+      preferredInputTokens: event.context?.preferredInputTokens == null
+        ? null
+        : Math.max(0, Number(event.context.preferredInputTokens)),
+      preferredInputUtilization: event.context?.preferredInputUtilization == null
+        ? null
+        : Math.max(0, Number(event.context.preferredInputUtilization)),
       reservedOutputTokens: Math.max(0, Number(event.context?.reservedOutputTokens || 0)),
       compacted: event.context?.compacted === true,
+      compactionReason: event.context?.compactionReason
+        ? String(event.context.compactionReason).slice(0, 64)
+        : null,
       utilization: Math.max(0, Number(event.context?.utilization || 0))
     };
   }
@@ -7333,6 +7355,30 @@ function conversationObjectiveFromInput(input) {
       ? "Review the attached material and tell me what is important."
       : NEW_CONVERSATION_OBJECTIVE
   );
+}
+
+export function recoveryModelIdentity({ settings = {}, modelConfig = null } = {}) {
+  const provider = String(modelConfig?.provider || settings.provider || "unknown").trim() || "unknown";
+  const model = String(modelConfig?.model || settings.model || "").trim();
+  const providerEntry = listModelProviders().find((entry) => entry.id === provider);
+  const providerLabel = String(
+    modelConfig?.displayName || providerEntry?.displayName || "Selected model"
+  ).trim();
+  const localModel = provider === "ollama"
+    ? OFFLINE_MODEL_MANIFEST.models.find((entry) => entry.id === model)
+    : null;
+  const modelLabel = String(
+    localModel?.modelDisplayName ||
+    modelConfig?.modelProfile?.label ||
+    providerEntry?.models?.find((entry) => entry.id === model)?.label ||
+    model
+  ).trim();
+  const label = localModel
+    ? `${localModel.name} (${modelLabel})`
+    : provider === "amos-hosted" || !modelLabel || modelLabel === "auto"
+      ? providerLabel
+      : `${providerLabel} (${modelLabel})`;
+  return { provider, model, label };
 }
 
 function emptyChildWorkspace() {

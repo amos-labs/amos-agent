@@ -67,7 +67,9 @@ export class OpenAICompatibleClient {
     const controller = new AbortController();
     let timedOut = false;
     let timer = null;
+    let lastActivityAt = requestStartedAt;
     const refreshTimeout = () => {
+      lastActivityAt = performance.now();
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         timedOut = true;
@@ -93,10 +95,11 @@ export class OpenAICompatibleClient {
         body: JSON.stringify(body)
       });
       response = await sendRequest();
+      refreshTimeout();
     } catch (error) {
       if (signal?.aborted) throw createAbortError();
       if (timedOut || isAbortError(error)) {
-        throw new Error(`${this.config.displayName || "Model"} request timed out`);
+        throw modelTimeoutError(this.config, requestStartedAt, lastActivityAt, "awaiting_response");
       }
       throw error;
     }
@@ -116,6 +119,7 @@ export class OpenAICompatibleClient {
           this.config.reasoningEffort = fallbackEffort;
           refreshTimeout();
           response = await sendRequest();
+          refreshTimeout();
           if (!response.ok) failure = await modelFailure(response);
         }
         if (!response.ok) throw new Error(failure.message);
@@ -168,7 +172,7 @@ export class OpenAICompatibleClient {
     } catch (error) {
       if (signal?.aborted) throw createAbortError();
       if (timedOut || isAbortError(error)) {
-        throw new Error(`${this.config.displayName || "Model"} request timed out`);
+        throw modelTimeoutError(this.config, requestStartedAt, lastActivityAt, "streaming_response");
       }
       throw error;
     } finally {
@@ -385,9 +389,11 @@ async function readStreamingResponse(response, {
   const toolCalls = new Map();
   let usage = null;
   let rawText = "";
+  let finalPayload = null;
   let firstOutputAt = null;
 
   const consume = (payload) => {
+    finalPayload = payload ? { ...(finalPayload || {}), ...payload } : finalPayload;
     usage = payload?.usage || usage;
     const delta = payload?.choices?.[0]?.delta;
     if (!delta) return;
@@ -451,7 +457,7 @@ async function readStreamingResponse(response, {
   return {
     message,
     usage: normalizedUsage(usage),
-    raw: rawText,
+    raw: finalPayload || rawText,
     timing: {
       firstOutputAt,
       timeToFirstOutputMs: firstOutputAt
@@ -459,6 +465,17 @@ async function readStreamingResponse(response, {
         : null
     }
   };
+}
+
+function modelTimeoutError(config, requestStartedAt, lastActivityAt, phase) {
+  const now = performance.now();
+  const error = new Error(`${config.displayName || "Model"} request timed out`);
+  error.code = "AMOS_MODEL_TIMEOUT";
+  error.timeoutMs = Number(config.requestTimeoutMs || 120_000);
+  error.elapsedMs = Math.max(0, Math.round(now - requestStartedAt));
+  error.inactiveMs = Math.max(0, Math.round(now - lastActivityAt));
+  error.phase = phase;
+  return error;
 }
 
 function withRequestMetrics(usage, {
