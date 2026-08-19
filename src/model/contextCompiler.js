@@ -1,3 +1,6 @@
+import { Buffer } from "node:buffer";
+import { canonicalJson } from "../util/canonicalJson.js";
+
 const DEFAULT_CONTEXT_TOKENS = 131_072;
 const DEFAULT_OUTPUT_TOKENS = 8_192;
 const MIN_CONTEXT_TOKENS = 4_096;
@@ -33,21 +36,31 @@ export function compileModelContext({
   return {
     messages: compiledMessages,
     plan: {
-      version: 2,
+      version: 3,
       contextTokens: context,
       reservedOutputTokens,
       safetyTokens,
       toolTokens,
       hardMessageTokenBudget,
       preferredInputTokens: preferredInput,
+      preferredMessageTokenBudget,
       messageTokenBudget,
       originalMessageTokens,
       compiledMessageTokens,
       estimatedInputTokens: toolTokens + compiledMessageTokens,
+      preferredBudgetExceeded: preferredInput != null &&
+        originalMessageTokens + toolTokens > preferredInput,
       compacted: compiledMessages !== messages,
+      compactionEstimatedSavedTokens: Math.max(
+        0,
+        originalMessageTokens - compiledMessageTokens
+      ),
+      compactionInvalidatesPrefix: compiledMessages !== messages,
       compactionReason: compiledMessages === messages
         ? null
-        : preferredInput != null && originalMessageTokens + toolTokens > preferredInput
+        : originalMessageTokens > hardMessageTokenBudget
+          ? "context_limit"
+          : preferredInput != null && originalMessageTokens + toolTokens > preferredInput
           ? "preferred_input_budget"
           : "context_limit",
       preferredInputUtilization: preferredInput == null
@@ -74,8 +87,11 @@ export function modelContentLength(content) {
   }, 0);
 }
 
-function estimateToolTokens(tools) {
-  return Math.ceil(JSON.stringify(Array.isArray(tools) ? tools : []).length / 4);
+export function estimateToolTokens(tools) {
+  return Math.ceil(Buffer.byteLength(
+    canonicalJson(Array.isArray(tools) ? tools : []),
+    "utf8"
+  ) / 4);
 }
 
 function modelToolCallLength(message) {

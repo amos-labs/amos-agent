@@ -183,7 +183,15 @@ test("OpenAI-compatible responses retain native local timing diagnostics", async
     usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
     load_duration: 1_500_000_000,
     prompt_eval_duration: 500_000_000,
-    eval_duration: 2_000_000_000
+    eval_duration: 2_000_000_000,
+    mtplx_stats: {
+      session_cache_hit: true,
+      cached_tokens: 18,
+      new_prefill_tokens: 2,
+      cache_source: "live_frontier",
+      request_session_source: "x-mtplx-session-id",
+      ssd_cache_hit: false
+    }
   }), {
     status: 200,
     headers: { "content-type": "application/json" }
@@ -193,6 +201,50 @@ test("OpenAI-compatible responses retain native local timing diagnostics", async
   assert.equal(result.usage.prompt_eval_ms, 500);
   assert.equal(result.usage.generation_ms, 2_000);
   assert.equal(result.usage.model, "test-model");
+  assert.equal(result.usage.cache_read_input_tokens, 18);
+  assert.equal(result.usage.new_prefill_tokens, 2);
+  assert.equal(result.usage.session_cache_hit, true);
+  assert.equal(result.usage.cache_source, "live_frontier");
+  assert.equal(result.usage.request_session_source, "x-mtplx-session-id");
+});
+
+test("local compatible endpoints receive opaque MTPLX session affinity headers only", async () => {
+  let localHeaders;
+  const local = new OpenAICompatibleClient({
+    apiKey: "local",
+    deployment: "local",
+    baseUrl: "http://127.0.0.1:8080/v1",
+    model: "qwen",
+    requestTimeoutMs: 5_000,
+    capabilities: { tools: true }
+  }, async (_url, options) => {
+    localHeaders = options.headers;
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Done" } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  });
+  await local.chat({
+    messages: [{ role: "user", content: "hello" }],
+    promptSessionId: "amos-opaque-session",
+    promptContractHash: "a".repeat(64)
+  });
+
+  let cloudHeaders;
+  await client(async (_url, options) => {
+    cloudHeaders = options.headers;
+    return new Response(JSON.stringify({
+      choices: [{ message: { role: "assistant", content: "Done" } }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }).chat({
+    messages: [{ role: "user", content: "hello" }],
+    promptSessionId: "amos-opaque-session",
+    promptContractHash: "a".repeat(64)
+  });
+
+  assert.equal(localHeaders["X-MTPLX-Session-ID"], "amos-opaque-session");
+  assert.equal(localHeaders["X-AMOS-Prompt-Contract"], "a".repeat(64));
+  assert.equal(cloudHeaders["X-MTPLX-Session-ID"], undefined);
+  assert.equal(cloudHeaders["X-AMOS-Prompt-Contract"], undefined);
 });
 
 test("streaming responses retain native local timing diagnostics from the final event", async () => {

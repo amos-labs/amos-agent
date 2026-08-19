@@ -917,6 +917,130 @@ test("older raw tool evidence is compacted while the two newest result blocks re
   assertCompleteToolBlocks(loop.messages);
 });
 
+test("raw tool evidence defers compaction when one future turn cannot repay the prefix rebuild", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "large_read", handler: (args) => ({ ok: true, id: args.id, body: "x".repeat(9_000) }) });
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxRawToolEvidenceChars: 8_000,
+        compactionExpectedFutureTurns: 1
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        turn += 1;
+        return turn <= 3
+          ? {
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [{
+                  id: `large-${turn}`,
+                  function: { name: "large_read", arguments: JSON.stringify({ id: turn }) }
+                }]
+              }
+            }
+          : { message: { role: "assistant", content: "Done." } };
+      }
+    }
+  });
+
+  await loop.run("read the large sources");
+  assert.equal(loop.messages.filter((message) => message.role === "tool").length, 3);
+  assert.equal(loop.lastCompactionDecision.applied, false);
+  assert.equal(loop.lastCompactionDecision.reason, "cache_rebuild_cost");
+});
+
+test("agent turns reuse one opaque prompt session and expose prefix telemetry", async () => {
+  const registry = new ToolRegistry();
+  registry.register({ name: "inspect", handler: () => ({ ok: true }) });
+  const requests = [];
+  const receipts = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: {
+      agent: {},
+      model: {
+        provider: "openai-compatible",
+        protocol: "openai-chat-completions",
+        deployment: "local",
+        model: "qwen3.8-27b",
+        reasoningEffort: "medium"
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat(input) {
+        requests.push(input);
+        turn += 1;
+        return turn === 1
+          ? {
+              message: {
+                role: "assistant",
+                content: "",
+                tool_calls: [{ id: "inspect-1", function: { name: "inspect", arguments: "{}" } }]
+              },
+              usage: { prompt_tokens: 100, completion_tokens: 10 }
+            }
+          : {
+              message: { role: "assistant", content: "Done." },
+              usage: { prompt_tokens: 120, completion_tokens: 10, cache_read_input_tokens: 80 }
+            };
+      }
+    }
+  });
+
+  await loop.run("inspect", {
+    promptSession: {
+      key: "task-123",
+      tenantBoundary: { tenantId: "tenant-secret" },
+      authorityBoundary: { workspace: "/private/customer" }
+    },
+    onEvent: (event) => {
+      if (event.type === "context_compiled") receipts.push(event);
+    }
+  });
+
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].promptSessionId, requests[1].promptSessionId);
+  assert.match(requests[0].promptSessionId, /^amos-[a-f0-9]{48}$/);
+  assert.equal(requests[0].promptContractHash, requests[1].promptContractHash);
+  assert.equal(receipts[0].prefixCache.contractReused, false);
+  assert.equal(receipts[1].prefixCache.contractReused, true);
+  assert.equal(receipts[1].prefixCache.sharedMessageCount, 2);
+  assert.ok(receipts[1].prefixCache.reusableInputTokens > 0);
+  assert.doesNotMatch(JSON.stringify(receipts), /tenant-secret|\/private\/customer/);
+});
+
+test("changing or omitting a prompt session clears stale prefix state", () => {
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "done" } }) }
+  });
+  loop.configurePromptSession({ key: "first", tenantBoundary: { id: "one" } });
+  loop.lastPromptCacheState = { contractSha256: "cached", messages: [] };
+  loop.lastPromptCacheUsage = { cachedInputTokens: 10 };
+
+  loop.configurePromptSession({ key: "second", tenantBoundary: { id: "one" } });
+  assert.equal(loop.lastPromptCacheState, null);
+  assert.equal(loop.lastPromptCacheUsage, null);
+  assert.ok(loop.activePromptSessionId);
+
+  loop.configurePromptSession(null);
+  assert.equal(loop.activePromptSessionId, null);
+  assert.equal(loop.promptBoundary, null);
+});
+
 test("productive work continues beyond the former eight-cycle limit", async () => {
   const registry = new ToolRegistry();
   const executed = [];
@@ -1157,6 +1281,9 @@ test("completed task history stays below the provider message ceiling", async ()
   assert.ok(loop.messages.length <= 10);
   assert.ok(loop.messages.some((message) => String(message.content).includes("Complete task 29")));
   assert.ok(!loop.messages.some((message) => String(message.content).includes("Complete task 0\n")));
+  assert.equal(loop.lastCompactionDecision.scope, "completed_history");
+  assert.equal(loop.lastCompactionDecision.applied, true);
+  assert.ok(loop.lastCompactionDecision.tokensSaved > 0);
 });
 
 test("an active tool-heavy task keeps its objective and complete recent tool blocks", async () => {
@@ -1216,6 +1343,9 @@ test("an active tool-heavy task keeps its objective and complete recent tool blo
   assert.equal(await loop.run("Inspect all twelve parts"), "All twelve parts inspected.");
   assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   assert.ok(loop.messages.length <= 13);
+  assert.equal(loop.lastCompactionDecision.scope, "active_history");
+  assert.equal(loop.lastCompactionDecision.applied, true);
+  assert.ok(loop.lastCompactionDecision.rebuildTokens > 0);
 });
 
 test("successful AMOS results receive a short-lived desktop canvas reference", async () => {
