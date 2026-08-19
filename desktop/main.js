@@ -930,6 +930,10 @@ app.whenReady().then(async () => {
   updateState = updateManager.state();
   updateManager.start();
   controller.refreshOffline().catch(() => {});
+  // Warm only the explicitly active local model. This runs off the startup
+  // path and uses the managed 30-minute keep-alive, avoiding a multi-gigabyte
+  // cold load when the user's first task begins.
+  controller.warmLocalIntelligence(initialSettings).catch(() => {});
   controller.refreshRemote().catch(() => {});
   remoteSyncTimer = setInterval(() => controller.refreshRemote().catch(() => {}), 30_000);
   remoteSyncTimer.unref?.();
@@ -943,6 +947,7 @@ app.whenReady().then(async () => {
   powerMonitor.on("resume", () => {
     controller?.refreshRemote().catch(() => {});
     controller?.refreshOffline().catch(() => {});
+    controller?.warmLocalIntelligence().catch(() => {});
   });
 });
 

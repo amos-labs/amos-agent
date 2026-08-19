@@ -182,6 +182,18 @@ test("reasoning effort is normalized to each provider or model contract", () => 
   });
   assert.equal(bedrockClaude.reasoningEffort, "medium");
 
+  const localExtraHigh = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "ollama",
+    AMOS_MODEL: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
+    AMOS_MODEL_REASONING_EFFORT: "xhigh"
+  });
+  const localDefault = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "ollama",
+    AMOS_MODEL: "qwen3:8b"
+  });
+  assert.equal(localExtraHigh.reasoningEffort, "high");
+  assert.equal(localDefault.reasoningEffort, "medium");
+
   const bedrockFable = resolveModelConfig({
     AMOS_MODEL_PROVIDER: "bedrock",
     AMOS_MODEL: "anthropic.claude-fable-5",
@@ -398,6 +410,69 @@ test("OpenAI-compatible client omits reasoning for runtimes without that capabil
   assert.equal(body.messages[0].provider_state, undefined);
   assert.equal(body.tools[0].function.name, "noop");
   assert.equal(result.message.content, "ready");
+});
+
+test("Ollama canonicalizes system messages for strict Qwen templates", async () => {
+  let body;
+  const client = new OpenAICompatibleClient({
+    provider: "ollama",
+    displayName: "AMOS Local",
+    baseUrl: "http://127.0.0.1:11435/v1",
+    model: "qwen3:8b",
+    requestTimeoutMs: 1_000,
+    capabilities: { reasoning: true }
+  }, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonModelResponse("ready");
+  });
+
+  await client.chat({
+    messages: [
+      { role: "user", content: "Investigate" },
+      { role: "system", content: "Primary policy" },
+      { role: "assistant", content: "Working" },
+      { role: "system", content: "Stop using tools" }
+    ]
+  });
+
+  assert.deepEqual(body.messages.map((message) => message.role), ["system", "user", "assistant"]);
+  assert.equal(body.messages[0].content, "Primary policy\n\nStop using tools");
+});
+
+test("Ollama retries and remembers a Qwen template's advertised reasoning vocabulary", async () => {
+  const bodies = [];
+  const client = new OpenAICompatibleClient({
+    provider: "ollama",
+    displayName: "AMOS Local",
+    baseUrl: "http://127.0.0.1:11435/v1",
+    model: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M",
+    reasoningEffort: "high",
+    requestTimeoutMs: 1_000,
+    capabilities: { reasoning: true }
+  }, async (_url, options) => {
+    const body = JSON.parse(options.body);
+    bodies.push(body);
+    if (body.reasoning_effort === "high") {
+      return {
+        ok: false,
+        status: 400,
+        async text() {
+          return JSON.stringify({
+            error: {
+              message: "Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low."
+            }
+          });
+        }
+      };
+    }
+    return jsonModelResponse("ready");
+  });
+
+  await client.chat({ messages: [{ role: "user", content: "first" }] });
+  await client.chat({ messages: [{ role: "user", content: "second" }] });
+
+  assert.deepEqual(bodies.map((body) => body.reasoning_effort), ["high", "xhigh", "xhigh"]);
+  assert.equal(client.config.reasoningEffort, "xhigh");
 });
 
 test("model client can obtain a short-lived AMOS identity at request time", async () => {
