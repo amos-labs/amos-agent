@@ -470,6 +470,8 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(javascript, /Leave a goal/);
   assert.match(javascript, /api\.startAutonomousGoal\(/);
   assert.match(html, /id="goalObjectiveInput"/);
+  assert.match(html, /id="goalCheckpointInput"/);
+  assert.match(html, /Keep working; ask only when a real decision is needed/);
   assert.match(html, /Start and leave/);
   assert.match(preload, /desktop:start-autonomous-goal/);
   assert.match(main, /controller\.startAutonomousGoal/);
@@ -477,6 +479,8 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(controller, /kind: "goal_pursuit"/);
   assert.match(controller, /isolate: true/);
   assert.match(javascript, /function decisionInputCard\(/);
+  assert.match(javascript, /request\.decisionType === "research-checkpoint"/);
+  assert.match(javascript, /resolveDecisionInput\(request, option, chip, true\)/);
   assert.match(javascript, /api\.resolveDecisionInput\(/);
   assert.match(preload, /desktop:resolve-decision-input/);
   assert.match(main, /controller\.resolveDecisionInput/);
@@ -489,6 +493,8 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(main, /controller\.cancelSupervisedTaskRun/);
   assert.match(controller, /remote\.projectsLibrary\(\)/);
   assert.match(controller, /execution_authority: false/);
+  assert.match(controller, /AMOS_MODEL_TRANSIENT_AFTER_PROGRESS/);
+  assert.match(controller, /desktopResearchCheckpointPolicy/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_projects"/);
   assert.match(remoteState, /this\.mcp\.callTool\("list_task_inbox"/);
   assert.match(remoteState, /this\.mcp\.callTool\("start_task_run"/);

@@ -72,12 +72,28 @@ test("desktop approval bridge parks a Decisions question until the user answers"
   });
 
   assert.equal(request.kind, "decision-input");
+  assert.equal(request.decisionType, "general");
   assert.equal(request.message, "Which location should launch first?");
   assert.deepEqual(request.options, ["Austin", "Denver"]);
   assert.equal(bridge.pendingRequests().length, 1);
   assert.equal(bridge.resolveInput(request.id, { answered: true, answer: "Austin" }), true);
   assert.deepEqual(await pending, { answered: true, answer: "Austin" });
   assert.equal(bridge.pendingRequests().length, 0);
+});
+
+test("desktop approval bridge marks research checkpoints for one-click inline choices", async () => {
+  let request;
+  const bridge = new DesktopApprovalBridge({ onRequest: (value) => (request = value) });
+  const pending = bridge.ask("Answer now or continue?", {
+    title: "Research checkpoint",
+    options: ["Synthesize now", "Research 5 more minutes"],
+    decisionType: "research-checkpoint"
+  });
+
+  assert.equal(request.kind, "decision-input");
+  assert.equal(request.decisionType, "research-checkpoint");
+  bridge.resolveInput(request.id, { answered: true, answer: "Synthesize now" });
+  assert.deepEqual(await pending, { answered: true, answer: "Synthesize now" });
 });
 
 test("desktop approval bridge does not treat a skipped Decisions question as an answer", async () => {

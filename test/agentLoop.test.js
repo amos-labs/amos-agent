@@ -1187,6 +1187,196 @@ test("a stalled empty model response retries the same turn without replaying com
   assert.equal(events.filter((event) => event.type === "phase" && event.phase === "retrying").length, 2);
 });
 
+test("a repeated empty response after tool progress falls back to low-reasoning no-tools synthesis", async () => {
+  const registry = new ToolRegistry();
+  let writes = 0;
+  registry.register({
+    name: "write_part",
+    async handler() {
+      writes += 1;
+      return { ok: true, path: "finished.txt" };
+    }
+  });
+  const requests = [];
+  let turn = 0;
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: { maxModelTransientRetries: 2 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat(input) {
+        requests.push(input);
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{ id: "write-1", function: { name: "write_part", arguments: "{}" } }]
+            }
+          };
+        }
+        if (turn <= 3) {
+          const error = new Error("Amazon Bedrock response did not include content or tool calls");
+          error.code = "AMOS_MODEL_REASONING_ONLY_RESPONSE";
+          error.stopReason = "max_tokens";
+          throw error;
+        }
+        return {
+          message: { role: "assistant", content: "Recovered the completed work." },
+          usage: { input_tokens: 30, output_tokens: 10 }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("build it", { onEvent: (event) => events.push(event) });
+  assert.equal(answer, "Recovered the completed work.");
+  assert.equal(writes, 1);
+  assert.equal(turn, 4);
+  assert.deepEqual(requests[3].tools, []);
+  assert.equal(requests[3].reasoningEffortOverride, "low");
+  assert.ok(requests[3].messages.some((message) =>
+    String(message.content || "").includes("amos_empty_response_recovery")
+  ));
+  assert.ok(events.some((event) =>
+    event.type === "phase" && event.phase === "synthesizing" && /recovering/i.test(event.summary)
+  ));
+});
+
+test("a timed research checkpoint lets the user synthesize without another tool call", async () => {
+  const registry = new ToolRegistry();
+  let now = 0;
+  let reads = 0;
+  registry.register({
+    name: "inspect_model",
+    async handler() {
+      reads += 1;
+      now = 61_000;
+      return { ok: true, mrr: 7100 };
+    }
+  });
+  const requests = [];
+  const decisions = [];
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {
+      async ask(question, options) {
+        decisions.push({ question, options });
+        return { answered: true, answer: "Synthesize now" };
+      }
+    },
+    amosClient: {},
+    now: () => now,
+    kimiClient: {
+      async chat(input) {
+        requests.push(input);
+        if (input.messages.some((message) =>
+          String(message.content || "").includes("amos_research_checkpoint_assessment")
+        )) {
+          return {
+            message: {
+              role: "assistant",
+              content: "MRR is established; partner economics remain uncertain; more research may improve channel assumptions."
+            }
+          };
+        }
+        if (requests.length === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{ id: "read-1", function: { name: "inspect_model", arguments: "{}" } }]
+            }
+          };
+        }
+        return { message: { role: "assistant", content: "Here is the supported plan." } };
+      }
+    }
+  });
+
+  const answer = await loop.run("Analyze the financial model", {
+    researchCheckpoint: { enabled: true, afterMs: 60_000, extensionMs: 300_000 }
+  });
+  assert.equal(answer, "Here is the supported plan.");
+  assert.equal(reads, 1);
+  assert.equal(decisions.length, 1);
+  assert.equal(decisions[0].options.decisionType, "research-checkpoint");
+  assert.deepEqual(requests[1].tools, []);
+  assert.equal(requests[1].reasoningEffortOverride, "low");
+  assert.match(decisions[0].options.context, /partner economics remain uncertain/i);
+  assert.deepEqual(requests[2].tools, []);
+  assert.ok(requests[2].messages.some((message) =>
+    String(message.content || "").includes("amos_research_checkpoint_synthesis")
+  ));
+});
+
+test("a research checkpoint can extend work or remove later timed interruptions", async () => {
+  const registry = new ToolRegistry();
+  let now = 0;
+  let reads = 0;
+  registry.register({
+    name: "inspect_model",
+    async handler() {
+      reads += 1;
+      now = reads === 1 ? 61_000 : 400_000;
+      return { ok: true };
+    }
+  });
+  let decisionCount = 0;
+  let mainTurn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {
+      async ask() {
+        decisionCount += 1;
+        return {
+          answered: true,
+          answer: decisionCount === 1
+            ? "Research 5 more minutes"
+            : "Keep working autonomously"
+        };
+      }
+    },
+    amosClient: {},
+    now: () => now,
+    kimiClient: {
+      async chat(input) {
+        if (input.messages.some((message) =>
+          String(message.content || "").includes("amos_research_checkpoint_assessment")
+        )) {
+          return { message: { role: "assistant", content: "Progress brief." } };
+        }
+        mainTurn += 1;
+        if (mainTurn <= 2) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: `read-${mainTurn}`,
+                function: { name: "inspect_model", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        now = 3_600_000;
+        return { message: { role: "assistant", content: "Autonomous result." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Research deeply", {
+    researchCheckpoint: { enabled: true, afterMs: 60_000, extensionMs: 300_000 }
+  }), "Autonomous result.");
+  assert.equal(decisionCount, 2);
+  assert.equal(reads, 2);
+});
+
 test("internal compaction evidence cannot masquerade as the completed user result", async () => {
   const registry = new ToolRegistry();
   let reads = 0;
