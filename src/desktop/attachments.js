@@ -11,6 +11,8 @@ const MAX_MEMORY_TEXT_BYTES = 4_500_000;
 const MAX_EXTRACTED_CHARS = 5_000_000;
 
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const SPREADSHEET_EXTENSIONS = new Set([".xlsx", ".xls", ".csv", ".tsv"]);
+const PRESENTATION_EXTENSIONS = new Set([".pptx"]);
 const TEXT_EXTENSIONS = new Set([
   ".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".jsonl", ".yaml", ".yml",
   ".toml", ".xml", ".html", ".htm", ".css", ".scss", ".less", ".sql", ".graphql",
@@ -329,6 +331,24 @@ export class AttachmentManager {
       throw new Error(`AMOS Desktop accepts up to ${MAX_ATTACHMENTS} attachments per session`);
     }
   }
+}
+
+export function attachmentToolkit(attachment) {
+  if (!attachment || attachment.kind === "image") return "";
+  const extension = extname(String(attachment.name || "")).toLowerCase();
+  const mime = String(attachment.mime || "").toLowerCase();
+  if (
+    SPREADSHEET_EXTENSIONS.has(extension) ||
+    mime.includes("spreadsheet") ||
+    mime === "text/csv" ||
+    mime === "text/tab-separated-values"
+  ) {
+    return "spreadsheets";
+  }
+  if (PRESENTATION_EXTENSIONS.has(extension) || mime.includes("presentation")) {
+    return "presentations";
+  }
+  return attachment.kind === "document" ? "documents" : "";
 }
 
 export function attachmentTextBudget({

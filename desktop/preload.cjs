@@ -21,6 +21,8 @@ const eventChannels = new Set([
 contextBridge.exposeInMainWorld("amosDesktop", {
   state: () => ipcRenderer.invoke("desktop:state"),
   saveSettings: (settings) => ipcRenderer.invoke("desktop:save-settings", settings),
+  configureBedrockDataRetention: (input) =>
+    ipcRenderer.invoke("desktop:configure-bedrock-data-retention", input),
   setTelemetryPreference: (input) =>
     ipcRenderer.invoke("desktop:set-telemetry-preference", input),
   completeOnboarding: (input) =>

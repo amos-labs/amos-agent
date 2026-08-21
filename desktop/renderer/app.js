@@ -76,6 +76,8 @@ let connectionSetupProvider = null;
 let currentTaskId = null;
 let streamingMessage = null;
 let canvasSidecarOpen = false;
+let currentPanelTab = "activity";
+let runTerminalState = "idle";
 let pendingUiActions = [];
 let pendingGenericConnectCalls = 0;
 let continuityConversationRestored = false;
@@ -113,9 +115,11 @@ const elements = Object.fromEntries(
     "personalIntelligenceCallout",
     "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
     "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
+    "chatRunStatus", "chatRunStatusText", "chatRunActivityButton",
     "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
-    "canvasSidecar", "contextResizeHandle",
+    "canvasSidecar", "contextResizeHandle", "panelActivityTab", "panelCanvasTab",
+    "panelActivityCount", "panelCanvasCount", "panelStateBadge",
     "attachmentList", "attachButton",
     "runningIndicator", "deploymentSummary", "activityList", "providerCards", "settingsForm",
     "managedProfileField", "advancedInfrastructureDetails",
@@ -126,6 +130,7 @@ const elements = Object.fromEntries(
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
     "baseUrlInput", "baseUrlHelp", "bedrockAuthField", "bedrockAuthInput",
+    "bedrockRetentionField", "bedrockRetentionConsent", "bedrockRetentionButton", "bedrockRetentionStatus",
     "intelligenceRolesField", "intelligenceRolesEnabled", "intelligenceRoleControls", "plannerRoleInput",
     "implementerRoleInput", "checkerRoleInput",
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
@@ -210,6 +215,7 @@ async function initialize() {
   updateAttachments(state.attachments || []);
   selectedProvider = state.settings.provider;
   canvasSidecarOpen = Boolean(state.activeCanvasId);
+  if (state.activeCanvasId) currentPanelTab = "canvas";
   syncAutomationSetup(state.automationSetup);
   restoreShellPreferences();
   render();
@@ -311,6 +317,10 @@ function bindActions() {
   elements.bedrockAuthInput.addEventListener("change", () =>
     renderProviderFields(elements.modelInput.value)
   );
+  elements.bedrockRetentionConsent.addEventListener("change", () => {
+    elements.bedrockRetentionButton.disabled = !elements.bedrockRetentionConsent.checked;
+  });
+  elements.bedrockRetentionButton.addEventListener("click", configureBedrockDataRetention);
   elements.testButton.addEventListener("click", testModel);
   elements.managedConnectButton.addEventListener("click", connectManagedIntelligence);
   elements.disconnectButton.addEventListener("click", disconnectAmos);
@@ -377,6 +387,9 @@ function bindActions() {
     input.addEventListener("change", renderTaskForkPreview);
   }
   elements.approvalsButton.addEventListener("click", () => showView("decisions"));
+  elements.chatRunActivityButton.addEventListener("click", () => openPanel("activity"));
+  elements.panelActivityTab.addEventListener("click", () => openPanel("activity"));
+  elements.panelCanvasTab.addEventListener("click", () => openPanel("canvas"));
   elements.workDecisionsTab.addEventListener("click", () => showWorkTab("open"));
   elements.workProofTab.addEventListener("click", () => showWorkTab("history"));
   elements.exportEvidencePackButton.addEventListener("click", exportEvidencePack);
@@ -501,7 +514,11 @@ function bindEvents() {
     state.canvases = canvasState.canvases || [];
     state.activeCanvasId = canvasState.activeCanvasId || null;
     activeCanvasId = state.activeCanvasId;
-    if (activeCanvasId) canvasSidecarOpen = true;
+    if (activeCanvasId) {
+      canvasSidecarOpen = true;
+      currentPanelTab = "canvas";
+      setPanelBadge("artifact");
+    }
     renderCanvas();
   });
   api.on("automation-setup:requested", (setup) => {
@@ -577,9 +594,9 @@ function bindEvents() {
         state.pendingInputs = [...pending, approval];
       }
       renderDecisions();
-      if (currentView !== "decisions") {
-        toast("AMOS needs your input. Open Decisions to answer.");
-      }
+      renderInlineDecisionRequest(approval, { focus: true });
+      updateChatRunStatus(approval.message || "AMOS needs your input to continue.", "waiting");
+      setPanelBadge("waiting");
       return;
     }
     if (!eventMatchesActiveTask(approval)) {
@@ -606,6 +623,8 @@ function bindEvents() {
     elements.approvalModal.classList.remove("hidden");
     elements.activityStreamTitle.textContent = "AMOS is waiting for you";
     elements.runningIndicator.textContent = "Local approval needed";
+    updateChatRunStatus("AMOS needs your approval to continue.", "waiting");
+    setPanelBadge("waiting");
     elements.promptInput.placeholder = "Keep typing—your direction will be queued while this approval waits…";
     elements.approvalModal.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
@@ -3967,24 +3986,31 @@ function renderCanvas() {
   const hasBlocks = Boolean(canvas?.blocks?.length);
   const setupVisible = Boolean(automationSetupDraft && currentView === "operator");
   renderBriefingLibrary();
-  if (!canvas && !setupVisible) canvasSidecarOpen = false;
-  if (setupVisible) canvasSidecarOpen = true;
-  const sidecarVisible = setupVisible || Boolean(
-    canvas && canvasSidecarOpen && currentView === "operator"
-  );
+  if (setupVisible) {
+    canvasSidecarOpen = true;
+    currentPanelTab = "canvas";
+  }
+  const sidecarVisible = Boolean(canvasSidecarOpen && currentView === "operator");
   elements.operatorGrid.classList.toggle("has-context", sidecarVisible);
   elements.canvasSidecar.classList.toggle("hidden", !sidecarVisible);
-  const canvasAvailable = setupVisible || Boolean(canvas);
-  elements.canvasToggleButton.classList.toggle("hidden", !canvasAvailable || currentView !== "operator");
+  elements.canvasToggleButton.classList.toggle("hidden", currentView !== "operator");
   elements.canvasToggleButton.setAttribute("aria-pressed", sidecarVisible ? "true" : "false");
   elements.canvasToggleButton.classList.toggle("active", sidecarVisible);
   elements.contextResizeHandle.classList.toggle("hidden", !sidecarVisible);
-  elements.automationSetupSurface.classList.toggle("hidden", !setupVisible);
-  elements.canvasSurface.classList.toggle("hidden", setupVisible);
+  const activityVisible = sidecarVisible && currentPanelTab === "activity";
+  const canvasVisible = sidecarVisible && currentPanelTab === "canvas";
+  elements.panelActivityTab.classList.toggle("active", currentPanelTab === "activity");
+  elements.panelActivityTab.setAttribute("aria-selected", String(currentPanelTab === "activity"));
+  elements.panelCanvasTab.classList.toggle("active", currentPanelTab === "canvas");
+  elements.panelCanvasTab.setAttribute("aria-selected", String(currentPanelTab === "canvas"));
+  elements.activityStream.classList.toggle("hidden", !activityVisible);
+  elements.automationSetupSurface.classList.toggle("hidden", !(canvasVisible && setupVisible));
+  elements.canvasSurface.classList.toggle("hidden", !canvasVisible || setupVisible);
 
   elements.canvasBadge.textContent = String(canvases.length);
   elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
-  if (setupVisible) {
+  elements.panelCanvasCount.textContent = String(canvases.length);
+  if (setupVisible && canvasVisible) {
     renderAutomationSetup();
     return;
   }
@@ -5532,12 +5558,18 @@ function formatCanvasValue(value, format) {
 }
 
 function openCanvasSidecar(id = activeCanvasId) {
-  if (!id) return;
-  activeCanvasId = id;
-  state.activeCanvasId = id;
+  if (id) {
+    activeCanvasId = id;
+    state.activeCanvasId = id;
+  }
+  openPanel("canvas");
+}
+
+function openPanel(tab = currentPanelTab) {
+  currentPanelTab = tab === "canvas" ? "canvas" : "activity";
   canvasSidecarOpen = true;
   showView("operator");
-  elements.promptInput.focus();
+  renderCanvas();
 }
 
 function closeCanvasSidecar() {
@@ -5551,6 +5583,7 @@ function toggleCanvasSidecar() {
   // just flip the flag and re-render. Closing behaves exactly like the ×
   // button; opening shows the most recent canvas.
   canvasSidecarOpen = !canvasSidecarOpen;
+  if (canvasSidecarOpen && !activeCanvasId) currentPanelTab = "activity";
   renderCanvas();
   if (!canvasSidecarOpen) elements.promptInput.focus();
 }
@@ -6341,6 +6374,13 @@ function renderDecisions() {
       elements.recentDecisions.append(decisionCard(approval, false));
     }
   }
+  const pendingIds = new Set(pendingInputs.map((request) => request.id));
+  for (const card of elements.messages.querySelectorAll(".decision-card.inline-decision")) {
+    if (!pendingIds.has(card.dataset.inputId)) card.remove();
+  }
+  if (running) {
+    for (const request of pendingInputs) renderInlineDecisionRequest(request);
+  }
 }
 
 function taskCheckpointCard(checkpoint) {
@@ -6676,6 +6716,31 @@ function decisionInputCard(request) {
   return card;
 }
 
+function renderInlineDecisionRequest(request, { focus = false } = {}) {
+  if (!request?.id || !eventMatchesActiveTask(request)) return null;
+  const existing = Array.from(
+    elements.messages.querySelectorAll(".decision-card.inline-decision")
+  ).find((card) => card.dataset.inputId === request.id);
+  if (existing) {
+    if (focus) existing.querySelector("textarea")?.focus();
+    return existing;
+  }
+  const card = decisionInputCard(request);
+  card.classList.add("inline-decision");
+  showView("operator");
+  elements.messages.append(card);
+  renderConversationChrome();
+  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (focus) window.setTimeout(() => card.querySelector("textarea")?.focus(), 0);
+  return card;
+}
+
+function removeInlineDecisionRequest(id) {
+  for (const card of elements.messages.querySelectorAll(".decision-card.inline-decision")) {
+    if (card.dataset.inputId === id) card.remove();
+  }
+}
+
 async function resolveDecisionInput(request, answer, button, answered) {
   const label = button?.textContent || "Send answer";
   if (button) setButtonBusy(button, true, answered ? "Sending…" : "Skipping…");
@@ -6689,7 +6754,12 @@ async function resolveDecisionInput(request, answer, button, answered) {
       state.pendingInputs = (Array.isArray(state.pendingInputs) ? state.pendingInputs : [])
         .filter((item) => item.id !== request.id);
     }
+    removeInlineDecisionRequest(request.id);
     renderDecisions();
+    if (running) {
+      updateChatRunStatus(answered ? "Using your answer and continuing…" : "Continuing without that answer…", "active");
+      setPanelBadge("working");
+    }
     toast(answered ? "Answer sent. AMOS can continue." : "Skipped. AMOS will continue without that answer.");
   } catch (error) {
     toast(error.message, true);
@@ -7588,6 +7658,7 @@ function syncSelectedModelEndpoint() {
   const provider = state?.providers?.find((item) => item.id === selectedProvider);
   const model = providerModelProfile(provider, elements.modelInput.value);
   syncProviderReasoning(provider, model);
+  renderBedrockRetentionControl(provider, model);
   if (!model?.endpointPath) {
     renderModelEndpointHelp(provider, model);
     return;
@@ -7603,6 +7674,38 @@ function syncSelectedModelEndpoint() {
     // Core validation produces the actionable error when the user saves/tests.
   }
   renderModelEndpointHelp(provider, model);
+}
+
+function renderBedrockRetentionControl(provider, model) {
+  const required = provider?.id === "bedrock" &&
+    model?.dataRetention?.requiredMode === "provider_data_share";
+  elements.bedrockRetentionField.classList.toggle("hidden", !required);
+  if (!required) {
+    elements.bedrockRetentionConsent.checked = false;
+    elements.bedrockRetentionButton.disabled = true;
+    elements.bedrockRetentionStatus.textContent = "AMOS will never enable this automatically.";
+  }
+}
+
+async function configureBedrockDataRetention() {
+  if (!elements.bedrockRetentionConsent.checked) return;
+  setButtonBusy(elements.bedrockRetentionButton, true, "Enabling…");
+  elements.settingsError.classList.add("hidden");
+  try {
+    await persistSettings();
+    const result = await api.configureBedrockDataRetention({ confirmed: true });
+    elements.bedrockRetentionStatus.textContent = result.message;
+    elements.bedrockRetentionConsent.checked = false;
+    toast(result.message);
+  } catch (error) {
+    const message = friendlyError(error);
+    elements.settingsError.textContent = message;
+    elements.settingsError.classList.remove("hidden");
+    elements.bedrockRetentionStatus.textContent = message;
+  } finally {
+    setButtonBusy(elements.bedrockRetentionButton, false, "Enable provider data sharing");
+    elements.bedrockRetentionButton.disabled = !elements.bedrockRetentionConsent.checked;
+  }
 }
 
 function providerModelProfile(provider, modelId) {
@@ -8309,14 +8412,20 @@ async function runTask(event, options = {}) {
     clearTransientTaskMessages();
     addMessage("assistant", result.answer, { eventId: result.taskEventId });
     if (result.interrupted) {
+      runTerminalState = "interrupted";
       toast("The model timed out after making progress. Completed work is intact; continue here to verify and finish the remainder.", true);
+    } else {
+      runTerminalState = "completed";
     }
     renderGovernedUiActions();
     state.activity = result.activity;
     state.canvases = result.canvases || state.canvases;
     state.activeCanvasId = result.activeCanvasId || state.activeCanvasId;
     activeCanvasId = state.activeCanvasId || activeCanvasId;
-    if (activeCanvasId) canvasSidecarOpen = true;
+    if (activeCanvasId) {
+      canvasSidecarOpen = true;
+      currentPanelTab = "canvas";
+    }
     state.privateMemory = result.privateMemory || state.privateMemory;
     state.offlineProposals = result.offlineProposals || state.offlineProposals;
     renderHistory();
@@ -8333,6 +8442,9 @@ async function runTask(event, options = {}) {
       toast(`Task completed, but ${failures.length} item${failures.length === 1 ? "" : "s"} could not be added to company memory.`, true);
     }
   } catch (error) {
+    runTerminalState = error?.code === "AMOS_TASK_CANCELED" || /task canceled/i.test(error.message)
+      ? "interrupted"
+      : "failed";
     if (!isStillVisible()) {
       toast(`A background task stopped: ${error.message}`, true);
       return;
@@ -8444,18 +8556,19 @@ function resetSessionView() {
   updateAttachments([]);
   const welcome = elements.messages.querySelector(".welcome-message");
   const starters = elements.messages.querySelector(".starter-actions");
-  const activity = elements.activityStream;
   clearInlineApproval();
   elements.messages.replaceChildren();
   if (welcome) elements.messages.append(welcome);
   if (starters) elements.messages.append(starters);
   elements.liveEvents.replaceChildren();
-  activity.classList.add("hidden");
-  activity.open = false;
-  elements.messages.append(activity);
+  elements.chatRunStatus.classList.add("hidden");
+  elements.panelActivityCount.textContent = "0";
   pendingUiActions = [];
   pendingGenericConnectCalls = 0;
   canvasSidecarOpen = false;
+  currentPanelTab = "activity";
+  runTerminalState = "idle";
+  setPanelBadge("");
   renderCanvas();
   renderStarterActions();
   renderConversationChrome();
@@ -8708,23 +8821,51 @@ function approvalIdFromUrl(value) {
 function beginInlineActivity() {
   pendingUiActions = [];
   pendingGenericConnectCalls = 0;
+  runTerminalState = "running";
+  currentPanelTab = "activity";
   elements.liveEvents.replaceChildren();
-  elements.activityStreamTitle.textContent = "AMOS is working";
+  elements.panelActivityCount.textContent = "0";
+  elements.activityStreamTitle.textContent = "Live activity";
   elements.runningIndicator.textContent = "Starting…";
   elements.runningIndicator.classList.add("active");
-  elements.activityStream.classList.remove("hidden");
-  elements.activityStream.open = true;
-  elements.messages.append(elements.activityStream);
+  updateChatRunStatus("Preparing the task…", "active");
+  setPanelBadge("working");
+  renderCanvas();
   elements.messages.scrollTop = elements.messages.scrollHeight;
 }
 
-function finishInlineActivity() {
-  if (elements.activityStream.classList.contains("hidden")) return;
-  const count = elements.liveEvents.childElementCount;
-  elements.activityStreamTitle.textContent = "Work complete";
-  elements.runningIndicator.textContent = `${count} recorded step${count === 1 ? "" : "s"}`;
+function finishInlineActivity(status = runTerminalState) {
+  const count = elements.liveEvents.querySelectorAll(".event-card").length;
+  const failed = status === "failed";
+  const interrupted = status === "interrupted";
+  elements.activityStreamTitle.textContent = failed
+    ? "Run stopped"
+    : interrupted
+      ? "Run interrupted"
+      : "Activity";
+  elements.runningIndicator.textContent = `${count} recorded event${count === 1 ? "" : "s"}`;
   elements.runningIndicator.classList.remove("active");
-  elements.activityStream.open = false;
+  updateChatRunStatus(
+    failed
+      ? `Run stopped · ${count} recorded event${count === 1 ? "" : "s"}`
+      : interrupted
+        ? `Run interrupted safely · ${count} recorded event${count === 1 ? "" : "s"}`
+        : `Completed · ${count} recorded event${count === 1 ? "" : "s"}`,
+    failed ? "failed" : "completed"
+  );
+  setPanelBadge(failed ? "error" : activeCanvasId ? "artifact" : "");
+}
+
+function updateChatRunStatus(message, status = "active") {
+  elements.chatRunStatus.classList.remove("hidden", "active", "waiting", "failed", "completed");
+  elements.chatRunStatus.classList.add(status);
+  elements.chatRunStatusText.textContent = String(message || "AMOS is working…");
+}
+
+function setPanelBadge(status = "") {
+  elements.panelStateBadge.classList.remove("working", "waiting", "error", "artifact");
+  elements.panelStateBadge.classList.toggle("hidden", !status);
+  if (status) elements.panelStateBadge.classList.add(status);
 }
 
 function captureGovernedUiActions(event) {
@@ -8827,6 +8968,7 @@ function renderGovernedUiActions() {
 
 function renderLiveEvent(event) {
   if (event.type === "assistant_delta") {
+    updateChatRunStatus("Writing the response…", "active");
     if (streamingMessage) {
       streamingMessage.className = "message assistant streaming";
       streamingMessage.replaceChildren();
@@ -8839,6 +8981,10 @@ function renderLiveEvent(event) {
     return;
   }
   captureGovernedUiActions(event);
+  const transientStatus = chatStatusForEvent(event);
+  if (transientStatus) updateChatRunStatus(transientStatus.message, transientStatus.status);
+  if (event.type === "tool_error") setPanelBadge("error");
+  else if (running) setPanelBadge("working");
   const card = document.createElement("div");
   card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}${event.type === "coding_lifecycle" ? " coding-lifecycle" : ""}`;
   const title = document.createElement("strong");
@@ -8879,8 +9025,39 @@ function renderLiveEvent(event) {
   }
   card.append(title, detail);
   elements.liveEvents.append(card);
+  elements.panelActivityCount.textContent = String(
+    elements.liveEvents.querySelectorAll(".event-card").length
+  );
   trimLiveEvents();
-  elements.messages.scrollTop = elements.messages.scrollHeight;
+  if (canvasSidecarOpen && currentPanelTab === "activity") {
+    elements.activityStream.scrollTop = elements.activityStream.scrollHeight;
+  }
+}
+
+function chatStatusForEvent(event) {
+  if (event.type === "phase") {
+    if (event.phase === "waiting") {
+      return { message: event.summary || "AMOS needs your input to continue.", status: "waiting" };
+    }
+    if (["completed", "interrupted", "failed"].includes(event.phase)) return null;
+    return { message: event.summary || humanizeTool(event.phase || "Working"), status: "active" };
+  }
+  if (event.type === "workflow") {
+    return { message: event.title || "Planning the work…", status: "active" };
+  }
+  if (event.type === "tool_start") {
+    return { message: `Working with ${humanizeTool(event.name || "the selected tool")}…`, status: "active" };
+  }
+  if (event.type === "tool_error") {
+    return { message: "AMOS encountered a tool issue and is correcting it…", status: "active" };
+  }
+  if (event.type === "routing") {
+    return { message: "Choosing the right intelligence for this step…", status: "active" };
+  }
+  if (event.type === "context_compiled") {
+    return { message: "Using the relevant company and task context…", status: "active" };
+  }
+  return null;
 }
 
 // Default the work stream to the most recent few steps. Older cards stay in
@@ -8910,13 +9087,13 @@ function trimLiveEvents() {
       if (!nowExpanded) {
         container.scrollIntoView({ block: "nearest" });
       }
-      elements.messages.scrollTop = elements.messages.scrollHeight;
+      elements.activityStream.scrollTop = elements.activityStream.scrollHeight;
     });
     container.append(toggle);
   }
   toggle.textContent = expanded
-    ? `Show fewer steps ↑`
-    : `Show ${overflow} earlier step${overflow === 1 ? "" : "s"} ↓`;
+    ? `Show fewer events ↑`
+    : `Show ${overflow} earlier event${overflow === 1 ? "" : "s"} ↓`;
 }
 
 const CONSEQUENTIAL_RECEIPT_STATES = new Set([
@@ -9023,7 +9200,12 @@ function setRunning(value) {
   elements.runningIndicator.textContent = value ? "Working · steer or stop" : "Idle";
   elements.runningIndicator.classList.toggle("active", value);
   if (value) {
-    elements.activityStreamTitle.textContent = "AMOS is working";
+    if (runTerminalState === "idle") runTerminalState = "running";
+    elements.activityStreamTitle.textContent = "Live activity";
+    if (elements.chatRunStatus.classList.contains("hidden")) {
+      updateChatRunStatus("AMOS is working…", "active");
+    }
+    setPanelBadge("working");
   } else {
     finishInlineActivity();
   }
@@ -9144,8 +9326,10 @@ function clearInlineApproval() {
   pendingApproval = null;
   if (running) {
     elements.promptInput.placeholder = "Add direction while AMOS works…";
-    elements.activityStreamTitle.textContent = "AMOS is working";
+    elements.activityStreamTitle.textContent = "Live activity";
     elements.runningIndicator.textContent = "Working · steer or stop";
+    updateChatRunStatus("Continuing the task…", "active");
+    setPanelBadge("working");
   }
 }
 

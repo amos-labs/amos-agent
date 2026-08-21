@@ -8,6 +8,7 @@ import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
 import { createModelClient, listModelProviders } from "../model/providers.js";
+import { configureBedrockProviderDataSharing } from "../model/bedrockDataRetention.js";
 import {
   INTELLIGENCE_ROUTER_WORKFLOW_QUALIFIED,
   isAmosDesktopRoutingConfig,
@@ -39,7 +40,7 @@ import { createSubagentTools } from "../tools/subagents.js";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
-import { AttachmentManager } from "./attachments.js";
+import { attachmentToolkit, AttachmentManager } from "./attachments.js";
 import {
   automationInstallArguments,
   emptyAutomationTemplateCatalog,
@@ -148,8 +149,8 @@ import {
 import { createAbortError, isAbortError } from "../util/abort.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 import {
+  resolveTaskWorkflow,
   taskWorkflowCatalog,
-  taskWorkflowFromId,
   withWorkflowToolkits
 } from "../workflows.js";
 
@@ -585,12 +586,31 @@ export class DesktopController {
   async warmLocalIntelligence(settings = null) {
     if (!this.offlineManager) return null;
     const selectedSettings = settings || await this.settingsStore.read();
+    const resolvedConfig = this.configFrom(selectedSettings);
+    const modelConfig = resolvedConfig.model;
+    const needsRouter = isAmosDesktopRoutingConfig(modelConfig) ||
+      selectedSettings.intelligenceRoles?.enabled === true ||
+      resolvedConfig.agent?.progressiveTools !== false;
+    let routerWarm = null;
+    if (needsRouter) {
+      try {
+        routerWarm = await this.offlineManager.warmRouter?.(systemProfile());
+        if (routerWarm) {
+          this.record("routing", "Warmed AMOS Local Router for the next task", routerWarm);
+        }
+      } catch (error) {
+        this.record(
+          "routing",
+          `AMOS Local Router will cold-start on demand: ${error.message}`
+        );
+      }
+    }
     const requestedModel = selectedSettings.provider === "ollama"
       ? selectedSettings.model
       : selectedSettings.hybridRouting?.enabled === true
         ? selectedSettings.hybridRouting.localModel
         : "";
-    if (!requestedModel) return null;
+    if (!requestedModel) return routerWarm;
     const offline = await this.offlineManager.refresh(systemProfile());
     const model = offline.models?.find((item) => item.id === requestedModel);
     if (!model?.installed) return null;
@@ -2137,6 +2157,25 @@ export class DesktopController {
     return { ok: true, message: result.message.content || "AMOS intelligence ready", usage: result.usage };
   }
 
+  async configureBedrockDataRetention(input = {}) {
+    if (input.confirmed !== true) {
+      throw new Error("Confirm the Amazon Bedrock provider data sharing notice first");
+    }
+    const settings = await this.settingsStore.read();
+    const config = this.configFrom(settings).model;
+    const result = await configureBedrockProviderDataSharing(config);
+    this.record(
+      "settings",
+      `Enabled Amazon Bedrock provider data sharing for ${config.modelProfile?.label || config.model}`,
+      { mode: result.mode, updatedAt: result.updatedAt }
+    );
+    return {
+      ok: true,
+      ...result,
+      message: "Amazon Bedrock provider data sharing is enabled. You can now test this model."
+    };
+  }
+
   async run(input) {
     const stored = await this.settingsStore.read();
     const settings = input?.settings
@@ -2367,8 +2406,11 @@ export class DesktopController {
         pairing,
         signal: abortController.signal
       });
-      const classifiedWorkflow = taskWorkflowFromId(routingDecision?.workflow) ||
-        taskWorkflowFromId("outcome-execution");
+      const classifiedWorkflow = resolveTaskWorkflow({
+        objective,
+        attachmentNames,
+        routedWorkflowId: routingDecision?.workflow
+      });
       const previewWorkflow = pairing.enabled && classifiedWorkflow?.family === "coding"
         ? withWorkflowToolkits(classifiedWorkflow, ["collaboration"])
         : classifiedWorkflow;
@@ -2435,8 +2477,13 @@ export class DesktopController {
       const attachmentsById = new Map(
         this.attachments.list().map((attachment) => [attachment.id, attachment])
       );
-      if (references.some((reference) => attachmentsById.get(reference?.id)?.kind === "document")) {
-        runtime.registry?.activateToolkit?.("documents", { mode: "add" });
+      const attachmentToolkits = new Set(
+        references
+          .map((reference) => attachmentToolkit(attachmentsById.get(reference?.id)))
+          .filter(Boolean)
+      );
+      for (const toolkit of attachmentToolkits) {
+        runtime.registry?.activateToolkit?.(toolkit, { mode: "add" });
       }
       const modelContent = this.attachments.buildMessageContent(
         prompt,
