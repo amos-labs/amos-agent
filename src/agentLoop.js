@@ -222,6 +222,8 @@ export class AgentLoop {
       let rejectedInternalCompletions = 0;
       let transientRetries = 0;
       const researchPolicy = normalizeResearchCheckpointPolicy(researchCheckpoint);
+      let toolCyclesSinceResearchCheckpoint = 0;
+      let toolCycleCheckpointActive = researchPolicy.enabled;
       let nextResearchCheckpointAt = researchPolicy.enabled
         ? this.now() + researchPolicy.afterMs
         : Number.POSITIVE_INFINITY;
@@ -565,6 +567,7 @@ export class AgentLoop {
         consecutiveToolErrorCycles = outcomes.every((outcome) => outcome.failed)
           ? consecutiveToolErrorCycles + 1
           : 0;
+        toolCyclesSinceResearchCheckpoint += 1;
 
         const guardReason = this.guardReason({
           repeatedToolCycles,
@@ -575,15 +578,23 @@ export class AgentLoop {
         }
         if (
           completedToolActions > 0 &&
-          this.now() >= nextResearchCheckpointAt
+          (
+            this.now() >= nextResearchCheckpointAt ||
+            (
+              toolCycleCheckpointActive &&
+              toolCyclesSinceResearchCheckpoint >= researchPolicy.afterToolCycles
+            )
+          )
         ) {
+          const checkpointReason = this.now() >= nextResearchCheckpointAt ? "elapsed_time" : "tool_cycles";
           const checkpoint = await this.requestResearchDirection({
             policy: researchPolicy,
             onEvent,
             signal,
             turn,
             completedToolActions,
-            failedToolActions
+            failedToolActions,
+            checkpointReason
           });
           if (checkpoint.action === "synthesize") {
             return this.summarizeResearchCheckpoint({
@@ -596,8 +607,10 @@ export class AgentLoop {
           }
           if (checkpoint.action === "autonomous") {
             nextResearchCheckpointAt = Number.POSITIVE_INFINITY;
+            toolCycleCheckpointActive = false;
           } else {
             nextResearchCheckpointAt = this.now() + checkpoint.extensionMs;
+            toolCyclesSinceResearchCheckpoint = 0;
           }
         }
         turn += 1;
@@ -1161,7 +1174,8 @@ export class AgentLoop {
     signal,
     turn,
     completedToolActions,
-    failedToolActions
+    failedToolActions,
+    checkpointReason = "elapsed_time"
   }) {
     if (typeof this.approvals?.ask !== "function") {
       return { action: "autonomous", extensionMs: policy.extensionMs };
@@ -1191,6 +1205,9 @@ export class AgentLoop {
           failedToolActions > 0
             ? `${failedToolActions} tool action${failedToolActions === 1 ? " has" : "s have"} failed`
             : "no tool failures recorded",
+          checkpointReason === "tool_cycles"
+            ? "the work-step checkpoint was reached"
+            : "the time checkpoint was reached",
           "Completed work and evidence are preserved. Continuing does not replay prior actions."
         ].join(" · "),
         options: [
@@ -1210,6 +1227,7 @@ export class AgentLoop {
       completedToolActions,
       failedToolActions,
       extensionMs: choice.extensionMs,
+      reason: checkpointReason,
       summary: researchCheckpointChoiceSummary(choice)
     });
     if (choice.action !== "synthesize") {
@@ -1496,15 +1514,24 @@ function isTransientModelFailure(error) {
 
 function normalizeResearchCheckpointPolicy(input) {
   if (!input || input.enabled === false) {
-    return { enabled: false, afterMs: 0, extensionMs: 0 };
+    return { enabled: false, afterMs: 0, extensionMs: 0, afterToolCycles: Number.POSITIVE_INFINITY };
   }
   const afterMs = boundedResearchDuration(input.afterMs, 0);
-  if (afterMs <= 0) return { enabled: false, afterMs: 0, extensionMs: 0 };
+  if (afterMs <= 0) {
+    return { enabled: false, afterMs: 0, extensionMs: 0, afterToolCycles: Number.POSITIVE_INFINITY };
+  }
   return {
     enabled: true,
     afterMs,
-    extensionMs: boundedResearchDuration(input.extensionMs, afterMs)
+    extensionMs: boundedResearchDuration(input.extensionMs, afterMs),
+    afterToolCycles: boundedResearchToolCycles(input.afterToolCycles, 12)
   };
+}
+
+function boundedResearchToolCycles(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return fallback;
+  return Math.min(100, Math.max(2, parsed));
 }
 
 function boundedResearchDuration(value, fallback) {

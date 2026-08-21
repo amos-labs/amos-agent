@@ -355,7 +355,7 @@ test("Operator exposes guided Platform-owned Automation setup beside chat", asyn
   assert.match(html, /id="automationSetupSurface"/);
   assert.match(html, /Outcome, connections, mappings, trigger, preview/i);
   assert.match(javascript, /api\.beginAutomationSetup\(\{ intent: objective \}\)/);
-  assert.match(javascript, /api\.automationOperations\(automationSetupDraft\.connection\)/);
+  assert.match(javascript, /api\.automationOperations\(automationSetupDraft\.destinationConnection\)/);
   assert.match(javascript, /compileAutomationMappings/);
   assert.match(javascript, /api\.installAutomationSetup\(\{/);
   assert.match(javascript, /api\.activateAutomationSetup\(automationSetupDraft\.setupId\)/);

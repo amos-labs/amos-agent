@@ -104,13 +104,20 @@ export function automationInstallArguments(input, { catalog, connections, contra
     if (!hasMaterialValue(supplied[key])) throw new Error(`${humanize(key)} is required`);
   }
 
-  if (allowed.has("connection")) {
-    const connection = requiredText(supplied.connection, 128, "Connection");
-    const current = (Array.isArray(connections) ? connections : []).find(
-      (item) => item.usable === true && (item.id === connection || item.provider === connection)
-    );
-    if (!current) throw new Error("Select a connected system available to this AMOS identity");
-    supplied.connection = current.id || current.provider;
+  for (const [key, label] of [
+    ["connection", "Connection"],
+    ["source_connection", "Source connection"],
+    ["destination_connection", "Destination connection"]
+  ]) {
+    if (!allowed.has(key)) continue;
+    supplied[key] = resolveUsableConnection(supplied[key], connections, label);
+  }
+  if (
+    allowed.has("source_connection") &&
+    allowed.has("destination_connection") &&
+    supplied.source_connection === supplied.destination_connection
+  ) {
+    throw new Error("Choose different connected systems for the source and destination");
   }
   if (allowed.has("operation")) {
     const operation = requiredText(supplied.operation, 64, "Connection operation");
@@ -128,6 +135,10 @@ export function automationInstallArguments(input, { catalog, connections, contra
   }
   if (supplied.webhook !== undefined) {
     supplied.webhook = requiredIdentifier(supplied.webhook, 120, "Webhook event");
+  }
+  if (supplied.event_types !== undefined) {
+    supplied.event_types = stringArray(supplied.event_types, 50, 160);
+    if (supplied.event_types.length === 0) throw new Error("Choose at least one source event type");
   }
   if (supplied.collection !== undefined) {
     supplied.collection = requiredIdentifier(supplied.collection, 120, "AMOS collection");
@@ -539,6 +550,15 @@ function hasMaterialValue(value) {
   if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
   return value !== undefined && value !== null;
+}
+
+function resolveUsableConnection(value, connections, label) {
+  const connection = requiredText(value, 128, label);
+  const current = (Array.isArray(connections) ? connections : []).find(
+    (item) => item.usable === true && (item.id === connection || item.provider === connection)
+  );
+  if (!current) throw new Error(`Select a connected ${label.toLowerCase()} available to this AMOS identity`);
+  return current.id || current.provider;
 }
 
 function humanize(value) {
