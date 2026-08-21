@@ -23,7 +23,12 @@ export class DesktopApprovalBridge {
     });
   }
 
-  ask(question, { title = "", context = "", options = [] } = {}) {
+  ask(question, {
+    title = "",
+    context = "",
+    options = [],
+    decisionType = "general"
+  } = {}) {
     const message = String(question || "").trim();
     if (!message) {
       return Promise.resolve({ answered: false, answer: "", error: "A question is required" });
@@ -36,6 +41,9 @@ export class DesktopApprovalBridge {
       title: String(title || "AMOS needs your input").trim().slice(0, 160) || "AMOS needs your input",
       context: String(context || "").trim().slice(0, 2_000),
       options: normalizeDecisionOptions(options),
+      decisionType: decisionType === "research-checkpoint"
+        ? "research-checkpoint"
+        : "general",
       requestedAt: new Date().toISOString()
     };
     return new Promise((resolve) => {

@@ -49,7 +49,8 @@ export class AgentLoop {
     amosClient,
     systemPrompt = SYSTEM_PROMPT,
     workflowSelector = selectTaskWorkflow,
-    onToolResult = null
+    onToolResult = null,
+    now = () => Date.now()
   }) {
     this.config = config;
     this.modelClient = modelClient || kimiClient;
@@ -59,6 +60,7 @@ export class AgentLoop {
     this.systemPrompt = systemPrompt;
     this.workflowSelector = workflowSelector;
     this.onToolResult = onToolResult;
+    this.now = now;
     this.lastWorkflow = null;
     this.lastContextReceipt = null;
     this.lastContextPlan = null;
@@ -155,7 +157,8 @@ export class AgentLoop {
       presentationIntent = null,
       canvasActive = false,
       completionGate = null,
-      promptSession = null
+      promptSession = null,
+      researchCheckpoint = null
     } = {}
   ) {
     throwIfAborted(signal);
@@ -218,6 +221,10 @@ export class AgentLoop {
       let rejectedCompletions = 0;
       let rejectedInternalCompletions = 0;
       let transientRetries = 0;
+      const researchPolicy = normalizeResearchCheckpointPolicy(researchCheckpoint);
+      let nextResearchCheckpointAt = researchPolicy.enabled
+        ? this.now() + researchPolicy.afterMs
+        : Number.POSITIVE_INFINITY;
       let pendingRoutingDecision = routingDecision?.minimumClass
         ? routingDecision
         : null;
@@ -265,6 +272,25 @@ export class AgentLoop {
         } catch (error) {
           if (isAbortError(error) || signal?.aborted) throw error;
           const retryBudget = this.config.agent?.maxModelTransientRetries ?? 2;
+          const shouldRecoverEmptyResponse =
+            completedToolActions > 0 &&
+            isEmptyModelResponse(error) &&
+            transientRetries >= Math.min(1, retryBudget);
+          if (shouldRecoverEmptyResponse) {
+            try {
+              return await this.summarizeAfterEmptyResponse(error, {
+                onEvent,
+                signal,
+                turn,
+                completedToolActions,
+                failedToolActions
+              });
+            } catch (recoveryError) {
+              if (isAbortError(recoveryError) || signal?.aborted) throw recoveryError;
+              error.recoveryFailure = String(recoveryError?.message || recoveryError).slice(0, 1_000);
+              transientRetries = retryBudget;
+            }
+          }
           const preserveExpensiveLocalProgress =
             completedToolActions > 0 &&
             isModelTimeout(error) &&
@@ -298,7 +324,8 @@ export class AgentLoop {
             // Retries are exhausted for a transient failure after completed tool
             // work. Surface the same recoverable-progress contract as a timeout
             // so continuity can pick up finished work instead of a bare error.
-            error.code = error.code || "AMOS_MODEL_TRANSIENT_AFTER_PROGRESS";
+            error.providerFailureCode = error.code || "AMOS_MODEL_TRANSIENT";
+            error.code = "AMOS_MODEL_TRANSIENT_AFTER_PROGRESS";
             error.completedToolActions = completedToolActions;
             error.failedToolActions = failedToolActions;
             error.partialResponse = partialResponse;
@@ -545,6 +572,33 @@ export class AgentLoop {
         });
         if (guardReason) {
           return this.summarizeGuardedStop(guardReason, { onEvent, signal, turn });
+        }
+        if (
+          completedToolActions > 0 &&
+          this.now() >= nextResearchCheckpointAt
+        ) {
+          const checkpoint = await this.requestResearchDirection({
+            policy: researchPolicy,
+            onEvent,
+            signal,
+            turn,
+            completedToolActions,
+            failedToolActions
+          });
+          if (checkpoint.action === "synthesize") {
+            return this.summarizeResearchCheckpoint({
+              onEvent,
+              signal,
+              turn,
+              completedToolActions,
+              failedToolActions
+            });
+          }
+          if (checkpoint.action === "autonomous") {
+            nextResearchCheckpointAt = Number.POSITIVE_INFINITY;
+          } else {
+            nextResearchCheckpointAt = this.now() + checkpoint.extensionMs;
+          }
         }
         turn += 1;
       }
@@ -1101,6 +1155,246 @@ export class AgentLoop {
     this.canvasToolState.updateRequested ||= intent.updateRequested;
   }
 
+  async requestResearchDirection({
+    policy,
+    onEvent,
+    signal,
+    turn,
+    completedToolActions,
+    failedToolActions
+  }) {
+    if (typeof this.approvals?.ask !== "function") {
+      return { action: "autonomous", extensionMs: policy.extensionMs };
+    }
+    throwIfAborted(signal);
+    const minutes = Math.max(1, Math.round(policy.extensionMs / 60_000));
+    const assessment = await this.researchCheckpointAssessment({
+      onEvent,
+      signal,
+      turn,
+      completedToolActions,
+      failedToolActions
+    });
+    onEvent({
+      type: "phase",
+      phase: "waiting",
+      turn,
+      summary: "Research checkpoint reached; waiting for your direction"
+    });
+    const result = await this.approvals.ask(
+      "AMOS is still building context. Would you like a supported answer now, or should it keep researching?",
+      {
+        title: "Research checkpoint",
+        context: [
+          assessment,
+          `${completedToolActions} tool action${completedToolActions === 1 ? " has" : "s have"} completed`,
+          failedToolActions > 0
+            ? `${failedToolActions} tool action${failedToolActions === 1 ? " has" : "s have"} failed`
+            : "no tool failures recorded",
+          "Completed work and evidence are preserved. Continuing does not replay prior actions."
+        ].join(" · "),
+        options: [
+          "Synthesize now",
+          `Research ${minutes} more minute${minutes === 1 ? "" : "s"}`,
+          "Keep working autonomously"
+        ],
+        decisionType: "research-checkpoint"
+      }
+    );
+    throwIfAborted(signal);
+    const choice = researchCheckpointChoice(result, policy);
+    onEvent({
+      type: "research_checkpoint",
+      turn,
+      action: choice.action,
+      completedToolActions,
+      failedToolActions,
+      extensionMs: choice.extensionMs,
+      summary: researchCheckpointChoiceSummary(choice)
+    });
+    if (choice.action !== "synthesize") {
+      const direction = choice.userDirection || (
+        choice.action === "autonomous"
+          ? "Continue working autonomously without another timed research check-in."
+          : `Continue researching for ${Math.max(1, Math.round(choice.extensionMs / 60_000))} more minutes.`
+      );
+      this.messages.push({
+        role: "user",
+        content: [
+          "<amos_research_checkpoint_direction>",
+          direction,
+          "Preserve completed evidence and do not replay completed actions.",
+          "</amos_research_checkpoint_direction>"
+        ].join("\n")
+      });
+      onEvent({
+        type: "phase",
+        phase: "thinking",
+        turn,
+        summary: choice.action === "autonomous"
+          ? "Continuing autonomously with completed work intact"
+          : "Continuing research with completed work intact"
+      });
+    }
+    return choice;
+  }
+
+  async researchCheckpointAssessment({
+    onEvent,
+    signal,
+    turn,
+    completedToolActions,
+    failedToolActions
+  }) {
+    onEvent({
+      type: "phase",
+      phase: "checkpointing",
+      turn,
+      summary: "Preparing a concise research progress brief"
+    });
+    const instruction = [
+      "<amos_research_checkpoint_assessment>",
+      "Do not call a tool and do not give the full final answer yet.",
+      "In no more than 120 words, summarize: (1) what the existing evidence establishes, (2) the material gaps still being researched, and (3) whether more research is likely to improve the answer.",
+      `The transcript contains ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"} and ${failedToolActions} failed tool action${failedToolActions === 1 ? "" : "s"}.`,
+      "Do not expose private reasoning or raw tool payloads.",
+      "</amos_research_checkpoint_assessment>"
+    ].join("\n");
+    const messages = [
+      ...this.prepareMessagesForModel([]),
+      { role: "user", content: instruction }
+    ];
+    try {
+      const response = await this.modelClient.chat({
+        messages,
+        tools: [],
+        signal,
+        reasoningEffortOverride: "low",
+        promptSessionId: this.activePromptSessionId,
+        promptContractHash: this.pendingPromptContract?.sha256 || null,
+        onRoutingDecision: (decision) => {
+          onEvent({ type: "routing", turn, ...decision });
+        }
+      });
+      throwIfAborted(signal);
+      this.observeLocalPromptPerformance(response.usage);
+      this.observePromptCacheUsage(response.usage);
+      onEvent(usageEventFromResponse(response.usage, turn));
+      const content = String(response.message?.content || "").trim().slice(0, 1_200);
+      if (!content || response.message?.tool_calls?.length) return "";
+      this.messages.push(response.message);
+      return content;
+    } catch (error) {
+      if (isAbortError(error) || signal?.aborted) throw error;
+      return "";
+    }
+  }
+
+  async summarizeResearchCheckpoint({
+    onEvent,
+    signal,
+    turn,
+    completedToolActions,
+    failedToolActions
+  }) {
+    return this.synthesizeWithoutTools({
+      onEvent,
+      signal,
+      turn: turn + 1,
+      phaseSummary: "Synthesizing the evidence collected so far",
+      completionSummary: "Task completed at the user's research checkpoint",
+      instruction: [
+        "<amos_research_checkpoint_synthesis>",
+        "The user chose to synthesize now.",
+        "Do not call another tool in this response.",
+        `Base the answer on the ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"} and the evidence already in context.`,
+        failedToolActions > 0
+          ? `${failedToolActions} tool action${failedToolActions === 1 ? "" : "s"} failed; distinguish those gaps from established evidence.`
+          : "No tool failures were recorded.",
+        "Give the user the strongest supported answer now, state material uncertainties, and identify the best next step.",
+        "</amos_research_checkpoint_synthesis>"
+      ].join("\n")
+    });
+  }
+
+  async summarizeAfterEmptyResponse(error, {
+    onEvent,
+    signal,
+    turn,
+    completedToolActions,
+    failedToolActions
+  }) {
+    return this.synthesizeWithoutTools({
+      onEvent,
+      signal,
+      turn: turn + 1,
+      reasoningEffortOverride: "low",
+      phaseSummary: "The provider returned no final answer; recovering from completed work",
+      completionSummary: "Recovered an evidence-backed result without replaying completed work",
+      instruction: [
+        "<amos_empty_response_recovery>",
+        "A prior provider response contained no user-visible text or tool call.",
+        "Do not call a tool. Do not repeat, undo, or replay any completed action.",
+        `Synthesize the best user-facing result from the ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"} already represented in this transcript.`,
+        failedToolActions > 0
+          ? `Clearly separate the ${failedToolActions} failed tool action${failedToolActions === 1 ? "" : "s"} from verified evidence.`
+          : "No tool failures were recorded.",
+        error?.stopReason ? `The provider stop reason was ${String(error.stopReason).slice(0, 128)}.` : "",
+        "State what was established, what remains uncertain, and the best next step.",
+        "</amos_empty_response_recovery>"
+      ].filter(Boolean).join("\n")
+    });
+  }
+
+  async synthesizeWithoutTools({
+    onEvent,
+    signal,
+    turn,
+    instruction,
+    phaseSummary,
+    completionSummary,
+    reasoningEffortOverride = null
+  }) {
+    throwIfAborted(signal);
+    onEvent({
+      type: "phase",
+      phase: "synthesizing",
+      turn,
+      summary: phaseSummary
+    });
+    const messages = [
+      ...this.prepareMessagesForModel([]),
+      { role: "user", content: instruction }
+    ];
+    this.captureContextReceipt({ messages, tools: [], turn });
+    const response = await this.modelClient.chat({
+      messages,
+      tools: [],
+      signal,
+      reasoningEffortOverride,
+      promptSessionId: this.activePromptSessionId,
+      promptContractHash: this.pendingPromptContract?.sha256 || null,
+      onRoutingDecision: (decision) => {
+        onEvent({ type: "routing", turn, ...decision });
+      },
+      onDelta: (delta, text) => {
+        onEvent({ type: "assistant_delta", turn, delta, text });
+      }
+    });
+    this.observeLocalPromptPerformance(response.usage);
+    this.observePromptCacheUsage(response.usage);
+    onEvent(usageEventFromResponse(response.usage, turn));
+    throwIfAborted(signal);
+    this.messages.push(response.message);
+    onEvent({
+      type: "phase",
+      phase: "completed",
+      turn,
+      summary: completionSummary
+    });
+    return response.message.content || "";
+  }
+
   guardReason({ repeatedToolCycles, consecutiveToolErrorCycles }) {
     const repeatedLimit = this.config.agent?.maxRepeatedToolCycles ?? 3;
     if (repeatedToolCycles >= repeatedLimit) {
@@ -1182,12 +1476,78 @@ function isModelTimeout(error) {
   );
 }
 
+function isEmptyModelResponse(error) {
+  return [
+    "AMOS_MODEL_REASONING_ONLY_RESPONSE",
+    "AMOS_MODEL_EMPTY_RESPONSE"
+  ].includes(error?.code) ||
+    /did not include choices\[0\]\.message|did not include content or tool calls|empty response|no choices/i.test(
+      String(error?.message || "")
+    );
+}
+
 function isTransientModelFailure(error) {
   if (isAbortError(error)) return false;
   const message = String(error?.message || "");
   return isModelTimeout(error) ||
-    /did not include choices\[0\]\.message|did not include content or tool calls|empty response|no choices/i.test(message) ||
+    isEmptyModelResponse(error) ||
     /fetch failed|ECONNRESET|socket hang up|network error|UND_ERR/i.test(message);
+}
+
+function normalizeResearchCheckpointPolicy(input) {
+  if (!input || input.enabled === false) {
+    return { enabled: false, afterMs: 0, extensionMs: 0 };
+  }
+  const afterMs = boundedResearchDuration(input.afterMs, 0);
+  if (afterMs <= 0) return { enabled: false, afterMs: 0, extensionMs: 0 };
+  return {
+    enabled: true,
+    afterMs,
+    extensionMs: boundedResearchDuration(input.extensionMs, afterMs)
+  };
+}
+
+function boundedResearchDuration(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(24 * 60 * 60_000, Math.max(1_000, Math.round(parsed)));
+}
+
+function researchCheckpointChoice(result, policy) {
+  const answer = String(result?.answer || "").trim();
+  if (!result?.answered || !answer) {
+    return { action: "autonomous", extensionMs: policy.extensionMs, userDirection: "" };
+  }
+  const normalized = answer.toLowerCase();
+  if (/synthesi[sz]e|answer now|finish now|report now/.test(normalized)) {
+    return { action: "synthesize", extensionMs: 0, userDirection: "" };
+  }
+  if (/autonomous|without (?:another )?(?:check|interrupt)|do not ask|don['’]t ask|keep working$/.test(normalized)) {
+    return { action: "autonomous", extensionMs: policy.extensionMs, userDirection: "" };
+  }
+  const duration = researchExtensionFromAnswer(normalized, policy.extensionMs);
+  const knownContinuation = /^(?:research|continue)\s+\d+(?:\.\d+)?\s+(?:more\s+)?(?:hours?|hrs?|minutes?|mins?)$/.test(normalized) ||
+    normalized === "keep going";
+  return {
+    action: "continue",
+    extensionMs: duration,
+    userDirection: knownContinuation ? "" : answer.slice(0, 8_000)
+  };
+}
+
+function researchExtensionFromAnswer(answer, fallback) {
+  const match = answer.match(/(\d+(?:\.\d+)?)\s*(?:more\s*)?(hours?|hrs?|minutes?|mins?)/i);
+  if (!match) return fallback;
+  const amount = Number(match[1]);
+  const multiplier = /^h/i.test(match[2]) ? 60 * 60_000 : 60_000;
+  return boundedResearchDuration(amount * multiplier, fallback);
+}
+
+function researchCheckpointChoiceSummary(choice) {
+  if (choice.action === "synthesize") return "The user chose to synthesize the evidence now";
+  if (choice.action === "autonomous") return "The user chose to continue without timed research check-ins";
+  const minutes = Math.max(1, Math.round(choice.extensionMs / 60_000));
+  return `The user chose to continue research for ${minutes} more minute${minutes === 1 ? "" : "s"}`;
 }
 
 function usageEventFromResponse(usage, turn) {

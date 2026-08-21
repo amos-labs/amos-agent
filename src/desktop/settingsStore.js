@@ -44,6 +44,8 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   reasoningEffort: "",
   localRuntime: "ollama",
   operatingMode: "online",
+  researchCheckpointMinutes: 5,
+  autonomousCheckpointMinutes: 0,
   appearance: "system",
   workspace: "",
   localApprovalMode: "ask",
@@ -209,6 +211,8 @@ export function sanitizeSettings(input = {}) {
         : "medium",
     localRuntime: input.localRuntime === "mtplx" ? "mtplx" : "ollama",
     operatingMode,
+    researchCheckpointMinutes: checkpointMinutes(input.researchCheckpointMinutes, 5),
+    autonomousCheckpointMinutes: checkpointMinutes(input.autonomousCheckpointMinutes, 0),
     appearance: ["system", "light", "dark"].includes(input.appearance)
       ? input.appearance
       : "system",
@@ -244,6 +248,11 @@ export function sanitizeSettings(input = {}) {
     hybridRouting: sanitizeHybridRouting(input.hybridRouting),
     providerCredentials: sanitizeProviderCredentials(input.providerCredentials)
   };
+}
+
+function checkpointMinutes(value, fallback) {
+  const parsed = Number(value);
+  return [0, 2, 5, 10, 15, 30, 60].includes(parsed) ? parsed : fallback;
 }
 
 function sanitizeProviderCredentials(input = {}) {

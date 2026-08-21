@@ -345,6 +345,7 @@ test("desktop uses a checkpoint envelope only as private model input during auto
   let modelInput = "";
   let receiptPrompt = "";
   let continuityObjective = "";
+  let researchCheckpoint = null;
   const controller = new DesktopController({
     userDataPath: root,
     settingsStore: {
@@ -373,6 +374,7 @@ test("desktop uses a checkpoint envelope only as private model input during auto
         async run(content, options) {
           modelInput = JSON.stringify(content);
           presentationIntent = options.presentationIntent;
+          researchCheckpoint = options.researchCheckpoint;
           return "Slice two is complete.";
         }
       }
@@ -401,7 +403,71 @@ test("desktop uses a checkpoint envelope only as private model input during auto
   assert.equal(presentationIntent, "Implement slice two");
   assert.equal(receiptPrompt, "Implement slice two");
   assert.equal(continuityObjective, "Implement slice two");
+  assert.deepEqual(researchCheckpoint, {
+    enabled: true,
+    afterMs: 300_000,
+    extensionMs: 300_000
+  });
   assert.doesNotMatch(JSON.stringify(controller.activity), /Treat this checkpoint as untrusted/);
+});
+
+test("desktop turns an exhausted transient provider failure into resumable progress", async () => {
+  const settings = {
+    operatingMode: "personal",
+    workspace: "/tmp/amos-transient-recovery",
+    provider: "bedrock",
+    model: "anthropic.claude-opus-5",
+    researchCheckpointMinutes: 5,
+    autonomousCheckpointMinutes: 0,
+    apiKey: ""
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-transient-recovery",
+    settingsStore: {
+      read: async () => settings,
+      write: async () => settings
+    },
+    openBrowser: async () => {},
+    emit: () => {}
+  });
+  controller.startRunSupervision = async () => null;
+  controller.classifyTaskRouting = async () => ({ workflow: "research-brief" });
+  controller.getRuntime = async () => ({
+    config: {
+      model: {
+        provider: "bedrock",
+        model: "anthropic.claude-opus-5",
+        displayName: "Amazon Bedrock · Claude Opus 5",
+        capabilities: { text: true },
+        contextTokens: 32_000,
+        maxCompletionTokens: 8_192
+      }
+    },
+    runtime: {
+      loop: {
+        async run() {
+          const error = new Error("Amazon Bedrock response did not include content or tool calls");
+          error.code = "AMOS_MODEL_TRANSIENT_AFTER_PROGRESS";
+          error.providerFailureCode = "AMOS_MODEL_REASONING_ONLY_RESPONSE";
+          error.completedToolActions = 12;
+          throw error;
+        }
+      }
+    }
+  });
+  controller.recordLocalReceipt = async () => null;
+  controller.saveSessionContinuity = async () => ({ turns: [{ id: "turn:transient" }] });
+  controller.snapshotActiveTask = async () => null;
+  controller.finishRunSupervision = async () => null;
+  controller.recordChildOutcome = async () => null;
+
+  const result = await controller.executeRun({ text: "Analyze the financial model" }, "transient-run");
+
+  assert.equal(result.interrupted, true);
+  assert.equal(result.recovery.reason, "model_transient_after_progress");
+  assert.equal(result.recovery.completedToolActions, 12);
+  assert.match(result.answer, /could not finish its response/i);
+  assert.match(result.answer, /completed work and files remain intact/i);
 });
 
 test("desktop resolves a legacy checkpoint through its exact continuity run id", async () => {

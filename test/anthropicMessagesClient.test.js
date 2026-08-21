@@ -215,3 +215,36 @@ test("Anthropic Messages translates the shared none setting into disabled thinki
   assert.deepEqual(requestBody.thinking, { type: "disabled" });
   assert.equal(requestBody.output_config, undefined);
 });
+
+test("Anthropic Messages supports a turn-local lower reasoning effort for recovery synthesis", async () => {
+  let requestBody;
+  const modelClient = client(async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return Response.json({ content: [{ type: "text", text: "Recovered answer." }] });
+  });
+  await modelClient.chat({
+    messages: [{ role: "user", content: "Synthesize completed work" }],
+    reasoningEffortOverride: "low"
+  });
+  assert.deepEqual(requestBody.output_config, { effort: "low" });
+});
+
+test("Anthropic Messages identifies a reasoning-only response without exposing private thinking", async () => {
+  const modelClient = client(async () => Response.json({
+    content: [{ type: "thinking", thinking: "private analysis", signature: "signed" }],
+    stop_reason: "max_tokens",
+    usage: { input_tokens: 100, output_tokens: 4096 }
+  }));
+
+  await assert.rejects(
+    modelClient.chat({ messages: [{ role: "user", content: "Finish the answer" }] }),
+    (error) => {
+      assert.equal(error.code, "AMOS_MODEL_REASONING_ONLY_RESPONSE");
+      assert.equal(error.stopReason, "max_tokens");
+      assert.deepEqual(error.contentBlockTypes, ["thinking"]);
+      assert.equal(error.usage.total_tokens, 4196);
+      assert.doesNotMatch(error.message, /private analysis/);
+      return true;
+    }
+  );
+});

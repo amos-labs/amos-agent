@@ -134,6 +134,7 @@ const elements = Object.fromEntries(
     "intelligenceRolesField", "intelligenceRolesEnabled", "intelligenceRoleControls", "plannerRoleInput",
     "implementerRoleInput", "checkerRoleInput",
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
+    "researchCheckpointInput", "autonomousCheckpointInput",
     "taskRoleBar", "plannerRoleButton", "implementerRoleButton", "checkerRoleButton",
     "taskUsageLine",
     "settingsBackButton", "settingsError", "intelligenceTestStatus", "intelligenceTestIcon",
@@ -176,7 +177,7 @@ const elements = Object.fromEntries(
     "projectInstructionsInput", "projectCostInput", "projectModalError", "projectCancelButton",
     "projectSubmitButton",
     "goalModal", "goalForm", "goalModalTitle", "goalModalClose", "goalProjectIdInput",
-    "goalProjectName", "goalObjectiveInput", "goalModalError", "goalCancelButton",
+    "goalProjectName", "goalObjectiveInput", "goalCheckpointInput", "goalModalError", "goalCancelButton",
     "goalSubmitButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
@@ -3280,6 +3281,7 @@ function openGoalModal(project) {
   elements.goalProjectIdInput.value = project.id;
   elements.goalProjectName.textContent = `Project: ${project.name}`;
   elements.goalObjectiveInput.value = "";
+  elements.goalCheckpointInput.value = String(state?.settings?.autonomousCheckpointMinutes ?? 0);
   elements.goalModalError.textContent = "";
   elements.goalModalError.classList.add("hidden");
   elements.goalModal.classList.remove("hidden");
@@ -3298,9 +3300,14 @@ async function submitAutonomousGoal(event) {
   event.preventDefault();
   const projectId = elements.goalProjectIdInput.value;
   const objective = elements.goalObjectiveInput.value.trim();
+  const researchCheckpointMinutes = Number(elements.goalCheckpointInput.value);
   setButtonBusy(elements.goalSubmitButton, true, "Starting…");
   try {
-    const response = await api.startAutonomousGoal({ projectId, objective });
+    const response = await api.startAutonomousGoal({
+      projectId,
+      objective,
+      researchCheckpointMinutes
+    });
     state.projects = response.projects || state.projects;
     state.tasks = response.tasks || state.tasks;
     selectedProjectId = projectId;
@@ -6638,8 +6645,9 @@ async function removeOfflineProposal(proposal, button) {
 }
 
 function decisionInputCard(request) {
+  const researchCheckpoint = request.decisionType === "research-checkpoint";
   const card = document.createElement("article");
-  card.className = "decision-card pending decision-input";
+  card.className = `decision-card pending decision-input${researchCheckpoint ? " research-checkpoint" : ""}`;
   card.dataset.inputId = request.id;
   const content = document.createElement("div");
   content.className = "decision-content";
@@ -6647,7 +6655,7 @@ function decisionInputCard(request) {
   meta.className = "decision-meta";
   const status = document.createElement("span");
   status.className = "decision-status pending";
-  status.textContent = "needs input";
+  status.textContent = researchCheckpoint ? "research check-in" : "needs input";
   const time = document.createElement("time");
   time.dateTime = request.requestedAt || "";
   time.textContent = request.requestedAt ? new Date(request.requestedAt).toLocaleString() : "";
@@ -6670,12 +6678,14 @@ function decisionInputCard(request) {
   const field = document.createElement("label");
   field.className = "decision-input-field";
   const fieldLabel = document.createElement("span");
-  fieldLabel.textContent = "Your answer";
+  fieldLabel.textContent = researchCheckpoint ? "Or give AMOS different direction" : "Your answer";
   const textarea = document.createElement("textarea");
   textarea.rows = 3;
   textarea.maxLength = 8000;
   textarea.required = true;
-  textarea.placeholder = "Type the answer AMOS needs to continue…";
+  textarea.placeholder = researchCheckpoint
+    ? "For example: research another hour, focusing on partner economics…"
+    : "Type the answer AMOS needs to continue…";
   field.append(fieldLabel, textarea);
   form.append(field);
   if (Array.isArray(request.options) && request.options.length > 0) {
@@ -6687,8 +6697,12 @@ function decisionInputCard(request) {
       chip.className = "button ghost compact-button";
       chip.textContent = option;
       chip.addEventListener("click", () => {
-        textarea.value = option;
-        textarea.focus();
+        if (researchCheckpoint) {
+          resolveDecisionInput(request, option, chip, true);
+        } else {
+          textarea.value = option;
+          textarea.focus();
+        }
       });
       chips.append(chip);
     }
@@ -6699,12 +6713,12 @@ function decisionInputCard(request) {
   const skip = document.createElement("button");
   skip.type = "button";
   skip.className = "button secondary";
-  skip.textContent = "Skip";
+  skip.textContent = researchCheckpoint ? "Keep working" : "Skip";
   skip.addEventListener("click", () => resolveDecisionInput(request, "", skip, false));
   const submit = document.createElement("button");
   submit.type = "submit";
   submit.className = "button primary";
-  submit.textContent = "Send answer";
+  submit.textContent = researchCheckpoint ? "Send direction" : "Send answer";
   buttons.append(skip, submit);
   form.append(buttons);
   form.addEventListener("submit", (event) => {
@@ -7054,6 +7068,8 @@ function renderSettings() {
     ? "api-key"
     : "sigv4";
   elements.operatingModeInput.value = settings.operatingMode || "online";
+  elements.researchCheckpointInput.value = String(settings.researchCheckpointMinutes ?? 5);
+  elements.autonomousCheckpointInput.value = String(settings.autonomousCheckpointMinutes ?? 0);
   elements.appearanceInput.value = settings.appearance || "system";
   elements.mcpInput.value = settings.amosMcpUrl;
   renderTelemetryPreference();
@@ -8052,6 +8068,8 @@ async function persistSettings() {
       ? ""
       : elements.reasoningInput.value,
     operatingMode: elements.operatingModeInput.value,
+    researchCheckpointMinutes: Number(elements.researchCheckpointInput.value),
+    autonomousCheckpointMinutes: Number(elements.autonomousCheckpointInput.value),
     appearance: elements.appearanceInput.value,
     amosMcpUrl: elements.mcpInput.value
   };

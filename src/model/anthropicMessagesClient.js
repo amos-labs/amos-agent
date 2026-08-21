@@ -13,9 +13,16 @@ export class AnthropicMessagesClient {
     this.fetch = fetchImpl;
   }
 
-  async chat({ messages, tools = [], onDelta = null, signal = null }) {
+  async chat({
+    messages,
+    tools = [],
+    onDelta = null,
+    signal = null,
+    reasoningEffortOverride = null
+  }) {
     const apiKey = this.config.apiKey || (await this.config.getAccessToken?.());
     const translated = anthropicTranscript(messages);
+    const reasoningEffort = reasoningEffortOverride || this.config.reasoningEffort;
     const body = {
       model: this.config.model,
       max_tokens: this.config.maxCompletionTokens || 8_192,
@@ -23,12 +30,12 @@ export class AnthropicMessagesClient {
     };
     if (translated.system) body.system = translated.system;
     if (
-      this.config.reasoningEffort === "none" &&
+      reasoningEffort === "none" &&
       this.config.capabilities?.reasoning !== false
     ) {
       body.thinking = { type: "disabled" };
-    } else if (this.config.reasoningEffort && this.config.capabilities?.reasoning !== false) {
-      body.output_config = { effort: this.config.reasoningEffort };
+    } else if (reasoningEffort && this.config.capabilities?.reasoning !== false) {
+      body.output_config = { effort: reasoningEffort };
     }
     if (tools.length > 0 && this.config.capabilities?.tools !== false) {
       body.tools = tools.map(anthropicTool);
@@ -164,7 +171,7 @@ function normalizeAnthropicPayload(payload, displayName) {
   const content = Array.isArray(payload.content) ? payload.content : [];
   const message = canonicalAnthropicMessage(content);
   if (!message.content && !message.tool_calls?.length) {
-    throw new Error(`${displayName} response did not include content or tool calls`);
+    throw emptyAnthropicResponseError(payload, content, displayName);
   }
   message.provider_state = { protocol: PROTOCOL, content: structuredClone(content) };
   return { message, usage: normalizedUsage(payload.usage), raw: payload };
@@ -194,6 +201,7 @@ async function readAnthropicStream(response, { signal, displayName, onDelta }) {
   const blocks = new Map();
   let visibleText = "";
   let usage = null;
+  let stopReason = "";
   let failure = null;
   const result = await readSseEvents(response, {
     signal,
@@ -219,6 +227,7 @@ async function readAnthropicStream(response, { signal, displayName, onDelta }) {
         finishAnthropicBlock(blocks.get(data.index));
       } else if (type === "message_delta") {
         usage = { ...(usage || {}), ...(data.usage || {}) };
+        stopReason = String(data.delta?.stop_reason || stopReason || "");
       }
     }
   });
@@ -233,9 +242,28 @@ async function readAnthropicStream(response, { signal, displayName, onDelta }) {
     finishAnthropicBlock(block);
     return block;
   });
-  const normalized = normalizeAnthropicPayload({ content, usage }, displayName);
+  const normalized = normalizeAnthropicPayload({
+    content,
+    usage,
+    ...(stopReason ? { stop_reason: stopReason } : {})
+  }, displayName);
   normalized.raw = result.raw;
   return normalized;
+}
+
+function emptyAnthropicResponseError(payload, content, displayName) {
+  const blockTypes = [...new Set(content.map((block) => String(block?.type || "")).filter(Boolean))];
+  const reasoningOnly = blockTypes.length > 0 && blockTypes.every((type) =>
+    type === "thinking" || type === "redacted_thinking"
+  );
+  const error = new Error(`${displayName} response did not include content or tool calls`);
+  error.code = reasoningOnly
+    ? "AMOS_MODEL_REASONING_ONLY_RESPONSE"
+    : "AMOS_MODEL_EMPTY_RESPONSE";
+  error.stopReason = String(payload?.stop_reason || "").slice(0, 128);
+  error.contentBlockTypes = blockTypes.slice(0, 16);
+  error.usage = normalizedUsage(payload?.usage);
+  return error;
 }
 
 function applyAnthropicDelta(blocks, index, delta, emitText) {

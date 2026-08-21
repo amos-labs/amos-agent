@@ -2221,6 +2221,7 @@ export class DesktopController {
       parentTaskId: input?.parentTaskId || task?.parentTaskId || "",
       remoteTaskId: task?.remoteId || (isUuid(task?.id) ? task.id : ""),
       projectId: task?.projectId || "",
+      taskKind: task?.kind || "general",
       contextKey: task?.contextKey || this.activeContextKey || "active",
       select: input?.select !== false,
       settings: structuredClone(settings),
@@ -2510,6 +2511,11 @@ export class DesktopController {
         presentationIntent: objective,
         canvasActive: Boolean(this.canvases.state().activeCanvasId),
         completionGate: () => this.codingLifecycleCompletionGate(),
+        researchCheckpoint: desktopResearchCheckpointPolicy({
+          settings,
+          input,
+          lane: this.runManager.current()
+        }),
         promptSession: {
           key: this.activeTaskRecordId || this.activeContextKey || resumeTaskId || taskId,
           tenantBoundary: {
@@ -2742,13 +2748,17 @@ export class DesktopController {
           offlineProposals: await this.offlineProposalState()
         };
       }
-      if (!canceled && error?.code === "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS") {
+      if (!canceled && [
+        "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS",
+        "AMOS_MODEL_TRANSIENT_AFTER_PROGRESS"
+      ].includes(error?.code)) {
         const completedToolActions = Math.max(0, Number(error.completedToolActions || 0));
         const recordedSteps = receiptEvents.length;
         const recoveredPartial = String(error.partialResponse || "").trim();
         const lifecycle = this.interruptCodingLifecycle("provider_failed", error.message);
+        const timedOut = error.code === "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS";
         const recoveryNote = [
-          `${modelIdentity.label} stopped responding after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
+          `${modelIdentity.label} ${timedOut ? "stopped responding" : "could not finish its response"} after ${recordedSteps} recorded progress event${recordedSteps === 1 ? "" : "s"}, including ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}.`,
           "The completed work and files remain intact; AMOS did not replay or roll back any action.",
           lifecycle.note,
           "Continue in this conversation and ask AMOS to inspect the current workspace, verify what completed, and finish only the remaining work."
@@ -2772,6 +2782,7 @@ export class DesktopController {
           model: modelIdentity.model,
           completed_tool_actions: completedToolActions,
           recorded_steps: recordedSteps,
+          provider_failure_code: error.providerFailureCode || error.code,
           timeout_phase: String(error.phase || "unknown").slice(0, 64),
           timeout_ms: Math.max(0, Number(error.timeoutMs || 0)),
           timeout_elapsed_ms: Math.max(0, Number(error.elapsedMs || 0)),
@@ -2813,7 +2824,9 @@ export class DesktopController {
           answer,
           interrupted: true,
           recovery: {
-            reason: "model_timeout_after_progress",
+            reason: timedOut
+              ? "model_timeout_after_progress"
+              : "model_transient_after_progress",
             provider: modelIdentity.provider,
             model: modelIdentity.model,
             modelLabel: modelIdentity.label,
@@ -3110,17 +3123,32 @@ export class DesktopController {
       answered: input?.answered !== false,
       answer: String(input?.answer || "")
     };
-    const resolved = this.approvals.resolveInput?.(id, payload)
+    const directBridge = this.approvals;
+    const resolved = directBridge.resolveInput?.(id, payload)
       ? { resolved: true }
       : null;
     if (!resolved) {
       for (const lane of this.runManager.nonTerminal()) {
         if (lane.approvals?.resolveInput?.(id, payload)) {
+          this.runManager.transition(lane.id, "running", {
+            phase: "thinking",
+            summary: "Applying the user's direction"
+          });
+          this.send("desktop-runs:changed", this.runManager.active());
           void this.sendRemoteState();
           return { resolved: true, taskId: lane.id };
         }
       }
       return { resolved: false };
+    }
+    const directLane = this.runManager.nonTerminal().find((lane) => lane.approvals === directBridge);
+    if (directLane) {
+      this.runManager.transition(directLane.id, "running", {
+        phase: "thinking",
+        summary: "Applying the user's direction"
+      });
+      this.send("desktop-runs:changed", this.runManager.active());
+      resolved.taskId = directLane.id;
     }
     void this.sendRemoteState();
     return resolved;
@@ -3796,6 +3824,7 @@ export class DesktopController {
     const started = await this.run({
       text: objective,
       taskRecordId,
+      researchCheckpointMinutes: input.researchCheckpointMinutes,
       select: false,
       wait: false,
       isolate: true
@@ -7509,6 +7538,13 @@ function sanitizeAgentEvent(event) {
         }))
     };
   }
+  if (event.type === "research_checkpoint") {
+    return {
+      type: "research_checkpoint",
+      name: event.action || "continued",
+      outcome: event.summary || "Research direction recorded"
+    };
+  }
   if (event.type === "runtime") {
     return {
       type: "runtime",
@@ -7776,6 +7812,9 @@ function toolEventSummary(event) {
   if (event.type === "workflow") return `Selected workflow: ${event.title}`;
   if (event.type === "phase") return event.summary || `Task ${event.phase}`;
   if (event.type === "assistant_delta") return "Streaming response";
+  if (event.type === "research_checkpoint") {
+    return event.summary || "Recorded the user's research direction";
+  }
   if (event.type === "routing") {
     if (event.hostedClass) {
       return `Local ${event.minimumClass || "invalid"} vs hosted ${event.hostedClass}: ${event.agreement ? "agreement" : "disagreement"}`;
@@ -7794,6 +7833,26 @@ function toolEventSummary(event) {
   if (event.type === "tool_start") return `Started ${event.name}`;
   if (event.type === "tool_error") return `${event.name} failed: ${event.error}`;
   return `Completed ${event.name}`;
+}
+
+function desktopResearchCheckpointPolicy({ settings = {}, input = {}, lane = null } = {}) {
+  const background = lane?.taskKind === "goal_pursuit" ||
+    Boolean(lane?.parentTaskId) ||
+    lane?.select === false;
+  const fallback = background
+    ? settings.autonomousCheckpointMinutes
+    : settings.researchCheckpointMinutes;
+  const requested = input?.researchCheckpointMinutes ?? fallback;
+  const minutes = [0, 2, 5, 10, 15, 30, 60].includes(Number(requested))
+    ? Number(requested)
+    : (background ? 0 : 5);
+  if (minutes <= 0) return { enabled: false, afterMs: 0, extensionMs: 0 };
+  const durationMs = minutes * 60_000;
+  return {
+    enabled: true,
+    afterMs: durationMs,
+    extensionMs: durationMs
+  };
 }
 
 function localRouterFailureCode(error) {

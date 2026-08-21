@@ -16,6 +16,8 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.baseUrl, "");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.intelligenceProfile, "auto");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.reasoningEffort, "");
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.researchCheckpointMinutes, 5);
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.autonomousCheckpointMinutes, 0);
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalMode, "ask");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalWorkspace, "");
   assert.deepEqual(DEFAULT_DESKTOP_SETTINGS.localApprovalKinds, []);
@@ -23,6 +25,26 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.onboardingCompletedAt, "");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.onboardingBoundary, "");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.hybridRouting.enabled, false);
+});
+
+test("research checkpoint settings are bounded while autonomous goals may run uninterrupted", () => {
+  const settings = sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    researchCheckpointMinutes: 10,
+    autonomousCheckpointMinutes: 60
+  });
+  assert.equal(settings.researchCheckpointMinutes, 10);
+  assert.equal(settings.autonomousCheckpointMinutes, 60);
+  assert.equal(sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    researchCheckpointMinutes: 999,
+    autonomousCheckpointMinutes: -1
+  }).researchCheckpointMinutes, 5);
+  assert.equal(sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    researchCheckpointMinutes: 999,
+    autonomousCheckpointMinutes: -1
+  }).autonomousCheckpointMinutes, 0);
 });
 
 test("hybrid model recipes are explicit, bounded, and survive unrelated writes", async () => {
