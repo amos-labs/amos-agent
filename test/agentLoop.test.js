@@ -1314,6 +1314,69 @@ test("a timed research checkpoint lets the user synthesize without another tool 
   ));
 });
 
+test("a work-step checkpoint prevents varied tools from running indefinitely", async () => {
+  const registry = new ToolRegistry();
+  let reads = 0;
+  registry.register({
+    name: "inspect_next_source",
+    async handler() {
+      reads += 1;
+      return { ok: true, source: reads };
+    }
+  });
+  let mainTurns = 0;
+  let decisions = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {
+      async ask() {
+        decisions += 1;
+        return { answered: true, answer: "Synthesize now" };
+      }
+    },
+    amosClient: {},
+    now: () => 0,
+    kimiClient: {
+      async chat(input) {
+        if (input.messages.some((message) =>
+          String(message.content || "").includes("amos_research_checkpoint_assessment")
+        )) {
+          return { message: { role: "assistant", content: "Two sources are enough to answer." } };
+        }
+        if (input.messages.some((message) =>
+          String(message.content || "").includes("amos_research_checkpoint_synthesis")
+        )) {
+          return { message: { role: "assistant", content: "Here is the bounded result." } };
+        }
+        mainTurns += 1;
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `read-${mainTurns}`,
+              function: { name: "inspect_next_source", arguments: JSON.stringify({ source: mainTurns }) }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("Research the opportunity", {
+    researchCheckpoint: {
+      enabled: true,
+      afterMs: 60 * 60_000,
+      extensionMs: 300_000,
+      afterToolCycles: 2
+    }
+  });
+  assert.equal(answer, "Here is the bounded result.");
+  assert.equal(reads, 2);
+  assert.equal(decisions, 1);
+});
+
 test("a research checkpoint can extend work or remove later timed interruptions", async () => {
   const registry = new ToolRegistry();
   let now = 0;

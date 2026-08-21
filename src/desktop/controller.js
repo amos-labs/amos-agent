@@ -3419,13 +3419,32 @@ export class DesktopController {
       throw new Error("This AMOS Platform does not yet advertise guided Automation templates");
     }
     const requestedTemplate = String(input.templateKey || "").trim().slice(0, 120);
+    const sourceProvider = String(input.sourceProvider || "").trim().slice(0, 80);
+    const destinationProvider = String(input.destinationProvider || "").trim().slice(0, 80);
+    const inferredTemplate = sourceProvider && destinationProvider &&
+      this.automationTemplates.templates.some((template) => template.key === "cross_system_event_sync")
+      ? "cross_system_event_sync"
+      : "";
     const templateKey = this.automationTemplates.templates.some(
       (template) => template.key === requestedTemplate
-    ) ? requestedTemplate : "";
+    ) ? requestedTemplate : inferredTemplate;
+    const connections = this.connectionsCatalog?.connections || [];
+    const sourceConnection = preferredAutomationConnection(connections, sourceProvider);
+    const destinationConnection = preferredAutomationConnection(
+      connections,
+      destinationProvider,
+      sourceConnection
+    );
     this.automationSetup = {
       id: randomUUID(),
       intent,
       templateKey,
+      sourceProvider,
+      destinationProvider,
+      sourceConnection,
+      destinationConnection,
+      triggerEvent: String(input.triggerEvent || "").trim().slice(0, 160),
+      operationKey: String(input.operationKey || "").trim().slice(0, 64),
       phase: templateKey ? "connections" : "intent",
       taskId: this.activeTaskRecordId || "",
       createdAt: new Date().toISOString(),
@@ -3437,6 +3456,15 @@ export class DesktopController {
       template_key: templateKey || null,
       task_id: this.automationSetup.taskId || null
     });
+    let operationContractCount = null;
+    if (destinationConnection) {
+      try {
+        const operations = await remote.automationOperations(destinationConnection);
+        operationContractCount = operations.contracts.length;
+      } catch {
+        // Setup remains usable when operation discovery is temporarily unavailable.
+      }
+    }
     const setup = publicAutomationSetup(this.automationSetup);
     this.send("automation-setup:requested", setup);
     await this.sendRemoteState();
@@ -3445,7 +3473,13 @@ export class DesktopController {
       setup_id: setup.id,
       template_count: this.automationTemplates.templates.length,
       selected_template: templateKey || null,
-      message: "The guided Automation work surface is open beside this conversation."
+      source_connection: sourceConnection || null,
+      destination_connection: destinationConnection || null,
+      active_destination_operation_contracts: operationContractCount,
+      conversation_required: operationContractCount === 0,
+      message: operationContractCount === 0
+        ? "The review surface is open, but the destination has no active typed operation contract. Continue in chat: derive the smallest provider contract needed for this outcome, ask only questions that materially change behavior, and obtain human activation before returning to mapping."
+        : "The Automation review surface is open beside this conversation with the matched systems and trigger."
     };
   }
 
@@ -3462,8 +3496,9 @@ export class DesktopController {
     const parameters = input.parameters && typeof input.parameters === "object"
       ? input.parameters
       : {};
-    const operations = parameters.connection
-      ? await remote.automationOperations(parameters.connection)
+    const operationConnection = parameters.destination_connection || parameters.connection;
+    const operations = operationConnection
+      ? await remote.automationOperations(operationConnection)
       : { contracts: [] };
     const args = automationInstallArguments(
       {
@@ -7327,12 +7362,40 @@ function publicAutomationSetup(setup) {
     id: String(setup.id || ""),
     intent: String(setup.intent || "").slice(0, 2_000),
     templateKey: String(setup.templateKey || "").slice(0, 120),
+    sourceProvider: String(setup.sourceProvider || "").slice(0, 80),
+    destinationProvider: String(setup.destinationProvider || "").slice(0, 80),
+    sourceConnection: String(setup.sourceConnection || "").slice(0, 128),
+    destinationConnection: String(setup.destinationConnection || "").slice(0, 128),
+    triggerEvent: String(setup.triggerEvent || "").slice(0, 160),
+    operationKey: String(setup.operationKey || "").slice(0, 64),
     phase: String(setup.phase || "intent").slice(0, 40),
     taskId: String(setup.taskId || "").slice(0, 128),
     createdAt: setup.createdAt || null,
     installation: setup.installation ? structuredClone(setup.installation) : null,
     activation: setup.activation ? structuredClone(setup.activation) : null
   };
+}
+
+function preferredAutomationConnection(connections, providerHint, excluded = "") {
+  const hint = String(providerHint || "").trim().toLowerCase();
+  if (!hint) return "";
+  const matches = (Array.isArray(connections) ? connections : [])
+    .filter((connection) => connection?.usable === true && connection.status === "connected")
+    .filter((connection) => (connection.id || connection.provider) !== excluded)
+    .filter((connection) => {
+      const provider = String(connection.provider || "").toLowerCase();
+      const name = String(connection.displayName || "").toLowerCase();
+      return provider === hint || provider.includes(hint) || hint.includes(provider) || name.includes(hint);
+    })
+    .sort((left, right) => {
+      const preferred = (connection) => /connection[_ -]?call[_ -]?ready|platform account/i.test(
+        String(connection.displayName || "")
+      ) ? 1 : 0;
+      const preference = preferred(right) - preferred(left);
+      if (preference !== 0) return preference;
+      return String(right.createdAt || "").localeCompare(String(left.createdAt || ""));
+    });
+  return matches[0]?.id || matches[0]?.provider || "";
 }
 
 function publicAutomationActivation(value) {
@@ -7846,12 +7909,15 @@ function desktopResearchCheckpointPolicy({ settings = {}, input = {}, lane = nul
   const minutes = [0, 2, 5, 10, 15, 30, 60].includes(Number(requested))
     ? Number(requested)
     : (background ? 0 : 5);
-  if (minutes <= 0) return { enabled: false, afterMs: 0, extensionMs: 0 };
+  if (minutes <= 0) {
+    return { enabled: false, afterMs: 0, extensionMs: 0, afterToolCycles: Number.POSITIVE_INFINITY };
+  }
   const durationMs = minutes * 60_000;
   return {
     enabled: true,
     afterMs: durationMs,
-    extensionMs: durationMs
+    extensionMs: durationMs,
+    afterToolCycles: 12
   };
 }
 

@@ -33,6 +33,17 @@ const catalogPayload = {
     required_parameters: ["webhook", "connection", "operation"],
     optional_parameters: ["arguments", "standing_grant"],
     model_required_for_run: false
+  }, {
+    key: "cross_system_event_sync",
+    version: 1,
+    blueprint: "connected_operations",
+    title: "Cross-System Event Synchronization",
+    description: "Move one connected-system event into another system.",
+    installable: true,
+    trigger_modes: ["webhook"],
+    required_parameters: ["webhook", "source_connection", "destination_connection", "operation"],
+    optional_parameters: ["event_types", "arguments", "standing_grant"],
+    model_required_for_run: false
   }],
   operator_setup_contract: {
     primary_surface: "AMOS Desktop Operator conversation",
@@ -210,6 +221,56 @@ test("bounded standing authority is normalized and remains an explicit template 
   assert.equal(args.parameters.standing_grant.max_total_runs, 100_000);
 });
 
+test("cross-system install arguments preserve distinct source and destination roles", () => {
+  const catalog = normalizeAutomationTemplateCatalog(catalogPayload);
+  const operations = normalizeAutomationOperations(operationPayload);
+  const args = automationInstallArguments({
+    templateKey: "cross_system_event_sync",
+    name: "Stripe invoices into QuickBooks",
+    parameters: {
+      webhook: "stripe-events",
+      source_connection: "stripe",
+      destination_connection: "quickbooks",
+      operation: "create_invoice",
+      event_types: ["invoice.finalized", "invoice.paid"]
+    }
+  }, {
+    catalog,
+    connections: [{
+      id: "33333333-3333-4333-8333-333333333333",
+      provider: "stripe",
+      usable: true
+    }, {
+      id: "11111111-1111-4111-8111-111111111111",
+      provider: "quickbooks",
+      usable: true
+    }],
+    contracts: operations.contracts
+  });
+
+  assert.equal(args.parameters.source_connection, "33333333-3333-4333-8333-333333333333");
+  assert.equal(args.parameters.destination_connection, "11111111-1111-4111-8111-111111111111");
+  assert.deepEqual(args.parameters.event_types, ["invoice.finalized", "invoice.paid"]);
+  assert.throws(() => automationInstallArguments({
+    templateKey: "cross_system_event_sync",
+    name: "Invalid self-sync",
+    parameters: {
+      webhook: "stripe-events",
+      source_connection: "quickbooks",
+      destination_connection: "quickbooks",
+      operation: "create_invoice"
+    }
+  }, {
+    catalog,
+    connections: [{
+      id: "11111111-1111-4111-8111-111111111111",
+      provider: "quickbooks",
+      usable: true
+    }],
+    contracts: operations.contracts
+  }), /different connected systems/i);
+});
+
 test("Desktop retains activation authority internally while exposing a credential-free preview", () => {
   const installation = normalizeAutomationInstallation({
     installed: true,
@@ -249,14 +310,75 @@ test("the Operator tool opens setup with the user's exact intent", async () => {
 
   const result = await tool.handler({
     intent: "When Stripe creates an invoice, create it in QuickBooks.",
-    template_key: "event_driven_system_sync"
+    template_key: "cross_system_event_sync",
+    source_provider: "stripe",
+    destination_provider: "quickbooks",
+    trigger_event: "invoice.finalized",
+    operation_key: "create_invoice"
   });
 
   assert.deepEqual(received, {
     intent: "When Stripe creates an invoice, create it in QuickBooks.",
-    templateKey: "event_driven_system_sync"
+    templateKey: "cross_system_event_sync",
+    sourceProvider: "stripe",
+    destinationProvider: "quickbooks",
+    triggerEvent: "invoice.finalized",
+    operationKey: "create_invoice"
   });
   assert.equal(result.setup_id, "setup-1");
+});
+
+test("Desktop infers the cross-system template, connection roles, and missing-contract boundary", async () => {
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-cross-system-setup",
+    settingsStore: { read: async () => ({ operatingMode: "online" }) },
+    openBrowser() {},
+    emit() {}
+  });
+  controller.automationTemplates = normalizeAutomationTemplateCatalog(catalogPayload);
+  controller.connectionsCatalog = {
+    connections: [{
+      id: "stripe-legacy",
+      provider: "stripe",
+      displayName: "AMOS Labs Stripe (live)",
+      usable: true,
+      status: "connected",
+      createdAt: "2026-01-01T00:00:00.000Z"
+    }, {
+      id: "stripe-platform",
+      provider: "stripe",
+      displayName: "AMOS Labs Stripe (platform account, connection_call-ready)",
+      usable: true,
+      status: "connected",
+      createdAt: "2026-08-01T00:00:00.000Z"
+    }, {
+      id: "quickbooks-live",
+      provider: "quickbooks",
+      displayName: "QuickBooks",
+      usable: true,
+      status: "connected"
+    }]
+  };
+  controller.personalRemote = async () => ({
+    async automationOperations(connection) {
+      assert.equal(connection, "quickbooks-live");
+      return { connectionId: connection, provider: "quickbooks", contracts: [] };
+    }
+  });
+  controller.sendRemoteState = async () => {};
+
+  const result = await controller.beginAutomationSetup({
+    intent: "Create QuickBooks invoices from finalized Stripe invoices.",
+    sourceProvider: "stripe",
+    destinationProvider: "quickbooks",
+    triggerEvent: "invoice.finalized"
+  });
+
+  assert.equal(result.selected_template, "cross_system_event_sync");
+  assert.equal(result.source_connection, "stripe-platform");
+  assert.equal(result.destination_connection, "quickbooks-live");
+  assert.equal(result.conversation_required, true);
+  assert.match(result.message, /continue in chat/i);
 });
 
 test("activation reuses the exact server-returned contract instead of renderer arguments", async () => {

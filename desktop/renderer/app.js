@@ -1725,16 +1725,28 @@ function syncAutomationSetup(setup) {
     automationSetupDraft.activation = setup.activation || automationSetupDraft.activation;
     if (setup.installation) automationSetupDraft.phaseIndex = 5;
   } else {
+    const sourceConnection = setup.sourceConnection || preferredVisibleAutomationConnection(setup.sourceProvider);
+    const destinationConnection = setup.destinationConnection || preferredVisibleAutomationConnection(
+      setup.destinationProvider,
+      sourceConnection
+    );
     automationSetupDraft = {
       setupId: setup.id,
       intent: setup.intent || "",
       templateKey: setup.templateKey || "",
       name: "",
-      connection: "",
-      operation: "",
+      sourceProvider: setup.sourceProvider || "",
+      destinationProvider: setup.destinationProvider || "",
+      sourceConnection,
+      destinationConnection,
+      connection: destinationConnection || "",
+      operation: setup.operationKey || "",
+      triggerEvents: setup.triggerEvent || "",
+      showAllTemplates: false,
+      showAllConnections: false,
       mappings: [],
       cadence: { kind: "weekly", weekday: 0, hour_utc: 6, minute_utc: 0 },
-      webhook: "",
+      webhook: setup.sourceProvider ? `${providerSlug(setup.sourceProvider)}-events` : "",
       collection: "",
       filter: "",
       backfill: false,
@@ -1753,6 +1765,7 @@ function syncAutomationSetup(setup) {
       activation: setup.activation || null
     };
     automationSetupOperations = null;
+    currentPanelTab = "canvas";
   }
   canvasSidecarOpen = true;
   if (state) renderCanvas();
@@ -1765,7 +1778,7 @@ function renderAutomationSetup() {
   const phase = AUTOMATION_SETUP_PHASES[draft.phaseIndex] || "intent";
   elements.automationSetupTitle.textContent = template?.title || "Build an Automation.";
   elements.automationSetupSubtitle.textContent = draft.intent ||
-    "AMOS will walk through the exact outcome, connections, mappings, trigger, preview, and governed activation.";
+    "AMOS will establish the outcome in conversation, then use this surface to review the exact systems, mappings, trigger, and governed activation.";
   elements.automationSetupPhases.replaceChildren();
   for (const [index, key] of AUTOMATION_SETUP_PHASES.entries()) {
     const item = document.createElement("li");
@@ -1812,58 +1825,66 @@ function renderAutomationIntentStep() {
   name.control.placeholder = "Choose a template to use its suggested name";
   body.append(name.label);
 
-  const catalog = state.automationTemplates || { blueprints: [], templates: [] };
-  for (const blueprint of catalog.blueprints || []) {
-    const heading = document.createElement("div");
-    heading.className = "automation-step-copy";
-    const title = document.createElement("h3");
-    title.textContent = blueprint.title;
-    const description = document.createElement("p");
-    description.textContent = blueprint.description;
-    heading.append(title, description);
-    body.append(heading);
-    const grid = document.createElement("div");
-    grid.className = "automation-template-grid";
-    for (const template of (catalog.templates || []).filter(
-      (item) => item.blueprintKey === blueprint.key
-    )) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `automation-template-card${template.key === automationSetupDraft.templateKey ? " selected" : ""}`;
-      button.disabled = !template.installable;
-      const meta = document.createElement("small");
-      meta.textContent = template.installable
-        ? `${template.triggerModes.join(" / ") || "guided"} · model-free runtime`
-        : "Guided custom build";
-      const name = document.createElement("strong");
-      name.textContent = template.title;
-      const copy = document.createElement("span");
-      copy.textContent = template.installable ? template.description : template.whyGuided;
-      button.append(meta, name, copy);
-      button.addEventListener("click", () => {
-        captureAutomationSetupFields("intent");
-        automationSetupDraft.templateKey = template.key;
-        automationSetupDraft.name = automationSetupDraft.name || template.title;
-        automationSetupDraft.mappings = [];
-        automationSetupOperations = null;
-        renderAutomationSetup();
-      });
-      grid.append(button);
-    }
-    body.append(grid);
+  const templates = automationTemplateSuggestions();
+  const heading = automationStepCopy(
+    automationSetupDraft.templateKey ? "Matched workflow" : "Suggested starting points",
+    automationSetupDraft.templateKey
+      ? "AMOS matched this from the source, destination, trigger, and outcome established in chat."
+      : "AMOS filtered the Platform catalog to the few starting points most relevant to this outcome."
+  );
+  body.append(heading);
+  const grid = document.createElement("div");
+  grid.className = "automation-template-grid";
+  for (const template of templates) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `automation-template-card${template.key === automationSetupDraft.templateKey ? " selected" : ""}`;
+    button.disabled = !template.installable;
+    const meta = document.createElement("small");
+    meta.textContent = template.installable
+      ? `${template.triggerModes.join(" / ") || "guided"} · model-free runtime`
+      : "Guided custom build";
+    const name = document.createElement("strong");
+    name.textContent = template.title;
+    const copy = document.createElement("span");
+    copy.textContent = template.installable ? template.description : template.whyGuided;
+    button.append(meta, name, copy);
+    button.addEventListener("click", () => {
+      captureAutomationSetupFields("intent");
+      automationSetupDraft.templateKey = template.key;
+      automationSetupDraft.name = automationSetupDraft.name || template.title;
+      automationSetupDraft.mappings = [];
+      automationSetupOperations = null;
+      renderAutomationSetup();
+    });
+    grid.append(button);
+  }
+  body.append(grid);
+  const totalTemplates = state.automationTemplates?.templates?.length || 0;
+  if (!automationSetupDraft.showAllTemplates && templates.length < totalTemplates) {
+    const showAll = actionButton("Choose a different starting point", "secondary");
+    showAll.addEventListener("click", () => {
+      automationSetupDraft.showAllTemplates = true;
+      renderAutomationSetup();
+    });
+    body.append(showAll);
   }
 }
 
 function renderAutomationConnectionStep(template) {
   const body = elements.automationSetupBody;
   const needsConnection = template?.requiredParameters?.includes("connection");
+  const needsSource = template?.requiredParameters?.includes("source_connection");
+  const needsDestination = template?.requiredParameters?.includes("destination_connection");
   body.append(automationStepCopy(
-    "Connect the systems this workflow needs.",
-    needsConnection
-      ? "Choose the connected account that will perform the typed operation. Add a missing app here without placing credentials in chat."
+    needsSource && needsDestination ? "Confirm the source and destination." : "Confirm the system this workflow needs.",
+    needsSource && needsDestination
+      ? "AMOS matched each connected account to its role from the conversation. The source produces the event; only the destination performs the typed operation."
+      : needsConnection
+        ? "Confirm the connected account that will perform the typed operation. Add a missing app here without placing credentials in chat."
       : "This template runs against governed AMOS data and does not require an external application connection."
   ));
-  if (!needsConnection) {
+  if (!needsConnection && !needsSource && !needsDestination) {
     body.append(automationBoundary(
       "No external credential is needed. AMOS will still revalidate the current company identity and scopes on every run."
     ));
@@ -1872,28 +1893,33 @@ function renderAutomationConnectionStep(template) {
   const connections = (state.connectionsCatalog?.connections || []).filter(
     (connection) => connection.status === "connected" && connection.usable === true
   );
-  const list = document.createElement("div");
-  list.className = "automation-connection-list";
-  for (const connection of connections) {
-    list.append(automationChoice({
-      name: "automationConnection",
-      value: connection.id || connection.provider,
-      checked: automationSetupDraft.connection === (connection.id || connection.provider),
-      title: connection.displayName,
-      detail: `${humanizeProvider(connection.provider)} · ${connection.ownership.replaceAll("_", " ")}`,
-      badge: "Connected",
-      onChange: () => {
-        automationSetupDraft.connection = connection.id || connection.provider;
-        automationSetupDraft.operation = "";
-        automationSetupDraft.mappings = [];
-        automationSetupOperations = null;
-      }
+  if (needsSource && needsDestination) {
+    body.append(automationConnectionRole({
+      title: "Source system",
+      detail: "Produces the signed event and payload.",
+      role: "source",
+      providerHint: automationSetupDraft.sourceProvider,
+      connections
+    }));
+    body.append(automationConnectionRole({
+      title: "Destination system",
+      detail: "Receives the governed typed operation.",
+      role: "destination",
+      providerHint: automationSetupDraft.destinationProvider,
+      connections
+    }));
+  } else {
+    body.append(automationConnectionRole({
+      title: "Connected system",
+      detail: "Performs the governed typed operation.",
+      role: "connection",
+      providerHint: automationSetupDraft.destinationProvider,
+      connections
     }));
   }
   if (connections.length === 0) {
-    list.append(automationBoundary("No usable app connection is visible to this identity yet."));
+    body.append(automationBoundary("No usable app connection is visible to this identity yet."));
   }
-  body.append(list);
   const available = state.connectionsCatalog?.providers || [];
   const connectedProviders = new Set(connections.map((item) => item.provider));
   const connectable = available.filter(
@@ -1917,6 +1943,53 @@ function renderAutomationConnectionStep(template) {
     }
     body.append(grid);
   }
+}
+
+function automationConnectionRole({ title, detail, role, providerHint, connections }) {
+  const wrapper = document.createElement("section");
+  wrapper.className = "automation-connection-role";
+  wrapper.append(automationStepCopy(title, detail));
+  const selectedKey = role === "source"
+    ? "sourceConnection"
+    : role === "destination" ? "destinationConnection" : "connection";
+  const selected = automationSetupDraft[selectedKey];
+  const relevant = automationSetupDraft.showAllConnections || !providerHint
+    ? connections
+    : connections.filter((connection) => automationConnectionMatches(connection, providerHint));
+  const visible = relevant.length > 0 ? relevant : connections;
+  const list = document.createElement("div");
+  list.className = "automation-connection-list";
+  for (const connection of visible) {
+    const value = connection.id || connection.provider;
+    list.append(automationChoice({
+      name: `automation${role}Connection`,
+      value,
+      checked: selected === value,
+      title: connection.displayName,
+      detail: `${humanizeProvider(connection.provider)} · ${connection.ownership.replaceAll("_", " ")}`,
+      badge: "Connected",
+      onChange: () => {
+        automationSetupDraft[selectedKey] = value;
+        if (role !== "source") {
+          automationSetupDraft.connection = value;
+          automationSetupDraft.destinationConnection = value;
+          automationSetupDraft.operation = "";
+          automationSetupDraft.mappings = [];
+          automationSetupOperations = null;
+        }
+      }
+    }));
+  }
+  wrapper.append(list);
+  if (!automationSetupDraft.showAllConnections && visible.length < connections.length) {
+    const showAll = actionButton("Show other connected accounts", "secondary");
+    showAll.addEventListener("click", () => {
+      automationSetupDraft.showAllConnections = true;
+      renderAutomationSetup();
+    });
+    wrapper.append(showAll);
+  }
+  return wrapper;
 }
 
 function renderAutomationMappingStep(template) {
@@ -1944,21 +2017,18 @@ function renderAutomationMappingStep(template) {
         detail: `${contract.method} ${contract.pathTemplate}`,
         badge: contract.consequence,
         onChange: () => {
-          automationSetupDraft.operation = contract.operationKey;
-          if (contract.consequence !== "write") automationSetupDraft.approvalMode = "per_run";
-          automationSetupDraft.mappings = mappingRowsForOperation(contract).map((row) => ({
-            ...row,
-            mode: template.triggerModes.includes("schedule") ? "constant" : "reference",
-            value: ""
-          }));
+          chooseAutomationOperation(contract, template);
           renderAutomationSetup();
         }
       }));
     }
     if ((automationSetupOperations.contracts || []).length === 0) {
       list.append(automationBoundary(
-        "This connection has no active typed operation contracts. Ask AMOS in chat to derive contracts from the provider documentation; a human must activate them before this workflow can be installed."
+        "The destination has no active typed operation contract for this outcome. AMOS needs to derive the smallest safe contract, ask only the accounting or business questions that materially change it, and obtain human activation before mapping can continue."
       ));
+      const continueInChat = actionButton("Resolve this in conversation", "primary");
+      continueInChat.addEventListener("click", continueAutomationSetupInConversation);
+      list.append(continueInChat);
     }
     body.append(list);
     if (automationSetupDraft.operation) renderAutomationMappingRows(body);
@@ -2065,12 +2135,21 @@ function renderAutomationTriggerStep(template) {
       body.append(time.label);
     }
   } else if (mode === "webhook") {
-    const field = setupField("Signed webhook event", "input", automationSetupDraft.webhook);
+    const crossSystem = isCrossSystemAutomationTemplate(template);
+    if (crossSystem) {
+      const events = setupField("Source event types", "input", automationSetupDraft.triggerEvents);
+      events.control.id = "automationTriggerEvents";
+      events.control.placeholder = "invoice.finalized, invoice.paid";
+      body.append(events.label);
+    }
+    const field = setupField("Signed webhook channel", "input", automationSetupDraft.webhook);
     field.control.id = "automationWebhook";
-    field.control.placeholder = "stripe.invoice.created";
+    field.control.placeholder = "stripe-events";
     body.append(field.label);
     body.append(automationBoundary(
-      "This selects an existing signed tenant-webhook event. Provider-side webhook provisioning is not performed by this draft installer."
+      crossSystem
+        ? "The source connection and event allowlist become visible trigger metadata. The webhook channel still uses the tenant-signed endpoint; provider-side webhook provisioning remains a separate governed setup action."
+        : "This selects an existing signed tenant-webhook event. Provider-side webhook provisioning is not performed by this draft installer."
     ));
   } else {
     const collection = setupField("AMOS collection", "input", automationSetupDraft.collection);
@@ -2265,10 +2344,21 @@ async function automationSetupNext() {
       automationSetupDraft.name ||= template.title;
       automationSetupDraft.phaseIndex = 1;
     } else if (phase === "connections") {
-      if (template.requiredParameters.includes("connection")) {
+      if (isCrossSystemAutomationTemplate(template)) {
+        if (!automationSetupDraft.sourceConnection) throw new Error("Choose or connect the source system");
+        if (!automationSetupDraft.destinationConnection) throw new Error("Choose or connect the destination system");
+        if (automationSetupDraft.sourceConnection === automationSetupDraft.destinationConnection) {
+          throw new Error("Choose different connected systems for the source and destination");
+        }
+        automationSetupOperations = await api.automationOperations(automationSetupDraft.destinationConnection);
+      } else if (template.requiredParameters.includes("connection")) {
         if (!automationSetupDraft.connection) throw new Error("Choose or connect the system this Automation will operate");
         automationSetupOperations = await api.automationOperations(automationSetupDraft.connection);
       }
+      const requestedOperation = (automationSetupOperations?.contracts || []).find(
+        (contract) => contract.operationKey === automationSetupDraft.operation
+      );
+      if (requestedOperation) chooseAutomationOperation(requestedOperation, template);
       automationSetupDraft.phaseIndex = 2;
     } else if (phase === "mapping") {
       validateAutomationMappingStep(template);
@@ -2324,6 +2414,7 @@ async function closeAutomationSetup() {
   automationSetupDraft = null;
   automationSetupOperations = null;
   if (state) state.automationSetup = null;
+  if (!activeCanvasId) currentPanelTab = "activity";
   renderCanvas();
   if (setupId) await api.dismissAutomationSetup(setupId).catch(() => {});
   elements.promptInput.focus();
@@ -2366,9 +2457,11 @@ function captureAutomationSetupFields(phase) {
       }
     }
     const webhook = document.getElementById("automationWebhook");
+    const triggerEvents = document.getElementById("automationTriggerEvents");
     const collection = document.getElementById("automationCollection");
     const filter = document.getElementById("automationFilter");
     if (webhook) automationSetupDraft.webhook = webhook.value.trim();
+    if (triggerEvents) automationSetupDraft.triggerEvents = triggerEvents.value.trim();
     if (collection) automationSetupDraft.collection = collection.value.trim();
     if (filter) automationSetupDraft.filter = filter.value.trim();
     automationSetupDraft.backfill = document.getElementById("automationBackfill")?.checked || false;
@@ -2413,6 +2506,12 @@ function automationSetupPreview(template) {
   validateAutomationMappingStep(template);
   const parameters = {};
   if (template.requiredParameters.includes("connection")) parameters.connection = automationSetupDraft.connection;
+  if (template.requiredParameters.includes("source_connection")) {
+    parameters.source_connection = automationSetupDraft.sourceConnection;
+  }
+  if (template.requiredParameters.includes("destination_connection")) {
+    parameters.destination_connection = automationSetupDraft.destinationConnection;
+  }
   if (template.requiredParameters.includes("operation")) {
     parameters.operation = automationSetupDraft.operation;
     const populated = automationSetupDraft.mappings.filter((row) => String(row.value || "").trim());
@@ -2449,7 +2548,21 @@ function automationSetupPreview(template) {
   } else if (mode === "webhook") {
     if (!automationSetupDraft.webhook) throw new Error("Name the signed webhook event");
     parameters.webhook = automationSetupDraft.webhook;
-    trigger = { kind: "webhook", webhook: parameters.webhook };
+    if (template.optionalParameters.includes("event_types")) {
+      parameters.event_types = automationSetupDraft.triggerEvents
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (parameters.event_types.length === 0) throw new Error("Name at least one source event type");
+    }
+    trigger = {
+      kind: "webhook",
+      webhook: parameters.webhook,
+      ...(parameters.source_connection
+        ? { source: { connection: parameters.source_connection } }
+        : {}),
+      ...(parameters.event_types ? { event_types: parameters.event_types } : {})
+    };
   } else {
     if (!automationSetupDraft.collection) throw new Error("Name the AMOS collection to watch");
     parameters.collection = automationSetupDraft.collection;
@@ -2518,6 +2631,96 @@ async function connectProviderFromAutomation(provider, button) {
   } finally {
     if (button.isConnected) setButtonBusy(button, false, `Connect ${provider.label}`);
   }
+}
+
+function continueAutomationSetupInConversation() {
+  const destination = automationConnectionLabel(automationSetupDraft.destinationConnection || automationSetupDraft.connection);
+  elements.promptInput.value = [
+    `The ${destination || "destination"} connection has no active typed operation contract for this Automation.`,
+    `Please derive the smallest safe contract needed to accomplish: ${automationSetupDraft.intent}`,
+    "Ask me only questions that materially change the accounting or business behavior, obtain human activation for the exact contract, and then reopen this mapping review."
+  ].join(" ");
+  openPanel("activity");
+  elements.promptInput.focus();
+  toast("The exact contract boundary is ready to resolve in chat.");
+}
+
+function chooseAutomationOperation(contract, template) {
+  automationSetupDraft.operation = contract.operationKey;
+  if (contract.consequence !== "write") automationSetupDraft.approvalMode = "per_run";
+  automationSetupDraft.mappings = mappingRowsForOperation(contract).map((row) => ({
+    ...row,
+    mode: template.triggerModes.includes("schedule") ? "constant" : "reference",
+    value: ""
+  }));
+}
+
+function isCrossSystemAutomationTemplate(template) {
+  return template?.requiredParameters?.includes("source_connection") &&
+    template.requiredParameters.includes("destination_connection");
+}
+
+function automationTemplateSuggestions() {
+  const templates = state?.automationTemplates?.templates || [];
+  if (automationSetupDraft.showAllTemplates) return templates;
+  const selected = templates.find((template) => template.key === automationSetupDraft.templateKey);
+  if (selected) return [selected];
+  const intent = [
+    automationSetupDraft.intent,
+    automationSetupDraft.sourceProvider,
+    automationSetupDraft.destinationProvider
+  ].join(" ").toLowerCase();
+  const connectedIntent = /sync|integrat|webhook|stripe|quickbooks|qbo|invoice|email|calendar|crm|connected/.test(intent);
+  const words = new Set(intent.split(/[^a-z0-9]+/).filter((word) => word.length > 3));
+  return templates
+    .map((template) => {
+      const searchable = `${template.key} ${template.title} ${template.description}`.toLowerCase();
+      let score = connectedIntent && template.blueprintKey === "connected_operations" ? 10 : 0;
+      if (/source|destination|into|from/.test(intent) && template.key === "cross_system_event_sync") score += 20;
+      for (const word of words) if (searchable.includes(word)) score += 1;
+      return { template, score };
+    })
+    .sort((left, right) => right.score - left.score || left.template.title.localeCompare(right.template.title))
+    .slice(0, 3)
+    .map(({ template }) => template);
+}
+
+function preferredVisibleAutomationConnection(providerHint, excluded = "") {
+  const matches = (state?.connectionsCatalog?.connections || [])
+    .filter((connection) => connection.status === "connected" && connection.usable === true)
+    .filter((connection) => (connection.id || connection.provider) !== excluded)
+    .filter((connection) => automationConnectionMatches(connection, providerHint))
+    .sort((left, right) => {
+      const preferred = (connection) => /connection[_ -]?call[_ -]?ready|platform account/i.test(
+        String(connection.displayName || "")
+      ) ? 1 : 0;
+      return preferred(right) - preferred(left) ||
+        String(right.createdAt || "").localeCompare(String(left.createdAt || ""));
+    });
+  return matches[0]?.id || matches[0]?.provider || "";
+}
+
+function automationConnectionMatches(connection, providerHint) {
+  const hint = String(providerHint || "").trim().toLowerCase();
+  if (!hint) return true;
+  const provider = String(connection?.provider || "").toLowerCase();
+  const name = String(connection?.displayName || "").toLowerCase();
+  return provider === hint || provider.includes(hint) || hint.includes(provider) || name.includes(hint);
+}
+
+function automationConnectionLabel(connectionId) {
+  const connection = (state?.connectionsCatalog?.connections || []).find(
+    (item) => (item.id || item.provider) === connectionId
+  );
+  return connection?.displayName || humanizeProvider(automationSetupDraft.destinationProvider || "");
+}
+
+function providerSlug(value) {
+  return String(value || "provider")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "provider";
 }
 
 function selectedAutomationTemplate() {
@@ -3995,7 +4198,6 @@ function renderCanvas() {
   renderBriefingLibrary();
   if (setupVisible) {
     canvasSidecarOpen = true;
-    currentPanelTab = "canvas";
   }
   const sidecarVisible = Boolean(canvasSidecarOpen && currentView === "operator");
   elements.operatorGrid.classList.toggle("has-context", sidecarVisible);
@@ -6770,6 +6972,9 @@ async function resolveDecisionInput(request, answer, button, answered) {
     }
     removeInlineDecisionRequest(request.id);
     renderDecisions();
+    if (request.decisionType === "research-checkpoint") {
+      addMessage("assistant", researchCheckpointAcknowledgement(answer, answered));
+    }
     if (running) {
       updateChatRunStatus(answered ? "Using your answer and continuing…" : "Continuing without that answer…", "active");
       setPanelBadge("working");
@@ -6780,6 +6985,17 @@ async function resolveDecisionInput(request, answer, button, answered) {
   } finally {
     if (button?.isConnected) setButtonBusy(button, false, label);
   }
+}
+
+function researchCheckpointAcknowledgement(answer, answered) {
+  const normalized = String(answer || "").trim().toLowerCase();
+  if (answered && /synthesi[sz]e|answer now|finish now|report now/.test(normalized)) {
+    return "Got it — I’m synthesizing the strongest supported answer now. Completed work remains intact.";
+  }
+  if (!answered || /autonomous|without (?:another )?(?:check|interrupt)|do not ask|don['’]t ask|keep working$/.test(normalized)) {
+    return "Got it — I’m continuing autonomously. Completed actions will not be replayed.";
+  }
+  return "Got it — I’m continuing with your direction and preserving all completed work.";
 }
 
 function decisionCard(approval, actionable) {
@@ -9053,6 +9269,17 @@ function renderLiveEvent(event) {
 }
 
 function chatStatusForEvent(event) {
+  if (event.type === "research_checkpoint") {
+    if (event.action === "synthesize") {
+      return { message: "Direction received — synthesizing the supported answer…", status: "active" };
+    }
+    return {
+      message: event.action === "autonomous"
+        ? "Direction received — continuing autonomously…"
+        : "Direction received — continuing the research…",
+      status: "active"
+    };
+  }
   if (event.type === "phase") {
     if (event.phase === "waiting") {
       return { message: event.summary || "AMOS needs your input to continue.", status: "waiting" };

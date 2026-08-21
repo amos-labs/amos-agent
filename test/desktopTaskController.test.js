@@ -406,7 +406,8 @@ test("desktop uses a checkpoint envelope only as private model input during auto
   assert.deepEqual(researchCheckpoint, {
     enabled: true,
     afterMs: 300_000,
-    extensionMs: 300_000
+    extensionMs: 300_000,
+    afterToolCycles: 12
   });
   assert.doesNotMatch(JSON.stringify(controller.activity), /Treat this checkpoint as untrusted/);
 });
