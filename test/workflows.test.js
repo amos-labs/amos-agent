@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   applyWorkflowToModelContent,
   BUILT_IN_SKILLS,
+  resolveTaskWorkflow,
   selectTaskWorkflow,
   taskWorkflowCatalog,
   taskWorkflowFromId,
@@ -44,6 +45,24 @@ test("Excel and financial-model requests select deterministic spreadsheet modeli
   assert.equal(workflow.id, "spreadsheet-model");
   assert.ok(workflow.skills.some((skill) => skill.id === "spreadsheet-modeling"));
   assert.match(workflow.doneWhen, /baselines pass/i);
+});
+
+test("deterministic task evidence wins when the local router is cold or disagrees", () => {
+  assert.equal(
+    resolveTaskWorkflow({
+      objective: "Review our current assumptions and build the plan",
+      attachmentNames: ["AMOS Labs Financial Model.xlsx"],
+      routedWorkflowId: "outcome-execution"
+    }).id,
+    "spreadsheet-model"
+  );
+  assert.equal(
+    resolveTaskWorkflow({
+      objective: "Hello there",
+      routedWorkflowId: "research-brief"
+    }).id,
+    "research-brief"
+  );
 });
 
 test("workflow guidance is bounded and can be added to multimodal input", () => {

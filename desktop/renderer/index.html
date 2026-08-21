@@ -123,7 +123,9 @@
             <span id="identityBadge" class="identity-badge hidden"></span>
             <span id="modeBadge" class="mode-badge">ONLINE COMPANY</span>
             <span id="runtimeBadge" class="runtime-badge">Intelligence not configured</span>
-            <button id="canvasToggleButton" class="button ghost hidden" type="button" aria-pressed="false" aria-label="Toggle work surface" title="Toggle work surface">▦ Panel</button>
+            <button id="canvasToggleButton" class="button ghost panel-toggle" type="button" aria-pressed="false" aria-label="Toggle AMOS Panel" title="Open activity and work surfaces">
+              <span>▦ Panel</span><span id="panelStateBadge" class="panel-state-badge hidden" aria-hidden="true"></span>
+            </button>
             <button id="approvalsButton" class="button ghost">Review decisions</button>
           </div>
         </header>
@@ -273,19 +275,11 @@
                   </div>
                 </div>
                 <div id="starterActions" class="starter-actions"></div>
-                <details id="activityStream" class="activity-stream hidden" open>
-                  <summary>
-                    <span class="activity-stream-icon" aria-hidden="true">⌁</span>
-                    <span class="activity-stream-copy">
-                      <strong id="activityStreamTitle">AMOS is working</strong>
-                      <small>Progress summaries, governed tool use, and recorded outcomes</small>
-                    </span>
-                    <span id="runningIndicator" class="running-indicator">Starting…</span>
-                  </summary>
-                  <div id="liveEvents" class="live-events" aria-live="polite"></div>
-                  <p id="deploymentSummary" class="activity-boundary">Configure a model to see its deployment boundary.</p>
-                  <p id="taskUsageLine" class="task-usage-line hidden"></p>
-                </details>
+                <div id="chatRunStatus" class="chat-run-status hidden" role="status" aria-live="polite">
+                  <span class="chat-run-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                  <span id="chatRunStatusText">Preparing the task…</span>
+                  <button id="chatRunActivityButton" class="chat-run-activity-button" type="button">View activity</button>
+                </div>
                 <section id="approvalModal" class="approval-modal inline-approval hidden" role="region" aria-live="polite" aria-label="Local approval needed">
                   <span class="eyebrow warning">LOCAL APPROVAL NEEDED</span>
                   <h2>AMOS is paused before acting on this computer.</h2>
@@ -352,7 +346,31 @@
             </div>
 
             <div id="contextResizeHandle" class="context-resize-handle hidden" role="separator" aria-label="Resize work surface" aria-orientation="vertical" tabindex="0"></div>
-            <aside id="canvasSidecar" class="canvas-sidecar hidden" aria-label="Current AMOS work surface">
+            <aside id="canvasSidecar" class="canvas-sidecar hidden" aria-label="AMOS Panel">
+              <header class="panel-header">
+                <div class="panel-tabs" role="tablist" aria-label="AMOS Panel views">
+                  <button id="panelActivityTab" class="panel-tab active" type="button" role="tab" aria-selected="true">
+                    Activity <span id="panelActivityCount">0</span>
+                  </button>
+                  <button id="panelCanvasTab" class="panel-tab" type="button" role="tab" aria-selected="false">
+                    Work surface <span id="panelCanvasCount">0</span>
+                  </button>
+                </div>
+                <button id="canvasCloseButton" class="icon-button" type="button" aria-label="Close AMOS Panel" title="Close AMOS Panel">×</button>
+              </header>
+              <section id="activityStream" class="panel-activity-surface" role="tabpanel" aria-labelledby="panelActivityTab">
+                <div class="panel-activity-heading">
+                  <div>
+                    <span class="eyebrow">LIVE TASK ACTIVITY</span>
+                    <h2 id="activityStreamTitle">Activity</h2>
+                    <p>Routing, tools, governed actions, timing, and recorded outcomes.</p>
+                  </div>
+                  <span id="runningIndicator" class="running-indicator">Idle</span>
+                </div>
+                <div id="liveEvents" class="live-events" aria-live="polite"></div>
+                <p id="deploymentSummary" class="activity-boundary">Configure a model to see its deployment boundary.</p>
+                <p id="taskUsageLine" class="task-usage-line hidden"></p>
+              </section>
               <section id="automationSetupSurface" class="automation-setup-surface hidden" aria-label="Guided Automation setup">
                 <div class="automation-setup-heading">
                   <div>
@@ -381,7 +399,6 @@
                     <button id="canvasSaveButton" class="button secondary hidden" type="button">Save briefing</button>
                     <button id="canvasScheduleButton" class="button secondary hidden" type="button">Schedule</button>
                     <button id="canvasRefreshButton" class="button secondary hidden" type="button">Refresh</button>
-                    <button id="canvasCloseButton" class="icon-button" type="button" aria-label="Close work surface" title="Close work surface">×</button>
                   </div>
                 </div>
                 <div id="canvasSourceBar" class="canvas-source-bar hidden"></div>
@@ -899,6 +916,18 @@
                   <option value="api-key">Amazon Bedrock API key</option>
                 </select>
                 <small>SigV4 uses an AWS profile, SSO session, environment credentials, or attached IAM role in the Desktop main process. Credentials never enter chat or the renderer.</small>
+              </div>
+              <div id="bedrockRetentionField" class="local-setup-callout bedrock-retention-callout hidden">
+                <div>
+                  <strong>Provider data sharing required</strong>
+                  <span>Claude Fable 5 requires an explicit Amazon Bedrock account opt-in. Prompts and completions are shared with Anthropic and may be retained for up to 30 days.</span>
+                  <label class="bedrock-retention-consent">
+                    <input id="bedrockRetentionConsent" type="checkbox">
+                    <span>I understand this changes the data-retention mode for this AWS account.</span>
+                  </label>
+                  <small id="bedrockRetentionStatus">AMOS will never enable this automatically.</small>
+                </div>
+                <button id="bedrockRetentionButton" class="button secondary" type="button" disabled>Enable provider data sharing</button>
               </div>
               <div class="field">
                 <label for="apiKeyInput">Provider credential</label>

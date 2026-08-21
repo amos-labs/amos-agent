@@ -177,6 +177,7 @@ export class OpenAICompatibleClient {
           fallbackUsed: usedLocalFallback,
           requestStartedAt,
           firstOutputAt: result.timing?.firstOutputAt || null,
+          bufferedResponse: result.timing?.buffered === true,
           completedAt: performance.now(),
           raw: result.raw
         });
@@ -204,6 +205,7 @@ export class OpenAICompatibleClient {
           fallbackUsed: usedLocalFallback,
           requestStartedAt,
           firstOutputAt: null,
+          bufferedResponse: true,
           completedAt: performance.now(),
           raw: payload
         }),
@@ -361,7 +363,10 @@ async function modelFailure(response) {
   }
   return {
     payload,
-    message: payload?.error?.message || text || `Model request failed with ${response.status}`
+    message: withCorrelationReference(
+      payload?.error?.message || text || `Model request failed with ${response.status}`,
+      payload?.error?.correlation_id
+    )
   };
 }
 
@@ -422,6 +427,7 @@ async function readStreamingResponse(response, {
       usage: normalizedUsage(payload.usage),
       raw: payload,
       timing: {
+        buffered: true,
         firstOutputAt,
         timeToFirstOutputMs: Math.max(0, Math.round(firstOutputAt - requestStartedAt))
       }
@@ -435,11 +441,22 @@ async function readStreamingResponse(response, {
   let firstOutputAt = null;
 
   const consume = (payload) => {
+    if (payload?.error?.message) {
+      const error = new Error(withCorrelationReference(
+        payload.error.message,
+        payload.error.correlation_id
+      ));
+      error.code = payload.error.code || "AMOS_PROVIDER_STREAM_ERROR";
+      throw error;
+    }
     finalPayload = payload ? { ...(finalPayload || {}), ...payload } : finalPayload;
     usage = payload?.usage || usage;
     const delta = payload?.choices?.[0]?.delta;
     if (!delta) return;
     if (typeof delta.role === "string") message.role = delta.role;
+    if (Array.isArray(delta.amos_bedrock_reasoning)) {
+      message.amos_bedrock_reasoning = delta.amos_bedrock_reasoning;
+    }
     if (typeof delta.content === "string" && delta.content.length > 0) {
       firstOutputAt ||= performance.now();
       message.content += delta.content;
@@ -501,12 +518,18 @@ async function readStreamingResponse(response, {
     usage: normalizedUsage(usage),
     raw: finalPayload || rawText,
     timing: {
+      buffered: false,
       firstOutputAt,
       timeToFirstOutputMs: firstOutputAt
         ? Math.max(0, Math.round(firstOutputAt - requestStartedAt))
         : null
     }
   };
+}
+
+function withCorrelationReference(message, correlationId) {
+  const reference = String(correlationId || "").trim();
+  return reference ? `${message} Reference: ${reference}.` : message;
 }
 
 function modelTimeoutError(config, requestStartedAt, lastActivityAt, phase) {
@@ -526,6 +549,7 @@ function withRequestMetrics(usage, {
   fallbackUsed = false,
   requestStartedAt,
   firstOutputAt,
+  bufferedResponse = false,
   completedAt,
   raw
 }) {
@@ -534,9 +558,11 @@ function withRequestMetrics(usage, {
     ? raw.mtplx_stats
     : {};
   const totalLatencyMs = Math.max(0, Math.round(completedAt - requestStartedAt));
-  const generationMs = firstOutputAt
+  const observedGenerationMs = !bufferedResponse && firstOutputAt
     ? Math.max(1, Math.round(completedAt - firstOutputAt))
     : null;
+  const nativeGenerationMs = nanosecondsToMilliseconds(raw?.eval_duration);
+  const generationMs = nativeGenerationMs ?? observedGenerationMs;
   const outputTokens = Number(normalized.output_tokens || 0);
   const cachedInputTokens = firstFinite(
     normalized.cache_read_input_tokens,
@@ -553,6 +579,7 @@ function withRequestMetrics(usage, {
     requested_runtime: localRuntimeName(requestedConfig),
     fallback_used: fallbackUsed === true,
     fallback_reason: fallbackUsed === true ? "primary_transport_failed" : null,
+    response_streamed: !bufferedResponse,
     latency_ms: totalLatencyMs,
     time_to_first_output_ms: firstOutputAt
       ? Math.max(0, Math.round(firstOutputAt - requestStartedAt))
@@ -562,7 +589,7 @@ function withRequestMetrics(usage, {
       : null,
     load_ms: nanosecondsToMilliseconds(raw?.load_duration),
     prompt_eval_ms: nanosecondsToMilliseconds(raw?.prompt_eval_duration),
-    generation_ms: nanosecondsToMilliseconds(raw?.eval_duration) ?? generationMs,
+    generation_ms: generationMs,
     session_cache_hit: booleanOrNull(stats.session_cache_hit),
     cache_source: textOrNull(stats.cache_source),
     cache_miss_reason: textOrNull(stats.cache_miss_reason),
@@ -643,11 +670,13 @@ function consumeSseEvents(buffer, consume) {
       .map((line) => line.slice(5).trim())
       .join("\n");
     if (!data || data === "[DONE]") continue;
+    let payload;
     try {
-      consume(JSON.parse(data));
+      payload = JSON.parse(data);
     } catch {
       throw new Error("Model returned an invalid streaming response");
     }
+    consume(payload);
   }
   return remaining;
 }

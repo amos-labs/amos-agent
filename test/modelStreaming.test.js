@@ -161,7 +161,7 @@ test("streaming request remains compatible with endpoints that return one JSON r
   const fetchImpl = async () =>
     new Response(JSON.stringify({
       choices: [{ message: { role: "assistant", content: "One response" } }],
-      usage: { total_tokens: 4 }
+      usage: { prompt_tokens: 2, completion_tokens: 2, total_tokens: 4 }
     }), {
       status: 200,
       headers: { "content-type": "application/json" }
@@ -175,6 +175,9 @@ test("streaming request remains compatible with endpoints that return one JSON r
   assert.deepEqual(deltas, ["One response"]);
   assert.equal(result.usage.model, "test-model");
   assert.ok(result.usage.time_to_first_output_ms >= 0);
+  assert.equal(result.usage.response_streamed, false);
+  assert.equal(result.usage.generation_ms, null);
+  assert.equal(result.usage.generation_tokens_per_second, null);
 });
 
 test("OpenAI-compatible responses retain native local timing diagnostics", async () => {
@@ -200,6 +203,7 @@ test("OpenAI-compatible responses retain native local timing diagnostics", async
   assert.equal(result.usage.load_ms, 1_500);
   assert.equal(result.usage.prompt_eval_ms, 500);
   assert.equal(result.usage.generation_ms, 2_000);
+  assert.equal(result.usage.generation_tokens_per_second, 5);
   assert.equal(result.usage.model, "test-model");
   assert.equal(result.usage.cache_read_input_tokens, 18);
   assert.equal(result.usage.new_prefill_tokens, 2);
@@ -269,4 +273,61 @@ test("streaming responses retain native local timing diagnostics from the final 
   assert.equal(result.usage.load_ms, 1_500);
   assert.equal(result.usage.prompt_eval_ms, 500);
   assert.equal(result.usage.generation_ms, 2_000);
+});
+
+test("hosted streaming retains signed reasoning continuity without rendering it", async () => {
+  const events = [
+    { choices: [{ delta: { role: "assistant", content: "Done" } }] },
+    {
+      choices: [{
+        delta: {
+          amos_bedrock_reasoning: [{
+            type: "reasoning_text",
+            text: "private reasoning",
+            signature: "signed"
+          }]
+        },
+        finish_reason: "stop"
+      }],
+      usage: { prompt_tokens: 2, completion_tokens: 1, total_tokens: 3 }
+    }
+  ];
+  const result = await client(async () => new Response(
+    `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`,
+    { status: 200, headers: { "content-type": "text/event-stream" } }
+  )).chat({
+    messages: [{ role: "user", content: "hello" }],
+    onDelta: () => {}
+  });
+
+  assert.equal(result.message.content, "Done");
+  assert.equal(result.message.amos_bedrock_reasoning[0].signature, "signed");
+});
+
+test("a structured provider error aborts a stream even after partial output", async () => {
+  const correlationId = "9f7d7a8f-ecf7-4ec9-9438-b9852e9b67f8";
+  const events = [
+    { choices: [{ delta: { role: "assistant", content: "Partial" } }] },
+    {
+      error: {
+        code: "provider_stream_error",
+        message: "The provider stream stopped.",
+        correlation_id: correlationId
+      }
+    }
+  ];
+  await assert.rejects(
+    client(async () => new Response(
+      events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )).chat({
+      messages: [{ role: "user", content: "hello" }],
+      onDelta: () => {}
+    }),
+    (error) => {
+      assert.equal(error.code, "provider_stream_error");
+      assert.match(error.message, new RegExp(correlationId));
+      return true;
+    }
+  );
 });

@@ -358,6 +358,16 @@ export function selectTaskWorkflow({ objective, attachmentNames = [] } = {}) {
   return publicWorkflow(recipe);
 }
 
+export function resolveTaskWorkflow({
+  objective,
+  attachmentNames = [],
+  routedWorkflowId = ""
+} = {}) {
+  const deterministic = selectTaskWorkflow({ objective, attachmentNames });
+  if (deterministic.id !== DEFAULT_RECIPE.id) return deterministic;
+  return taskWorkflowFromId(routedWorkflowId) || deterministic;
+}
+
 export function taskWorkflowCatalog() {
   return [...RECIPES, DEFAULT_RECIPE].filter((recipe) => recipe.classifier !== false).map((recipe) => ({
     id: recipe.id,

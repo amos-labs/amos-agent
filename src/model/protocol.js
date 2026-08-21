@@ -5,6 +5,7 @@ import {
   linkAbortSignal,
   throwIfAborted
 } from "../util/abort.js";
+import { bedrockRetentionActionableError } from "./bedrockDataRetention.js";
 
 export const MODEL_PROTOCOLS = Object.freeze({
   OPENAI_CHAT_COMPLETIONS: "openai-chat-completions",
@@ -92,9 +93,9 @@ export async function executeModelRequest({
       } catch {
         payload = { raw: text };
       }
-      const message = payload?.error?.message || payload?.message || text ||
+      const providerMessage = payload?.error?.message || payload?.message || text ||
         `${displayName} request failed with ${response.status}`;
-      throw new Error(message);
+      throw new Error(bedrockRetentionActionableError(config, providerMessage));
     }
     return await consume(response, { displayName, signal: controller.signal });
   } catch (error) {

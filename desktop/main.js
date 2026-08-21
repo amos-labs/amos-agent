@@ -379,6 +379,8 @@ function decrypt(value) {
 function registerIpc() {
   ipcMain.handle("desktop:state", () => controller.state());
   ipcMain.handle("desktop:save-settings", (_event, settings) => controller.saveSettings(settings));
+  ipcMain.handle("desktop:configure-bedrock-data-retention", (_event, input) =>
+    controller.configureBedrockDataRetention(input));
   ipcMain.handle("desktop:set-telemetry-preference", async (_event, input) => {
     if (input?.enabled !== true && input?.enabled !== false) {
       throw new Error("Telemetry preference must be true or false");

@@ -645,6 +645,10 @@ test("Ollama manager verifies and installs the bundled router exactly once", asy
     fetchImpl: async (url) => {
       const path = new URL(url).pathname;
       if (path === "/api/version") return jsonResponse({ version: "0.32.5" });
+      if (path === "/api/generate") return jsonResponse({
+        load_duration: 2_000_000,
+        total_duration: 3_000_000
+      });
       return jsonResponse({
         models: routerInstalled ? [{ name: INTELLIGENCE_ROUTER_MODEL, size: 1 }] : []
       });
@@ -659,6 +663,10 @@ test("Ollama manager verifies and installs the bundled router exactly once", asy
   }]);
   await manager.ensureRouter();
   assert.equal(created.length, 1);
+  const warmed = await manager.warmRouter();
+  assert.equal(warmed.model, INTELLIGENCE_ROUTER_MODEL);
+  assert.equal(warmed.loadMs, 2);
+  assert.equal(warmed.keepAlive, "30m");
 });
 
 test("Ollama manager blocks a router whose release checksum does not match", async () => {

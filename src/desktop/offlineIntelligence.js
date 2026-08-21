@@ -506,6 +506,7 @@ export class OllamaModelManager {
     this.routerPreparation = null;
     this.performance = {
       lastPreload: null,
+      lastRouterWarm: null,
       lastAcceleratorPreload: null,
       lastAcceleratorFallback: null,
       loadedModels: []
@@ -770,6 +771,33 @@ export class OllamaModelManager {
       this.routerPreparation = null;
     });
     return this.routerPreparation;
+  }
+
+  async warmRouter(system = null, { keepAlive = "30m" } = {}) {
+    const router = await this.ensureRouter(system);
+    if (!router.ready) throw new Error("AMOS Local Router is unavailable");
+    const startedAt = performance.now();
+    const payload = await this.request("/api/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: INTELLIGENCE_ROUTER_MODEL,
+        prompt: "",
+        stream: false,
+        keep_alive: keepAlive
+      }),
+      timeoutMs: 60_000
+    });
+    this.performance.lastRouterWarm = {
+      model: INTELLIGENCE_ROUTER_MODEL,
+      observedAt: new Date().toISOString(),
+      elapsedMs: Math.round(performance.now() - startedAt),
+      loadMs: nanosecondsToMilliseconds(payload?.load_duration),
+      totalMs: nanosecondsToMilliseconds(payload?.total_duration),
+      keepAlive
+    };
+    this.publish(system);
+    return structuredClone(this.performance.lastRouterWarm);
   }
 
   async prepareRouter(system) {

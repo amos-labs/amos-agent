@@ -119,9 +119,13 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   assert.match(html, /id="modelInput"[^>]*><\/select>/);
   assert.match(html, /id="baseUrlHelp"/);
   assert.match(html, /id="bedrockAuthInput"/);
+  assert.match(html, /id="bedrockRetentionField"/);
+  assert.match(html, /I understand this changes the data-retention mode for this AWS account/);
+  assert.match(html, /AMOS will never enable this automatically/);
   assert.match(html, /AWS credential chain · SigV4 \(recommended\)/);
   assert.match(javascript, /modelInput\.addEventListener\("change", syncSelectedModelEndpoint\)/);
   assert.match(javascript, /bedrockAuthMode: selectedProvider === "bedrock"/);
+  assert.match(javascript, /api\.configureBedrockDataRetention\(\{ confirmed: true \}\)/);
   assert.match(javascript, /model\.aliases\?\.includes\(selectedModel\)/);
   assert.match(javascript, /endpoint\.pathname = model\.endpointPath/);
   assert.match(javascript, /syncProviderReasoning\(provider, model\)/);
@@ -541,7 +545,7 @@ test("Briefings are a single-column saved-view library with typed platform actio
   assert.doesNotMatch(javascript, /most relevant coaching or learning intervention/);
 });
 
-test("Operator is chat-first with collapsible navigation and inline governed progress", async () => {
+test("Operator is chat-first with transient progress and detailed activity in the Panel", async () => {
   const [javascript, html, css] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
@@ -555,13 +559,20 @@ test("Operator is chat-first with collapsible navigation and inline governed pro
     /class="composer-tools"[\s\S]*?id="clearButton"[\s\S]*?>Clear context<\/button>/
   );
   assert.match(html, /id="activityStream"/);
-  assert.match(html, /Progress summaries, governed tool use, and recorded outcomes/);
+  assert.match(html, /Routing, tools, governed actions, timing, and recorded outcomes/);
+  assert.match(html, /id="chatRunStatus"/);
+  assert.match(html, /id="panelActivityTab"/);
+  assert.match(html, /id="panelCanvasTab"/);
+  assert.match(html, /id="canvasToggleButton" class="button ghost panel-toggle"/);
   const operator = html.match(/<section id="operatorView"([\s\S]*?)<section id="canvasView"/)?.[1] || "";
   const heading = operator.match(/id="conversationHeading"([\s\S]*?)<div id="messages"/)?.[1] || "";
   assert.doesNotMatch(operator, /class="work-panel"/);
   assert.doesNotMatch(heading, /id="clearButton"/);
   assert.match(javascript, /function beginInlineActivity\(\)/);
-  assert.match(javascript, /finishInlineActivity\(\)/);
+  assert.match(javascript, /function finishInlineActivity\(status = runTerminalState\)/);
+  assert.match(javascript, /function renderInlineDecisionRequest\(/);
+  assert.match(javascript, /renderInlineDecisionRequest\(approval, \{ focus: true \}\)/);
+  assert.doesNotMatch(javascript, /Work complete/);
   assert.match(javascript, /selectJourneyStarterActions\(state\)/);
   assert.match(javascript, /button\.dataset\.actionId = action\.id/);
   assert.match(javascript, /executeStarterAction\(action, button\)/);
@@ -665,7 +676,10 @@ test("dynamic canvases open beside chat without navigating away from Operator", 
 
   assert.match(html, /id="canvasSidecar"/);
   assert.match(html, /id="liveCanvasList"/);
-  assert.match(javascript, /if \(activeCanvasId\) canvasSidecarOpen = true;\s+renderCanvas\(\);/);
+  assert.match(
+    javascript,
+    /api\.on\("canvas:changed"[\s\S]*?canvasSidecarOpen = true;[\s\S]*?currentPanelTab = "canvas";[\s\S]*?renderCanvas\(\);/
+  );
   assert.match(javascript, /operatorGrid\.classList\.toggle\("has-context", sidecarVisible\)/);
   assert.match(javascript, /contextResizeHandle\.classList\.toggle\("hidden", !sidecarVisible\)/);
   assert.doesNotMatch(

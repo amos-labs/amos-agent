@@ -4,7 +4,11 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
-import { attachmentTextBudget, AttachmentManager } from "../src/desktop/attachments.js";
+import {
+  attachmentTextBudget,
+  attachmentToolkit,
+  AttachmentManager
+} from "../src/desktop/attachments.js";
 
 test("document attachments become bounded model reference material", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-attachments-"));
@@ -97,6 +101,9 @@ test("native XLSX attachments expose sheet values and formulas to the model", as
   assert.match(content, /Current MRR\t2200/);
   assert.match(content, /=B1\*12 \[result: 26400\]/);
   assert.equal(attachment.mime, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  assert.equal(attachmentToolkit(attachment), "spreadsheets");
+  assert.equal(attachmentToolkit({ name: "plan.docx", kind: "document" }), "documents");
+  assert.equal(attachmentToolkit({ name: "brief.pptx", kind: "document" }), "presentations");
 });
 
 test("pasted screenshots are sent only to vision-capable models", async () => {
