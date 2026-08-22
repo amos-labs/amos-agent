@@ -578,6 +578,12 @@ test("Operator is chat-first with transient progress and detailed activity in th
   assert.match(javascript, /function finishInlineActivity\(status = runTerminalState\)/);
   assert.match(javascript, /function renderInlineDecisionRequest\(/);
   assert.match(javascript, /renderInlineDecisionRequest\(approval, \{ focus: true \}\)/);
+  assert.match(javascript, /decisionInputDrafts\.set\(request\.id, textarea\.value\)/);
+  assert.match(javascript, /function captureInteractiveState\(\)/);
+  assert.match(javascript, /restoreInteractiveState\(interaction\)/);
+  assert.match(javascript, /runId === currentTaskId/);
+  assert.match(javascript, /if \(result\.resolvedInput\)/);
+  assert.match(javascript, /finishCanceledRunInUi/);
   assert.doesNotMatch(javascript, /Work complete/);
   assert.match(javascript, /selectJourneyStarterActions\(state\)/);
   assert.match(javascript, /button\.dataset\.actionId = action\.id/);

@@ -78,10 +78,12 @@ let streamingMessage = null;
 let canvasSidecarOpen = false;
 let currentPanelTab = "activity";
 let runTerminalState = "idle";
+let activeUiRunToken = 0;
 let pendingUiActions = [];
 let pendingGenericConnectCalls = 0;
 let continuityConversationRestored = false;
 const transientTaskMessages = new Set();
+const decisionInputDrafts = new Map();
 let forkTaskSource = null;
 let automationSetupDraft = null;
 let automationSetupOperations = null;
@@ -498,13 +500,19 @@ function bindEvents() {
     if (!eventMatchesActiveTask(taskStatus)) return;
     currentTaskId = taskStatus?.running ? taskStatus.taskId || currentTaskId : null;
     if (!taskStatus?.running && pendingApproval) clearInlineApproval();
+    if (!taskStatus?.running && taskStatus?.reason === "user_cancelled") {
+      finishCanceledRunInUi(taskStatus.taskId);
+      return;
+    }
     setRunning(Boolean(taskStatus?.running));
   });
   api.on("desktop-runs:changed", (runs) => {
     if (!state) return;
+    const interaction = captureInteractiveState();
     state.activeRuns = Array.isArray(runs) ? runs : [];
     renderProjects();
     renderTasks();
+    restoreInteractiveState(interaction);
   });
   api.on("activity:changed", (activity) => {
     const envelope = Array.isArray(activity) ? { items: activity } : activity || {};
@@ -548,6 +556,7 @@ function bindEvents() {
   });
   api.on("remote:changed", (remote) => {
     if (!state) return;
+    const interaction = captureInteractiveState();
     const next = { ...remote };
     if (!eventMatchesActiveTask(remote)) {
       delete next.activeContextKey;
@@ -571,6 +580,7 @@ function bindEvents() {
     renderCanvas();
     renderStarterActions();
     restoreConversationFromContinuity();
+    restoreInteractiveState(interaction);
   });
   api.on("update:changed", (nextUpdateState) => {
     updateState = nextUpdateState;
@@ -3830,7 +3840,9 @@ async function submitTaskFork(event) {
     });
     closeTaskForkModal();
     adoptOpenedTask(response);
-    toast("Fork created and opened. No model request or tool call was replayed.");
+    toast(response.continuedInBackground
+      ? "Fork created and opened. The original run is still working in the background; nothing was replayed."
+      : "Fork created and opened. No model request or tool call was replayed.");
   } catch (error) {
     elements.forkTaskError.textContent = error.message;
     elements.forkTaskError.classList.remove("hidden");
@@ -6686,6 +6698,10 @@ function decisionInputCard(request) {
   textarea.placeholder = researchCheckpoint
     ? "For example: research another hour, focusing on partner economics…"
     : "Type the answer AMOS needs to continue…";
+  textarea.value = decisionInputDrafts.get(request.id) || "";
+  textarea.addEventListener("input", () => {
+    decisionInputDrafts.set(request.id, textarea.value);
+  });
   field.append(fieldLabel, textarea);
   form.append(field);
   if (Array.isArray(request.options) && request.options.length > 0) {
@@ -6768,6 +6784,7 @@ async function resolveDecisionInput(request, answer, button, answered) {
       state.pendingInputs = (Array.isArray(state.pendingInputs) ? state.pendingInputs : [])
         .filter((item) => item.id !== request.id);
     }
+    decisionInputDrafts.delete(request.id);
     removeInlineDecisionRequest(request.id);
     renderDecisions();
     if (running) {
@@ -8376,11 +8393,14 @@ async function runTask(event, options = {}) {
     return;
   }
   if (!prompt && attachments.length === 0) return;
+  const uiRunToken = ++activeUiRunToken;
   const submittedTask = {
     taskRecordId: String(state?.activeTaskRecordId || state?.tasks?.activeTaskId || ""),
     contextKey: String(state?.activeContextKey || "active")
   };
-  const isStillVisible = () => eventMatchesActiveTask(submittedTask);
+  const isStillVisible = () => (
+    uiRunToken === activeUiRunToken && eventMatchesActiveTask(submittedTask)
+  );
   const attachmentSummary = attachments.length > 0
     ? `\n\nAttached: ${attachments.map((item) => item.name).join(", ")}`
     : "";
@@ -8503,6 +8523,24 @@ async function steerTask(direction) {
   elements.runButton.disabled = true;
   try {
     const result = await api.steerTask(currentTaskId, direction);
+    if (result.resolvedInput) {
+      addMessage("user", direction);
+      elements.promptInput.value = "";
+      decisionInputDrafts.delete(result.inputId);
+      if (state) {
+        state.pendingInputs = (Array.isArray(state.pendingInputs) ? state.pendingInputs : [])
+          .filter((item) => item.id !== result.inputId);
+      }
+      removeInlineDecisionRequest(result.inputId);
+      renderDecisions();
+      clearTransientTaskMessages();
+      const pending = addMessage("pending", "AMOS received your answer and is continuing now…");
+      transientTaskMessages.add(pending);
+      streamingMessage = pending;
+      updateChatRunStatus("Using your answer and continuing…", "active");
+      elements.promptInput.focus();
+      return;
+    }
     if (!result.queued) {
       toast(result.message || "AMOS could not queue that direction.", true);
       return;
@@ -8532,9 +8570,37 @@ async function cancelTask() {
   try {
     const result = await api.cancelTask(currentTaskId);
     if (!result.canceled) toast(result.message || "No task is running.");
+    else if (result.detached) finishCanceledRunInUi(result.taskId);
   } catch (error) {
     toast(error.message, true);
   }
+}
+
+function finishCanceledRunInUi(canceledRunId = "") {
+  if (runTerminalState === "interrupted" && !running) return;
+  activeUiRunToken += 1;
+  runTerminalState = "interrupted";
+  currentTaskId = null;
+  streamingMessage = null;
+  clearTransientTaskMessages();
+  const pendingInputs = Array.isArray(state?.pendingInputs) ? state.pendingInputs : [];
+  const canceledInputs = pendingInputs.filter((request) => (
+    !canceledRunId || !request.runId || request.runId === canceledRunId
+  ));
+  for (const request of canceledInputs) {
+    decisionInputDrafts.delete(request.id);
+    removeInlineDecisionRequest(request.id);
+  }
+  if (state) {
+    const canceledIds = new Set(canceledInputs.map((request) => request.id));
+    state.pendingInputs = pendingInputs.filter((request) => !canceledIds.has(request.id));
+  }
+  addMessage(
+    "assistant",
+    "Run stopped. Completed work remains intact, and AMOS is ready for your next message without restarting the app."
+  );
+  renderDecisions();
+  setRunning(false);
 }
 
 async function clearSession() {
@@ -8688,6 +8754,8 @@ function conversationForkCapabilityMessage(capability = {}) {
 }
 
 function eventMatchesActiveTask(value = {}) {
+  const runId = String(value?.runId || "");
+  if (runId && currentTaskId && runId === currentTaskId) return true;
   const taskRecordId = String(value?.taskRecordId || "");
   const contextKey = String(value?.contextKey || "");
   if (!taskRecordId && !contextKey) return true;
@@ -8697,6 +8765,58 @@ function eventMatchesActiveTask(value = {}) {
     (taskRecordId && (taskRecordId === activeTaskId || (!activeTaskId && taskRecordId === activeContext))) ||
     (contextKey && contextKey === activeContext)
   );
+}
+
+function captureInteractiveState() {
+  const active = document.activeElement;
+  const editable = active?.matches?.("input, textarea, select") ? active : null;
+  const requestId = editable?.closest?.("[data-input-id]")?.dataset?.inputId || "";
+  return {
+    openModalIds: [...document.querySelectorAll(".modal-backdrop:not(.hidden)")]
+      .map((modal) => modal.id)
+      .filter(Boolean),
+    control: editable ? {
+      id: editable.id || "",
+      requestId,
+      tagName: editable.tagName,
+      type: editable.type || "",
+      name: editable.name || "",
+      value: editable.value,
+      checked: editable.checked,
+      selectionStart: editable.selectionStart,
+      selectionEnd: editable.selectionEnd
+    } : null
+  };
+}
+
+function restoreInteractiveState(snapshot) {
+  if (!snapshot) return;
+  for (const id of snapshot.openModalIds || []) {
+    document.getElementById(id)?.classList.remove("hidden");
+  }
+  const saved = snapshot.control;
+  if (!saved) return;
+  let control = saved.id ? document.getElementById(saved.id) : null;
+  if (!control && saved.requestId) {
+    const card = [...document.querySelectorAll("[data-input-id]")]
+      .find((item) => item.dataset.inputId === saved.requestId);
+    control = [...(card?.querySelectorAll("input, textarea, select") || [])]
+      .find((item) => (
+        item.tagName === saved.tagName &&
+        (!saved.name || item.name === saved.name)
+      )) || null;
+  }
+  if (!control) return;
+  if (["checkbox", "radio"].includes(saved.type)) control.checked = saved.checked;
+  else control.value = saved.value;
+  control.focus({ preventScroll: true });
+  if (
+    typeof control.setSelectionRange === "function" &&
+    Number.isInteger(saved.selectionStart) &&
+    Number.isInteger(saved.selectionEnd)
+  ) {
+    control.setSelectionRange(saved.selectionStart, saved.selectionEnd);
+  }
 }
 
 function renderMarkdown(container, source) {

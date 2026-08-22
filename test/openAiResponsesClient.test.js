@@ -177,6 +177,37 @@ test("OpenAI Responses streaming emits text and assembles a native function call
   assert.equal(result.usage.total_tokens, 28);
 });
 
+test("OpenAI Responses streaming timeout measures inactivity instead of total active time", async () => {
+  const encoder = new TextEncoder();
+  const fetchImpl = async () => new Response(new ReadableStream({
+    start(controller) {
+      setTimeout(() => {
+        controller.enqueue(encoder.encode(
+          'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"still "}\n\n'
+        ));
+      }, 35);
+      setTimeout(() => {
+        controller.enqueue(encoder.encode(
+          'event: response.completed\ndata: {"type":"response.completed","response":{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"still working"}]}]}}\n\n'
+        ));
+        controller.close();
+      }, 70);
+    }
+  }), {
+    status: 200,
+    headers: { "content-type": "text/event-stream" }
+  });
+  const modelClient = client(fetchImpl);
+  modelClient.config.requestTimeoutMs = 50;
+
+  const result = await modelClient.chat({
+    messages: [{ role: "user", content: "Do a longer job" }],
+    onDelta: () => {}
+  });
+
+  assert.equal(result.message.content, "still working");
+});
+
 test("OpenAI Responses aborts the native request with the canonical task error", async () => {
   const fetchImpl = (_url, options) => new Promise((_resolve, reject) => {
     options.signal.addEventListener("abort", () => {
@@ -202,9 +233,14 @@ test("OpenAI Responses aborts the native request with the canonical task error",
 test("OpenAI Responses normalizes provider HTTP errors and request timeouts", async () => {
   await assert.rejects(
     client(async () => new Response(JSON.stringify({
-      error: { message: "Rate limit reached" }
+      error: { message: "Rate limit reached", code: "throttled" }
     }), { status: 429 })).chat({ messages: [{ role: "user", content: "hello" }] }),
-    /Rate limit reached/
+    (error) => {
+      assert.match(error.message, /Rate limit reached/);
+      assert.equal(error.status, 429);
+      assert.equal(error.code, "throttled");
+      return true;
+    }
   );
 
   const modelClient = client((_url, options) => new Promise((_resolve, reject) => {
@@ -215,8 +251,11 @@ test("OpenAI Responses normalizes provider HTTP errors and request timeouts", as
     }, { once: true });
   }));
   modelClient.config.requestTimeoutMs = 10;
-  await assert.rejects(
-    modelClient.chat({ messages: [{ role: "user", content: "hello" }] }),
-    /OpenAI request timed out/
-  );
+  await assert.rejects(modelClient.chat({ messages: [{ role: "user", content: "hello" }] }), (error) => {
+    assert.match(error.message, /OpenAI request timed out/);
+    assert.equal(error.code, "AMOS_MODEL_TIMEOUT");
+    assert.equal(error.timeoutMs, 10);
+    assert.ok(error.inactiveMs >= 0);
+    return true;
+  });
 });

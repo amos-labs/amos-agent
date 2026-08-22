@@ -57,11 +57,19 @@ export async function executeModelRequest({
 }) {
   throwIfAborted(signal);
   const controller = new AbortController();
+  const requestStartedAt = performance.now();
+  let lastActivityAt = requestStartedAt;
   let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, config.requestTimeoutMs || 120_000);
+  let timer = null;
+  const refreshTimeout = () => {
+    lastActivityAt = performance.now();
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, config.requestTimeoutMs || 120_000);
+  };
+  refreshTimeout();
   const unlink = linkAbortSignal(signal, controller);
   const displayName = config.displayName || "Model";
 
@@ -85,6 +93,7 @@ export async function executeModelRequest({
       signal: controller.signal,
       body: request.body
     });
+    refreshTimeout();
     if (!response.ok) {
       const text = await response.text();
       let payload;
@@ -95,13 +104,27 @@ export async function executeModelRequest({
       }
       const providerMessage = payload?.error?.message || payload?.message || text ||
         `${displayName} request failed with ${response.status}`;
-      throw new Error(bedrockRetentionActionableError(config, providerMessage));
+      const failure = new Error(bedrockRetentionActionableError(config, providerMessage));
+      failure.status = response.status;
+      failure.code = payload?.error?.code || payload?.code || "";
+      failure.retryAfter = response.headers?.get?.("retry-after") || "";
+      throw failure;
     }
-    return await consume(response, { displayName, signal: controller.signal });
+    return await consume(response, {
+      displayName,
+      signal: controller.signal,
+      onActivity: refreshTimeout
+    });
   } catch (error) {
     if (signal?.aborted) throw createAbortError();
     if (timedOut || isAbortError(error)) {
-      throw new Error(`${displayName} request timed out`);
+      const timeout = new Error(`${displayName} request timed out after becoming inactive`);
+      timeout.code = "AMOS_MODEL_TIMEOUT";
+      timeout.phase = "streaming_response";
+      timeout.timeoutMs = Number(config.requestTimeoutMs || 120_000);
+      timeout.elapsedMs = Math.max(0, Math.round(performance.now() - requestStartedAt));
+      timeout.inactiveMs = Math.max(0, Math.round(performance.now() - lastActivityAt));
+      throw timeout;
     }
     throw error;
   } finally {
@@ -119,7 +142,12 @@ export async function readJsonResponse(response, displayName) {
   }
 }
 
-export async function readSseEvents(response, { signal, onEvent, displayName }) {
+export async function readSseEvents(response, {
+  signal,
+  onEvent,
+  displayName,
+  onActivity = () => {}
+}) {
   const contentType = response.headers?.get?.("content-type") || "";
   if (!contentType.includes("text/event-stream")) {
     return { streamed: false, payload: await readJsonResponse(response, displayName), raw: null };
@@ -136,6 +164,7 @@ export async function readSseEvents(response, { signal, onEvent, displayName }) 
         throwIfAborted(signal);
         const { done, value } = await reader.read();
         if (done) break;
+        onActivity();
         const chunk = decoder.decode(value, { stream: true });
         raw += chunk;
         buffer += chunk;

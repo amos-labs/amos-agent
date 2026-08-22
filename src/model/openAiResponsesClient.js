@@ -13,15 +13,22 @@ export class OpenAIResponsesClient {
     this.fetch = fetchImpl;
   }
 
-  async chat({ messages, tools = [], onDelta = null, signal = null }) {
+  async chat({
+    messages,
+    tools = [],
+    onDelta = null,
+    signal = null,
+    reasoningEffortOverride = null
+  }) {
     const apiKey = this.config.apiKey || (await this.config.getAccessToken?.());
+    const reasoningEffort = reasoningEffortOverride || this.config.reasoningEffort;
     const body = {
       model: this.config.model,
       input: responsesInput(messages),
       store: false
     };
-    if (this.config.reasoningEffort && this.config.capabilities?.reasoning !== false) {
-      body.reasoning = { effort: this.config.reasoningEffort };
+    if (reasoningEffort && this.config.capabilities?.reasoning !== false) {
+      body.reasoning = { effort: reasoningEffort };
       if (this.config.capabilities?.encryptedReasoning !== false) {
         body.include = ["reasoning.encrypted_content"];
       }
@@ -156,7 +163,7 @@ function canonicalResponsesMessage(output) {
   };
 }
 
-async function readResponsesStream(response, { signal, displayName, onDelta }) {
+async function readResponsesStream(response, { signal, displayName, onDelta, onActivity }) {
   let completed = null;
   let failure = null;
   let visibleText = "";
@@ -164,6 +171,7 @@ async function readResponsesStream(response, { signal, displayName, onDelta }) {
   const result = await readSseEvents(response, {
     signal,
     displayName,
+    onActivity,
     onEvent: ({ event, data }) => {
       if (!data) return;
       const type = data.type || event;
