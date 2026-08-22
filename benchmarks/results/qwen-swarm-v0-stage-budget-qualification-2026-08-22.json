@@ -1,0 +1,64 @@
+{
+  "schema": "amos.swarm-development-qualification",
+  "version": 1,
+  "createdAt": "2026-08-22T22:25:05.217Z",
+  "status": "contract-qualified-awaiting-blind-judge",
+  "dataClassification": "development-visible",
+  "sourceRevision": "5988c1b5e99a4870466794547ad273d157b304c3",
+  "configDigest": "647e277681f1005d30d5da0c434c60ccc623772f80267a6bfc2f79923754be85",
+  "missionManifestDigest": "6df583011b381fb4146673928dba5aa2a59c23340a63d76bcdaed50c414b2c13",
+  "controls": {
+    "qwen-direct": {
+      "reportDigest": "e2791eed5e13c3741f85731c5bb0e03a94bb9d8ed91e358ae3828916e2e39867",
+      "runs": 9,
+      "wallSeconds": 163.089,
+      "meanRunSeconds": 18.121,
+      "inferenceCalls": 12,
+      "promptTokens": 6555,
+      "outputTokens": 15471,
+      "weightedGenerationTokensPerSecond": 94.868,
+      "medianRequestGenerationTokensPerSecond": 96.119,
+      "answerRecoveries": 3,
+      "truncatedFinalAnswers": 0
+    },
+    "qwen-swarm": {
+      "reportDigest": "516a6d589aa9ccbfb7104b1ff208c2a44b99fdb51fff0283896797d43427a53b",
+      "runs": 9,
+      "wallSeconds": 374.583,
+      "meanRunSeconds": 41.62,
+      "inferenceCalls": 60,
+      "promptTokens": 81801,
+      "outputTokens": 45307,
+      "weightedGenerationTokensPerSecond": 95.819,
+      "medianRequestGenerationTokensPerSecond": 94.43,
+      "answerRecoveries": 24,
+      "validStructuredStages": 36,
+      "totalStructuredStages": 36,
+      "truncatedFinalAnswers": 0
+    }
+  },
+  "swarmToDirectRatios": {
+    "wallTime": 2.297,
+    "promptTokens": 12.479,
+    "outputTokens": 2.929,
+    "inferenceCalls": 5
+  },
+  "contractFindings": [
+    "Both controls completed all nine requested development runs without final-answer truncation.",
+    "All 36 swarm stages satisfied their provider-enforced JSON Schema contracts.",
+    "The warmed AWS endpoint sustained approximately 95 generated tokens per second in both controls.",
+    "Swarm used 2.3 times the wall time and 2.9 times the output tokens of Direct Qwen on these missions."
+  ],
+  "preliminaryQualityAudit": [
+    "Both controls consistently selected the controlling churn target and separated verified from uncollected MRR.",
+    "Direct Qwen was deterministic across all three repetitions for each mission.",
+    "Swarm surfaced explicit confidence and unresolved risks, but one funnel repetition misstated the largest absolute loss and some growth-plan risks cited unsupported industry benchmarks.",
+    "The visible development cases are too easy and too few to establish a quality winner."
+  ],
+  "blindJudge": {
+    "status": "pending",
+    "winner": null,
+    "fableControlStatus": "blocked-pending-explicit-provider-data-share-approval"
+  },
+  "promotionEligible": false
+}
