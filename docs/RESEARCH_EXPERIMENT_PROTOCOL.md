@@ -327,6 +327,17 @@ board, budgets, timing, and output-token usage. A report is development
 evidence only until answers are anonymized, blindly judged, repeated at least
 three times, and evaluated under the frozen frontier portfolio.
 
+The corrected stage-budget qualification completed on 2026-08-22. Direct Qwen
+and Swarm Qwen each completed nine runs; all 36 Swarm stages satisfied JSON
+Schema and neither control returned a truncated final answer. Warmed decode
+was approximately 95 tokens/second. On these three visible missions, Swarm
+cost 2.297x the wall time and 2.929x the output tokens of Direct Qwen. A manual
+audit found useful explicit risks but also one absolute-loss error and
+unsupported benchmark claims, so no quality winner is declared. The compact
+qualification record is
+`benchmarks/results/qwen-swarm-v0-stage-budget-qualification-2026-08-22.json`.
+Blind judging and the Fable control remain mandatory.
+
 ### Run the local baseline
 
 Start AMOS Local so the selected runtime is listening, then run:
