@@ -7,14 +7,23 @@ contract for AMOS recursive-intelligence work. It specializes the original
 AMOS `ExperimentProposal` and `ImpactOutcome` lifecycle for model, runtime,
 data, training, and research-system experiments.
 
-The initial implementation is a pure local contract module:
+The initial implementation is a local, provider-neutral contract and evidence
+store:
 
 - `src/research/experimentProtocol.js`
+- `src/research/evaluationAttestation.js`
+- `src/research/experimentStore.js`
+- `src/research/qwenResearchEnvironment.js`
 - `test/researchExperimentProtocol.test.js`
+- `test/researchEvaluationAttestation.test.js`
+- `test/researchExperimentStore.test.js`
+- `test/qwenResearchEnvironment.test.js`
 
-It does not execute a model, schedule a mission, store customer data, approve a
-company action, or deploy a candidate. Those integrations require separate
-gated slices.
+The Qwen worker can execute explicitly supplied research fixtures against a
+pinned local endpoint or a private AWS vLLM endpoint reached through an SSM
+tunnel. It does not schedule a company mission, ingest customer
+data, approve a company action, or deploy a candidate. Those integrations
+require separate gated slices.
 
 ## Ownership boundary
 
@@ -148,7 +157,30 @@ Models may propose, start work, or contribute outcomes. A model actor cannot
 record approval, promotion, rejection, quarantine, or reversion. Those events
 require a human, hybrid, or governed service actor.
 
-The ledger is presently a deterministic value object, not a persistent store.
+The ledger is also persisted in an append-only, content-addressed local store.
+Proposal, evaluation-manifest, outcome, attestation, and ledger values are
+immutable SHA-256-addressed objects. Each ledger generation is a new exclusive
+head reference; there is no mutable `HEAD` to corrupt or overwrite. A bounded
+per-experiment lock serializes writers, stale locks are recoverable, and an
+object written before a crash is harmless until an immutable head references
+it. Reads recompute every content digest and the complete ledger hash chain.
+
+### Evaluation attestation
+
+Schema: `amos.research-evaluation-attestation`, version 1.
+
+The sealed evaluator signs an exact Ed25519 envelope containing:
+
+- evaluator identity, version, and environment digest;
+- proposal, evaluation-manifest, outcome, and promotion-decision digests;
+- experiment and candidate identity; and
+- the deterministic eligibility bit and sorted rejection reasons.
+
+Verification recomputes the outcome validation and promotion decision before
+checking the signature. Changing a measurement, budget usage, safety result,
+decision, or referenced artifact therefore fails closed. The evaluator private
+key remains outside the candidate/proposer boundary; the store accepts only the
+public verification key.
 
 ## Research levels
 
@@ -165,21 +197,100 @@ A proposal may edit only surfaces at or below its declared level. Advancing a
 research level expands the isolated experimental surface, never production
 authority.
 
+## Qwen environment and first experiments
+
+Qwen begins in Phase 0, before any fine-tuning or managed-platform integration.
+The already qualified Qwen 3.8 27B artifact and selectable Ollama/MTPLX
+runtimes become the first research worker. The initial laboratory is local and
+L1-only: Qwen may propose changes to prompts, context compilation, routing,
+planning, verification, stopping, recovery, and agent coordination. It cannot
+change its evaluator, hidden cases, budgets, permissions, or production
+candidate.
+
+Schema `amos.qwen-research-environment` records the exact model repository,
+revision, artifact-manifest digest, served model ID, runtime version/profile,
+runtime release contract, local binary digest, prompt/tool-schema binding,
+inference settings, and hardware. Execution refuses a draft environment that
+lacks the actual runtime-binary digest. Model/runtime drift and non-loopback
+Phase-0 endpoints fail closed.
+
+Each case returns an `amos.qwen-research-observation` containing request,
+provider-response, message, data-manifest, and environment digests plus prompt,
+decode, cache, and wall-time metrics. The complete provider response remains in
+the observation so the response digest is independently verifiable.
+
+The first measured sequence is:
+
+1. Pin the Qwen artifact, runtime, prompt/tool-schema digest, source revision,
+   hardware, and inference settings into a reproducible environment manifest.
+2. Convert the existing 35-point qualification cases into the first visible
+   development manifest; create new validation, sealed, and canary partitions
+   rather than pretending the now-visible cases remain hidden.
+3. Record a three-run baseline for quality, wall time, prompt time, decode
+   throughput, tokens, recovery behavior, and proof receipts.
+4. Run one-variable L1 experiments, beginning with context density/prefix
+   stability, then routing/branching, stopping/recovery, and coordination.
+5. Require a signed evaluator result and independent reproduction before a
+   candidate is eligible for shadow use. Production promotion remains a
+   separate human/governed-service decision.
+
+Swarm Mode follows that direct baseline immediately: at most three logical
+workers share one Qwen checkpoint and coordinate through a typed evidence
+board. The direct and swarm routes are compared against each other and a
+pinned Fable control under both equal-budget and unconstrained-quality regimes.
+
+The AWS environment is the primary experiment lane because the local 27B
+decode rate is insufficient for rapid direct-versus-swarm iteration. Local
+Qwen remains the inexpensive development and fallback lane. AWS reproduces the
+same proof-carrying worker contract rather than introducing a second research
+protocol.
+
+It reproduces the same worker protocol in an ephemeral, network-bounded
+inference cell with a pinned image and model artifact. One private vLLM endpoint
+uses continuous batching for logical swarm workers; additional physical
+replicas require measured utilization. GPU training enters at L3/L4 only after
+data rights, trajectory quality, and the baseline evaluator are proven. This
+avoids paying for a training cluster before the research loop can distinguish
+a real improvement from evaluator overfitting.
+
 ## Next implementation slices
 
-1. Add signed evaluation-result envelopes so the sealed evaluator—not a caller
-   assertion—attests measurements and safety floors.
-2. Add a local append-only experiment store with atomic writes, locking,
-   content-addressed artifacts, and recovery tests.
-3. Add a CLI that validates manifests/proposals/outcomes, evaluates promotion,
-   and exports portable proof bundles.
-4. Convert the first existing AMOS qualification fixtures into a development
-   evaluation manifest without moving sealed data into Desktop.
-5. Add a managed-platform adapter only after the autonomous-goals contracts
-   stabilize. The adapter should exchange IDs and signed receipts, not share
-   tables or lifecycle ownership.
-6. Connect `autoresearch` through the protocol as the first fixed-budget L4
-   laboratory.
+1. Convert the first qualification fixtures into a development dataset and
+   create genuinely protected validation/sealed/canary replacements.
+2. Add a CLI that initializes an experiment, runs a fixed-budget Qwen baseline,
+   validates/signs the evaluator result, and exports a portable proof bundle.
+3. Implement Swarm Mode v0: mission compiler, three logical roles, typed
+   evidence board, verifier/integrator, and direct-versus-swarm evaluator.
+4. Stage the pinned AWS Qwen FP8 and vLLM artifacts, deploy the private G7e
+   inference cell, and record the first three-run direct baseline.
+5. Reproduce the proof bundle locally or on a second AWS cell as an independent
+   check; local speed is not a prerequisite for beginning AWS experiments.
+6. Add a managed-platform adapter only after the autonomous-goals contracts
+   stabilize. The adapter exchanges IDs and signed receipts; it does not share
+   goal tables or lifecycle ownership.
+7. Connect `autoresearch` through the protocol as the first fixed-budget L4
+   laboratory after the L1 loop and data gates are proven.
+
+### Run the local baseline
+
+Start AMOS Local so the selected runtime is listening, then run:
+
+```bash
+npm run research:qwen-baseline -- \
+  --runtime ollama \
+  --runtime-binary "/Applications/AMOS Desktop.app/Contents/Resources/ollama/ollama" \
+  --url http://127.0.0.1:11435 \
+  --repetitions 3 \
+  --suite all \
+  --output /tmp/amos-qwen-phase0-baseline.json
+```
+
+For MTPLX, use `--runtime mtplx`, its exact 2.8.3 binary path, and
+`--url http://127.0.0.1:18081`. The command probes the served model, hashes the
+runtime binary and benchmark script, pins the source revision and environment,
+runs every repetition, and emits one content-addressable baseline report. It
+labels the current qualification fixtures `development`; they are visible in
+the repository and are not valid sealed evidence.
 
 ## Explicit non-goals for version 1
 

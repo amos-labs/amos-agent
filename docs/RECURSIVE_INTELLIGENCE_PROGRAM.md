@@ -168,6 +168,77 @@ self-improving system cannot learn only from its own outputs. AMOS company work
 provides external economic signal; the general scientific portfolio provides
 independent reality checks beyond business software.
 
+## Qwen swarm and model-level target
+
+The Qwen swarm is the first concrete cognition architecture for the program,
+not a temporary demo that disappears when training begins. It evolves through
+three forms while retaining the same evidence and evaluation contracts.
+
+### Swarm Mode v0: logical agents over one backbone
+
+Direct Qwen remains the low-latency default. A complexity/budget router may
+send harder work to a maximum of three logical workers:
+
+1. an explorer that finds hypotheses and missing evidence;
+2. a builder/domain specialist that develops the candidate solution; and
+3. a skeptic/verifier that challenges claims, runs checks, and prepares the
+   integration evidence.
+
+A deterministic mission compiler gives each worker a typed work unit. Workers
+coordinate through one typed evidence board containing claims, sources,
+artifacts, tests, uncertainty, conflicts, and completion state—not through an
+unbounded shared chat transcript. A verifier/integrator produces the final
+answer only from board entries and execution receipts that survive challenge.
+
+On a Mac, these workers share one loaded Qwen 27B checkpoint, runtime, prefix
+cache, and KV infrastructure. They are distinct contexts and roles, not three
+copies of the weights. In AWS, the same worker contract uses one private vLLM
+endpoint with continuous batching; workers fan out physically only when
+measured parallelism justifies another replica.
+
+The first contest is pre-registered and blind: direct Qwen versus Qwen Swarm
+versus a pinned Fable control on complex research, finance, planning, and build
+tasks. Reports show both unconstrained quality and matched time/token/cost
+results. A swarm win that merely spends three times the inference budget is
+reported honestly rather than collapsed into one score.
+
+### Specialist swarm: shared backbone plus adapters
+
+Once successful and failed trajectories are verified and rights-cleared, the
+logical roles become learned specialists. One shared Qwen backbone exposes
+role-specific LoRA/adaptor experts for exploration, tool use, construction,
+verification, recovery, and integration. A learned phase router selects the
+smallest sufficient expert set and reasoning depth under the mission budget.
+The base weights remain shared; adapters are loaded, composed, or batched
+without multiplying the full 27B residency.
+
+Frontier models may grade, teach, or generate candidates only when their terms
+explicitly permit the intended use. Rights-approved open-weight models, AMOS-
+owned outcomes, deterministic verifiers, and explicitly licensed teachers are
+the durable training sources. Provider output access alone never implies a
+right to train a competing model.
+
+### Model-level organism
+
+The ambitious target is an agentic mixture of experts with persistent governed
+state:
+
+- shared recurrent workspace tokens encode the evidence-board state between
+  phases without granting the model authority over the authoritative ledger;
+- specialist adapters or native experts activate by task phase;
+- confidence, disagreement, novelty, and remaining budget determine reasoning
+  depth, branching, and stopping;
+- successful AMOS mission traces and externally verified outcomes train the
+  policy; and
+- expensive swarm solutions are distilled back into a faster direct-model
+  path, while irreducibly hard work continues to use the swarm.
+
+This is the program's compounding loop: scaffold improvements create better
+trajectories; trajectories create better specialists and routing; specialists
+make the swarm cheaper and stronger; distillation raises the direct baseline;
+and the stronger baseline searches for the next model and architecture gains.
+The evaluation constitution, not any worker or router, decides what survives.
+
 ## One proof-carrying learning protocol
 
 Do not create a second conceptual protocol for model research. Generalize the

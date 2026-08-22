@@ -11,3 +11,9 @@ desktop/vendor/ollama/
 desktop/vendor/router/
 __pycache__/
 *.pyc
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
