@@ -1,0 +1,19 @@
+{
+  "schema": "amos.swarm-development-qualification",
+  "version": 1,
+  "createdAt": "2026-08-22T22:10:02.000Z",
+  "status": "failed-contract-gate",
+  "dataClassification": "development-visible",
+  "sourceRevision": "bf48b64",
+  "controlId": "qwen-direct",
+  "missionId": "funnel-bottleneck-001",
+  "repetition": 1,
+  "answerReserveTokens": 768,
+  "failure": "The visible answer exhausted its reserved output budget before completion.",
+  "correctiveActions": [
+    "Increase the visible-answer reserve to 1536 tokens.",
+    "Cap direct and integrated final answers at 900 words.",
+    "Retain hard rejection of output-budget truncation."
+  ],
+  "promotionEligible": false
+}

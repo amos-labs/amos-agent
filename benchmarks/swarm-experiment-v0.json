@@ -11,7 +11,7 @@
       "model": "amos-qwen38-27b-fp8",
       "dialect": "qwen",
       "reasoningEffort": "low",
-      "answerReserveTokens": 768,
+      "answerReserveTokens": 1536,
       "endpointEnv": "AMOS_QWEN_RESEARCH_URL",
       "defaultEndpoint": "http://127.0.0.1:18080",
       "apiKeyEnv": "AMOS_LOCAL_BENCHMARK_API_KEY"
@@ -22,7 +22,7 @@
       "model": "amos-qwen38-27b-fp8",
       "dialect": "qwen",
       "reasoningEffort": "low",
-      "answerReserveTokens": 768,
+      "answerReserveTokens": 1536,
       "endpointEnv": "AMOS_QWEN_RESEARCH_URL",
       "defaultEndpoint": "http://127.0.0.1:18080",
       "apiKeyEnv": "AMOS_LOCAL_BENCHMARK_API_KEY"
@@ -42,12 +42,12 @@
   "budget": {
     "maxWallMilliseconds": 300000,
     "maxInferenceCalls": 8,
-    "maxTotalOutputTokens": 5120,
-    "directOutputTokens": 2048,
-    "workerOutputTokens": 1024,
-    "verifierOutputTokens": 1024,
-    "integratorOutputTokens": 2048,
-    "answerReserveTokens": 768
+    "maxTotalOutputTokens": 9984,
+    "directOutputTokens": 3072,
+    "workerOutputTokens": 2304,
+    "verifierOutputTokens": 2304,
+    "integratorOutputTokens": 3072,
+    "answerReserveTokens": 1536
   },
   "comparison": {
     "requiredControlIds": [
