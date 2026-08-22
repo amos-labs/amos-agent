@@ -1,0 +1,80 @@
+{
+  "schema": "amos.swarm-development-missions",
+  "version": 1,
+  "id": "swarm-challenge-development-v0",
+  "dataClassification": "development-visible",
+  "missions": [
+    {
+      "id": "revenue-cash-allocation-001",
+      "objective": "Build a 90-day cash allocation plan that accelerates growth without counting uncollected revenue or violating the operating constraints.",
+      "context": "AMOS has $7,100 verified MRR and $42,000 cash. A signed $5,000 MRR customer is expected to enter Stripe next week but has not yet been invoiced or collected. Gross margin on verified revenue is 82%. Fixed monthly operating expense is $13,500, including founders but excluding new hires and variable marketing. The company wants at least four months of runway measured against the next month's committed burn. A proposed engineer costs $9,000 per month and cannot start before day 60. A partner manager costs $6,500 per month and can start on day 30. Paid acquisition has produced visits but no verified signups, while three active referral partners produced $2,400 of the current MRR. Partner commissions are 20% of first-year collected revenue and are paid only after collection. No debt may be assumed. Separate observed facts, assumptions, and decisions.",
+      "successCriteria": [
+        "Exclude the signed but uncollected deal from the verified starting revenue and state the trigger for including it.",
+        "Show a numerically coherent runway and allocation calculation under at least two revenue cases.",
+        "Prioritize or reject hiring and channel spend while respecting start dates, commission timing, and the four-month runway floor.",
+        "Define weekly leading indicators, decision gates, and explicit spending stop rules.",
+        "Distinguish facts from assumptions and identify the most decision-relevant missing evidence."
+      ]
+    },
+    {
+      "id": "partner-program-capacity-001",
+      "objective": "Design a launchable partner program that resolves margin, support-capacity, and approval conflicts rather than simply maximizing partner count.",
+      "context": "The target is 20 activated VAR, MSP, and affiliate partners in 90 days. One founder can onboard at most four partners per week. Solutions engineering can support six technical evaluations per week, but existing customers consume three of those slots. Standard gross margin before commission is 82%. Affiliates request 25% of first-year collected revenue; MSPs request a 30% resale discount plus two hours of monthly support per customer; VARs request 20% plus deal registration. Finance requires contribution margin after commission and estimated support cost to stay above 45%. Support is costed at $120 per hour. Legal permits pre-approved messaging and standard terms without per-contact approval, but any exclusivity, custom data access, or discount above 30% requires a human decision. A partner is activated only after training, one qualified opportunity, and an accepted joint plan. The current CRM has 60 prospective partners but stale role data on 35% of contacts.",
+      "successCriteria": [
+        "Segment the partner types and calculate the economics of at least one realistic deal for each type.",
+        "Respect onboarding and technical-evaluation capacity when sequencing the 90-day target.",
+        "Define activation, qualification, autonomous actions, and the exact human approval boundary.",
+        "Address stale contact data and avoid treating recruited partners as activated partners.",
+        "Provide a staged experiment with continuation, correction, and stop criteria."
+      ]
+    },
+    {
+      "id": "incident-timeline-authority-001",
+      "objective": "Reconstruct the most defensible incident timeline, identify the likely failure domain, and recommend immediate actions without overstating causality.",
+      "context": "All timestamps are UTC. The public status page says API latency began at 14:12, based on the first customer report. The load balancer shows p95 latency crossing 2 seconds at 14:07. A deployment record says release 8f31 completed at 14:04, but the signed orchestrator receipt shows the last new container became healthy at 14:09. Database CPU stayed below 42% throughout. At 14:11, application logs began showing connection-pool exhaustion on the new container set. A support note claims the database went down at 14:10, but database availability logs show no outage. Rollback was requested at 14:18, approved at 14:21, and completed at 14:28. Pool exhaustion ended at 14:29; p95 recovered at 14:31. At 14:35, an engineer observed that release 8f31 changed the pool size from 40 per container to 8 while also doubling container count from 5 to 10. The primary source order is signed receipts and machine telemetry, then deployment records, then public status, then support notes.",
+      "successCriteria": [
+        "Produce a chronological timeline that distinguishes release completion, first measured degradation, first report, rollback, and recovery.",
+        "Resolve the contradictory database-outage claim using the stated source authority.",
+        "Identify the supported likely failure domain while keeping root-cause confidence calibrated.",
+        "Recommend immediate containment, verification, and follow-up instrumentation.",
+        "Name at least one plausible alternative explanation and the evidence that would rule it in or out."
+      ]
+    },
+    {
+      "id": "zero-downtime-migration-001",
+      "objective": "Create a dependency-aware migration plan that fits team capacity, preserves rollback, and meets the no-downtime requirement.",
+      "context": "A six-week migration must move 18 million customer records from Store A to Store B with no planned downtime. Two engineers are available, but one is unavailable during week 3. Store A remains authoritative until cutover. Existing writes average 45 per second with peaks of 140; Store B has been load-tested to 220 writes per second. Historical records contain 0.7% malformed phone fields that Store B rejects. Schema changes can be deployed independently of application releases. The application can dual-write, but the current implementation does not attach an idempotency key. Finance closes books at the end of week 4 and prohibits a cutover from three days before through two days after close. Security requires encryption, an audit log, and deletion of migration exports within seven days. Rollback must not lose writes accepted after cutover. DNS has a 30-minute TTL. A full backfill at the measured safe rate takes 52 hours.",
+      "successCriteria": [
+        "Sequence schema, data cleaning, idempotent dual-write, backfill, reconciliation, cutover, and rollback dependencies.",
+        "Account for the week-3 staffing gap, finance blackout, backfill duration, and DNS behavior.",
+        "Define quantitative reconciliation and cutover gates rather than relying on a calendar date alone.",
+        "Provide a rollback design that preserves post-cutover writes and identifies the point of no simple return.",
+        "Meet the security retention and audit requirements."
+      ]
+    },
+    {
+      "id": "experiment-portfolio-001",
+      "objective": "Select a four-week experiment portfolio that maximizes decision value under cash, engineering, and review constraints.",
+      "context": "The available budget is $24,000 and 16 engineering-days. Experiment A costs $6,000 and 3 days, has a 40% chance of adding $4,000 MRR, and is reversible. B costs $12,000 and 8 days, has a 25% chance of adding $12,000 MRR, but changes customer data flows and requires a three-day security review using 2 of its engineering-days. C costs $4,000 and 5 days, has a 60% chance of reducing monthly support cost by $1,500, and cannot begin until A supplies new event instrumentation. D costs $10,000 and 4 days, has a 50% chance of adding $3,000 MRR, but conflicts for the same partner audience as A, so A and D cannot run simultaneously. E costs $3,000 and 2 days, has a 70% chance of invalidating or confirming the core assumption behind B; if E invalidates it, B should not run. At most two experiments can be active at once. Revenue effects are monthly recurring estimates, not cash received during the four-week window.",
+      "successCriteria": [
+        "Compare expected value without conflating MRR or cost reduction with immediate four-week cash.",
+        "Respect budget, engineering-days, concurrency, dependencies, audience conflict, and security review.",
+        "Use information value to decide whether E should precede B.",
+        "Provide an executable weekly sequence and branch conditions based on experiment results.",
+        "State why at least one attractive-looking experiment is deferred or rejected."
+      ]
+    },
+    {
+      "id": "kpi-definition-reconciliation-001",
+      "objective": "Reconcile conflicting growth metrics into a board-ready view without adding incompatible definitions.",
+      "context": "Stripe reports 112 active paid subscriptions on August 31, including 9 annual plans and excluding 6 trials. The CRM reports 127 active customers, but 11 are implementation-only accounts with no subscription and 7 are subsidiaries billed through a parent account. The product database reports 146 active workspaces, where one paying customer may own multiple workspaces. Finance reports August recurring revenue of $19,800: $17,100 monthly-plan MRR plus $2,700 annual contract value divided by 12. Stripe's dashboard displays $22,300 MRR because it includes $1,000 of metered usage and a signed $1,500 subscription whose first invoice failed. The board defines MRR as collected or contractually current recurring subscription value, excludes usage, trials, and failed first invoices, and counts customers at the billed parent-account level. July board MRR was $18,600 on the same definition. Three annual subscribers renewed in August; their monthly-equivalent value was already included in July MRR.",
+      "successCriteria": [
+        "Select the board-authoritative MRR using the supplied definition and explain every excluded Stripe component.",
+        "Calculate month-over-month board MRR growth correctly.",
+        "Avoid adding subscriptions, CRM customers, and workspaces as though they were the same unit.",
+        "Derive only the customer count supported by the CRM adjustments and clearly state any remaining reconciliation uncertainty.",
+        "Explain why annual renewals are not automatically new MRR and propose a durable metric contract."
+      ]
+    }
+  ]
+}
