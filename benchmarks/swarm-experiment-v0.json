@@ -11,7 +11,7 @@
       "model": "amos-qwen38-27b-fp8",
       "dialect": "qwen",
       "reasoningEffort": "low",
-      "answerReserveTokens": 128,
+      "answerReserveTokens": 768,
       "endpointEnv": "AMOS_QWEN_RESEARCH_URL",
       "defaultEndpoint": "http://127.0.0.1:18080",
       "apiKeyEnv": "AMOS_LOCAL_BENCHMARK_API_KEY"
@@ -22,7 +22,7 @@
       "model": "amos-qwen38-27b-fp8",
       "dialect": "qwen",
       "reasoningEffort": "low",
-      "answerReserveTokens": 128,
+      "answerReserveTokens": 768,
       "endpointEnv": "AMOS_QWEN_RESEARCH_URL",
       "defaultEndpoint": "http://127.0.0.1:18080",
       "apiKeyEnv": "AMOS_LOCAL_BENCHMARK_API_KEY"
@@ -30,7 +30,7 @@
     {
       "id": "fable-control",
       "mode": "direct",
-      "model": "anthropic.claude-fable-5",
+      "model": "us.anthropic.claude-fable-5",
       "dialect": "generic",
       "reasoningEffort": null,
       "answerReserveTokens": 0,
@@ -42,12 +42,12 @@
   "budget": {
     "maxWallMilliseconds": 300000,
     "maxInferenceCalls": 8,
-    "maxTotalOutputTokens": 2048,
-    "directOutputTokens": 768,
-    "workerOutputTokens": 384,
-    "verifierOutputTokens": 384,
-    "integratorOutputTokens": 512,
-    "answerReserveTokens": 128
+    "maxTotalOutputTokens": 5120,
+    "directOutputTokens": 2048,
+    "workerOutputTokens": 1024,
+    "verifierOutputTokens": 1024,
+    "integratorOutputTokens": 2048,
+    "answerReserveTokens": 768
   },
   "comparison": {
     "requiredControlIds": [

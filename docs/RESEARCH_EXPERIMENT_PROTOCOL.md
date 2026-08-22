@@ -288,7 +288,19 @@ The direct and swarm paths share two protocol safeguards. An answer reserve
 prevents hidden reasoning from consuming the entire completion, and a
 sequential-tool policy prevents a dependent tool call before its required
 identifier exists. Recovery consumes the reserved portion of the original
-completion budget; it does not silently grant extra tokens.
+completion budget; it does not silently grant extra tokens. Swarm stages use
+provider-enforced JSON Schema, and the research runner fails closed when a
+response exhausts its token budget or violates a typed stage contract.
+
+The first AWS Swarm v0 qualification on 2026-08-22 deliberately failed this
+contract gate. Qwen completed the underlying reasoning, but the original
+128-token answer reserve truncated six direct answers and 33 of 36 typed swarm
+stages required recovery; only three stage envelopes parsed successfully. The
+run is preserved as development evidence in
+`benchmarks/results/qwen-swarm-v0-contract-qualification-2026-08-22.json`.
+It is not evidence that either control won. The corrected quality regime uses
+a 768-token answer reserve, larger stage allocations, provider-enforced JSON
+Schema, and truncation rejection before the controls are rerun.
 
 The visible development mission manifest is not sealed evidence. It exists to
 debug the scaffold before running the private and public frontier portfolio.
@@ -302,7 +314,8 @@ npm run research:swarm -- \
 ```
 
 Use `qwen-direct` for the direct control. For Fable, start the loopback Bedrock
-benchmark gateway with model `anthropic.claude-fable-5`, then run
+benchmark gateway with the US system inference profile
+`us.anthropic.claude-fable-5`, then run
 `--control fable-control`. Each report binds the source revision, experiment
 configuration, mission manifest, control, proof-carrying observations, typed
 board, budgets, timing, and output-token usage. A report is development

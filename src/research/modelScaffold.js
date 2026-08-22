@@ -59,6 +59,7 @@ export async function runResearchInference({
   repetition = 1,
   maxOutputTokens,
   answerReserveTokens = 0,
+  responseFormat = null,
   promptSessionId = null,
   signal = null
 }) {
@@ -75,6 +76,7 @@ export async function runResearchInference({
     repetition,
     maxOutputTokens: budget.reasoningPhaseTokens,
     reasoningEffortOverride: null,
+    responseFormat,
     promptSessionId,
     signal
   });
@@ -95,6 +97,7 @@ export async function runResearchInference({
       repetition,
       maxOutputTokens: budget.answerReserveTokens,
       reasoningEffortOverride: "none",
+      responseFormat,
       promptSessionId,
       signal
     });

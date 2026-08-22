@@ -136,6 +136,18 @@ then submits at most three concurrent logical worker contexts to this same
 endpoint. Additional GPUs are justified only by measured queueing or
 utilization—not by the number of logical agents.
 
+After the qualification contract is healthy, run the three visible
+development missions through both Qwen controls without exposing the bearer
+key:
+
+```bash
+./scripts/run-swarm.sh /tmp/amos-qwen-swarm-v0 3
+```
+
+This writes separate content-addressed Direct Qwen and Swarm Qwen reports. Stop
+the instance immediately afterward; Fable runs separately through the
+loopback Bedrock benchmark gateway and does not require the Qwen GPU.
+
 ## Recovery and operations
 
 - `systemctl status amos-qwen` and `journalctl -u amos-qwen` are available in
