@@ -1515,6 +1515,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .automation-template-card small { color: var(--blue-2); font-size: 7px; font-weight: 800; text-transform: uppercase; }
 .automation-template-card strong { font-size: 12px; }
 .automation-template-card span { color: var(--muted); font-size: 9px; line-height: 1.45; }
+.automation-connection-role {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-softer);
+}
+.automation-connection-role .automation-step-copy { margin-bottom: 9px; }
+.automation-connection-role .automation-step-copy h3 { font-size: 13px; }
 .automation-connection-list, .automation-operation-list { display: grid; gap: 7px; margin-bottom: 14px; }
 .automation-choice {
   display: grid;
