@@ -1,0 +1,39 @@
+{
+  "schema": "amos.swarm-development-missions",
+  "version": 1,
+  "id": "swarm-development-v0",
+  "dataClassification": "development-visible",
+  "missions": [
+    {
+      "id": "funnel-bottleneck-001",
+      "objective": "Identify the largest measured funnel bottleneck and recommend the next measurement or intervention without inventing causality.",
+      "context": "An ad campaign produced 1,400 ad clicks, 1,200 landing-page visits, 120 playground sessions, and 0 account signups.",
+      "successCriteria": [
+        "Correctly identify playground-to-signup as the largest measured loss.",
+        "Distinguish the measured bottleneck from its still-unknown root cause.",
+        "Recommend an actionable next measurement or intervention."
+      ]
+    },
+    {
+      "id": "contradictory-target-001",
+      "objective": "State the controlling Project Heron churn target and explain the conflicting evidence concisely.",
+      "context": "Board draft dated 2026-05-10: proposed 12% annual churn target. CFO operating memo approved 2026-07-26: current annual churn target is 18% and supersedes the May board draft.",
+      "successCriteria": [
+        "Use 18% as the current target.",
+        "Identify the approved CFO memo as controlling.",
+        "Explain that 12% came from the superseded draft."
+      ]
+    },
+    {
+      "id": "partner-growth-plan-001",
+      "objective": "Design a creative but executable partner-led growth plan for AMOS that prioritizes VARs, MSPs, and affiliates while keeping the operating team small.",
+      "context": "Current MRR is $7,100. A $5,000 MRR deal has been signed but should not be counted until it appears in Stripe. Growth should primarily be partner-led. Marketing, influencer, and ad spend may scale with revenue. AMOS can use governed autonomous goals, loops, connected finance data, and human approvals for consequential actions.",
+      "successCriteria": [
+        "Separate verified current revenue from signed but not yet collected revenue.",
+        "Provide a staged partner acquisition and activation system.",
+        "Identify bounded autonomous loops and their approval boundaries.",
+        "Define leading indicators, stopping rules, and a first 30-day execution sequence."
+      ]
+    }
+  ]
+}

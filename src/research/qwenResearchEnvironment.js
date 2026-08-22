@@ -419,6 +419,7 @@ export class QwenResearchWorker {
     dataManifestDigest,
     repetition = 1,
     maxOutputTokens = this.environment.inference.maxOutputTokens,
+    reasoningEffortOverride = null,
     promptSessionId = null,
     signal = null
   }) {
@@ -428,13 +429,20 @@ export class QwenResearchWorker {
     sha256(dataManifestDigest, "dataManifestDigest");
     boundedInteger(repetition, 1, 10_000, "repetition");
     boundedInteger(maxOutputTokens, 1, this.environment.inference.maxOutputTokens, "maxOutputTokens");
+    if (
+      reasoningEffortOverride !== null &&
+      !REASONING_EFFORTS.has(reasoningEffortOverride)
+    ) {
+      throw new Error("reasoningEffortOverride is unsupported");
+    }
     if (promptSessionId !== null) requiredId(promptSessionId, "promptSessionId");
 
     const request = buildInferenceRequest({
       environment: this.environment,
       messages,
       tools,
-      maxOutputTokens
+      maxOutputTokens,
+      reasoningEffortOverride
     });
     const requestDigest = digestResearchValue({
       caseId,
@@ -711,22 +719,30 @@ function validatePinnedBindings(environment, expected) {
   }
 }
 
-function buildInferenceRequest({ environment, messages, tools, maxOutputTokens }) {
+function buildInferenceRequest({
+  environment,
+  messages,
+  tools,
+  maxOutputTokens,
+  reasoningEffortOverride = null
+}) {
+  const reasoningEffort = reasoningEffortOverride || environment.inference.reasoningEffort;
   if (environment.runtime.protocol === "openai") {
     return {
       model: environment.model.servedModelId,
       messages,
       ...(tools.length > 0 ? { tools } : {}),
+      ...(tools.length > 1 ? { parallel_tool_calls: false } : {}),
       stream: false,
       temperature: environment.inference.temperature,
       seed: environment.inference.seed,
       max_tokens: maxOutputTokens,
-      ...(environment.inference.reasoningEffort === "none"
+      ...(reasoningEffort === "none"
         ? { enable_thinking: false }
-        : { reasoning_effort: environment.inference.reasoningEffort }),
-      chat_template_kwargs: environment.inference.reasoningEffort === "none"
+        : { reasoning_effort: reasoningEffort }),
+      chat_template_kwargs: reasoningEffort === "none"
         ? { enable_thinking: false }
-        : { reasoning_effort: environment.inference.reasoningEffort }
+        : { reasoning_effort: reasoningEffort }
     };
   }
   return {
@@ -734,7 +750,7 @@ function buildInferenceRequest({ environment, messages, tools, maxOutputTokens }
     messages,
     ...(tools.length > 0 ? { tools } : {}),
     stream: false,
-    think: environment.inference.reasoningEffort === "none" ? false : environment.inference.reasoningEffort,
+    think: reasoningEffort === "none" ? false : reasoningEffort,
     options: {
       temperature: environment.inference.temperature,
       seed: environment.inference.seed,

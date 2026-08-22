@@ -85,9 +85,11 @@ test("the AWS Qwen environment pins the official FP8 artifact and authenticated 
     },
     now: sequenceDates([
       "2026-08-22T12:00:00.000Z",
-      "2026-08-22T12:00:00.500Z"
+      "2026-08-22T12:00:00.500Z",
+      "2026-08-22T12:00:01.000Z",
+      "2026-08-22T12:00:01.500Z"
     ]),
-    monotonicNow: sequenceNumbers([0, 500])
+    monotonicNow: sequenceNumbers([0, 500, 1_000, 1_500])
   });
   await worker.probe();
   await worker.runCase({
@@ -97,6 +99,15 @@ test("the AWS Qwen environment pins the official FP8 artifact and authenticated 
   });
   assert.equal(calls[0].options.headers.authorization, "Bearer test-secret");
   assert.equal(calls[1].body.reasoning_effort, "low");
+  await worker.runCase({
+    caseId: "aws-development-answer-reserve",
+    messages: [{ role: "user", content: "Return the final answer." }],
+    dataManifestDigest: RESEARCH_TEST_DIGESTS.e,
+    reasoningEffortOverride: "none"
+  });
+  assert.equal(calls[2].body.enable_thinking, false);
+  assert.deepEqual(calls[2].body.chat_template_kwargs, { enable_thinking: false });
+  assert.equal(Object.hasOwn(calls[2].body, "reasoning_effort"), false);
 });
 
 test("the MTPLX research worker probes and records a proof-carrying inference observation", async () => {

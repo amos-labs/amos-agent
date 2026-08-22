@@ -271,6 +271,44 @@ a real improvement from evaluator overfitting.
 7. Connect `autoresearch` through the protocol as the first fixed-budget L4
    laboratory after the L1 loop and data gates are proven.
 
+## Swarm Mode v0 experiment runner
+
+Swarm Mode v0 is implemented as a research-only scaffold. It does not add a
+second production agent loop or managed-platform goal lifecycle. The runner
+uses one endpoint and at most three logical worker roles:
+
+1. `explorer` and `builder` run concurrently against the shared checkpoint;
+2. both append typed claims, evidence, proposals, and risks to a
+   content-addressed evidence board;
+3. `verifier` challenges that board after the first wave completes; and
+4. an integrator produces the visible answer while preserving unresolved
+   risks.
+
+The direct and swarm paths share two protocol safeguards. An answer reserve
+prevents hidden reasoning from consuming the entire completion, and a
+sequential-tool policy prevents a dependent tool call before its required
+identifier exists. Recovery consumes the reserved portion of the original
+completion budget; it does not silently grant extra tokens.
+
+The visible development mission manifest is not sealed evidence. It exists to
+debug the scaffold before running the private and public frontier portfolio.
+Run one control through the loopback research endpoint with:
+
+```bash
+npm run research:swarm -- \
+  --control qwen-swarm \
+  --repetitions 3 \
+  --output /tmp/qwen-swarm-v0.json
+```
+
+Use `qwen-direct` for the direct control. For Fable, start the loopback Bedrock
+benchmark gateway with model `anthropic.claude-fable-5`, then run
+`--control fable-control`. Each report binds the source revision, experiment
+configuration, mission manifest, control, proof-carrying observations, typed
+board, budgets, timing, and output-token usage. A report is development
+evidence only until answers are anonymized, blindly judged, repeated at least
+three times, and evaluated under the frozen frontier portfolio.
+
 ### Run the local baseline
 
 Start AMOS Local so the selected runtime is listening, then run:
