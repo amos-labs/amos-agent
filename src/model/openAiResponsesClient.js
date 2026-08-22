@@ -1,5 +1,7 @@
 import {
+  assertValidModelToolArguments,
   executeModelRequest,
+  isModelOutputTruncated,
   normalizedUsage,
   readJsonResponse,
   readSseEvents
@@ -128,14 +130,25 @@ function responsesMessageContent(content) {
   });
 }
 
-function normalizeResponsesPayload(payload, displayName) {
+function normalizeResponsesPayload(payload, displayName, { allowIncomplete = false } = {}) {
   const output = Array.isArray(payload.output) ? payload.output : [];
   const message = canonicalResponsesMessage(output);
   if (!message.content && !message.tool_calls?.length) {
     throw new Error(`${displayName} response did not include content or tool calls`);
   }
   message.provider_state = { protocol: PROTOCOL, output: structuredClone(output) };
-  return { message, usage: normalizedUsage(payload.usage), raw: payload };
+  const stopReason = payload?.incomplete_details?.reason || payload?.status || "";
+  const normalized = {
+    message,
+    usage: normalizedUsage(payload.usage),
+    raw: payload,
+    ...(stopReason ? { stopReason } : {})
+  };
+  if (payload?.status === "incomplete" && !allowIncomplete) {
+    assertValidModelToolArguments(normalized, { displayName });
+    throw incompleteResponseError(displayName, normalized);
+  }
+  return normalized;
 }
 
 function canonicalResponsesMessage(output) {
@@ -165,6 +178,7 @@ function canonicalResponsesMessage(output) {
 
 async function readResponsesStream(response, { signal, displayName, onDelta, onActivity }) {
   let completed = null;
+  let incomplete = null;
   let failure = null;
   let visibleText = "";
   const items = new Map();
@@ -189,7 +203,9 @@ async function readResponsesStream(response, { signal, displayName, onDelta, onA
         items.set(data.output_index ?? items.size, structuredClone(data.item));
       } else if (type === "response.completed") {
         completed = data.response || data;
-      } else if (["response.failed", "response.incomplete", "error"].includes(type)) {
+      } else if (type === "response.incomplete") {
+        incomplete = data.response || data;
+      } else if (["response.failed", "error"].includes(type)) {
         failure = data.error?.message || data.response?.error?.message ||
           data.response?.incomplete_details?.reason || `${displayName} response was ${type.split(".").pop()}`;
       }
@@ -202,8 +218,29 @@ async function readResponsesStream(response, { signal, displayName, onDelta, onA
     return normalized;
   }
   if (failure) throw new Error(failure);
+  if (incomplete) {
+    const payload = {
+      ...incomplete,
+      output: Array.isArray(incomplete.output)
+        ? incomplete.output
+        : [...items.entries()].sort(([a], [b]) => a - b).map(([, item]) => item)
+    };
+    const normalized = normalizeResponsesPayload(payload, displayName, { allowIncomplete: true });
+    assertValidModelToolArguments(normalized, { displayName });
+    throw incompleteResponseError(displayName, normalized);
+  }
   const payload = completed || { output: [...items.entries()].sort(([a], [b]) => a - b).map(([, item]) => item) };
   const normalized = normalizeResponsesPayload(payload, displayName);
   normalized.raw = result.raw;
   return normalized;
+}
+
+function incompleteResponseError(displayName, response) {
+  const stopReason = response?.stopReason || "incomplete";
+  const error = new Error(`${displayName} response was incomplete`);
+  error.code = "AMOS_MODEL_INCOMPLETE_RESPONSE";
+  error.stopReason = String(stopReason).slice(0, 128);
+  error.truncated = isModelOutputTruncated(stopReason);
+  error.usage = response?.usage || null;
+  return error;
 }

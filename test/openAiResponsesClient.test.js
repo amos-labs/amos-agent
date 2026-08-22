@@ -177,6 +177,80 @@ test("OpenAI Responses streaming emits text and assembles a native function call
   assert.equal(result.usage.total_tokens, 28);
 });
 
+test("OpenAI Responses reports incomplete streamed function arguments as a safe retryable failure", async () => {
+  const partialCall = {
+    type: "function_call",
+    call_id: "call_partial",
+    name: "amos_lookup",
+    arguments: "{\"unit\":"
+  };
+  const frames = [
+    ["response.output_item.added", {
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { ...partialCall, arguments: "" }
+    }],
+    ["response.function_call_arguments.delta", {
+      type: "response.function_call_arguments.delta",
+      output_index: 0,
+      delta: partialCall.arguments
+    }],
+    ["response.incomplete", {
+      type: "response.incomplete",
+      response: {
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+        output: [partialCall],
+        usage: { input_tokens: 20, output_tokens: 4_096 }
+      }
+    }]
+  ];
+
+  await assert.rejects(
+    client(async () => new Response(
+      frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )).chat({
+      messages: [{ role: "user", content: "Check the unit" }],
+      onDelta() {}
+    }),
+    (error) => {
+      assert.equal(error.code, "AMOS_MODEL_INVALID_TOOL_ARGUMENTS");
+      assert.equal(error.stopReason, "max_output_tokens");
+      assert.equal(error.toolName, "amos_lookup");
+      assert.equal(error.truncated, true);
+      assert.equal(error.usage.total_tokens, 4_116);
+      return true;
+    }
+  );
+});
+
+test("OpenAI Responses reports an incomplete text response for bounded agent retry", async () => {
+  const payload = {
+    status: "incomplete",
+    incomplete_details: { reason: "max_output_tokens" },
+    output: [{
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Partial answer" }]
+    }],
+    usage: { input_tokens: 10, output_tokens: 4_096 }
+  };
+
+  await assert.rejects(
+    client(async () => Response.json(payload)).chat({
+      messages: [{ role: "user", content: "Finish the answer" }]
+    }),
+    (error) => {
+      assert.equal(error.code, "AMOS_MODEL_INCOMPLETE_RESPONSE");
+      assert.equal(error.stopReason, "max_output_tokens");
+      assert.equal(error.truncated, true);
+      assert.equal(error.usage.total_tokens, 4_106);
+      return true;
+    }
+  );
+});
+
 test("OpenAI Responses streaming timeout measures inactivity instead of total active time", async () => {
   const encoder = new TextEncoder();
   const fetchImpl = async () => new Response(new ReadableStream({

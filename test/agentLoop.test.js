@@ -213,9 +213,11 @@ test("each coding role gets a fresh structured-result retry after a valid stage 
   assert.equal(turn, 7);
 });
 
-test("malformed tool JSON is returned as an error and never executes", async () => {
+test("malformed tool JSON from any model is corrected and never executes", async () => {
   let calls = 0;
   let turn = 0;
+  const requests = [];
+  const events = [];
   const registry = new ToolRegistry();
   registry.register({ name: "danger", handler: () => { calls += 1; } });
   const loop = new AgentLoop({
@@ -229,7 +231,8 @@ test("malformed tool JSON is returned as an error and never executes", async () 
     approvals: {},
     amosClient: {},
     kimiClient: {
-      async chat() {
+      async chat(input) {
+        requests.push(input);
         turn += 1;
         if (turn === 1) {
           return {
@@ -245,8 +248,47 @@ test("malformed tool JSON is returned as an error and never executes", async () 
     }
   });
 
-  assert.equal(await loop.run("test"), "recovered");
+  assert.equal(await loop.run("test", { onEvent: (event) => events.push(event) }), "recovered");
   assert.equal(calls, 0);
+  assert.equal(turn, 2);
+  assert.ok(requests[1].messages.some((message) =>
+    String(message.content || "").includes("<amos_tool_call_correction>") &&
+    String(message.content || "").includes("No tool from that invalid response executed")
+  ));
+  assert.ok(events.some((event) =>
+    event.type === "phase" && event.phase === "retrying" && /invalid tool arguments/i.test(event.summary)
+  ));
+});
+
+test("an output-limited model response is explained and retried automatically", async () => {
+  const requests = [];
+  const loop = new AgentLoop({
+    config: { agent: { maxModelTransientRetries: 1 } },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat(input) {
+        requests.push(input);
+        if (requests.length === 1) {
+          const error = new Error("OpenAI response was incomplete");
+          error.code = "AMOS_MODEL_INCOMPLETE_RESPONSE";
+          error.stopReason = "max_output_tokens";
+          error.truncated = true;
+          throw error;
+        }
+        return { message: { role: "assistant", content: "Recovered automatically." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Finish the task"), "Recovered automatically.");
+  assert.equal(requests.length, 2);
+  assert.ok(requests[1].messages.some((message) =>
+    String(message.content || "").includes("<amos_model_output_correction>") &&
+    String(message.content || "").includes("provider output limit was reached") &&
+    String(message.content || "").includes("No tool from that incomplete response executed")
+  ));
 });
 
 test("transient visual tool evidence reaches the next model turn but not public tool events", async () => {
@@ -1185,6 +1227,87 @@ test("a stalled empty model response retries the same turn without replaying com
   assert.equal(writes, 1);
   assert.equal(turn, 4);
   assert.equal(events.filter((event) => event.type === "phase" && event.phase === "retrying").length, 2);
+});
+
+test("invalid streamed tool arguments are explained to the model and retried without replay", async () => {
+  const registry = new ToolRegistry();
+  const writes = [];
+  registry.register({
+    name: "write_part",
+    async handler(args) {
+      writes.push(args.part);
+      return { ok: true, part: args.part };
+    }
+  });
+  const requests = [];
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: { maxModelTransientRetries: 2 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat(input) {
+        requests.push(input);
+        if (requests.length === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "write-1",
+                function: { name: "write_part", arguments: "{\"part\":1}" }
+              }]
+            }
+          };
+        }
+        if (requests.length === 2) {
+          const error = new Error(
+            "Amazon Bedrock returned incomplete streamed tool arguments after reaching max_tokens"
+          );
+          error.code = "AMOS_MODEL_INVALID_TOOL_ARGUMENTS";
+          error.stopReason = "max_tokens";
+          error.toolName = "write_part";
+          error.truncated = true;
+          throw error;
+        }
+        if (requests.length === 3) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "write-2",
+                function: { name: "write_part", arguments: "{\"part\":2}" }
+              }]
+            }
+          };
+        }
+        return { message: { role: "assistant", content: "Both parts are complete." } };
+      }
+    }
+  });
+
+  const answer = await loop.run("Write both parts", {
+    onEvent: (event) => events.push(event)
+  });
+
+  assert.equal(answer, "Both parts are complete.");
+  assert.deepEqual(writes, [1, 2]);
+  assert.equal(requests.length, 4);
+  assert.ok(requests[2].messages.some((message) => (
+    String(message.content || "").includes("<amos_tool_call_correction>") &&
+    String(message.content || "").includes("No tool from that invalid response executed") &&
+    String(message.content || "").includes("incomplete when the output limit was reached")
+  )));
+  assert.equal(requests[3].messages.some((message) =>
+    String(message.content || "").includes("<amos_tool_call_correction>")
+  ), false);
+  assert.ok(events.some((event) => (
+    event.type === "phase" &&
+    event.phase === "retrying" &&
+    /no tool from that response executed/i.test(event.summary)
+  )));
 });
 
 test("a repeated empty response after tool progress falls back to low-reasoning no-tools synthesis", async () => {
