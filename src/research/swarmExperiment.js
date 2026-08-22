@@ -13,16 +13,72 @@ export const SWARM_ROLES = Object.freeze(["explorer", "builder", "verifier"]);
 export const DEFAULT_SWARM_BUDGET = Object.freeze({
   maxWallMilliseconds: 300_000,
   maxInferenceCalls: 8,
-  maxTotalOutputTokens: 2_048,
-  directOutputTokens: 768,
-  workerOutputTokens: 384,
-  verifierOutputTokens: 384,
-  integratorOutputTokens: 512,
-  answerReserveTokens: 128
+  maxTotalOutputTokens: 5_120,
+  directOutputTokens: 2_048,
+  workerOutputTokens: 1_024,
+  verifierOutputTokens: 1_024,
+  integratorOutputTokens: 2_048,
+  answerReserveTokens: 768
 });
 
 const EVIDENCE_KINDS = new Set(["claim", "evidence", "proposal", "risk"]);
 const EVIDENCE_STATUSES = new Set(["supported", "contested", "unverified"]);
+const CONTRIBUTION_RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "amos_swarm_contribution",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["entries"],
+      properties: {
+        entries: {
+          type: "array",
+          minItems: 1,
+          maxItems: 8,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["kind", "statement", "sourceRefs", "confidence", "status"],
+            properties: {
+              kind: { type: "string", enum: [...EVIDENCE_KINDS] },
+              statement: { type: "string", minLength: 1 },
+              sourceRefs: {
+                type: "array",
+                maxItems: 20,
+                items: { type: "string", minLength: 1 }
+              },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+              status: { type: "string", enum: [...EVIDENCE_STATUSES] }
+            }
+          }
+        }
+      }
+    }
+  }
+};
+const INTEGRATED_RESPONSE_FORMAT = {
+  type: "json_schema",
+  json_schema: {
+    name: "amos_swarm_answer",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["answer", "confidence", "unresolvedRisks"],
+      properties: {
+        answer: { type: "string", minLength: 1 },
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+        unresolvedRisks: {
+          type: "array",
+          maxItems: 20,
+          items: { type: "string", minLength: 1 }
+        }
+      }
+    }
+  }
+};
 
 export class SwarmEvidenceBoard {
   constructor({ missionId, now = () => new Date() }) {
@@ -136,6 +192,7 @@ export class SwarmExperimentRunner {
         promptSessionId: `${mission.id}:direct`,
         signal: runSignal
       });
+      assertCompleteResponse(result, "direct");
       return {
         answer: requiredVisibleAnswer(result.message),
         confidence: null,
@@ -173,9 +230,11 @@ export class SwarmExperimentRunner {
             normalizedBudget.answerReserveTokens,
             normalizedBudget.workerOutputTokens - 1
           ),
+          responseFormat: CONTRIBUTION_RESPONSE_FORMAT,
           promptSessionId: `${mission.id}:swarm:${role}`,
           signal: runSignal
         });
+        assertCompleteResponse(result, role);
         const contribution = parseContribution(result.message, role);
         for (const entry of contribution.entries) board.append({ workerRole: role, ...entry });
         return { role, result, structured: contribution.structured };
@@ -192,9 +251,11 @@ export class SwarmExperimentRunner {
           normalizedBudget.answerReserveTokens,
           normalizedBudget.verifierOutputTokens - 1
         ),
+        responseFormat: CONTRIBUTION_RESPONSE_FORMAT,
         promptSessionId: `${mission.id}:swarm:verifier`,
         signal: runSignal
       });
+      assertCompleteResponse(verifierResult, "verifier");
       const verification = parseContribution(verifierResult.message, "verifier");
       for (const entry of verification.entries) {
         board.append({ workerRole: "verifier", ...entry });
@@ -211,9 +272,11 @@ export class SwarmExperimentRunner {
           normalizedBudget.answerReserveTokens,
           normalizedBudget.integratorOutputTokens - 1
         ),
+        responseFormat: INTEGRATED_RESPONSE_FORMAT,
         promptSessionId: `${mission.id}:swarm:integrator`,
         signal: runSignal
       });
+      assertCompleteResponse(integratorResult, "integrator");
       const integrated = parseIntegratedAnswer(integratorResult.message);
       const stages = [
         ...firstWave.map(({ role, result, structured }) =>
@@ -414,17 +477,8 @@ function parseContribution(message, role) {
       structured: true,
       entries: parsed.entries.slice(0, 50).map((entry) => normalizedEntry(entry))
     };
-  } catch {
-    return {
-      structured: false,
-      entries: [{
-        kind: role === "verifier" ? "risk" : "proposal",
-        statement: content,
-        sourceRefs: [],
-        confidence: 0.25,
-        status: "unverified"
-      }]
-    };
+  } catch (error) {
+    throw new Error(`${role} response did not satisfy the typed contribution contract: ${error.message}`);
   }
 }
 
@@ -442,13 +496,17 @@ function parseIntegratedAnswer(message) {
         100
       )
     };
-  } catch {
-    return {
-      structured: false,
-      answer: content,
-      confidence: 0.25,
-      unresolvedRisks: ["Integrator response did not satisfy the typed output contract."]
-    };
+  } catch (error) {
+    throw new Error(`Integrator response did not satisfy the typed output contract: ${error.message}`);
+  }
+}
+
+function assertCompleteResponse(result, role) {
+  const finalObservation = result?.observations?.at(-1);
+  const choice = finalObservation?.providerResponse?.choices?.[0];
+  const finishReason = String(choice?.finish_reason || choice?.stop_reason || "").toLowerCase();
+  if (["length", "max_tokens", "max_output_tokens"].includes(finishReason)) {
+    throw new Error(`${role} response exhausted its output budget before completion`);
   }
 }
 

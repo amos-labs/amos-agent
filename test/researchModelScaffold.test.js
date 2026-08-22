@@ -32,7 +32,8 @@ test("the research scaffold reserves visible-answer tokens and recovers without 
     messages: [{ role: "user", content: "Return only the function." }],
     dataManifestDigest: RESEARCH_TEST_DIGESTS.a,
     maxOutputTokens: 160,
-    answerReserveTokens: 64
+    answerReserveTokens: 64,
+    responseFormat: { type: "json_object" }
   });
 
   assert.equal(result.recoveryTriggered, true);
@@ -40,6 +41,8 @@ test("the research scaffold reserves visible-answer tokens and recovers without 
   assert.equal(calls[0].maxOutputTokens, 96);
   assert.equal(calls[1].maxOutputTokens, 64);
   assert.equal(calls[1].reasoningEffortOverride, "none");
+  assert.deepEqual(calls[0].responseFormat, { type: "json_object" });
+  assert.deepEqual(calls[1].responseFormat, { type: "json_object" });
   assert.equal(calls[1].messages.at(-1).content, ANSWER_RECOVERY_PROMPT);
   assert.equal(calls[1].messages.at(-2).reasoning_content, "I found the solution.");
   assert.equal(result.metrics.outputTokens, 120);

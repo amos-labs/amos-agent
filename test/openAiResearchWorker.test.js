@@ -43,12 +43,14 @@ test("the canonical research worker supports pinned Qwen and Fable-shaped loopba
     }],
     dataManifestDigest: RESEARCH_TEST_DIGESTS.a,
     maxOutputTokens: 64,
-    reasoningEffortOverride: "none"
+    reasoningEffortOverride: "none",
+    responseFormat: { type: "json_object" }
   });
 
   assert.equal(calls[0].options.headers.authorization, "Bearer test-key");
   assert.equal(calls[1].body.enable_thinking, false);
   assert.equal(calls[1].body.parallel_tool_calls, false);
+  assert.deepEqual(calls[1].body.response_format, { type: "json_object" });
   assert.equal(Object.hasOwn(calls[1].body, "reasoning_effort"), false);
   assert.equal(observation.metrics.generationTokensPerSecond, 100);
   assert.equal(observation.message.content, "visible answer");

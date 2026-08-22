@@ -33,6 +33,7 @@ test("Swarm Mode v0 runs explorer and builder concurrently through a typed evide
   ]);
   assert.equal(run.evidenceBoard.items.length, 3);
   assert.deepEqual(worker.started.slice(0, 2).sort(), ["builder", "explorer"]);
+  assert.equal(worker.calls.every((call) => call.responseFormat?.type === "json_schema"), true);
   assert.equal(run.metrics.logicalStages, 4);
   assert.equal(run.metrics.requests, 4);
 });
@@ -76,6 +77,48 @@ test("swarm budgets reserve the integrator and reject impossible allocations", (
   );
 });
 
+test("the research harness fails closed on truncated or malformed model output", async () => {
+  const direct = new SwarmExperimentRunner({
+    worker: {
+      async runCase(input) {
+        return fakeObservation(
+          input.caseId,
+          { role: "assistant", content: "A truncated answer" },
+          { finishReason: "length" }
+        );
+      }
+    },
+    controlId: "qwen-direct"
+  });
+  await assert.rejects(
+    direct.runDirect({
+      missionId: "mission-truncated-001",
+      objective: "Return a complete answer.",
+      dataManifestDigest: RESEARCH_TEST_DIGESTS.a,
+      budget: { ...DEFAULT_SWARM_BUDGET, answerReserveTokens: 0 }
+    }),
+    /exhausted its output budget/
+  );
+
+  const malformed = new SwarmExperimentRunner({
+    worker: {
+      async runCase(input) {
+        return fakeObservation(input.caseId, { role: "assistant", content: "not json" });
+      }
+    },
+    controlId: "qwen-swarm"
+  });
+  await assert.rejects(
+    malformed.runSwarm({
+      missionId: "mission-malformed-001",
+      objective: "Return typed evidence.",
+      dataManifestDigest: RESEARCH_TEST_DIGESTS.b,
+      budget: { ...DEFAULT_SWARM_BUDGET, answerReserveTokens: 0 }
+    }),
+    /typed contribution contract/
+  );
+});
+
 test("the evidence board is append-only and content addressed", () => {
   const board = new SwarmEvidenceBoard({
     missionId: "mission-board-001",
@@ -107,9 +150,12 @@ test("the evidence board is append-only and content addressed", () => {
 
 function scriptedWorker() {
   const started = [];
+  const calls = [];
   return {
     started,
+    calls,
     async runCase(input) {
+      calls.push(structuredClone(input));
       const role = input.caseId.split(":").at(-2);
       started.push(role);
       if (role === "explorer") {
@@ -157,10 +203,13 @@ function jsonMessage(value) {
   return { role: "assistant", content: JSON.stringify(value) };
 }
 
-function fakeObservation(caseId, message) {
+function fakeObservation(caseId, message, { finishReason = "stop" } = {}) {
   return {
     caseId,
     message,
+    providerResponse: {
+      choices: [{ finish_reason: finishReason, message }]
+    },
     metrics: {
       wallMilliseconds: 10,
       promptTokens: 20,

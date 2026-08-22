@@ -63,6 +63,7 @@ export class OpenAiResearchWorker {
     repetition = 1,
     maxOutputTokens,
     reasoningEffortOverride = null,
+    responseFormat = null,
     promptSessionId = null,
     signal = null
   }) {
@@ -84,7 +85,10 @@ export class OpenAiResearchWorker {
       stream: false,
       temperature: this.temperature,
       seed: this.seed,
-      max_tokens: maxOutputTokens
+      max_tokens: maxOutputTokens,
+      ...(responseFormat ? {
+        response_format: jsonObject(responseFormat, "responseFormat")
+      } : {})
     };
     const reasoningEffort = reasoningEffortOverride || this.reasoningEffort;
     if (this.dialect === "qwen") {
@@ -236,4 +240,15 @@ function boundedInteger(value, minimum, maximum, label) {
     throw new Error(`${label} must be an integer between ${minimum} and ${maximum}`);
   }
   return value;
+}
+
+function jsonObject(value, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  try {
+    return structuredClone(value);
+  } catch {
+    throw new Error(`${label} must be serializable`);
+  }
 }
