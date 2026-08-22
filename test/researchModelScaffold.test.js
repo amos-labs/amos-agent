@@ -4,6 +4,7 @@ import {
   ANSWER_RECOVERY_PROMPT,
   SEQUENTIAL_TOOL_POLICY,
   completionBudget,
+  observationIndicatesOutputTruncation,
   requiresVisibleAnswerRecovery,
   runResearchInference,
   withSequentialToolPolicy
@@ -74,10 +75,51 @@ test("tool calls do not trigger visible-answer recovery", () => {
   );
 });
 
-function observation({ caseId, message, outputTokens }) {
+test("a truncated partial answer consumes the reserved clean-answer pass", async () => {
+  const calls = [];
+  const worker = {
+    async runCase(input) {
+      calls.push(structuredClone(input));
+      const recovering = input.caseId.endsWith(":answer");
+      return observation({
+        caseId: input.caseId,
+        message: {
+          role: "assistant",
+          content: recovering ? "Complete final answer." : "Partial visible answer..."
+        },
+        outputTokens: recovering ? 20 : 96,
+        finishReason: recovering ? "stop" : "length"
+      });
+    }
+  };
+
+  const result = await runResearchInference({
+    worker,
+    caseId: "planning-001",
+    messages: [{ role: "user", content: "Return the complete plan." }],
+    dataManifestDigest: RESEARCH_TEST_DIGESTS.b,
+    maxOutputTokens: 160,
+    answerReserveTokens: 64
+  });
+
+  assert.equal(result.recoveryTriggered, true);
+  assert.equal(result.message.content, "Complete final answer.");
+  assert.equal(calls.length, 2);
+  assert.equal(observationIndicatesOutputTruncation({
+    providerResponse: { choices: [{ finish_reason: "length" }] }
+  }), true);
+  assert.equal(observationIndicatesOutputTruncation({
+    providerResponse: { choices: [{ finish_reason: "stop" }] }
+  }), false);
+});
+
+function observation({ caseId, message, outputTokens, finishReason = "stop" }) {
   return {
     caseId,
     message,
+    providerResponse: {
+      choices: [{ finish_reason: finishReason, message }]
+    },
     metrics: {
       wallMilliseconds: 10,
       promptTokens: 20,
