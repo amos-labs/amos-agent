@@ -298,9 +298,11 @@ contract gate. Qwen completed the underlying reasoning, but the original
 stages required recovery; only three stage envelopes parsed successfully. The
 run is preserved as development evidence in
 `benchmarks/results/qwen-swarm-v0-contract-qualification-2026-08-22.json`.
-It is not evidence that either control won. The corrected quality regime uses
-a 768-token answer reserve, larger stage allocations, provider-enforced JSON
-Schema, and truncation rejection before the controls are rerun.
+It is not evidence that either control won. A first hard-gated rerun showed
+that 768 visible-answer tokens were still insufficient for Direct Qwen. The
+corrected quality regime therefore reserves 1,536 visible-answer tokens, caps
+answers at 900 words, gives workers bounded concise entries, enforces JSON
+Schema, and rejects truncation before the controls are compared.
 
 The visible development mission manifest is not sealed evidence. It exists to
 debug the scaffold before running the private and public frontier portfolio.
