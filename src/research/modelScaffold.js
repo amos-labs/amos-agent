@@ -86,7 +86,10 @@ export async function runResearchInference({
 
   if (
     budget.answerReserveTokens > 0 &&
-    requiresVisibleAnswerRecovery(first.message)
+    (
+      requiresVisibleAnswerRecovery(first.message) ||
+      observationIndicatesOutputTruncation(first)
+    )
   ) {
     recoveryTriggered = true;
     final = await worker.runCase({
@@ -111,6 +114,12 @@ export async function runResearchInference({
     recoveryTriggered,
     metrics: aggregateObservationMetrics(observations)
   };
+}
+
+export function observationIndicatesOutputTruncation(observation) {
+  const choice = observation?.providerResponse?.choices?.[0];
+  const reason = String(choice?.finish_reason || choice?.stop_reason || "").toLowerCase();
+  return ["length", "max_tokens", "max_output_tokens"].includes(reason);
 }
 
 export function aggregateObservationMetrics(observations) {
