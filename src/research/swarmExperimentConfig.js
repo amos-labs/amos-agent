@@ -24,7 +24,6 @@ export function validateSwarmExperimentConfig(input) {
     requiredText(control.model, `${path}.model`);
     if (!["generic", "qwen"].includes(control.dialect)) throw new Error(`${path}.dialect is unsupported`);
     if (control.reasoningEffort !== null) requiredText(control.reasoningEffort, `${path}.reasoningEffort`);
-    integer(control.answerReserveTokens, 0, 131_071, `${path}.answerReserveTokens`);
     requiredText(control.endpointEnv, `${path}.endpointEnv`);
     const endpoint = new URL(control.defaultEndpoint);
     if (!['http:', 'https:'].includes(endpoint.protocol)) throw new Error(`${path}.defaultEndpoint is invalid`);

@@ -73,10 +73,7 @@ const report = {
 
 if (!probeOnly) {
   const runner = new SwarmExperimentRunner({ worker, controlId: control.id });
-  const budget = {
-    ...config.budget,
-    answerReserveTokens: control.answerReserveTokens
-  };
+  const budget = config.budget;
   for (const mission of missions) {
     const dataManifestDigest = digestResearchValue({
       manifestId: missionManifest.id,

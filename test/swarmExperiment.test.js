@@ -38,7 +38,7 @@ test("Swarm Mode v0 runs explorer and builder concurrently through a typed evide
   assert.equal(run.metrics.requests, 4);
 });
 
-test("direct and swarm controls share the same answer-reserve contract", async () => {
+test("direct and swarm controls use stage-specific answer reserves", async () => {
   const calls = [];
   const worker = {
     async runCase(input) {
@@ -63,6 +63,8 @@ test("direct and swarm controls share the same answer-reserve contract", async (
   assert.equal(run.stages[0].recoveryTriggered, true);
   assert.equal(run.metrics.answerRecoveries, 1);
   assert.equal(calls[1].reasoningEffortOverride, "none");
+  assert.equal(calls[0].maxOutputTokens, 1536);
+  assert.equal(calls[1].maxOutputTokens, 3072);
 });
 
 test("swarm budgets reserve the integrator and reject impossible allocations", () => {
@@ -72,7 +74,7 @@ test("swarm budgets reserve the integrator and reject impossible allocations", (
     /stage allocations exceed/
   );
   assert.throws(
-    () => validateSwarmBudget({ maxInferenceCalls: 4, answerReserveTokens: 128 }),
+    () => validateSwarmBudget({ maxInferenceCalls: 4 }),
     /maxInferenceCalls of at least 8/
   );
 });
@@ -95,7 +97,10 @@ test("the research harness fails closed on truncated or malformed model output",
       missionId: "mission-truncated-001",
       objective: "Return a complete answer.",
       dataManifestDigest: RESEARCH_TEST_DIGESTS.a,
-      budget: { ...DEFAULT_SWARM_BUDGET, answerReserveTokens: 0 }
+      budget: {
+        ...DEFAULT_SWARM_BUDGET,
+        directAnswerReserveTokens: 0
+      }
     }),
     /exhausted its output budget/
   );

@@ -300,11 +300,12 @@ run is preserved as development evidence in
 `benchmarks/results/qwen-swarm-v0-contract-qualification-2026-08-22.json`.
 It is not evidence that either control won. A first hard-gated rerun showed
 that 768 visible-answer tokens were still insufficient for Direct Qwen. The
-corrected quality regime therefore reserves 1,536 visible-answer tokens, caps
-answers at 900 words, gives workers bounded concise entries, enforces JSON
-Schema, and rejects truncation before the controls are compared. A truncated
-partial first-pass answer also consumes the reserved no-reasoning answer pass;
-nonempty partial content never bypasses recovery.
+corrected quality regime therefore reserves 3,072 tokens for direct and
+integrated user-facing answers and 1,024 tokens for bounded typed specialist
+output. It caps answers at 900 words, enforces JSON Schema, and rejects
+truncation before the controls are compared. A truncated partial first-pass
+answer also consumes the reserved no-reasoning answer pass; nonempty partial
+content never bypasses recovery.
 
 The visible development mission manifest is not sealed evidence. It exists to
 debug the scaffold before running the private and public frontier portfolio.
