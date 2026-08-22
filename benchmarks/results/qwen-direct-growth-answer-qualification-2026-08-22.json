@@ -1,0 +1,24 @@
+{
+  "schema": "amos.swarm-development-qualification",
+  "version": 1,
+  "createdAt": "2026-08-22T22:15:38.000Z",
+  "status": "failed-contract-gate",
+  "dataClassification": "development-visible",
+  "sourceRevision": "baa4610",
+  "controlId": "qwen-direct",
+  "completedMissions": [
+    "funnel-bottleneck-001",
+    "contradictory-target-001"
+  ],
+  "failedMission": "partner-growth-plan-001",
+  "repetition": 1,
+  "answerReserveTokens": 1536,
+  "failure": "The recovered growth-plan answer exhausted a 1536-token final-answer reserve.",
+  "correctiveActions": [
+    "Replace the global reserve with stage-specific reserves.",
+    "Reserve 3072 tokens for direct and integrated user-facing answers.",
+    "Reserve 1024 tokens for bounded typed worker and verifier output.",
+    "Keep the total Swarm output allocation fixed at 9984 tokens."
+  ],
+  "promotionEligible": false
+}

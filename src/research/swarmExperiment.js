@@ -14,11 +14,14 @@ export const DEFAULT_SWARM_BUDGET = Object.freeze({
   maxWallMilliseconds: 300_000,
   maxInferenceCalls: 8,
   maxTotalOutputTokens: 9_984,
-  directOutputTokens: 3_072,
-  workerOutputTokens: 2_304,
-  verifierOutputTokens: 2_304,
-  integratorOutputTokens: 3_072,
-  answerReserveTokens: 1_536
+  directOutputTokens: 4_608,
+  workerOutputTokens: 1_792,
+  verifierOutputTokens: 1_792,
+  integratorOutputTokens: 4_608,
+  directAnswerReserveTokens: 3_072,
+  workerAnswerReserveTokens: 1_024,
+  verifierAnswerReserveTokens: 1_024,
+  integratorAnswerReserveTokens: 3_072
 });
 
 const EVIDENCE_KINDS = new Set(["claim", "evidence", "proposal", "risk"]);
@@ -188,7 +191,7 @@ export class SwarmExperimentRunner {
         dataManifestDigest,
         repetition,
         maxOutputTokens: normalizedBudget.directOutputTokens,
-        answerReserveTokens: normalizedBudget.answerReserveTokens,
+        answerReserveTokens: normalizedBudget.directAnswerReserveTokens,
         promptSessionId: `${mission.id}:direct`,
         signal: runSignal
       });
@@ -226,10 +229,7 @@ export class SwarmExperimentRunner {
           dataManifestDigest,
           repetition,
           maxOutputTokens: normalizedBudget.workerOutputTokens,
-          answerReserveTokens: Math.min(
-            normalizedBudget.answerReserveTokens,
-            normalizedBudget.workerOutputTokens - 1
-          ),
+          answerReserveTokens: normalizedBudget.workerAnswerReserveTokens,
           responseFormat: CONTRIBUTION_RESPONSE_FORMAT,
           promptSessionId: `${mission.id}:swarm:${role}`,
           signal: runSignal
@@ -247,10 +247,7 @@ export class SwarmExperimentRunner {
         dataManifestDigest,
         repetition,
         maxOutputTokens: normalizedBudget.verifierOutputTokens,
-        answerReserveTokens: Math.min(
-          normalizedBudget.answerReserveTokens,
-          normalizedBudget.verifierOutputTokens - 1
-        ),
+        answerReserveTokens: normalizedBudget.verifierAnswerReserveTokens,
         responseFormat: CONTRIBUTION_RESPONSE_FORMAT,
         promptSessionId: `${mission.id}:swarm:verifier`,
         signal: runSignal
@@ -268,10 +265,7 @@ export class SwarmExperimentRunner {
         dataManifestDigest,
         repetition,
         maxOutputTokens: normalizedBudget.integratorOutputTokens,
-        answerReserveTokens: Math.min(
-          normalizedBudget.answerReserveTokens,
-          normalizedBudget.integratorOutputTokens - 1
-        ),
+        answerReserveTokens: normalizedBudget.integratorAnswerReserveTokens,
         responseFormat: INTEGRATED_RESPONSE_FORMAT,
         promptSessionId: `${mission.id}:swarm:integrator`,
         signal: runSignal
@@ -343,17 +337,17 @@ export function validateSwarmBudget(input = DEFAULT_SWARM_BUDGET) {
   ]) {
     boundedInteger(budget[field], 1, 10_000_000, `budget.${field}`);
   }
-  boundedInteger(
-    budget.answerReserveTokens,
-    0,
-    Math.min(
-      budget.directOutputTokens,
-      budget.workerOutputTokens,
-      budget.verifierOutputTokens,
-      budget.integratorOutputTokens
-    ) - 1,
-    "budget.answerReserveTokens"
-  );
+  for (const [reserveField, allocationField] of [
+    ["directAnswerReserveTokens", "directOutputTokens"],
+    ["workerAnswerReserveTokens", "workerOutputTokens"],
+    ["verifierAnswerReserveTokens", "verifierOutputTokens"],
+    ["integratorAnswerReserveTokens", "integratorOutputTokens"]
+  ]) {
+    boundedInteger(budget[reserveField], 0, 10_000_000, `budget.${reserveField}`);
+    if (budget[reserveField] >= budget[allocationField]) {
+      throw new Error(`budget.${reserveField} must be less than budget.${allocationField}`);
+    }
+  }
   const allocated = (budget.workerOutputTokens * 2) +
     budget.verifierOutputTokens + budget.integratorOutputTokens;
   if (allocated > budget.maxTotalOutputTokens) {
@@ -362,8 +356,12 @@ export function validateSwarmBudget(input = DEFAULT_SWARM_BUDGET) {
   if (budget.directOutputTokens > budget.maxTotalOutputTokens) {
     throw new Error("Direct allocation exceeds budget.maxTotalOutputTokens");
   }
-  if (budget.maxInferenceCalls < 8 && budget.answerReserveTokens > 0) {
-    throw new Error("An answer reserve requires budget.maxInferenceCalls of at least 8");
+  if (budget.maxInferenceCalls < 8 && [
+    budget.workerAnswerReserveTokens,
+    budget.verifierAnswerReserveTokens,
+    budget.integratorAnswerReserveTokens
+  ].some((value) => value > 0)) {
+    throw new Error("Swarm answer reserves require budget.maxInferenceCalls of at least 8");
   }
   return budget;
 }
