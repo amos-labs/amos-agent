@@ -1,0 +1,20 @@
+aws_region       = "us-east-1"
+availability_zone = "us-east-1b"
+
+# Pinned AWS Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 24.04),
+# discovered 2026-08-22. Re-verify before deployment.
+ami_id = "ami-0a30b02f6c5660457"
+
+# Phase 1 creates only the private network, KMS key, S3 model bucket, ECR
+# repository, and secret. It does not create a billable GPU.
+inference_enabled = false
+
+# Fill these from scripts/mirror-vllm-image.sh and scripts/stage-model.sh,
+# then change inference_enabled to true for Phase 2.
+vllm_image_uri          = ""
+model_manifest_sha256   = ""
+
+# Optional hard-to-miss cost notifications. This does not automatically stop
+# an instance; scripts/stop.sh is the intentional on-demand control.
+monthly_budget_usd = 0
+budget_email       = ""

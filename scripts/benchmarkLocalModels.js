@@ -14,6 +14,7 @@ const models = readModels(args);
 const baseUrl = readOption(args, "--url") ||
   process.env.AMOS_LOCAL_BENCHMARK_URL ||
   "http://127.0.0.1:11435";
+const apiKey = process.env.AMOS_LOCAL_BENCHMARK_API_KEY || "";
 const suite = normalizeSuite(
   readOption(args, "--suite") || process.env.AMOS_LOCAL_BENCHMARK_SUITE || "all"
 );
@@ -884,7 +885,8 @@ async function postJson(url, body, timeoutMs) {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "content-length": Buffer.byteLength(serialized)
+        "content-length": Buffer.byteLength(serialized),
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
       }
     }, (response) => {
       const chunks = [];
