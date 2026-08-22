@@ -327,6 +327,53 @@ board, budgets, timing, and output-token usage. A report is development
 evidence only until answers are anonymized, blindly judged, repeated at least
 three times, and evaluated under the frozen frontier portfolio.
 
+### Blind quality comparison
+
+`src/research/blindComparison.js` creates two digest-bound artifacts from two
+or more compatible experiment reports:
+
+- `amos.blind-comparison-bundle` contains the common mission evidence,
+  anonymized candidate answers, and a fixed six-dimension scoring rubric. It
+  contains no control, model, provider, endpoint, source-report, or run
+  identity metadata.
+- `amos.blind-comparison-mapping` contains the case-specific candidate-to-
+  control mapping and source digests. It is a private evaluator-custodian
+  artifact and must never be given to the judge.
+
+Candidate labels are independently shuffled for each case with a secret of at
+least 32 bytes. The secret itself is never stored in either artifact; only its
+SHA-256 digest appears in the private map. The CLI writes both artifacts with
+mode `0600`, rejects incomplete or digest-tampered reports, and requires every
+control to contain the same mission/repetition set:
+
+```bash
+openssl rand -out /tmp/amos-blind-salt.bin 32
+chmod 600 /tmp/amos-blind-salt.bin
+npm run research:swarm:blind -- \
+  --report /tmp/qwen-direct.json \
+  --report /tmp/qwen-swarm.json \
+  --salt-file /tmp/amos-blind-salt.bin \
+  --bundle /tmp/qwen-blind-public.json \
+  --mapping /tmp/qwen-blind-private.json
+```
+
+The judge receives only the public bundle and scores correctness, evidence
+grounding, completeness, actionability, calibrated uncertainty, and concision
+from one to five. It must rank every candidate; explicit ranking groups encode
+ties. Judgment validation fails closed on missing cases, unknown or duplicate
+candidates, incomplete dimensions, or out-of-range scores. Unmasking occurs
+only after a complete judgment and emits control-level rank and dimension
+totals bound to the bundle, private map, and judgment digests.
+
+The original three cases remain fast contract fixtures. The visible
+`benchmarks/swarm-challenge-missions-v0.json` suite adds six multi-constraint
+development missions for quality iteration: cash allocation, partner capacity,
+incident reconstruction, zero-downtime migration, experiment portfolio
+selection, and KPI reconciliation. It is intentionally visible and cannot
+serve as sealed promotion evidence. Run it by passing
+`--missions benchmarks/swarm-challenge-missions-v0.json` to
+`research:swarm`.
+
 The corrected stage-budget qualification completed on 2026-08-22. Direct Qwen
 and Swarm Qwen each completed nine runs; all 36 Swarm stages satisfied JSON
 Schema and neither control returned a truncated final answer. Warmed decode
