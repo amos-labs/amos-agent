@@ -38,7 +38,8 @@
     "desktop:release:win": "npm run runtime:prepare && npm run router:prepare && electron-builder --config desktop/electron-builder.windows-azure.cjs --win nsis --x64 --publish never",
     "canvas:prepare": "node scripts/prepareCanvasNative.cjs",
     "desktop:preview:win": "electron-builder --config desktop/electron-builder.windows-preview.yml --win nsis --x64 --publish never",
-    "research:qwen-baseline": "node scripts/runQwenResearchBaseline.js"
+    "research:qwen-baseline": "node scripts/runQwenResearchBaseline.js",
+    "research:validate-quality-portfolio": "node scripts/validateFrontierQualityPortfolio.js"
   },
   "devDependencies": {
     "electron": "^39.2.7",

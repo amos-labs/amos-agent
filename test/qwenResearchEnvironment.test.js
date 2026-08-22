@@ -64,6 +64,7 @@ test("the AWS Qwen environment pins the official FP8 artifact and authenticated 
   assert.equal(environment.runtime.id, "vllm");
   assert.equal(environment.runtime.version, "0.27.1");
   assert.equal(environment.model.revision, QWEN38_AWS_MODEL_REVISION);
+  assert.equal(environment.runtime.profile, "aws-g7e-fp8-mtp-v2");
   assert.equal(environment.inference.contextTokens, 32_768);
   assert.equal(environment.inference.reasoningEffort, "low");
 

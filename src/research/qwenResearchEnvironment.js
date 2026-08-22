@@ -30,7 +30,7 @@ export const QWEN38_AWS_SERVED_MODEL_ID = "amos-qwen38-27b-fp8";
 export const QWEN38_AWS_VLLM_VERSION = "0.27.1";
 
 const QWEN38_AWS_VLLM_PROFILE = Object.freeze({
-  id: "aws-g7e-fp8-mtp-v1",
+  id: "aws-g7e-fp8-mtp-v2",
   runtimeVersion: QWEN38_AWS_VLLM_VERSION,
   modelRepository: QWEN38_AWS_MODEL_ID,
   modelRevision: QWEN38_AWS_MODEL_REVISION,
@@ -40,8 +40,11 @@ const QWEN38_AWS_VLLM_PROFILE = Object.freeze({
   maxConcurrentSequences: 8,
   maxBatchedTokens: 16_384,
   gpuMemoryUtilization: 0.85,
+  automaticToolChoice: true,
+  toolCallParser: "qwen3_xml",
+  reasoningParser: "qwen3",
   prefixCaching: true,
-  speculativeMethod: "qwen3_5_mtp",
+  speculativeMethod: "mtp",
   speculativeTokens: 3
 });
 

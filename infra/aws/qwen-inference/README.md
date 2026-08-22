@@ -28,7 +28,8 @@ It is deliberately not a public model API:
 | Runtime | `vllm/vllm-openai:v0.27.1`, mirrored and addressed by digest |
 | Context | 32,768 tokens initially |
 | Scheduling | 8 sequences, 16,384 batched tokens, prefix cache enabled |
-| Speculation | native `qwen3_5_mtp`, three draft tokens |
+| Speculation | native `mtp`, three draft tokens |
+| Protocol parsing | native `qwen3_xml` tool calls and `qwen3` reasoning separation |
 | Endpoint | OpenAI-compatible API on instance loopback port 8000 |
 | Local tunnel | `http://127.0.0.1:18080` |
 

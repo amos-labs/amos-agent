@@ -18,7 +18,7 @@ for binary in aws docker nvidia-smi sha256sum; do
 done
 
 nvidia-smi
-install -d -m 0750 /opt/amos "$MODEL_ROOT" /var/cache/amos-vllm
+install -d -m 0750 /opt/amos "$MODEL_ROOT" /var/cache/amos-vllm /var/cache/amos-vllm/triton
 install -d -m 0750 /etc/amos
 
 aws s3 cp \
@@ -49,7 +49,11 @@ VLLM_API_KEY="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["api_key
 test -n "$VLLM_API_KEY"
 
 umask 077
-printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY" > "$ENVIRONMENT_PATH"
+{
+  printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY"
+  printf 'VLLM_NO_USAGE_STATS=1\n'
+  printf 'VLLM_DO_NOT_TRACK=1\n'
+} > "$ENVIRONMENT_PATH"
 unset API_KEY_JSON VLLM_API_KEY
 
 cat > "$SERVICE_PATH" <<'UNIT'
@@ -63,9 +67,8 @@ Type=simple
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=3600
-EnvironmentFile=/etc/amos/qwen.env
 ExecStartPre=-/usr/bin/docker rm -f amos-qwen
-ExecStart=/bin/bash -lc 'exec /usr/bin/docker run --name amos-qwen --rm --gpus all --ipc=host --network=host --read-only --tmpfs /tmp:rw,noexec,nosuid,size=8g -v /opt/amos/qwen-model:/model:ro -v /var/cache/amos-vllm:/root/.cache:rw ${vllm_image_uri} --model /model --served-model-name ${served_model_name} --host 127.0.0.1 --port 8000 --api-key "$VLLM_API_KEY" --trust-remote-code --max-model-len ${max_model_len} --max-num-seqs ${max_num_seqs} --max-num-batched-tokens ${max_num_batched_tokens} --gpu-memory-utilization ${gpu_memory_utilization} --enable-prefix-caching --speculative-config '\''{"method":"qwen3_5_mtp","num_speculative_tokens":${mtp_speculative_tokens}}'\'''
+ExecStart=/bin/bash -lc 'exec /usr/bin/docker run --name amos-qwen --rm --gpus all --ipc=host --network=host --env-file /etc/amos/qwen.env --read-only --tmpfs /tmp:rw,noexec,nosuid,size=8g -v /opt/amos/qwen-model:/model:ro -v /var/cache/amos-vllm:/root/.cache:rw -v /var/cache/amos-vllm/triton:/root/.triton:rw ${vllm_image_uri} --model /model --served-model-name ${served_model_name} --host 127.0.0.1 --port 8000 --trust-remote-code --max-model-len ${max_model_len} --max-num-seqs ${max_num_seqs} --max-num-batched-tokens ${max_num_batched_tokens} --gpu-memory-utilization ${gpu_memory_utilization} --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3 --enable-prefix-caching --speculative-config '\''{"method":"mtp","num_speculative_tokens":${mtp_speculative_tokens}}'\'''
 ExecStop=/usr/bin/docker stop --time 30 amos-qwen
 
 [Install]
@@ -77,9 +80,10 @@ systemctl daemon-reload
 systemctl enable --now amos-qwen.service
 
 for attempt in $(seq 1 180); do
-  if curl --silent --fail \
-    --header "Authorization: Bearer $(cut -d= -f2- "$ENVIRONMENT_PATH")" \
-    http://127.0.0.1:8000/v1/models >/dev/null; then
+  if {
+    printf 'header = "Authorization: Bearer %s"\n' "$(sed -n 's/^VLLM_API_KEY=//p' "$ENVIRONMENT_PATH" | head -n 1)"
+    printf 'url = "http://127.0.0.1:8000/v1/models"\n'
+  } | curl --silent --fail --config - >/dev/null; then
     echo "AMOS Qwen inference cell is ready"
     exit 0
   fi
