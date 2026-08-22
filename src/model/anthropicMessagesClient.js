@@ -1,5 +1,6 @@
 import {
   executeModelRequest,
+  invalidModelToolArgumentsError,
   normalizedUsage,
   readJsonResponse,
   readSseEvents
@@ -225,7 +226,8 @@ async function readAnthropicStream(response, { signal, displayName, onDelta, onA
           onDelta(delta, visibleText);
         });
       } else if (type === "content_block_stop") {
-        finishAnthropicBlock(blocks.get(data.index));
+        const block = blocks.get(data.index);
+        if (block) block._streamStopped = true;
       } else if (type === "message_delta") {
         usage = { ...(usage || {}), ...(data.usage || {}) };
         stopReason = String(data.delta?.stop_reason || stopReason || "");
@@ -240,7 +242,7 @@ async function readAnthropicStream(response, { signal, displayName, onDelta, onA
   }
   if (failure) throw new Error(failure);
   const content = [...blocks.entries()].sort(([a], [b]) => a - b).map(([, block]) => {
-    finishAnthropicBlock(block);
+    finishAnthropicBlock(block, { displayName, stopReason, usage });
     return block;
   });
   const normalized = normalizeAnthropicPayload({
@@ -285,12 +287,24 @@ function applyAnthropicDelta(blocks, index, delta, emitText) {
   blocks.set(index, block);
 }
 
-function finishAnthropicBlock(block) {
-  if (!block || block._partialJson == null) return;
+function finishAnthropicBlock(block, {
+  displayName = "Anthropic",
+  stopReason = "",
+  usage = null
+} = {}) {
+  if (!block) return;
+  delete block._streamStopped;
+  if (block._partialJson == null) return;
   try {
     block.input = JSON.parse(block._partialJson || "{}");
   } catch {
-    throw new Error("Anthropic returned invalid streamed tool arguments");
+    throw invalidModelToolArgumentsError({
+      displayName,
+      toolName: block.name,
+      rawArguments: block._partialJson,
+      stopReason,
+      usage
+    });
   }
   delete block._partialJson;
 }

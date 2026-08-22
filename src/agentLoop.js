@@ -23,6 +23,7 @@ import {
   derivePromptSessionId,
   promptContractConfig
 } from "./model/promptContract.js";
+import { assertValidModelToolArguments } from "./model/protocol.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
 // Leave headroom below AMOS Hosted's 256-message boundary while allowing long
@@ -221,6 +222,7 @@ export class AgentLoop {
       let rejectedCompletions = 0;
       let rejectedInternalCompletions = 0;
       let transientRetries = 0;
+      let modelRetryGuidance = null;
       const researchPolicy = normalizeResearchCheckpointPolicy(researchCheckpoint);
       let toolCyclesSinceResearchCheckpoint = 0;
       let toolCycleCheckpointActive = researchPolicy.enabled;
@@ -251,7 +253,10 @@ export class AgentLoop {
           summary: turn === 0 ? "Understanding the task and company context" : "Evaluating the latest results"
         });
         const tools = this.availableToolsForModel();
-        const messages = this.prepareMessagesForModel(tools);
+        const preparedMessages = this.prepareMessagesForModel(tools);
+        const messages = modelRetryGuidance
+          ? [...preparedMessages, modelRetryGuidance]
+          : preparedMessages;
         const contextReceipt = this.captureContextReceipt({ messages, tools, turn });
         onEvent({ type: "context_compiled", ...contextReceipt });
         let partialResponse = "";
@@ -270,6 +275,9 @@ export class AgentLoop {
             onDelta: (delta, text) => {
               partialResponse = String(text || partialResponse);
             }
+          });
+          assertValidModelToolArguments(response, {
+            displayName: this.config.model?.displayName || this.config.model?.provider || "Model"
           });
         } catch (error) {
           if (isAbortError(error) || signal?.aborted) throw error;
@@ -303,11 +311,22 @@ export class AgentLoop {
             transientRetries < retryBudget
           ) {
             transientRetries += 1;
+            const invalidToolArguments = isInvalidToolArguments(error);
+            const incompleteModelResponse = isIncompleteModelResponse(error);
+            modelRetryGuidance = invalidToolArguments
+              ? invalidToolArgumentsRetryMessage(error)
+              : incompleteModelResponse
+                ? incompleteModelResponseRetryMessage(error)
+                : null;
             onEvent({
               type: "phase",
               phase: "retrying",
               turn,
-              summary: `The model stopped responding; retrying with completed work intact (${transientRetries} of ${retryBudget})`
+              summary: invalidToolArguments
+                ? `The model produced invalid tool arguments; no tool from that response executed, so AMOS is correcting and retrying safely (${transientRetries} of ${retryBudget})`
+                : incompleteModelResponse
+                  ? `The model response ended before it could be accepted; no tool from that response executed, so AMOS is retrying safely (${transientRetries} of ${retryBudget})`
+                : `The model stopped responding; retrying with completed work intact (${transientRetries} of ${retryBudget})`
             });
             continue;
           }
@@ -341,6 +360,7 @@ export class AgentLoop {
           throw error;
         }
         transientRetries = 0;
+        modelRetryGuidance = null;
         this.observeLocalPromptPerformance(response.usage);
         this.observePromptCacheUsage(response.usage);
         const usageEvent = usageEventFromResponse(response.usage, turn);
@@ -1529,8 +1549,65 @@ function isTransientModelFailure(error) {
   if ([408, 425, 429, 500, 502, 503, 504].includes(status)) return true;
   return isModelTimeout(error) ||
     isEmptyModelResponse(error) ||
+    isInvalidToolArguments(error) ||
+    isIncompleteModelResponse(error) ||
     /fetch failed|ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|network error|UND_ERR/i.test(message) ||
     /rate.?limit|throttl|temporar(?:y|ily) unavailable|service unavailable|overloaded|bad gateway|gateway timeout/i.test(message);
+}
+
+function isIncompleteModelResponse(error) {
+  return error?.code === "AMOS_MODEL_INCOMPLETE_RESPONSE" ||
+    /response was incomplete/i.test(String(error?.message || ""));
+}
+
+function isInvalidToolArguments(error) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || "");
+  return code === "AMOS_MODEL_INVALID_TOOL_ARGUMENTS" ||
+    /invalid.*tool.*arguments?|tool.*arguments?.*invalid/i.test(code) ||
+    /invalid (?:streamed )?tool arguments|incomplete (?:streamed )?tool arguments/i.test(message);
+}
+
+function invalidToolArgumentsRetryMessage(error) {
+  const toolName = /^[A-Za-z0-9_.:-]{1,128}$/.test(String(error?.toolName || ""))
+    ? String(error.toolName)
+    : "the requested tool";
+  const truncated = error?.truncated === true;
+  const problem = error?.argumentProblem === "non_object"
+    ? "did not contain the required JSON object"
+    : "were not valid JSON";
+  return {
+    // This correction is request-local and deliberately does not mutate the
+    // durable conversation. Strict chat templates also require system content
+    // to remain at the beginning, so recovery guidance is a user turn.
+    role: "user",
+    content: [
+      "<amos_tool_call_correction>",
+      `Your previous response could not be accepted because the arguments for ${toolName} ${truncated ? "were incomplete when the output limit was reached" : problem}.`,
+      "No tool from that invalid response executed.",
+      "Retry the next unfinished step now with one compact tool call whose complete JSON arguments exactly match the advertised schema.",
+      "Do not repeat any completed tool call already represented by a tool result in the conversation.",
+      "If the input would be large, split the work into bounded calls instead of placing a large document or dataset in one argument.",
+      "</amos_tool_call_correction>"
+    ].join("\n")
+  };
+}
+
+function incompleteModelResponseRetryMessage(error) {
+  const outputLimit = error?.truncated === true
+    ? " because the provider output limit was reached"
+    : "";
+  return {
+    role: "user",
+    content: [
+      "<amos_model_output_correction>",
+      `Your previous response ended before it could be accepted${outputLimit}.`,
+      "No tool from that incomplete response executed.",
+      "Retry the next unfinished step now. Use one compact schema-valid tool call at a time and keep any user-facing response concise.",
+      "Do not repeat any completed tool call already represented by a tool result in the conversation.",
+      "</amos_model_output_correction>"
+    ].join("\n")
+  };
 }
 
 function normalizeResearchCheckpointPolicy(input) {

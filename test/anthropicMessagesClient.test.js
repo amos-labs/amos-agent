@@ -177,6 +177,54 @@ test("Anthropic Messages streaming preserves signed thinking and assembles tool 
   assert.equal(result.usage.total_tokens, 45);
 });
 
+test("Anthropic Messages reports malformed streamed tool input after capturing its stop reason", async () => {
+  const frames = [
+    ["message_start", {
+      type: "message_start",
+      message: { content: [], usage: { input_tokens: 30, output_tokens: 1 } }
+    }],
+    ["content_block_start", {
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "tool_use", id: "toolu_bad", name: "desktop_write", input: {} }
+    }],
+    ["content_block_delta", {
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "input_json_delta", partial_json: "{\"path\":\"unfinished" }
+    }],
+    ["content_block_stop", { type: "content_block_stop", index: 0 }],
+    ["message_delta", {
+      type: "message_delta",
+      delta: { stop_reason: "max_tokens" },
+      usage: { output_tokens: 4_096 }
+    }],
+    ["message_stop", { type: "message_stop" }]
+  ];
+  const fetchImpl = async () => new Response(
+    frames.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(""),
+    { status: 200, headers: { "content-type": "text/event-stream" } }
+  );
+
+  await assert.rejects(
+    client(fetchImpl).chat({
+      messages: [{ role: "user", content: "Write the artifact" }],
+      onDelta() {}
+    }),
+    (error) => {
+      assert.equal(error.code, "AMOS_MODEL_INVALID_TOOL_ARGUMENTS");
+      assert.equal(error.stopReason, "max_tokens");
+      assert.equal(error.toolName, "desktop_write");
+      assert.equal(error.truncated, true);
+      assert.equal(error.argumentCharacters, 19);
+      assert.equal(error.usage.total_tokens, 4_126);
+      assert.match(error.message, /incomplete tool arguments/i);
+      assert.doesNotMatch(error.message, /unfinished/);
+      return true;
+    }
+  );
+});
+
 test("Anthropic Messages marks failed canonical tool results as errors", async () => {
   let requestBody;
   const fetchImpl = async (_url, options) => {

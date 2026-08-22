@@ -46,6 +46,75 @@ export function normalizedUsage(usage) {
   });
 }
 
+export function assertValidModelToolArguments(response, { displayName = "Model" } = {}) {
+  for (const call of response?.message?.tool_calls || []) {
+    const rawArguments = call?.function?.arguments;
+    const candidate = rawArguments == null || rawArguments === "" ? "{}" : rawArguments;
+    let parsed;
+    let problem = "invalid_json";
+    try {
+      if (typeof candidate !== "string") throw new TypeError("Tool arguments must be JSON text");
+      parsed = JSON.parse(candidate);
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+        problem = "non_object";
+        throw new TypeError("Tool arguments must be a JSON object");
+      }
+    } catch {
+      throw invalidModelToolArgumentsError({
+        displayName,
+        toolName: call?.function?.name,
+        rawArguments: candidate,
+        stopReason: modelResponseStopReason(response),
+        usage: response?.usage,
+        problem
+      });
+    }
+  }
+  return response;
+}
+
+export function invalidModelToolArgumentsError({
+  displayName = "Model",
+  toolName = "",
+  rawArguments = "",
+  stopReason = "",
+  usage = null,
+  problem = "invalid_json"
+} = {}) {
+  const normalizedStopReason = String(stopReason || "").slice(0, 128);
+  const truncated = isModelOutputTruncated(normalizedStopReason);
+  const error = new Error(truncated
+    ? `${displayName} returned incomplete tool arguments after reaching its output limit`
+    : `${displayName} returned invalid tool arguments`);
+  error.code = "AMOS_MODEL_INVALID_TOOL_ARGUMENTS";
+  error.stopReason = normalizedStopReason;
+  error.toolName = String(toolName || "").slice(0, 128);
+  error.argumentCharacters = typeof rawArguments === "string"
+    ? rawArguments.length
+    : JSON.stringify(rawArguments ?? "").length;
+  error.argumentProblem = problem === "non_object" ? "non_object" : "invalid_json";
+  error.truncated = truncated;
+  error.usage = normalizedUsage(usage);
+  return error;
+}
+
+export function isModelOutputTruncated(stopReason) {
+  return /^(?:length|max[_-]?(?:tokens|output[_-]?tokens)|token[_-]?limit)$/i.test(
+    String(stopReason || "").trim()
+  );
+}
+
+function modelResponseStopReason(response) {
+  const raw = response?.raw && typeof response.raw === "object" ? response.raw : null;
+  return response?.stopReason ||
+    response?.stop_reason ||
+    raw?.choices?.[0]?.finish_reason ||
+    raw?.stop_reason ||
+    raw?.incomplete_details?.reason ||
+    raw?.response?.incomplete_details?.reason ||
+    "";
+}
+
 export async function executeModelRequest({
   config,
   fetchImpl = fetchCompat,
