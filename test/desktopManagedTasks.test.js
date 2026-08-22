@@ -230,6 +230,31 @@ test("Desktop opens and forks durable tasks without replaying a model or tool ca
   assert.equal(controller.canvases.active().title, "Scorecard");
   assert.equal(modelRuns, 0);
 
+  const originalRun = controller.runManager.launch({
+    id: "run-original",
+    taskRecordId: parentId,
+    contextKey: parentContext,
+    settings: await settings.read(),
+    activeContextKey: parentContext,
+    activeTaskRecordId: parentId,
+    activity: controller.activity,
+    attachments: controller.attachments,
+    canvases: controller.canvases,
+    canvasResults: controller.canvasResults,
+    approvals: controller.approvals,
+    activeTask: {
+      id: "run-original",
+      startedAt: "2026-08-10T12:01:00.000Z",
+      objective: "Keep researching",
+      phase: "thinking"
+    }
+  }, async () => new Promise(() => {}));
+  controller.runManager.select(originalRun.lane.id);
+  controller.runManager.transition(originalRun.lane.id, "running", {
+    phase: "thinking",
+    summary: "Continuing the original task"
+  });
+
   const forked = await controller.forkTaskResource({
     taskId: parentId,
     name: "Margin intervention",
@@ -240,6 +265,8 @@ test("Desktop opens and forks durable tasks without replaying a model or tool ca
   });
 
   assert.equal(forked.replayed, false);
+  assert.equal(forked.continuedInBackground, true);
+  assert.equal(controller.runManager.get(originalRun.lane.id).status, "running");
   assert.equal(forked.task.parentTaskId, parentId);
   assert.equal(forked.task.workspaceMode, "context_only");
   assert.equal(forked.forkManifest.safeguards.replayAllowed, false);

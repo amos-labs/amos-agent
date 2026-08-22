@@ -197,7 +197,7 @@ function canonicalAnthropicMessage(content) {
   };
 }
 
-async function readAnthropicStream(response, { signal, displayName, onDelta }) {
+async function readAnthropicStream(response, { signal, displayName, onDelta, onActivity }) {
   const blocks = new Map();
   let visibleText = "";
   let usage = null;
@@ -206,6 +206,7 @@ async function readAnthropicStream(response, { signal, displayName, onDelta }) {
   const result = await readSseEvents(response, {
     signal,
     displayName,
+    onActivity,
     onEvent: ({ event, data }) => {
       if (!data) return;
       const type = data.type || event;

@@ -1314,6 +1314,70 @@ test("a timed research checkpoint lets the user synthesize without another tool 
   ));
 });
 
+test("research checkpoint synthesis retries a transient provider failure without replaying tools", async () => {
+  const registry = new ToolRegistry();
+  let now = 0;
+  let reads = 0;
+  registry.register({
+    name: "inspect_once",
+    async handler() {
+      reads += 1;
+      now = 61_000;
+      return { ok: true, evidence: "retained" };
+    }
+  });
+  let request = 0;
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: { maxModelTransientRetries: 2 } },
+    registry,
+    approvals: {
+      async ask() {
+        return { answered: true, answer: "Synthesize now" };
+      }
+    },
+    amosClient: {},
+    now: () => now,
+    kimiClient: {
+      async chat(input) {
+        request += 1;
+        if (request === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{ id: "read-1", function: { name: "inspect_once", arguments: "{}" } }]
+            }
+          };
+        }
+        if (input.messages.some((message) =>
+          String(message.content || "").includes("amos_research_checkpoint_assessment")
+        )) {
+          return { message: { role: "assistant", content: "Enough evidence is available." } };
+        }
+        if (request === 3) {
+          const error = new Error("Service temporarily unavailable");
+          error.status = 503;
+          throw error;
+        }
+        return { message: { role: "assistant", content: "Recovered supported answer." } };
+      }
+    }
+  });
+
+  const answer = await loop.run("Research once", {
+    researchCheckpoint: { enabled: true, afterMs: 60_000, extensionMs: 300_000 },
+    onEvent: (event) => events.push(event)
+  });
+
+  assert.equal(answer, "Recovered supported answer.");
+  assert.equal(reads, 1);
+  assert.equal(request, 4);
+  assert.ok(events.some((event) => (
+    event.type === "phase" && event.phase === "retrying" && /preserved evidence/i.test(event.summary)
+  )));
+});
+
 test("a work-step checkpoint prevents varied tools from running indefinitely", async () => {
   const registry = new ToolRegistry();
   let reads = 0;

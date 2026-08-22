@@ -1385,20 +1385,38 @@ export class AgentLoop {
       { role: "user", content: instruction }
     ];
     this.captureContextReceipt({ messages, tools: [], turn });
-    const response = await this.modelClient.chat({
-      messages,
-      tools: [],
-      signal,
-      reasoningEffortOverride,
-      promptSessionId: this.activePromptSessionId,
-      promptContractHash: this.pendingPromptContract?.sha256 || null,
-      onRoutingDecision: (decision) => {
-        onEvent({ type: "routing", turn, ...decision });
-      },
-      onDelta: (delta, text) => {
-        onEvent({ type: "assistant_delta", turn, delta, text });
+    const retryBudget = this.config.agent?.maxModelTransientRetries ?? 2;
+    let retries = 0;
+    let response;
+    while (true) {
+      try {
+        response = await this.modelClient.chat({
+          messages,
+          tools: [],
+          signal,
+          reasoningEffortOverride,
+          promptSessionId: this.activePromptSessionId,
+          promptContractHash: this.pendingPromptContract?.sha256 || null,
+          onRoutingDecision: (decision) => {
+            onEvent({ type: "routing", turn, ...decision });
+          },
+          onDelta: (delta, text) => {
+            onEvent({ type: "assistant_delta", turn, delta, text });
+          }
+        });
+        break;
+      } catch (error) {
+        if (isAbortError(error) || signal?.aborted) throw error;
+        if (!isTransientModelFailure(error) || retries >= retryBudget) throw error;
+        retries += 1;
+        onEvent({
+          type: "phase",
+          phase: "retrying",
+          turn,
+          summary: `The model did not finish the response; retrying from preserved evidence (${retries} of ${retryBudget})`
+        });
       }
-    });
+    }
     this.observeLocalPromptPerformance(response.usage);
     this.observePromptCacheUsage(response.usage);
     onEvent(usageEventFromResponse(response.usage, turn));
@@ -1507,9 +1525,12 @@ function isEmptyModelResponse(error) {
 function isTransientModelFailure(error) {
   if (isAbortError(error)) return false;
   const message = String(error?.message || "");
+  const status = Number(error?.status || 0);
+  if ([408, 425, 429, 500, 502, 503, 504].includes(status)) return true;
   return isModelTimeout(error) ||
     isEmptyModelResponse(error) ||
-    /fetch failed|ECONNRESET|socket hang up|network error|UND_ERR/i.test(message);
+    /fetch failed|ECONNRESET|ECONNREFUSED|EPIPE|socket hang up|network error|UND_ERR/i.test(message) ||
+    /rate.?limit|throttl|temporar(?:y|ily) unavailable|service unavailable|overloaded|bad gateway|gateway timeout/i.test(message);
 }
 
 function normalizeResearchCheckpointPolicy(input) {

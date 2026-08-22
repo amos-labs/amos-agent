@@ -160,7 +160,13 @@ export class OpenAICompatibleClient {
           refreshTimeout();
           if (!response.ok) failure = await modelFailure(response);
         }
-        if (!response.ok) throw new Error(failure.message);
+        if (!response.ok) {
+          const providerError = new Error(failure.message);
+          providerError.status = response.status;
+          providerError.code = failure.payload?.error?.code || failure.payload?.code || "";
+          providerError.retryAfter = response.headers?.get?.("retry-after") || "";
+          throw providerError;
+        }
       }
 
       if (typeof onDelta === "function") {

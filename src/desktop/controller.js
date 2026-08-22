@@ -2200,14 +2200,20 @@ export class DesktopController {
       onRequest: (request) => {
         const lane = this.runManager.current();
         if (lane) {
+          const waitingForInput = request?.kind === "decision-input";
           this.runManager.transition(lane.id, "waiting", {
             phase: "waiting",
-            summary: "Waiting for approval"
+            summary: waitingForInput
+              ? String(request.message || "Waiting for your direction").slice(0, 500)
+              : "Waiting for approval",
+            pendingInputId: waitingForInput ? request.id : null
           });
           lane.supervisor?.observe({
             type: "phase",
             phase: "waiting",
-            summary: "Waiting for approval"
+            summary: waitingForInput
+              ? String(request.message || "Waiting for your direction").slice(0, 4_000)
+              : "Waiting for approval"
           });
           this.send("desktop-runs:changed", this.runManager.active());
         }
@@ -2615,6 +2621,12 @@ export class DesktopController {
       };
     } catch (error) {
       const canceled = isAbortError(error) || abortController.signal.aborted;
+      if (canceled && this.activeTask?.detached) {
+        // cancelTask already persisted the interruption and released the UI.
+        // If an uncooperative provider settles later, do not let the abandoned
+        // lane overwrite a newer continuation or emit a second terminal result.
+        throw createAbortError();
+      }
       const supervisionStopReason = String(
         this.runManager.current()?.supervisor?.stopReason || abortController.signal.reason || ""
       );
@@ -3016,6 +3028,52 @@ export class DesktopController {
       throw new Error("A steering message must be 40,000 characters or fewer");
     }
     const queuedAt = new Date().toISOString();
+    const pendingInput = this.approvals.pendingRequests?.().at(-1) || null;
+    if (pendingInput && this.approvals.resolveInput?.(pendingInput.id, {
+      answered: true,
+      answer: direction
+    })) {
+      active.summary = "Applying the user's answer";
+      active.phase = "thinking";
+      active.objective = appendSteeringObjective(active.objective, direction, queuedAt);
+      const lane = this.runManager.current();
+      if (lane) {
+        this.runManager.transition(lane.id, "running", {
+          phase: "thinking",
+          summary: "Applying the user's answer",
+          pendingInputId: null
+        });
+        this.send("desktop-runs:changed", this.runManager.active());
+      }
+      const event = {
+        type: "phase",
+        phase: "input_received",
+        summary: "Your answer was received; AMOS is continuing now"
+      };
+      this.send("agent:event", event);
+      active.receiptEvents?.push(receiptEvent(event));
+      this.record("user", direction, {
+        task_id: active.id,
+        decision_input: true,
+        input_id: pendingInput.id,
+        answered_at: queuedAt
+      });
+      if (active.checkpointed) {
+        await this.queueCheckpointUpdate(active.id, {
+          objective: active.objective,
+          phase: "thinking",
+          summary: event.summary
+        });
+        await this.sendTaskCheckpoints();
+      }
+      void this.sendRemoteState();
+      return {
+        queued: false,
+        resolvedInput: true,
+        inputId: pendingInput.id,
+        taskId: active.id
+      };
+    }
     active.steeringQueue.push({ content: direction, queuedAt });
     active.summary = "New direction queued";
     active.objective = appendSteeringObjective(active.objective, direction, queuedAt);
@@ -3057,14 +3115,69 @@ export class DesktopController {
     }
     active.phase = "canceling";
     active.summary = "Stopping safely";
+    active.acceptingSteering = false;
     this.send("agent:event", {
       type: "phase",
       phase: "canceling",
       summary: "Stopping the current model, network, and local process work"
     });
     this.approvals.cancelAll();
-    active.abortController.abort();
-    return { canceled: true, taskId: active.id };
+    active.abortController.abort("user_cancelled");
+
+    // A provider or local process is not allowed to hold the Desktop UI
+    // hostage after cancellation. The abandoned lane keeps its aborted signal
+    // and cannot begin another tool action, while the selected conversation is
+    // released immediately so the user can continue or fork without restarting.
+    active.detached = true;
+    if (lane) {
+      lane.detached = true;
+      this.runManager.transition(lane.id, "cancelled", {
+        phase: "cancelled",
+        summary: "Stopped by the user",
+        pendingInputId: null
+      });
+    }
+    if (active.checkpointed) {
+      await this.queueCheckpointUpdate(active.id, {
+        status: "canceled",
+        phase: "canceled",
+        summary: "Canceled by the user; completed work remains intact"
+      }).catch(() => {});
+      await this.sendTaskCheckpoints();
+    }
+    const settings = lane?.settings || await this.settingsStore.read();
+    await this.recordLocalReceipt({
+      taskId: active.id,
+      status: "canceled",
+      boundary: settings.operatingMode,
+      settings,
+      prompt: active.objective,
+      startedAt: active.startedAt,
+      receiptEvents: active.receiptEvents || [],
+      error: "Canceled by the user",
+      usage: active.usage
+    });
+    if (this.taskStore && this.activeTaskRecordId) {
+      const scope = this.taskScope(settings);
+      if (scope) {
+        await this.taskStore.update(scope, this.activeTaskRecordId, {
+          status: "interrupted",
+          canvasState: this.canvases.state()
+        }).catch(() => {});
+      }
+    }
+    if (lane && this.runManager.selectedRunId === lane.id) {
+      this.adoptRunSurface(lane);
+      this._activeTask = null;
+      this.runManager.select(null);
+    }
+    this.send("desktop-runs:changed", this.runManager.active());
+    this.send("agent:status", {
+      running: false,
+      taskId: active.id,
+      reason: "user_cancelled"
+    });
+    return { canceled: true, taskId: active.id, detached: true };
   }
 
   async interruptActiveTask() {
@@ -3132,7 +3245,8 @@ export class DesktopController {
         if (lane.approvals?.resolveInput?.(id, payload)) {
           this.runManager.transition(lane.id, "running", {
             phase: "thinking",
-            summary: "Applying the user's direction"
+            summary: "Applying the user's direction",
+            pendingInputId: null
           });
           this.send("desktop-runs:changed", this.runManager.active());
           void this.sendRemoteState();
@@ -3145,7 +3259,8 @@ export class DesktopController {
     if (directLane) {
       this.runManager.transition(directLane.id, "running", {
         phase: "thinking",
-        summary: "Applying the user's direction"
+        summary: "Applying the user's direction",
+        pendingInputId: null
       });
       this.send("desktop-runs:changed", this.runManager.active());
       resolved.taskId = directLane.id;
@@ -4151,9 +4266,7 @@ export class DesktopController {
 
   async forkTaskResource(input = {}) {
     const isolatedChild = input.select === false && input.isolatedChild === true;
-    if (this.activeTask && !isolatedChild) {
-      throw new Error("Finish or stop the current run before forking a task");
-    }
+    const continuedInBackground = Boolean(this.activeTask && !isolatedChild);
     const settings = await this.settingsStore.read();
     const scope = this.taskScope(settings);
     if (!scope || !this.taskStore) throw new Error("Task storage is unavailable");
@@ -4297,7 +4410,13 @@ export class DesktopController {
       return { task: child, continuity, forkManifest: child.forkManifest, opened: false };
     }
     const opened = await this.openTask(child.id);
-    return { ...opened, task: child, continuity, forkManifest: child.forkManifest };
+    return {
+      ...opened,
+      task: child,
+      continuity,
+      forkManifest: child.forkManifest,
+      continuedInBackground
+    };
   }
 
   presentCanvas(spec) {
@@ -6719,6 +6838,14 @@ export class DesktopController {
 
   send(channel, payload) {
     const lane = this.runManager?.current();
+    if (
+      lane?.detached &&
+      channel !== "desktop-runs:changed" &&
+      channel !== "task-checkpoints:changed" &&
+      !(channel === "agent:status" && payload?.running === false)
+    ) {
+      return;
+    }
     if (!lane || channel === "desktop-runs:changed") {
       this.emit(channel, payload);
       return;

@@ -750,6 +750,90 @@ test("desktop queues user steering on the active task and records the direction"
   );
 });
 
+test("desktop treats normal chat as the answer to a waiting checkpoint", async () => {
+  const emitted = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-waiting-input",
+    settingsStore: settingsStore(),
+    openBrowser: async () => {},
+    emit: (channel, payload) => emitted.push({ channel, payload })
+  });
+  controller.activeTask = {
+    id: "task-waiting",
+    abortController: new AbortController(),
+    checkpointed: false,
+    acceptingSteering: true,
+    objective: "Research the launch plan",
+    steeringQueue: [],
+    steeringCount: 0,
+    receiptEvents: [],
+    phase: "waiting",
+    summary: "Waiting for research direction"
+  };
+  const answer = controller.approvals.ask("Answer now or continue?", {
+    title: "Research checkpoint",
+    options: ["Synthesize now", "Research 5 more minutes"],
+    decisionType: "research-checkpoint"
+  });
+
+  const result = await controller.steerTask("task-waiting", "Synthesize now");
+
+  assert.equal(result.resolvedInput, true);
+  assert.equal(result.queued, false);
+  assert.equal(controller.activeTask.steeringQueue.length, 0);
+  assert.deepEqual(await answer, { answered: true, answer: "Synthesize now" });
+  assert.ok(emitted.some((event) => (
+    event.channel === "agent:event" && event.payload.phase === "input_received"
+  )));
+});
+
+test("desktop stop releases an uncooperative provider lane immediately", async () => {
+  const emitted = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-controller-hard-stop",
+    settingsStore: settingsStore(),
+    openBrowser: async () => {},
+    emit: (channel, payload) => emitted.push({ channel, payload })
+  });
+  const abortController = new AbortController();
+  const activeTask = {
+    id: "run-stuck",
+    abortController,
+    checkpointed: false,
+    acceptingSteering: true,
+    objective: "Wait forever",
+    steeringQueue: [],
+    steeringCount: 0,
+    receiptEvents: [],
+    phase: "thinking",
+    summary: "Waiting for the provider"
+  };
+  const launched = controller.runManager.launch({
+    id: "run-stuck",
+    taskRecordId: "task-stuck",
+    contextKey: "task:stuck",
+    settings: await settingsStore().read(),
+    abortController,
+    activeTask,
+    activity: [],
+    approvals: controller.approvals
+  }, async () => new Promise(() => {}));
+  controller.runManager.select(launched.lane.id);
+
+  const result = await controller.cancelTask(launched.lane.id);
+
+  assert.equal(result.detached, true);
+  assert.equal(abortController.signal.aborted, true);
+  assert.equal(controller.runManager.active().length, 0);
+  assert.equal(controller.runManager.get(launched.lane.id).status, "cancelled");
+  assert.equal(controller.activeTask, null);
+  assert.ok(emitted.some((event) => (
+    event.channel === "agent:status" &&
+    event.payload.running === false &&
+    event.payload.reason === "user_cancelled"
+  )));
+});
+
 test("desktop demo skips user-bound restart checkpoints without blocking the task", async () => {
   const taskStore = await checkpointStore();
   const emitted = [];

@@ -66,7 +66,7 @@ test("isolated children can spawn while the parent run is still active", async (
       workspaceMode: "same_directory",
       select: true
     }),
-    /Finish or stop the current run/
+    /Complete the first exchange/
   );
   const child = await controller.forkTaskResource({
     taskId: parent.id,
