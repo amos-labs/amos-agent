@@ -1,0 +1,90 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  ANSWER_RECOVERY_PROMPT,
+  SEQUENTIAL_TOOL_POLICY,
+  completionBudget,
+  requiresVisibleAnswerRecovery,
+  runResearchInference,
+  withSequentialToolPolicy
+} from "../src/research/modelScaffold.js";
+import { RESEARCH_TEST_DIGESTS } from "./fixtures/researchProtocolFixtures.js";
+
+test("the research scaffold reserves visible-answer tokens and recovers without more reasoning", async () => {
+  const calls = [];
+  const worker = {
+    async runCase(input) {
+      calls.push(structuredClone(input));
+      const recovering = input.caseId.endsWith(":answer");
+      return observation({
+        caseId: input.caseId,
+        message: recovering
+          ? { role: "assistant", content: "function solved() { return 42; }" }
+          : { role: "assistant", content: "", reasoning_content: "I found the solution." },
+        outputTokens: recovering ? 30 : 90
+      });
+    }
+  };
+
+  const result = await runResearchInference({
+    worker,
+    caseId: "coding-001",
+    messages: [{ role: "user", content: "Return only the function." }],
+    dataManifestDigest: RESEARCH_TEST_DIGESTS.a,
+    maxOutputTokens: 160,
+    answerReserveTokens: 64
+  });
+
+  assert.equal(result.recoveryTriggered, true);
+  assert.equal(result.message.content, "function solved() { return 42; }");
+  assert.equal(calls[0].maxOutputTokens, 96);
+  assert.equal(calls[1].maxOutputTokens, 64);
+  assert.equal(calls[1].reasoningEffortOverride, "none");
+  assert.equal(calls[1].messages.at(-1).content, ANSWER_RECOVERY_PROMPT);
+  assert.equal(calls[1].messages.at(-2).reasoning_content, "I found the solution.");
+  assert.equal(result.metrics.outputTokens, 120);
+});
+
+test("the research scaffold serializes dependent tools without mutating the transcript", () => {
+  const messages = [{ role: "user", content: "Inspect the campaign." }];
+  const tools = [{ type: "function", function: { name: "get_campaign" } }, {
+    type: "function",
+    function: { name: "get_page_metrics" }
+  }];
+  const governed = withSequentialToolPolicy(messages, tools);
+
+  assert.equal(messages.length, 1);
+  assert.equal(governed[0].role, "system");
+  assert.equal(governed[0].content, SEQUENTIAL_TOOL_POLICY);
+  assert.equal(governed[1].content, messages[0].content);
+});
+
+test("tool calls do not trigger visible-answer recovery", () => {
+  assert.equal(requiresVisibleAnswerRecovery({
+    role: "assistant",
+    content: "",
+    tool_calls: [{ id: "call-1", function: { name: "lookup", arguments: "{}" } }]
+  }), false);
+  assert.deepEqual(
+    completionBudget({ maxOutputTokens: 768, answerReserveTokens: 256 }),
+    { maxOutputTokens: 768, reasoningPhaseTokens: 512, answerReserveTokens: 256 }
+  );
+});
+
+function observation({ caseId, message, outputTokens }) {
+  return {
+    caseId,
+    message,
+    metrics: {
+      wallMilliseconds: 10,
+      promptTokens: 20,
+      outputTokens,
+      cachedInputTokens: 0,
+      promptMilliseconds: 2,
+      generationMilliseconds: 8,
+      promptTokensPerSecond: 10_000,
+      generationTokensPerSecond: outputTokens / 0.008,
+      sessionCacheHit: null
+    }
+  };
+}

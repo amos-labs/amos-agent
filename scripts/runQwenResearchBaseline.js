@@ -46,6 +46,12 @@ const probeOnly = args.includes("--probe-only");
 const apiKey = process.env.AMOS_LOCAL_BENCHMARK_API_KEY || null;
 const modelManifestDigest = option("--model-manifest-sha256");
 const reasoningEffort = option("--reasoning-effort") || (runtime === "vllm" ? "low" : "none");
+const answerReserveTokens = integerOption(
+  "--answer-reserve-tokens",
+  reasoningEffort === "none" ? 0 : Math.min(256, maxOutputTokens - 1),
+  0,
+  maxOutputTokens - 1
+);
 
 if (!["ollama", "mtplx", "vllm"].includes(runtime)) {
   fail("--runtime must be ollama, mtplx, or vllm");
@@ -121,6 +127,8 @@ try {
       String(contextTokens),
       "--max-tokens",
       String(maxOutputTokens),
+      "--answer-reserve-tokens",
+      String(answerReserveTokens),
       "--request-timeout-seconds",
       String(requestTimeoutSeconds),
       "--reasoning-effort",
@@ -207,6 +215,9 @@ function validateQualificationReport(report, environment) {
   }
   if (report.results[0].model !== environment.model.servedModelId) {
     throw new Error("Benchmark model does not match the pinned research environment");
+  }
+  if (report.answer_reserve_tokens !== answerReserveTokens) {
+    throw new Error("Benchmark answer reserve does not match the requested scaffold budget");
   }
 }
 
@@ -314,7 +325,8 @@ function fail(message) {
     "Usage: node scripts/runQwenResearchBaseline.js " +
     "--runtime mtplx|ollama|vllm --runtime-binary PATH --output REPORT.json " +
     "[--url URL] [--model-manifest-sha256 DIGEST] [--repetitions 3] " +
-    "[--suite all] [--reasoning-effort none|low|medium|xhigh] [--probe-only]"
+    "[--suite all] [--reasoning-effort none|low|medium|xhigh] " +
+    "[--answer-reserve-tokens 256] [--probe-only]"
   );
   process.exit(2);
 }

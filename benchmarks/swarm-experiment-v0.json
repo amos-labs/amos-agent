@@ -1,0 +1,66 @@
+{
+  "schema": "amos.swarm-experiment-config",
+  "version": 1,
+  "id": "amos-swarm-v0-development",
+  "status": "development",
+  "portfolioId": "frontier-quality-v1",
+  "controls": [
+    {
+      "id": "qwen-direct",
+      "mode": "direct",
+      "model": "amos-qwen38-27b-fp8",
+      "dialect": "qwen",
+      "reasoningEffort": "low",
+      "answerReserveTokens": 128,
+      "endpointEnv": "AMOS_QWEN_RESEARCH_URL",
+      "defaultEndpoint": "http://127.0.0.1:18080",
+      "apiKeyEnv": "AMOS_LOCAL_BENCHMARK_API_KEY"
+    },
+    {
+      "id": "qwen-swarm",
+      "mode": "swarm",
+      "model": "amos-qwen38-27b-fp8",
+      "dialect": "qwen",
+      "reasoningEffort": "low",
+      "answerReserveTokens": 128,
+      "endpointEnv": "AMOS_QWEN_RESEARCH_URL",
+      "defaultEndpoint": "http://127.0.0.1:18080",
+      "apiKeyEnv": "AMOS_LOCAL_BENCHMARK_API_KEY"
+    },
+    {
+      "id": "fable-control",
+      "mode": "direct",
+      "model": "anthropic.claude-fable-5",
+      "dialect": "generic",
+      "reasoningEffort": null,
+      "answerReserveTokens": 0,
+      "endpointEnv": "AMOS_FABLE_RESEARCH_URL",
+      "defaultEndpoint": "http://127.0.0.1:11440",
+      "apiKeyEnv": null
+    }
+  ],
+  "budget": {
+    "maxWallMilliseconds": 300000,
+    "maxInferenceCalls": 8,
+    "maxTotalOutputTokens": 2048,
+    "directOutputTokens": 768,
+    "workerOutputTokens": 384,
+    "verifierOutputTokens": 384,
+    "integratorOutputTokens": 512,
+    "answerReserveTokens": 128
+  },
+  "comparison": {
+    "requiredControlIds": [
+      "qwen-direct",
+      "qwen-swarm",
+      "fable-control"
+    ],
+    "regimes": [
+      "matched-wall-time",
+      "matched-inference-cost",
+      "best-quality"
+    ],
+    "blindJudgeRequired": true,
+    "minimumRepetitions": 3
+  }
+}
