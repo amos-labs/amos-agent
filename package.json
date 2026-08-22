@@ -22,6 +22,7 @@
     "benchmark:integration": "node scripts/benchmarkKnowledgeIntegration.js",
     "benchmark:local": "node scripts/benchmarkLocalModels.js",
     "research:qwen-baseline": "node scripts/runQwenResearchBaseline.js",
+    "research:validate-quality-portfolio": "node scripts/validateFrontierQualityPortfolio.js",
     "benchmark:prompt-cache": "node scripts/benchmarkPromptCache.js",
     "evaluate:router-workflows": "node scripts/evaluateRouterWorkflows.js",
     "benchmark:local:vision": "node scripts/benchmarkLocalVision.js",

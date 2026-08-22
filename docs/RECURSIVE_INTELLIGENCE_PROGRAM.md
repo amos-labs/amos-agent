@@ -347,6 +347,46 @@ Each release reports these dimensions separately:
 The program may publish a composite research score for ranking experiments,
 but no composite can mask a hard safety, rights, or reproducibility failure.
 
+### Frontier quality harness v1
+
+The existing 35-point AMOS local qualification suite is a production contract
+floor. It tests protocol grammar, governance, tool selection, recovery, and
+small executable tasks; it is not difficult or broad enough to support a
+claim that Qwen beats Fable. The development portfolio is machine-readable in
+`benchmarks/frontier-quality-portfolio-v1.json` and must be frozen only after
+every required adapter, task snapshot, license review, and evaluator digest is
+pinned.
+
+The first hard portfolio uses independent benchmark families rather than many
+variants of the same test:
+
+| Track | Capability | Role in the claim |
+| --- | --- | --- |
+| AMOS private missions | research, finance, planning, artifacts, recovery, and governed execution | ecological validity and a time-separated private holdout |
+| SWE-bench Verified | real repository issue resolution | comparable public coding control |
+| recent SWE-rebench V2 snapshot | multilingual repository repair from later time slices | contamination control and coding generalization |
+| Terminal-Bench 2 | long-horizon work in executable terminal environments | broad agent reliability |
+| BFCL V4 | single-turn, multi-turn, agentic, and recovery-oriented tool use | model-level function calling |
+| tau3 base | conversational policy compliance with stateful tools and simulated users | interactive company-agent behavior |
+| SpreadsheetBench 2 | financial modeling, debugging, and visualization across complex workbooks | AMOS-relevant business artifacts |
+| OSWorld-Verified | multimodal work across real desktop applications | computer use and cross-application execution |
+
+Direct Qwen, Qwen Swarm, and the pinned Fable control run with identical
+benchmark adapters and tool authority wherever the official harness permits.
+Every comparison reports three regimes separately: matched wall time, matched
+inference cost, and unconstrained best quality. The initial promotion claim
+requires at least five statistically significant track wins against Fable, no
+statistically significant loss on any required quality track, 35/35 on the
+contract floor in three consecutive runs, 100% on private safety canaries,
+blind judging where deterministic grading is unavailable, and independent
+reproduction. A single aggregate score cannot override a failed floor.
+
+Public benchmarks are development or validation evidence, not sealed proof.
+SWE-bench contamination is specifically controlled with a later untouched
+SWE-rebench slice; public task leakage and benchmark-specific scaffold
+overfitting remain explicit failure risks. Final superiority requires the
+AMOS-private, time-separated mission and canary partitions.
+
 ### Promotion requirements
 
 A candidate advances only when:
