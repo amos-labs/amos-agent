@@ -42,11 +42,18 @@ export function requiresVisibleAnswerRecovery(message) {
   return !visibleText(message.content);
 }
 
-export function visibleAnswerRecoveryMessages(messages, reasoningMessage) {
+export function visibleAnswerRecoveryMessages(
+  messages,
+  reasoningMessage,
+  recoveryPrompt = ANSWER_RECOVERY_PROMPT
+) {
+  if (typeof recoveryPrompt !== "string" || !recoveryPrompt.trim()) {
+    throw new Error("recoveryPrompt must be non-empty text");
+  }
   const transcript = structuredClone(messages);
   const prior = reasoningContinuationMessage(reasoningMessage);
   if (prior) transcript.push(prior);
-  transcript.push({ role: "user", content: ANSWER_RECOVERY_PROMPT });
+  transcript.push({ role: "user", content: recoveryPrompt.trim() });
   return transcript;
 }
 
@@ -61,10 +68,15 @@ export async function runResearchInference({
   answerReserveTokens = 0,
   responseFormat = null,
   promptSessionId = null,
+  visibleAnswerValidator = null,
+  answerRecoveryPrompt = ANSWER_RECOVERY_PROMPT,
   signal = null
 }) {
   if (!worker || typeof worker.runCase !== "function") {
     throw new Error("runResearchInference requires a worker with runCase()");
+  }
+  if (visibleAnswerValidator !== null && typeof visibleAnswerValidator !== "function") {
+    throw new Error("visibleAnswerValidator must be a function");
   }
   const budget = completionBudget({ maxOutputTokens, answerReserveTokens });
   const governedMessages = withSequentialToolPolicy(messages, tools);
@@ -88,13 +100,18 @@ export async function runResearchInference({
     budget.answerReserveTokens > 0 &&
     (
       requiresVisibleAnswerRecovery(first.message) ||
-      observationIndicatesOutputTruncation(first)
+      observationIndicatesOutputTruncation(first) ||
+      !visibleAnswerPasses(first.message, visibleAnswerValidator)
     )
   ) {
     recoveryTriggered = true;
     final = await worker.runCase({
       caseId: `${caseId}:answer`,
-      messages: visibleAnswerRecoveryMessages(governedMessages, first.message),
+      messages: visibleAnswerRecoveryMessages(
+        governedMessages,
+        first.message,
+        answerRecoveryPrompt
+      ),
       tools,
       dataManifestDigest,
       repetition,
@@ -114,6 +131,15 @@ export async function runResearchInference({
     recoveryTriggered,
     metrics: aggregateObservationMetrics(observations)
   };
+}
+
+function visibleAnswerPasses(message, validator) {
+  if (!validator) return true;
+  try {
+    return validator(message) === true;
+  } catch {
+    return false;
+  }
 }
 
 export function observationIndicatesOutputTruncation(observation) {

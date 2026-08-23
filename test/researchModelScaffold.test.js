@@ -113,6 +113,40 @@ test("a truncated partial answer consumes the reserved clean-answer pass", async
   }), false);
 });
 
+test("a custom completeness floor recovers a short visible answer", async () => {
+  const calls = [];
+  const recoveryPrompt = "Return the complete evidence-grounded answer.";
+  const worker = {
+    async runCase(input) {
+      calls.push(structuredClone(input));
+      const recovering = input.caseId.endsWith(":answer");
+      return observation({
+        caseId: input.caseId,
+        message: {
+          role: "assistant",
+          content: recovering ? "Complete substantive answer." : "Title only"
+        },
+        outputTokens: recovering ? 25 : 5
+      });
+    }
+  };
+
+  const result = await runResearchInference({
+    worker,
+    caseId: "planning-completeness-001",
+    messages: [{ role: "user", content: "Return the complete plan." }],
+    dataManifestDigest: RESEARCH_TEST_DIGESTS.b,
+    maxOutputTokens: 160,
+    answerReserveTokens: 64,
+    visibleAnswerValidator: (message) => message.content.length >= 20,
+    answerRecoveryPrompt: recoveryPrompt
+  });
+
+  assert.equal(result.recoveryTriggered, true);
+  assert.equal(result.message.content, "Complete substantive answer.");
+  assert.equal(calls[1].messages.at(-1).content, recoveryPrompt);
+});
+
 function observation({ caseId, message, outputTokens, finishReason = "stop" }) {
   return {
     caseId,

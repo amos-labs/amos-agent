@@ -67,6 +67,16 @@ test("the bounded Swarm treatment preserves the matched total budget", async () 
   assert.ok(config.budget.integratorOutputTokens > config.budget.workerOutputTokens);
 });
 
+test("the complete Swarm treatment makes substantive integration a hard contract", async () => {
+  const config = validateSwarmExperimentConfig(JSON.parse(await readFile(
+    new URL("../benchmarks/swarm-experiment-opus-complete-v2.json", import.meta.url),
+    "utf8"
+  )));
+  assert.equal(config.budget.integratorMinimumAnswerCharacters, 1_000);
+  assert.equal(config.budget.maxTotalOutputTokens, 9_984);
+  assert.equal(config.budget.directOutputTokens, 9_984);
+});
+
 test("development missions are visible fixtures and cannot masquerade as sealed evidence", async () => {
   const missions = validateSwarmDevelopmentMissions(JSON.parse(await readFile(
     new URL("../benchmarks/swarm-development-missions-v0.json", import.meta.url),

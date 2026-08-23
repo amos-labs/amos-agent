@@ -18,6 +18,7 @@ export const DEFAULT_SWARM_BUDGET = Object.freeze({
   workerOutputTokens: 1_792,
   verifierOutputTokens: 1_792,
   integratorOutputTokens: 4_608,
+  integratorMinimumAnswerCharacters: 1_000,
   directAnswerReserveTokens: 3_072,
   workerAnswerReserveTokens: 1_024,
   verifierAnswerReserveTokens: 1_024,
@@ -33,6 +34,7 @@ export const SWARM_CONTRIBUTION_LIMITS = Object.freeze({
   maximumSourceReferenceCharacters: 160
 });
 export const SWARM_INTEGRATION_LIMITS = Object.freeze({
+  minimumAnswerCharacters: 1_000,
   maximumAnswerCharacters: 7_000,
   maximumUnresolvedRisks: 8,
   maximumRiskCharacters: 500
@@ -80,35 +82,11 @@ const CONTRIBUTION_RESPONSE_FORMAT = {
     }
   }
 };
-const INTEGRATED_RESPONSE_FORMAT = {
-  type: "json_schema",
-  json_schema: {
-    name: "amos_swarm_answer",
-    strict: true,
-    schema: {
-      type: "object",
-      additionalProperties: false,
-      required: ["answer", "confidence", "unresolvedRisks"],
-      properties: {
-        answer: {
-          type: "string",
-          minLength: 1,
-          maxLength: SWARM_INTEGRATION_LIMITS.maximumAnswerCharacters
-        },
-        confidence: { type: "number", minimum: 0, maximum: 1 },
-        unresolvedRisks: {
-          type: "array",
-          maxItems: SWARM_INTEGRATION_LIMITS.maximumUnresolvedRisks,
-          items: {
-            type: "string",
-            minLength: 1,
-            maxLength: SWARM_INTEGRATION_LIMITS.maximumRiskCharacters
-          }
-        }
-      }
-    }
-  }
-};
+export const SWARM_COMPLETENESS_RECOVERY_PROMPT =
+  "Your prior output was missing, truncated, or too short to satisfy the mission. " +
+  "Return the complete user-facing answer now with no private reasoning. Address every success " +
+  "criterion explicitly, preserve material uncertainty, and use substantive sections rather " +
+  "than a title or summary fragment. Follow the original JSON output contract exactly.";
 
 export class SwarmEvidenceBoard {
   constructor({ missionId, now = () => new Date() }) {
@@ -293,12 +271,22 @@ export class SwarmExperimentRunner {
         repetition,
         maxOutputTokens: normalizedBudget.integratorOutputTokens,
         answerReserveTokens: normalizedBudget.integratorAnswerReserveTokens,
-        responseFormat: INTEGRATED_RESPONSE_FORMAT,
+        responseFormat: integratedResponseFormat(
+          normalizedBudget.integratorMinimumAnswerCharacters
+        ),
         promptSessionId: `${mission.id}:swarm:integrator`,
+        visibleAnswerValidator: (message) => integratedAnswerMeetsCompletenessFloor(
+          message,
+          normalizedBudget.integratorMinimumAnswerCharacters
+        ),
+        answerRecoveryPrompt: SWARM_COMPLETENESS_RECOVERY_PROMPT,
         signal: runSignal
       });
       assertCompleteResponse(integratorResult, "integrator");
-      const integrated = parseIntegratedAnswer(integratorResult.message);
+      const integrated = parseIntegratedAnswer(
+        integratorResult.message,
+        normalizedBudget.integratorMinimumAnswerCharacters
+      );
       const stages = [
         ...firstWave.map(({ role, result, structured }) =>
           stageRecord(role, result, { structured })),
@@ -360,7 +348,8 @@ export function validateSwarmBudget(input = DEFAULT_SWARM_BUDGET) {
     "directOutputTokens",
     "workerOutputTokens",
     "verifierOutputTokens",
-    "integratorOutputTokens"
+    "integratorOutputTokens",
+    "integratorMinimumAnswerCharacters"
   ]) {
     boundedInteger(budget[field], 1, 10_000_000, `budget.${field}`);
   }
@@ -382,6 +371,11 @@ export function validateSwarmBudget(input = DEFAULT_SWARM_BUDGET) {
   }
   if (budget.directOutputTokens > budget.maxTotalOutputTokens) {
     throw new Error("Direct allocation exceeds budget.maxTotalOutputTokens");
+  }
+  if (budget.integratorMinimumAnswerCharacters > SWARM_INTEGRATION_LIMITS.maximumAnswerCharacters) {
+    throw new Error(
+      "budget.integratorMinimumAnswerCharacters exceeds the integrated answer contract"
+    );
   }
   if (budget.maxInferenceCalls < 8 && [
     budget.workerAnswerReserveTokens,
@@ -516,13 +510,19 @@ function parseContribution(message, role) {
   }
 }
 
-function parseIntegratedAnswer(message) {
+function parseIntegratedAnswer(message, minimumAnswerCharacters) {
   const content = requiredVisibleAnswer(message);
   try {
     const parsed = parseJsonContent(content);
+    const answer = requiredText(parsed.answer, "integrator.answer", 500_000);
+    if (answer.length < minimumAnswerCharacters) {
+      throw new Error(
+        `integrator.answer must contain at least ${minimumAnswerCharacters} characters`
+      );
+    }
     return {
       structured: true,
-      answer: requiredText(parsed.answer, "integrator.answer", 500_000),
+      answer,
       confidence: boundedNumber(parsed.confidence, 0, 1, "integrator.confidence"),
       unresolvedRisks: uniqueStrings(
         parsed.unresolvedRisks || [],
@@ -533,6 +533,48 @@ function parseIntegratedAnswer(message) {
   } catch (error) {
     throw new Error(`Integrator response did not satisfy the typed output contract: ${error.message}`);
   }
+}
+
+function integratedAnswerMeetsCompletenessFloor(message, minimumAnswerCharacters) {
+  try {
+    const parsed = parseJsonContent(requiredVisibleAnswer(message));
+    return typeof parsed.answer === "string" &&
+      parsed.answer.trim().length >= minimumAnswerCharacters;
+  } catch {
+    return false;
+  }
+}
+
+function integratedResponseFormat(minimumAnswerCharacters) {
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "amos_swarm_answer",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["answer", "confidence", "unresolvedRisks"],
+        properties: {
+          answer: {
+            type: "string",
+            minLength: minimumAnswerCharacters,
+            maxLength: SWARM_INTEGRATION_LIMITS.maximumAnswerCharacters
+          },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
+          unresolvedRisks: {
+            type: "array",
+            maxItems: SWARM_INTEGRATION_LIMITS.maximumUnresolvedRisks,
+            items: {
+              type: "string",
+              minLength: 1,
+              maxLength: SWARM_INTEGRATION_LIMITS.maximumRiskCharacters
+            }
+          }
+        }
+      }
+    }
+  };
 }
 
 function assertCompleteResponse(result, role) {
