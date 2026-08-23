@@ -397,6 +397,32 @@ SWE-rebench slice; public task leakage and benchmark-specific scaffold
 overfitting remain explicit failure risks. Final superiority requires the
 AMOS-private, time-separated mission and canary partitions.
 
+#### Quality-first control ladder
+
+Opus 5 is the sole promotion control until Qwen Swarm meets or beats it
+consistently. Quality is the optimized objective; wall time, tokens,
+accelerator-hours, throughput, and dollars are retained in every receipt but do
+not become a cheaper-is-better substitute for task success. The first program
+can therefore spend materially more Qwen inference than one Opus call when the
+external verifier rewards the result. Efficiency work and distillation begin
+after the quality mechanism is demonstrated.
+
+Fable is a deferred secondary reference, not an easier interim target. Sol 5.6
+is the deferred stretch challenger. Neither is introduced into the active
+scorecard until the pre-registered Opus 5 consistency gate is complete, which
+prevents changing the comparison target after seeing candidate outcomes.
+
+#### First hard pilot
+
+`terminal-bench-quality-pilot-v1.json` pins Harbor 0.22.0, Terminal-Bench
+3.0.0, the public `production-planning` task, Terminus-2, and the official
+deterministic reward. The oracle must score 1.0 before any model result is
+accepted. Direct Opus and Qwen Swarm use the same terminal agent and task
+authority; Qwen decisions pass through two independent proposals, one critic,
+one integrator, and a fail-closed visible-answer recovery. The public pilot is
+for development and can never masquerade as sealed evidence. Three attempts
+per control are required before comparing consistency.
+
 ### Promotion requirements
 
 A candidate advances only when:

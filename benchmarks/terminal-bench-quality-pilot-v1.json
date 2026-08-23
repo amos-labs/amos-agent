@@ -1,0 +1,60 @@
+{
+  "schema": "amos.hard-benchmark-pilot",
+  "version": 1,
+  "id": "terminal-bench-quality-pilot-v1",
+  "status": "development",
+  "dataClassification": "public-development",
+  "objective": "Test whether the Qwen turn swarm can beat Opus 5 on externally verified long-horizon terminal work when quality is primary and compute is measured but not matched.",
+  "dataset": {
+    "harness": "harbor",
+    "harnessVersion": "0.22.0",
+    "id": "terminal-bench/terminal-bench",
+    "version": "3.0.0",
+    "task": "terminal-bench/production-planning",
+    "primaryMetric": "reward",
+    "verifier": "official-deterministic"
+  },
+  "agent": {
+    "name": "terminus-2",
+    "parser": "json",
+    "maxTurns": 100,
+    "temperature": 0.2
+  },
+  "candidate": {
+    "id": "qwen-swarm",
+    "model": "amos-qwen38-27b-fp8",
+    "reasoningEffort": "medium",
+    "scaffold": "amos-swarm-turn-gateway-v1",
+    "candidateWorkers": 2,
+    "criticWorkers": 1,
+    "integratorWorkers": 1,
+    "visibleAnswerRecovery": true
+  },
+  "frontierControl": {
+    "id": "opus-control",
+    "model": "us.anthropic.claude-opus-5",
+    "reasoningEffort": "max",
+    "scaffold": "terminus-2-direct"
+  },
+  "comparison": {
+    "primaryRegime": "best-quality",
+    "minimumAttemptsPerControl": 3,
+    "matchedComputeRequired": false,
+    "recordLatency": true,
+    "recordTokens": true,
+    "recordAcceleratorHours": true,
+    "recordEstimatedCost": true,
+    "oracleMustPass": true,
+    "publicPilotCountsAsSealedEvidence": false
+  },
+  "deferredControls": [
+    {
+      "id": "fable-control",
+      "purpose": "secondary reference after the Opus 5 consistency gate"
+    },
+    {
+      "id": "sol-5.6-control",
+      "purpose": "stretch challenger after the Opus 5 consistency gate"
+    }
+  ]
+}
