@@ -327,6 +327,14 @@ board, budgets, timing, and output-token usage. A report is development
 evidence only until answers are anonymized, blindly judged, repeated at least
 three times, and evaluated under the frozen frontier portfolio.
 
+For accounts that keep Bedrock's default retention mode, the alternate
+`benchmarks/swarm-experiment-opus-v0.json` configuration replaces Fable with
+the already-qualified `us.anthropic.claude-opus-5` control. Direct Qwen, Swarm
+Qwen, and Opus must all use that same configuration and mission manifest so
+their report digests remain comparison-compatible. Selecting Opus does not
+authorize sending private or customer data; only explicitly approved research
+fixtures may cross that provider boundary.
+
 ### Blind quality comparison
 
 `src/research/blindComparison.js` creates two digest-bound artifacts from two

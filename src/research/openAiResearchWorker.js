@@ -99,6 +99,8 @@ export class OpenAiResearchWorker {
         body.reasoning_effort = reasoningEffort;
         body.chat_template_kwargs = { reasoning_effort: reasoningEffort };
       }
+    } else if (reasoningEffort) {
+      body.reasoning_effort = reasoningEffort;
     }
     const requestDigest = digestResearchValue({
       controlId: this.controlId,

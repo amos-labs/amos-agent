@@ -148,6 +148,19 @@ This writes separate content-addressed Direct Qwen and Swarm Qwen reports. Stop
 the instance immediately afterward; Fable runs separately through the
 loopback Bedrock benchmark gateway and does not require the Qwen GPU.
 
+The helper also accepts an optional mission manifest and experiment config.
+For the visible challenge suite with the Opus-compatible comparison contract:
+
+```bash
+./scripts/run-swarm.sh \
+  /tmp/amos-qwen-opus-challenge 3 \
+  benchmarks/swarm-challenge-missions-v0.json \
+  benchmarks/swarm-experiment-opus-v0.json
+```
+
+The bearer key is retrieved with the AWS SDK and remains only in the benchmark
+process environment; it is never printed or written into a report.
+
 ## Recovery and operations
 
 - `systemctl status amos-qwen` and `journalctl -u amos-qwen` are available in

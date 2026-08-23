@@ -8,6 +8,8 @@ REGION="$(terraform -chdir="$TF_DIR" output -raw aws_region)"
 SECRET_ID="$(terraform -chdir="$TF_DIR" output -raw api_key_secret_id)"
 REPORT_DIR="${1:-/tmp/amos-qwen-swarm-v0}"
 REPETITIONS="${2:-3}"
+MISSIONS_PATH="${3:-}"
+CONFIG_PATH="${4:-}"
 
 if ! [[ "$REPETITIONS" =~ ^[1-9][0-9]*$ ]] || (( REPETITIONS > 20 )); then
   echo "Repetitions must be an integer between 1 and 20" >&2
@@ -17,21 +19,29 @@ fi
 mkdir -p "$REPORT_DIR"
 cd "$REPO_DIR"
 
+EXTRA_ARGS=()
+if [[ -n "$MISSIONS_PATH" ]]; then
+  EXTRA_ARGS+=(--missions "$MISSIONS_PATH")
+fi
+if [[ -n "$CONFIG_PATH" ]]; then
+  EXTRA_ARGS+=(--config "$CONFIG_PATH")
+fi
+
 export AMOS_LOCAL_BENCHMARK_API_KEY
-AMOS_LOCAL_BENCHMARK_API_KEY="$(aws secretsmanager get-secret-value \
-  --region "$REGION" \
-  --secret-id "$SECRET_ID" \
-  --query SecretString \
-  --output text | python3 -c 'import json,sys; print(json.load(sys.stdin)["api_key"])')"
+AMOS_LOCAL_BENCHMARK_API_KEY="$(python3 -c \
+  'import boto3,json,sys; print(json.loads(boto3.client("secretsmanager", region_name=sys.argv[1]).get_secret_value(SecretId=sys.argv[2])["SecretString"])["api_key"])' \
+  "$REGION" "$SECRET_ID")"
 
 npm run research:swarm -- \
   --control qwen-direct \
   --repetitions "$REPETITIONS" \
-  --output "$REPORT_DIR/qwen-direct.json"
+  --output "$REPORT_DIR/qwen-direct.json" \
+  "${EXTRA_ARGS[@]}"
 npm run research:swarm -- \
   --control qwen-swarm \
   --repetitions "$REPETITIONS" \
-  --output "$REPORT_DIR/qwen-swarm.json"
+  --output "$REPORT_DIR/qwen-swarm.json" \
+  "${EXTRA_ARGS[@]}"
 
 echo "Direct report: $REPORT_DIR/qwen-direct.json"
 echo "Swarm report: $REPORT_DIR/qwen-swarm.json"
