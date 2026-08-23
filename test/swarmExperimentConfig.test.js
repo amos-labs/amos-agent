@@ -36,6 +36,21 @@ test("the alternate control can bind Direct Qwen and Swarm Qwen to Opus 5", asyn
   assert.equal(config.comparison.blindJudgeRequired, true);
 });
 
+test("the best-quality regime grants every route the same larger total-output ceiling", async () => {
+  const config = validateSwarmExperimentConfig(JSON.parse(await readFile(
+    new URL("../benchmarks/swarm-experiment-opus-quality-v0.json", import.meta.url),
+    "utf8"
+  )));
+  assert.deepEqual(config.comparison.regimes, ["best-quality"]);
+  assert.equal(config.budget.maxTotalOutputTokens, 16_384);
+  assert.equal(config.budget.directOutputTokens, 16_384);
+  assert.equal(
+    (config.budget.workerOutputTokens * 2) + config.budget.verifierOutputTokens +
+      config.budget.integratorOutputTokens,
+    16_384
+  );
+});
+
 test("development missions are visible fixtures and cannot masquerade as sealed evidence", async () => {
   const missions = validateSwarmDevelopmentMissions(JSON.parse(await readFile(
     new URL("../benchmarks/swarm-development-missions-v0.json", import.meta.url),
