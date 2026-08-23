@@ -160,6 +160,8 @@ For the visible challenge suite with the Opus-compatible comparison contract:
 
 The bearer key is retrieved with the AWS SDK and remains only in the benchmark
 process environment; it is never printed or written into a report.
+Optional fifth and sixth arguments select one Qwen control and one mission ID,
+which supports inexpensive fail-fast probes before a full suite run.
 
 ## Recovery and operations
 
