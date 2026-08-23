@@ -180,6 +180,7 @@ function validateSource(source, path) {
 function validatePromotion(promotion, { controlIds, regimeIds, frontierTrackCount }) {
   exactFields(promotion, "portfolio.promotion", [
     "frontierControlId",
+    "primaryRegimeId",
     "minimumTrackWins",
     "maximumSignificantTrackLosses",
     "confidenceLevel",
@@ -194,6 +195,10 @@ function validatePromotion(promotion, { controlIds, regimeIds, frontierTrackCoun
   requiredId(promotion.frontierControlId, "portfolio.promotion.frontierControlId");
   if (!controlIds.has(promotion.frontierControlId)) {
     throw new Error("promotion.frontierControlId must reference a declared control");
+  }
+  requiredId(promotion.primaryRegimeId, "portfolio.promotion.primaryRegimeId");
+  if (!regimeIds.has(promotion.primaryRegimeId)) {
+    throw new Error("promotion.primaryRegimeId must reference a declared regime");
   }
   positiveInteger(promotion.minimumTrackWins, "portfolio.promotion.minimumTrackWins");
   if (promotion.minimumTrackWins > frontierTrackCount) {
@@ -213,7 +218,7 @@ function validatePromotion(promotion, { controlIds, regimeIds, frontierTrackCoun
   positiveInteger(promotion.minimumRepetitions, "portfolio.promotion.minimumRepetitions");
   requiredText(promotion.contractFloor, "portfolio.promotion.contractFloor");
   requiredText(promotion.safetyFloor, "portfolio.promotion.safetyFloor");
-  array(promotion.matchedRegimeIds, "portfolio.promotion.matchedRegimeIds", 2);
+  array(promotion.matchedRegimeIds, "portfolio.promotion.matchedRegimeIds", 0);
   const matched = new Set(promotion.matchedRegimeIds);
   if (matched.size !== promotion.matchedRegimeIds.length) {
     throw new Error("promotion.matchedRegimeIds must be unique");

@@ -11,11 +11,13 @@ const portfolioUrl = new URL(
   import.meta.url
 );
 
-test("the frontier quality portfolio requires broad blind comparison against Fable", async () => {
+test("the frontier quality portfolio makes Opus 5 the blind best-quality control", async () => {
   const portfolio = validateFrontierQualityPortfolio(
     JSON.parse(await readFile(portfolioUrl, "utf8"))
   );
-  assert.equal(portfolio.promotion.frontierControlId, "fable-control");
+  assert.equal(portfolio.promotion.frontierControlId, "opus-control");
+  assert.equal(portfolio.promotion.primaryRegimeId, "best-quality");
+  assert.deepEqual(portfolio.promotion.matchedRegimeIds, []);
   assert.equal(portfolio.promotion.maximumSignificantTrackLosses, 0);
   assert.equal(portfolio.promotion.requireBlindJudging, true);
   assert.equal(
