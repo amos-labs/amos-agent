@@ -72,6 +72,15 @@ test("blind preparation rejects tampered reports and mismatched case sets", () =
     () => prepareBlindComparison({ reports: [direct, missing], salt: Buffer.alloc(32, 3) }),
     /same cases/
   );
+
+  const failed = report("qwen-swarm", "swarm");
+  failed.status = "failed";
+  failed.failure = { message: "integrator exhausted its output budget" };
+  reseal(failed);
+  assert.throws(
+    () => prepareBlindComparison({ reports: [direct, failed], salt: Buffer.alloc(32, 3) }),
+    /did not complete/
+  );
 });
 
 test("judgments require exact candidates, complete rankings, and bounded scores", () => {

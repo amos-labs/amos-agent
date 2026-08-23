@@ -327,6 +327,22 @@ board, budgets, timing, and output-token usage. A report is development
 evidence only until answers are anonymized, blindly judged, repeated at least
 three times, and evaluated under the frozen frontier portfolio.
 
+The runner writes a report even when a control fails. Completed cases remain
+in the report and a bounded failure receipt records the mission, repetition,
+timestamp, error type, and error message. Both successful and failed reports
+are written atomically and content-addressed before the process returns its
+exit status. This prevents a late budget exhaustion, provider timeout, or
+typed-contract failure from erasing the earlier evidence in a long run.
+
+The 2026-08-23 challenge run exposed a different failure mode: adding tokens
+did not make Swarm reliable. The same partner-capacity mission passed as an
+isolated 16,384-token probe and then exhausted the integrator's 7,168-token
+allocation during the full run. The bounded-v1 treatment therefore keeps the
+9,984-token contest budget while limiting each specialist to three compact,
+decision-useful board entries and giving the integrator an explicit finite
+answer envelope and stopping rule. Direct Qwen remains an ablation and runtime
+baseline; the target quality contest is complete Swarm Qwen versus Opus.
+
 For accounts that keep Bedrock's default retention mode, the alternate
 `benchmarks/swarm-experiment-opus-v0.json` configuration replaces Fable with
 the already-qualified `us.anthropic.claude-opus-5` control. Direct Qwen, Swarm

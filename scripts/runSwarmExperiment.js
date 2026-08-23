@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from "node:child_process";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,10 @@ import {
   validateSwarmDevelopmentMissions,
   validateSwarmExperimentConfig
 } from "../src/research/swarmExperimentConfig.js";
+import {
+  finalizeSwarmExperimentReport,
+  swarmExperimentFailure
+} from "../src/research/swarmExperimentReport.js";
 
 const execFileAsync = promisify(execFile);
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -68,48 +72,72 @@ const report = {
   endpoint: redactedEndpoint(baseUrl),
   readiness,
   repetitions: probeOnly ? 0 : repetitions,
+  status: "running",
+  failure: null,
   runs: []
 };
 
-if (!probeOnly) {
-  const runner = new SwarmExperimentRunner({ worker, controlId: control.id });
-  const budget = config.budget;
-  for (const mission of missions) {
-    const dataManifestDigest = digestResearchValue({
-      manifestId: missionManifest.id,
-      mission
-    });
-    for (let repetition = 1; repetition <= repetitions; repetition += 1) {
-      console.log(
-        `Running ${control.id} · ${mission.id} · repetition ${repetition}/${repetitions}`
-      );
-      const common = {
-        missionId: mission.id,
-        objective: mission.objective,
-        context: mission.context,
-        successCriteria: mission.successCriteria,
-        dataManifestDigest,
-        repetition,
-        budget
-      };
-      const run = control.mode === "swarm"
-        ? await runner.runSwarm(common)
-        : await runner.runDirect(common);
-      report.runs.push({
-        missionId: mission.id,
-        repetition,
-        runDigest: digestResearchValue(run),
-        run
+let activeCase = null;
+let finalizedReport;
+let executionError = null;
+try {
+  if (!probeOnly) {
+    const runner = new SwarmExperimentRunner({ worker, controlId: control.id });
+    const budget = config.budget;
+    for (const mission of missions) {
+      const dataManifestDigest = digestResearchValue({
+        manifestId: missionManifest.id,
+        mission
       });
+      for (let repetition = 1; repetition <= repetitions; repetition += 1) {
+        activeCase = { missionId: mission.id, repetition };
+        console.log(
+          `Running ${control.id} · ${mission.id} · repetition ${repetition}/${repetitions}`
+        );
+        const common = {
+          missionId: mission.id,
+          objective: mission.objective,
+          context: mission.context,
+          successCriteria: mission.successCriteria,
+          dataManifestDigest,
+          repetition,
+          budget
+        };
+        const run = control.mode === "swarm"
+          ? await runner.runSwarm(common)
+          : await runner.runDirect(common);
+        report.runs.push({
+          missionId: mission.id,
+          repetition,
+          runDigest: digestResearchValue(run),
+          run
+        });
+      }
     }
   }
+  finalizedReport = finalizeSwarmExperimentReport(report, { status: "completed" });
+} catch (error) {
+  executionError = error;
+  const caseReference = activeCase || {
+    missionId: missions[0].id,
+    repetition: 1
+  };
+  finalizedReport = finalizeSwarmExperimentReport(report, {
+    status: "failed",
+    failure: swarmExperimentFailure(error, caseReference)
+  });
 }
 
-report.completedAt = new Date().toISOString();
-report.reportDigest = digestResearchValue({ ...report, reportDigest: null });
-await atomicWriteJson(outputPath, report);
+await atomicWriteJson(outputPath, finalizedReport);
 console.log(`Report: ${resolve(outputPath)}`);
-console.log(`Digest: ${report.reportDigest}`);
+console.log(`Digest: ${finalizedReport.reportDigest}`);
+if (executionError) {
+  console.error(
+    `Experiment failed at ${finalizedReport.failure.missionId} ` +
+    `repetition ${finalizedReport.failure.repetition}: ${finalizedReport.failure.message}`
+  );
+  process.exitCode = 1;
+}
 
 async function readJson(path) {
   try {
@@ -122,6 +150,7 @@ async function readJson(path) {
 async function atomicWriteJson(path, value) {
   const destination = resolve(path);
   const temporary = `${destination}.tmp-${process.pid}`;
+  await mkdir(dirname(destination), { recursive: true });
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, {
     encoding: "utf8",
     mode: 0o600

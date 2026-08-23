@@ -51,6 +51,22 @@ test("the best-quality regime grants every route the same larger total-output ce
   );
 });
 
+test("the bounded Swarm treatment preserves the matched total budget", async () => {
+  const config = validateSwarmExperimentConfig(JSON.parse(await readFile(
+    new URL("../benchmarks/swarm-experiment-opus-bounded-v1.json", import.meta.url),
+    "utf8"
+  )));
+  assert.deepEqual(config.comparison.regimes, ["matched-output-budget"]);
+  assert.equal(config.budget.maxTotalOutputTokens, 9_984);
+  assert.equal(config.budget.directOutputTokens, 9_984);
+  assert.equal(
+    (config.budget.workerOutputTokens * 2) + config.budget.verifierOutputTokens +
+      config.budget.integratorOutputTokens,
+    9_984
+  );
+  assert.ok(config.budget.integratorOutputTokens > config.budget.workerOutputTokens);
+});
+
 test("development missions are visible fixtures and cannot masquerade as sealed evidence", async () => {
   const missions = validateSwarmDevelopmentMissions(JSON.parse(await readFile(
     new URL("../benchmarks/swarm-development-missions-v0.json", import.meta.url),
