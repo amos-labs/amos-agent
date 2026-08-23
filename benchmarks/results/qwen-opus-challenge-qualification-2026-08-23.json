@@ -1,0 +1,130 @@
+{
+  "schema": "amos.swarm-development-qualification",
+  "version": 1,
+  "createdAt": "2026-08-23T09:12:39Z",
+  "status": "failed-swarm-completion-gate",
+  "dataClassification": "development-visible",
+  "missionManifestId": "swarm-challenge-development-v0",
+  "missionManifestDigest": "9b9e567f77e7eada24c036b3200f9611523b8329d7a6af6b6764e2056e075c54",
+  "missionCount": 6,
+  "repetitions": 3,
+  "matchedOutputBudget": {
+    "configId": "amos-swarm-opus-v0-development",
+    "configDigest": "4e5cf19dc9e2d0e748ba817e229de6a5d561e6f0fbfc9aaec90d4a88a28b430c",
+    "sourceRevision": "45e507ad3895cb9e298605ba120c4f09b9b51488",
+    "maximumOutputTokensPerMission": 9984,
+    "controls": {
+      "qwen-direct": {
+        "status": "completed",
+        "reportDigest": "8f2d600e5b61c8b0ba2d4d2a3dbf03057ab679e2acad45214ac6cc6799e319cd",
+        "runs": 18,
+        "wallMilliseconds": 886484,
+        "meanRunMilliseconds": 49249,
+        "p50RunMilliseconds": 52114,
+        "p95RunMilliseconds": 61871,
+        "inferenceCalls": 33,
+        "promptTokens": 21183,
+        "outputTokens": 87582,
+        "weightedGenerationTokensPerSecond": 98.799,
+        "answerRecoveries": 15
+      },
+      "opus-control": {
+        "status": "completed",
+        "reportDigest": "9e23f42692487e53adff2d06469f589c607aed89b70a93e8860fadf594465e45",
+        "runs": 18,
+        "wallMilliseconds": 1336510,
+        "meanRunMilliseconds": 74251,
+        "p50RunMilliseconds": 82837,
+        "p95RunMilliseconds": 149475,
+        "inferenceCalls": 30,
+        "promptTokens": 26644,
+        "outputTokens": 91053,
+        "weightedGenerationTokensPerSecond": 71.645,
+        "answerRecoveries": 12,
+        "pricingAssumptionUsdPerMillionTokens": {
+          "input": 5,
+          "output": 25
+        },
+        "estimatedInferenceCostUsd": 2.409545
+      },
+      "qwen-swarm": {
+        "status": "failed-contract-gate",
+        "missionId": "partner-program-capacity-001",
+        "repetition": 1,
+        "stage": "explorer",
+        "failure": "The explorer exhausted its 1,792-token stage budget after answer recovery.",
+        "durableReportAvailable": false,
+        "durableReportLimitation": "This run preceded atomic failed-run receipt support."
+      }
+    },
+    "performanceFindings": {
+      "qwenDirectLatencyReductionVersusOpus": 0.3367,
+      "qwenDirectGenerationRateMultipleVersusOpus": 1.379,
+      "qualityWinner": null
+    }
+  },
+  "bestQualityBudget": {
+    "configId": "amos-swarm-opus-best-quality-v0-development",
+    "configDigest": "99d9d40259172e5117cc9f1d95cccf47904642641e68db5ae572be118217d20c",
+    "sourceRevision": "98c4c7868b53986edf69e36f97272bd16fb19071",
+    "maximumOutputTokensPerMission": 16384,
+    "controls": {
+      "qwen-direct": {
+        "status": "completed",
+        "reportDigest": "c7c00917ff6c954c7fc46fb869d3fc2ed0ec17902e1276399382f437dd4b0ec9",
+        "runs": 18,
+        "wallMilliseconds": 1053021,
+        "meanRunMilliseconds": 58501,
+        "p50RunMilliseconds": 45450,
+        "p95RunMilliseconds": 100617,
+        "inferenceCalls": 21,
+        "promptTokens": 9333,
+        "outputTokens": 100659,
+        "weightedGenerationTokensPerSecond": 95.594,
+        "answerRecoveries": 3
+      },
+      "qwen-swarm": {
+        "status": "failed-contract-gate",
+        "targetedProbe": {
+          "status": "completed",
+          "missionId": "partner-program-capacity-001",
+          "runs": 1,
+          "reportDigest": "25900383fb9a8ca4029c3c59180fbcd0909d9919a539e19216f240b074ecb95e"
+        },
+        "fullRunFailure": {
+          "missionId": "partner-program-capacity-001",
+          "repetition": 1,
+          "stage": "integrator",
+          "failure": "The integrator exhausted its 7,168-token stage budget after answer recovery."
+        },
+        "finding": "A targeted pass followed by the same case failing in the full run demonstrates unstable stopping, not an insufficient aggregate budget."
+      },
+      "opus-control": {
+        "status": "failed-wall-time-gate",
+        "missionId": "revenue-cash-allocation-001",
+        "repetition": 1,
+        "maximumWallMilliseconds": 300000,
+        "failure": "The high-effort adaptive-thinking request exceeded the five-minute experiment wall-time limit."
+      }
+    }
+  },
+  "qualityComparison": {
+    "status": "not-started",
+    "requiredScope": [
+      "qwen-swarm",
+      "opus-control"
+    ],
+    "reason": "Swarm failed the completion floor and therefore produced no complete candidate set to judge.",
+    "directQwenRole": "Ablation and operating baseline only; it is not the target contest.",
+    "winner": null
+  },
+  "findings": [
+    "Direct Qwen and Opus completed all 18 matched-output-budget challenge cases.",
+    "Direct Qwen used 33.67% less mean wall time and generated tokens 1.379 times as quickly as Opus, but speed does not establish quality.",
+    "Swarm Qwen did not satisfy the completion floor under either tested budget regime and therefore cannot beat Opus in this qualification.",
+    "Increasing the Swarm budget moved the failure from an explorer to the integrator; it did not produce reliable completion.",
+    "Increasing Opus to a 16,384-token high-effort budget produced a five-minute timeout on the first mission, so more reasoning budget was also counterproductive for that control.",
+    "The next Swarm treatment should bound and compress specialist contributions, add deterministic early stopping, and preserve more of the fixed budget for synthesis rather than merely increasing tokens."
+  ],
+  "promotionEligible": false
+}

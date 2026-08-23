@@ -2,7 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_SWARM_BUDGET,
+  SWARM_CONTRIBUTION_LIMITS,
   SWARM_EVIDENCE_BOARD_SCHEMA,
+  SWARM_INTEGRATION_LIMITS,
   SwarmEvidenceBoard,
   SwarmExperimentRunner,
   validateSwarmBudget,
@@ -34,6 +36,20 @@ test("Swarm Mode v0 runs explorer and builder concurrently through a typed evide
   assert.equal(run.evidenceBoard.items.length, 3);
   assert.deepEqual(worker.started.slice(0, 2).sort(), ["builder", "explorer"]);
   assert.equal(worker.calls.every((call) => call.responseFormat?.type === "json_schema"), true);
+  const contributionSchema = worker.calls[0].responseFormat.json_schema.schema;
+  assert.equal(
+    contributionSchema.properties.entries.maxItems,
+    SWARM_CONTRIBUTION_LIMITS.maximumEntries
+  );
+  assert.equal(
+    contributionSchema.properties.entries.items.properties.statement.maxLength,
+    SWARM_CONTRIBUTION_LIMITS.maximumStatementCharacters
+  );
+  const integratedSchema = worker.calls.at(-1).responseFormat.json_schema.schema;
+  assert.equal(
+    integratedSchema.properties.answer.maxLength,
+    SWARM_INTEGRATION_LIMITS.maximumAnswerCharacters
+  );
   assert.equal(run.metrics.logicalStages, 4);
   assert.equal(run.metrics.requests, 4);
 });

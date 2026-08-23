@@ -365,6 +365,9 @@ function validateReport(input, index) {
     throw new Error(`Report ${index + 1} has an unsupported schema`);
   }
   verifyEmbeddedDigest(report, "reportDigest", `Report ${index + 1}`);
+  if (report.status !== undefined && report.status !== "completed") {
+    throw new Error(`Report ${index + 1} did not complete`);
+  }
   requiredText(report.configId, `reports[${index}].configId`);
   sha256(report.configDigest, `reports[${index}].configDigest`);
   requiredText(report.missionManifestId, `reports[${index}].missionManifestId`);
