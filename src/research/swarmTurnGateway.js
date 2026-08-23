@@ -65,11 +65,19 @@ export class SwarmTurnOrchestrator {
       observation(`candidate:${role}`, response)));
     const candidates = candidateResults.map(({ role, message }) => ({ role, message }));
     const board = candidateBoard(candidates);
-    const critiqueResponse = await this.#callBackend(
+    let critiqueResponse = await this.#callBackend(
       critiquePayload(request, board, this.backendModel, this.internalMaxTokens),
       { stage: "critic", signal }
     );
     observations.push(observation("critic", critiqueResponse));
+    if (requiresAnswerRecovery(critiqueResponse)) {
+      critiqueResponse = await this.#callBackend(
+        critiqueRecoveryPayload(request, board, this.backendModel, this.internalMaxTokens),
+        { stage: "critic:recovery", signal }
+      );
+      observations.push(observation("critic:recovery", critiqueResponse));
+    }
+    assertVisibleCompletion(critiqueResponse, "critic");
     const critique = assistantMessage(critiqueResponse);
     let integrationResponse = await this.#callBackend(
       integrationPayload(request, board, critique, this.backendModel),
@@ -89,7 +97,7 @@ export class SwarmTurnOrchestrator {
       );
       observations.push(observation("integrator:recovery", integrationResponse));
     }
-    assertVisibleCompletion(integrationResponse);
+    assertVisibleCompletion(integrationResponse, "integrator");
 
     const completedAt = validDate(this.now(), "now").toISOString();
     const traceBase = {
@@ -168,6 +176,25 @@ function critiquePayload(request, board, model, internalMaxTokens) {
         "likely task failure. Return concise corrective guidance for the final integrator."
       ),
       { role: "user", content: board }
+    ]
+  };
+}
+
+function critiqueRecoveryPayload(request, board, model, internalMaxTokens) {
+  const payload = critiquePayload(request, board, model, internalMaxTokens);
+  return {
+    ...payload,
+    enable_thinking: false,
+    reasoning_effort: undefined,
+    chat_template_kwargs: { enable_thinking: false },
+    messages: [
+      ...payload.messages,
+      {
+        role: "user",
+        content:
+          "Your prior critique exhausted its budget or returned no visible guidance. Return a " +
+          "concise, complete verifier critique now with no additional private reasoning."
+      }
     ]
   };
 }
@@ -362,9 +389,9 @@ function requiresAnswerRecovery(response) {
   );
 }
 
-function assertVisibleCompletion(response) {
+function assertVisibleCompletion(response, stage) {
   if (requiresAnswerRecovery(response)) {
-    throw new Error("integrator recovery returned no complete visible action");
+    throw new Error(`${stage} recovery returned no complete visible response`);
   }
 }
 
