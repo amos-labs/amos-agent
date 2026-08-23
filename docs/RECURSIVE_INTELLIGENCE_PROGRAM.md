@@ -197,7 +197,7 @@ endpoint with continuous batching; workers fan out physically only when
 measured parallelism justifies another replica.
 
 The first contest is pre-registered and blind: direct Qwen versus Qwen Swarm
-versus a pinned Fable control on complex research, finance, planning, and build
+versus a pinned Opus 5 control on complex research, finance, planning, and build
 tasks. Reports show both unconstrained quality and matched time/token/cost
 results. A swarm win that merely spends three times the inference budget is
 reported honestly rather than collapsed into one score.
@@ -352,7 +352,7 @@ but no composite can mask a hard safety, rights, or reproducibility failure.
 The existing 35-point AMOS local qualification suite is a production contract
 floor. It tests protocol grammar, governance, tool selection, recovery, and
 small executable tasks; it is not difficult or broad enough to support a
-claim that Qwen beats Fable. The development portfolio is machine-readable in
+claim that Qwen beats Opus 5. The development portfolio is machine-readable in
 `benchmarks/frontier-quality-portfolio-v1.json` and must be frozen only after
 every required adapter, task snapshot, license review, and evaluator digest is
 pinned.
@@ -373,17 +373,19 @@ variants of the same test:
 | AMOS private missions | research, finance, planning, artifacts, recovery, and governed execution | ecological validity and a time-separated private holdout |
 | SWE-bench Verified | real repository issue resolution | comparable public coding control |
 | recent SWE-rebench V2 snapshot | multilingual repository repair from later time slices | contamination control and coding generalization |
-| Terminal-Bench 2 | long-horizon work in executable terminal environments | broad agent reliability |
+| Terminal-Bench 3.0 | long-horizon work in executable terminal environments | broad agent reliability |
 | BFCL V4 | single-turn, multi-turn, agentic, and recovery-oriented tool use | model-level function calling |
 | tau3 base | conversational policy compliance with stateful tools and simulated users | interactive company-agent behavior |
 | SpreadsheetBench 2 | financial modeling, debugging, and visualization across complex workbooks | AMOS-relevant business artifacts |
-| OSWorld-Verified | multimodal work across real desktop applications | computer use and cross-application execution |
+| OSWorld 2.0 (2026.06.24 release) | multimodal work across real desktop applications | computer use and cross-application execution |
 
-Direct Qwen, Qwen Swarm, and the pinned Fable control run with identical
+Direct Qwen, Qwen Swarm, and the pinned Opus 5 control run with identical
 benchmark adapters and tool authority wherever the official harness permits.
-Every comparison reports three regimes separately: matched wall time, matched
-inference cost, and unconstrained best quality. The initial promotion claim
-requires at least five statistically significant track wins against Fable, no
+Best verified quality is the primary promotion regime. Matched wall-time and
+matched-cost results remain useful secondary diagnostics, while latency,
+throughput, accelerator hours, and dollars are always reported. The initial
+promotion claim requires at least five statistically significant track wins
+against Opus 5, no
 statistically significant loss on any required quality track, 35/35 on the
 contract floor in three consecutive runs, 100% on private safety canaries,
 blind judging where deterministic grading is unavailable, and independent

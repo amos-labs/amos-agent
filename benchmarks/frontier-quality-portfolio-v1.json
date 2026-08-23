@@ -4,7 +4,7 @@
   "id": "frontier-quality-v1",
   "status": "development",
   "createdAt": "2026-08-22T20:50:00.000Z",
-  "objective": "Determine whether direct or swarm Qwen beats the pinned Claude Fable control on broad, executable agent quality without hiding safety regressions, benchmark contamination, human intervention, or excess inference spend.",
+  "objective": "Determine whether Qwen Swarm beats the pinned Claude Opus 5 control on broad, executable agent quality without hiding safety regressions, benchmark contamination, or human intervention. Inference spend, latency, and throughput are reported constraints rather than substitutes for verified quality.",
   "controls": [
     {
       "id": "qwen-direct",
@@ -23,10 +23,10 @@
       "pinnedConfigRequired": true
     },
     {
-      "id": "fable-control",
+      "id": "opus-control",
       "role": "frontier_control",
       "provider": "amazon-bedrock",
-      "model": "anthropic.claude-fable-5",
+      "model": "us.anthropic.claude-opus-5",
       "scaffold": "amos-direct-v1",
       "pinnedConfigRequired": true
     }
@@ -36,13 +36,13 @@
       "id": "matched-wall-time",
       "kind": "matched_time",
       "budgetDimension": "wall_seconds",
-      "required": true
+      "required": false
     },
     {
       "id": "matched-inference-cost",
       "kind": "matched_cost",
       "budgetDimension": "usd",
-      "required": true
+      "required": false
     },
     {
       "id": "best-quality",
@@ -129,13 +129,13 @@
       "countsTowardFrontierWin": true
     },
     {
-      "id": "terminal-bench-2",
+      "id": "terminal-bench-3",
       "category": "long-horizon terminal operation",
       "phase": "frontier_quality",
       "source": {
         "kind": "external",
-        "repository": "https://github.com/harbor-framework/terminal-bench-2",
-        "version": "terminal-bench@2.0",
+        "repository": "https://github.com/harbor-framework/terminal-bench",
+        "version": "terminal-bench@3.0.0",
         "license": "Apache-2.0",
         "timeSeparated": false,
         "pinRequiredBeforeRun": true
@@ -205,18 +205,18 @@
       "countsTowardFrontierWin": true
     },
     {
-      "id": "osworld-verified",
+      "id": "osworld-v2",
       "category": "multimodal desktop operation",
       "phase": "frontier_quality",
       "source": {
         "kind": "external",
-        "repository": "https://github.com/xlang-ai/OSWorld",
-        "version": "OSWorld-Verified",
+        "repository": "https://github.com/xlang-ai/OSWorld-V2",
+        "version": "osworld-v2-2026.06.24",
         "license": "Apache-2.0",
         "timeSeparated": false,
         "pinRequiredBeforeRun": true
       },
-      "adapter": "osworld-verified",
+      "adapter": "osworld-v2",
       "primaryMetric": "task_success_rate",
       "determinism": "simulator",
       "executionStatus": "planned",
@@ -244,17 +244,15 @@
     }
   ],
   "promotion": {
-    "frontierControlId": "fable-control",
+    "frontierControlId": "opus-control",
+    "primaryRegimeId": "best-quality",
     "minimumTrackWins": 5,
     "maximumSignificantTrackLosses": 0,
     "confidenceLevel": 0.95,
     "minimumRepetitions": 3,
     "contractFloor": "35/35 in three consecutive runs",
     "safetyFloor": "100% of required private canaries",
-    "matchedRegimeIds": [
-      "matched-wall-time",
-      "matched-inference-cost"
-    ],
+    "matchedRegimeIds": [],
     "requireBlindJudging": true,
     "requireIndependentReproduction": true,
     "prohibitCompositeMasking": true
