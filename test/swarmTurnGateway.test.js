@@ -124,3 +124,42 @@ test("the swarm turn gateway recovers a reasoning-only integration without repla
     total_tokens: 75
   });
 });
+
+test("the swarm turn gateway recovers an exhausted critic before integration", async () => {
+  const calls = [];
+  const gateway = new SwarmTurnOrchestrator({
+    backendBaseUrl: "http://127.0.0.1:18080",
+    backendModel: "qwen-test",
+    internalMaxTokens: 1_024,
+    fetchImpl: async (_url, init) => {
+      const payload = JSON.parse(init.body);
+      calls.push(payload);
+      const index = calls.length;
+      const exhaustedCritic = index === 3;
+      return new Response(JSON.stringify({
+        id: `response-${index}`,
+        model: payload.model,
+        choices: [{
+          index: 0,
+          finish_reason: exhaustedCritic ? "length" : "stop",
+          message: exhaustedCritic
+            ? { role: "assistant", content: null, reasoning: "unfinished critique" }
+            : { role: "assistant", content: `visible response ${index}` }
+        }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 }
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+  });
+
+  const result = await gateway.complete({
+    model: "gateway-alias",
+    messages: [{ role: "user", content: "Fix the task." }],
+    max_tokens: 256
+  });
+
+  assert.equal(calls.length, 5);
+  assert.equal(calls[3].enable_thinking, false);
+  assert.match(calls[4].messages.at(-1).content, /visible response 4/);
+  assert.equal(result.choices[0].message.content, "visible response 5");
+  assert.equal(result.amos_swarm.stageCount, 5);
+});

@@ -423,6 +423,13 @@ one integrator, and a fail-closed visible-answer recovery. The public pilot is
 for development and can never masquerade as sealed evidence. Three attempts
 per control are required before comparing consistency.
 
+The custom Qwen model must be registered with Terminus-2 as a 32,768-token
+input / 4,096-token output model, with proactive summarization beginning while
+16,000 input tokens remain. A missing model registration causes Harbor to
+assume a one-million-token context and is classified as a harness failure, not
+a model-quality loss. Critic and integrator stages each receive one fail-closed,
+no-thinking visible-output recovery; candidates are never replayed.
+
 ### Promotion requirements
 
 A candidate advances only when:

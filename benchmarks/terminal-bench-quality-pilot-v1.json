@@ -18,7 +18,12 @@
     "name": "terminus-2",
     "parser": "json",
     "maxTurns": 100,
-    "temperature": 0.2
+    "temperature": 0.2,
+    "modelInfo": {
+      "maxInputTokens": 32768,
+      "maxOutputTokens": 4096
+    },
+    "proactiveSummarizationThreshold": 16000
   },
   "candidate": {
     "id": "qwen-swarm",
