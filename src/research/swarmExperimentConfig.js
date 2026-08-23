@@ -29,8 +29,14 @@ export function validateSwarmExperimentConfig(input) {
     if (!['http:', 'https:'].includes(endpoint.protocol)) throw new Error(`${path}.defaultEndpoint is invalid`);
     if (control.apiKeyEnv !== null) requiredText(control.apiKeyEnv, `${path}.apiKeyEnv`);
   }
-  for (const expected of ["qwen-direct", "qwen-swarm", "fable-control"]) {
+  for (const expected of ["qwen-direct", "qwen-swarm"]) {
     if (!ids.has(expected)) throw new Error(`Missing required swarm control: ${expected}`);
+  }
+  const frontierControls = config.controls.filter((control) =>
+    !["qwen-direct", "qwen-swarm"].includes(control.id));
+  if (frontierControls.length !== 1 || frontierControls[0].mode !== "direct" ||
+      frontierControls[0].dialect !== "generic") {
+    throw new Error("Swarm v0 requires exactly one generic direct frontier control");
   }
   validateSwarmBudget(config.budget);
   const required = config.comparison?.requiredControlIds;

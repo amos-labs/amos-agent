@@ -20,6 +20,22 @@ test("the Swarm v0 config binds Direct Qwen, Swarm Qwen, and Fable to one compar
   assert.equal(config.comparison.minimumRepetitions, 3);
 });
 
+test("the alternate control can bind Direct Qwen and Swarm Qwen to Opus 5", async () => {
+  const config = validateSwarmExperimentConfig(JSON.parse(await readFile(
+    new URL("../benchmarks/swarm-experiment-opus-v0.json", import.meta.url),
+    "utf8"
+  )));
+  assert.deepEqual(config.controls.map((control) => control.id), [
+    "qwen-direct",
+    "qwen-swarm",
+    "opus-control"
+  ]);
+  assert.equal(config.controls[2].model, "us.anthropic.claude-opus-5");
+  assert.equal(config.controls[2].reasoningEffort, "high");
+  assert.equal(config.budget.directOutputTokens, config.budget.maxTotalOutputTokens);
+  assert.equal(config.comparison.blindJudgeRequired, true);
+});
+
 test("development missions are visible fixtures and cannot masquerade as sealed evidence", async () => {
   const missions = validateSwarmDevelopmentMissions(JSON.parse(await readFile(
     new URL("../benchmarks/swarm-development-missions-v0.json", import.meta.url),

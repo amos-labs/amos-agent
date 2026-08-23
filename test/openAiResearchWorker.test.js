@@ -56,6 +56,35 @@ test("the canonical research worker supports pinned Qwen and Fable-shaped loopba
   assert.equal(observation.message.content, "visible answer");
 });
 
+test("generic research controls carry explicit reasoning and recovery overrides to their gateway", async () => {
+  const bodies = [];
+  const worker = new OpenAiResearchWorker({
+    controlId: "opus-control",
+    model: "us.anthropic.claude-opus-5",
+    baseUrl: "http://127.0.0.1:11440",
+    dialect: "generic",
+    reasoningEffort: "high",
+    fetchImpl: async (_url, options) => {
+      bodies.push(JSON.parse(options.body));
+      return response({
+        choices: [{ message: { role: "assistant", content: "answer" } }],
+        usage: { prompt_tokens: 10, completion_tokens: 2 }
+      });
+    }
+  });
+
+  const common = {
+    caseId: "case-opus",
+    messages: [{ role: "user", content: "Answer." }],
+    dataManifestDigest: RESEARCH_TEST_DIGESTS.a,
+    maxOutputTokens: 128
+  };
+  await worker.runCase(common);
+  await worker.runCase({ ...common, reasoningEffortOverride: "none" });
+
+  assert.deepEqual(bodies.map((body) => body.reasoning_effort), ["high", "none"]);
+});
+
 function response(payload) {
   return {
     ok: true,
