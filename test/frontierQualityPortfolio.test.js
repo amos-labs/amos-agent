@@ -10,6 +10,10 @@ const portfolioUrl = new URL(
   "../benchmarks/frontier-quality-portfolio-v1.json",
   import.meta.url
 );
+const hardPilotUrl = new URL(
+  "../benchmarks/terminal-bench-quality-pilot-v1.json",
+  import.meta.url
+);
 
 test("the frontier quality portfolio makes Opus 5 the blind best-quality control", async () => {
   const portfolio = validateFrontierQualityPortfolio(
@@ -43,4 +47,17 @@ test("the portfolio cannot freeze before every required adapter is ready", async
     () => validateFrontierQualityPortfolio(portfolio),
     /planned required tracks/
   );
+});
+
+test("the first hard pilot makes verified quality primary and defers easier controls", async () => {
+  const pilot = JSON.parse(await readFile(hardPilotUrl, "utf8"));
+  assert.equal(pilot.dataset.version, "3.0.0");
+  assert.equal(pilot.dataset.task, "terminal-bench/production-planning");
+  assert.equal(pilot.comparison.primaryRegime, "best-quality");
+  assert.equal(pilot.comparison.matchedComputeRequired, false);
+  assert.equal(pilot.comparison.minimumAttemptsPerControl, 3);
+  assert.deepEqual(pilot.deferredControls.map((control) => control.id), [
+    "fable-control",
+    "sol-5.6-control"
+  ]);
 });
