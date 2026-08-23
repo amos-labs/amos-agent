@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_SWARM_BUDGET,
+  SWARM_COMPLETENESS_RECOVERY_PROMPT,
   SWARM_CONTRIBUTION_LIMITS,
   SWARM_EVIDENCE_BOARD_SCHEMA,
   SWARM_INTEGRATION_LIMITS,
@@ -24,7 +25,8 @@ test("Swarm Mode v0 runs explorer and builder concurrently through a typed evide
 
   assert.deepEqual(validateSwarmExperimentRun(run), run);
   assert.equal(run.mode, "swarm");
-  assert.equal(run.result.answer, "The measured bottleneck is playground-to-signup.");
+  assert.match(run.result.answer, /^The measured bottleneck is playground-to-signup\./);
+  assert.ok(run.result.answer.length >= SWARM_INTEGRATION_LIMITS.minimumAnswerCharacters);
   assert.equal(run.result.confidence, 0.98);
   assert.equal(run.evidenceBoard.schema, SWARM_EVIDENCE_BOARD_SCHEMA);
   assert.deepEqual(run.stages.map((stage) => stage.role), [
@@ -47,11 +49,55 @@ test("Swarm Mode v0 runs explorer and builder concurrently through a typed evide
   );
   const integratedSchema = worker.calls.at(-1).responseFormat.json_schema.schema;
   assert.equal(
+    integratedSchema.properties.answer.minLength,
+    SWARM_INTEGRATION_LIMITS.minimumAnswerCharacters
+  );
+  assert.equal(
     integratedSchema.properties.answer.maxLength,
     SWARM_INTEGRATION_LIMITS.maximumAnswerCharacters
   );
   assert.equal(run.metrics.logicalStages, 4);
   assert.equal(run.metrics.requests, 4);
+});
+
+test("the Swarm integrator retries a title-only result and fails closed if recovery stays short", async () => {
+  const calls = [];
+  const worker = {
+    async runCase(input) {
+      calls.push(structuredClone(input));
+      const role = input.caseId.split(":").at(-2);
+      if (role !== "integrator") {
+        return fakeObservation(input.caseId, jsonMessage({ entries: [{
+          kind: "evidence",
+          statement: "A grounded mission fact.",
+          sourceRefs: ["mission context"],
+          confidence: 1,
+          status: "supported"
+        }] }));
+      }
+      return fakeObservation(input.caseId, jsonMessage({
+        answer: input.caseId.endsWith(":answer") ? "Still too short." : "Title only",
+        confidence: 0.5,
+        unresolvedRisks: []
+      }));
+    }
+  };
+  const runner = new SwarmExperimentRunner({ worker, controlId: "qwen-swarm" });
+
+  await assert.rejects(
+    runner.runSwarm({
+      missionId: "mission-short-integrator-001",
+      objective: "Return a complete answer.",
+      dataManifestDigest: RESEARCH_TEST_DIGESTS.a
+    }),
+    /at least 1000 characters/
+  );
+  const integratorCalls = calls.filter((call) => call.caseId.includes(":integrator:"));
+  assert.equal(integratorCalls.length, 2);
+  assert.equal(
+    integratorCalls[1].messages.at(-1).content,
+    SWARM_COMPLETENESS_RECOVERY_PROMPT
+  );
 });
 
 test("direct and swarm controls use stage-specific answer reserves", async () => {
@@ -210,7 +256,7 @@ function scriptedWorker() {
       }
       if (role === "integrator") {
         return fakeObservation(input.caseId, jsonMessage({
-          answer: "The measured bottleneck is playground-to-signup.",
+          answer: substantiveAnswer("The measured bottleneck is playground-to-signup."),
           confidence: 0.98,
           unresolvedRisks: ["Root cause remains unmeasured."]
         }));
@@ -222,6 +268,10 @@ function scriptedWorker() {
 
 function jsonMessage(value) {
   return { role: "assistant", content: JSON.stringify(value) };
+}
+
+function substantiveAnswer(prefix) {
+  return `${prefix} ${"Ground the recommendation in the typed evidence board and preserve the unresolved causal risk. ".repeat(14)}`;
 }
 
 function fakeObservation(caseId, message, { finishReason = "stop" } = {}) {

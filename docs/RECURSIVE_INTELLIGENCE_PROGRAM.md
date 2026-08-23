@@ -357,6 +357,14 @@ claim that Qwen beats Fable. The development portfolio is machine-readable in
 every required adapter, task snapshot, license review, and evaluator digest is
 pinned.
 
+The six visible challenge missions are a contract smoke test, not a capability
+score. The first bounded-v1 Qwen Swarm run completed all 18 attempts, but seven
+integrated answers were shorter than 1,000 characters and several were obvious
+title or table fragments. `swarm-experiment-opus-complete-v2.json` therefore
+makes a substantive answer length a fail-closed transport contract. This catches
+missing and truncated synthesis; it does not grade correctness or reward
+verbosity. Frontier evidence begins only in the verifier-scored tracks below.
+
 The first hard portfolio uses independent benchmark families rather than many
 variants of the same test:
 
