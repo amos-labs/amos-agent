@@ -1,10 +1,11 @@
 # First run and operating boundaries
 
-AMOS Desktop is the cold path. The first-run screen teaches the intended
-product hierarchy before it asks for setup: connect a real company for the
-complete AMOS experience, explore Northwind as a bounded sample company, or
-use a local/BYO personal workspace. The selected boundary persists so a
-restart does not send a configured user back through onboarding.
+AMOS Desktop is the cold path. The first-run screen is one column of
+required and optional steps, not a marketing page. The only required step is
+**choose intelligence** (AMOS Intelligence, this computer, or your key).
+Connecting AMOS Platform and a workspace folder are optional; Desktop still
+works if they skip. The selected boundary persists so a restart does not send
+a configured user back through onboarding.
 
 The product loop is the same on every path: describe the work, build or change
 something, ask for the next step, delegate a bounded task, and keep a local
@@ -21,14 +22,27 @@ reopens first-run so the user is not left in a dead Online company shell.
 Anonymous usage events stay off until the first-run privacy choice. Telemetry
 never gates **Enter**.
 
-## My company — recommended
+## Intelligence — required
 
-The primary first-run card is the complete company product. It states the
-commercial boundary before signup: a 14-day free trial and plans starting at
-$99/month. OAuth supplies durable company memory, applications, engines,
-goals, policies, approvals, and receipts. Managed AMOS Intelligence is the
-default; no provider key or model selection is required. Ongoing AMOS
-Intelligence access requires an AMOS company subscription.
+First-run asks how AMOS should think before it asks for a company:
+
+- **AMOS Intelligence** — included with an AMOS account, runs on AMOS
+  hardware, not Bedrock. Sign-in is required. Connecting company systems is a
+  later, optional step.
+- **This computer** — AMOS Local. No AMOS subscription.
+- **Your key** — OpenAI, Claude, Grok, Kimi, or a compatible endpoint. No AMOS
+  subscription; the provider may bill its own usage.
+
+Personal + AMOS Intelligence + no OAuth stays **not configured**.
+
+## AMOS Platform — recommended
+
+The Platform step is optional. It states why someone would connect: systems
+they already run, durable company memory, policy and approvals, and
+automations that keep running after Desktop closes. The commercial boundary
+is a 14-day free trial and plans starting at $99/month. OAuth supplies
+company memory, applications, engines, goals, policies, approvals, and
+receipts. Skipping Platform does not block Enter once intelligence is ready.
 
 Returning users see their active company instead of trial acquisition copy.
 "Reconnect" is reserved for an authentication session that actually needs to
@@ -36,8 +50,8 @@ be renewed.
 
 ## Northwind demo
 
-Northwind is the second path: a realistic but intentionally bounded company
-experience. The demo launches the public Playground in a browser. After abuse
+Northwind sits under the optional Platform step: a realistic but intentionally
+bounded sample company. The demo launches the public Playground in a browser. After abuse
 checks create a short-lived Northwind tenant, the Playground sends the
 tenant-scoped key to a one-time loopback receiver using an HTML form POST. The
 key does not enter the browser URL, history, query logs, or referrer.
@@ -62,12 +76,12 @@ The demo uses real AMOS tools, policy, approvals, receipts, and metered hosted
 intelligence against sample data. It cannot connect credentials, spend real
 money, or escape the demo tenant.
 
-## My workspace
+## This computer / your key
 
 **Your model, this computer.** No AMOS account or AMOS subscription is
 required. Hosted `auto` is not available here and needs a sign-in — use
-**Northwind** or **My company** for AMOS Intelligence. A BYOK provider may bill
-its own usage separately.
+**AMOS Intelligence** or **Northwind** for AMOS Intelligence. A BYOK provider
+may bill its own usage separately.
 
 Recommended intelligence:
 
@@ -102,7 +116,9 @@ stack, manifests, scripts, Git state, README excerpt, likely checks, and
 suggested tasks.
 
 Personal + AMOS Intelligence + no OAuth stays **not configured**. Enter stays
-off until a local profile or BYO key is saved and a folder is chosen.
+off until a local profile or BYO key is saved. A workspace folder is optional:
+it is the folder AMOS may read and change with approval. Chat works without
+one; local file, Git, patch, and shell tools wait until a folder is chosen.
 
 The readiness row is path-aware: its intelligence check remains incomplete
 until the person chooses a starting point. The stored hosted default therefore

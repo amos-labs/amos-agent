@@ -10,6 +10,8 @@ import { selectJourneyStarterActions } from "../../src/desktop/journeyStarterAct
 
 const api = window.amosDesktop;
 
+applyPlatformShell();
+
 const providerDefaults = {
   kimi: {
     model: "kimi-k3",
@@ -112,11 +114,11 @@ const elements = Object.fromEntries(
     "decisionBadge", "privateMemoryBadge", "projectBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
-    "connectButton", "localModeButton", "demoModeButton", "connectCheck",
+    "connectButton", "localModeButton", "demoModeButton", "onboardHostedButton", "onboardByokButton", "connectCheck",
     "northwindIntelligenceChoice", "northwindUsageSummary", "northwindCurrentIntelligence",
     "demoHostedIntelligenceButton", "demoLocalIntelligenceButton", "demoByokIntelligenceButton",
     "providerCheck", "onboardingProviderText", "onboardingIntelligenceHint",
-    "workspaceCheck", "enterButton", "boundaryReadinessText",
+    "workspaceCheck", "onboardingWorkspaceText", "onboardingWorkspaceHint", "enterButton", "boundaryReadinessText",
     "personalIntelligenceCallout",
     "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
     "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
@@ -250,7 +252,9 @@ function bindActions() {
   }
   elements.settingsBackButton.addEventListener("click", returnFromIntelligenceSettings);
   elements.connectButton.addEventListener("click", connectAmos);
-  elements.localModeButton.addEventListener("click", startPersonal);
+  elements.onboardHostedButton.addEventListener("click", chooseHostedIntelligence);
+  elements.localModeButton.addEventListener("click", () => startPersonal("ollama"));
+  elements.onboardByokButton.addEventListener("click", () => startPersonal("openai"));
   elements.demoModeButton.addEventListener("click", startDemo);
   elements.demoConnectButton.addEventListener("click", connectAmos);
   elements.demoHostedIntelligenceButton.addEventListener("click", useDemoHostedIntelligence);
@@ -772,10 +776,21 @@ function render() {
       : taskLocalApproval
         ? "Local work allowed for task"
         : "Auto-approve local work";
-  elements.localModeButton.classList.toggle(
-    "selected",
-    Boolean((state.mode?.personal || state.mode?.offline) && !demo)
+  const personalLocal = Boolean(
+    (state.mode?.personal || state.mode?.offline) &&
+    ["ollama", "llama-cpp"].includes(state.settings.provider)
   );
+  const personalByok = Boolean(
+    state.mode?.personal &&
+    !demo &&
+    !["amos-hosted", "ollama", "llama-cpp"].includes(state.settings.provider)
+  );
+  elements.onboardHostedButton.classList.toggle(
+    "selected",
+    Boolean(state.settings.provider === "amos-hosted" && (state.connected || demo) && !state.mode?.personal)
+  );
+  elements.localModeButton.classList.toggle("selected", personalLocal && !demo);
+  elements.onboardByokButton.classList.toggle("selected", personalByok);
   elements.demoModeButton.classList.toggle("selected", demo);
   elements.demoModeButton.disabled = demo;
   elements.demoModeButton.classList.toggle("hidden", activeAccount);
@@ -807,14 +822,14 @@ function render() {
     : "Start my free trial →";
   elements.connectButton.disabled = activeAccount;
   elements.boundaryReadinessText.textContent = demo
-    ? "Northwind demo"
+    ? "Northwind sample is connected. Optional: skip this and still use Desktop."
     : state.connected
-      ? "Company connected"
+      ? "AMOS account connected. Connect systems later from Connections if you have not already."
       : state.mode?.offline
-        ? "Local-only"
+        ? "Local-only. Platform is optional — Desktop still works."
         : state.mode?.personal
-          ? "Personal workspace"
-          : "Choose a starting point";
+          ? "Using this computer. Platform is optional — Desktop still works."
+          : "Optional. Skip this and Desktop still works for chat, files, and coding.";
   const startingPointSelected = Boolean(
     state.connected || state.mode?.personal || state.mode?.offline
   );
@@ -822,6 +837,11 @@ function render() {
   renderStep(elements.connectCheck, startingPointSelected);
   renderStep(elements.providerCheck, intelligenceReady);
   renderStep(elements.workspaceCheck, Boolean(state.settings.workspace));
+  elements.onboardingWorkspaceText.textContent = state.settings.workspace
+    ? workspaceFolderName(state.settings.workspace)
+    : "Choose a folder AMOS may work in";
+  elements.onboardingWorkspaceButton.title = state.settings.workspace ||
+    "A workspace is optional. Chat works without one.";
   const personalNeedsIntelligence = Boolean(
     state.mode?.personal && !state.connected && !state.configured
   );
@@ -836,7 +856,6 @@ function render() {
   elements.enterButton.disabled = !(
     (state.connected || state.mode?.personal || state.mode?.offline) &&
     state.configured &&
-    state.settings.workspace &&
     state.mode?.valid !== false
   );
   elements.enterButton.textContent = onboardingEnterLabel();
@@ -896,6 +915,16 @@ function render() {
   renderCanvas();
   renderStarterActions();
   renderConversationChrome();
+}
+
+function applyPlatformShell() {
+  const ua = navigator.userAgent || "";
+  const platform = /Windows/i.test(ua)
+    ? "win32"
+    : /Mac OS X|Macintosh/i.test(ua)
+      ? "darwin"
+      : "linux";
+  document.documentElement.dataset.platform = platform;
 }
 
 function restoreShellPreferences() {
@@ -8060,17 +8089,49 @@ function onboardingBoundaryFromState(current) {
   return current?.settings?.onboardingBoundary || "";
 }
 
-async function startPersonal() {
-  setButtonBusy(elements.localModeButton, true, "Preparing…");
+async function chooseHostedIntelligence() {
+  if (state?.connected) {
+    setButtonBusy(elements.onboardHostedButton, true, "Selecting…");
+    try {
+      state = await api.saveSettings({
+        provider: "amos-hosted",
+        model: "auto",
+        baseUrl: "",
+        intelligenceProfile: "auto",
+        reasoningEffort: "",
+        operatingMode: "online"
+      });
+      selectedProvider = "amos-hosted";
+      render();
+      toast("AMOS Intelligence is ready.");
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      setButtonBusy(elements.onboardHostedButton, false, "AMOS Intelligence");
+    }
+    return;
+  }
+  await connectAmos();
+}
+
+async function startPersonal(providerId = "ollama") {
+  const button = providerId === "openai" ? elements.onboardByokButton : elements.localModeButton;
+  setButtonBusy(button, true, "Preparing…");
   try {
     state = await api.startPersonal();
-    toast("Personal workspace selected. Choose a local profile or your own key to begin.");
+    toast(
+      providerId === "openai"
+        ? "Bring-your-key selected. Add a provider credential to begin."
+        : "This computer selected. Choose a local profile to begin."
+    );
     render();
-    if (!state.configured || state.settings.provider === "amos-hosted") showView("settings");
+    if (!state.configured || state.settings.provider === "amos-hosted" || providerId) {
+      openDemoIntelligenceSettings(providerId);
+    }
   } catch (error) {
     toast(error.message, true);
   } finally {
-    setButtonBusy(elements.localModeButton, false, "My workspace");
+    setButtonBusy(button, false, providerId === "openai" ? "Bring my own key" : "AMOS Local");
   }
 }
 
@@ -8180,7 +8241,14 @@ function activeCompanyName() {
   )?.tenant_name || state?.identity?.tenant_slug || "the selected company";
 }
 
+function workspaceFolderName(path) {
+  const parts = String(path || "").split(/[/\\]/).filter(Boolean);
+  return parts.at(-1) || String(path || "");
+}
+
 async function chooseWorkspace() {
+  const buttons = [elements.onboardingWorkspaceButton, elements.workspaceButton];
+  for (const button of buttons) button.disabled = true;
   try {
     const previousWorkspace = state.settings.workspace;
     state = await api.chooseWorkspace();
@@ -8190,6 +8258,8 @@ async function chooseWorkspace() {
     }
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    for (const button of buttons) button.disabled = false;
   }
 }
 

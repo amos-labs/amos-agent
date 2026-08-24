@@ -15,6 +15,7 @@ import {
 } from "electron";
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import electronUpdater from "electron-updater";
@@ -668,7 +669,8 @@ function registerIpc() {
   );
   ipcMain.handle("desktop:choose-workspace", async () => {
     const result = await dialog.showOpenDialog(window, {
-      title: "Choose the folders AMOS may work in",
+      title: "Choose a folder AMOS may work in",
+      defaultPath: homedir(),
       properties: ["openDirectory", "createDirectory"]
     });
     if (result.canceled || !result.filePaths[0]) return controller.state();
