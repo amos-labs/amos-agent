@@ -26,10 +26,11 @@ never gates **Enter**.
 
 First-run asks how AMOS should think before it asks for a company:
 
-- **AMOS Intelligence** — included with an AMOS account, runs on AMOS
-  hardware, not Bedrock. Sign-in is required. Connecting company systems is a
-  later, optional step.
-- **This computer** — AMOS Local. No AMOS subscription.
+- **AMOS Intelligence (Hosted)** — the default. Included with an AMOS
+  account. Enter is available immediately; signing in and connecting company
+  systems remain optional on the same screen.
+- **This computer** — AMOS Local. No AMOS subscription. The recommended
+  local model for this computer is selected on the same form.
 - **Your key** — OpenAI, Claude, Grok, Kimi, or a compatible endpoint. No AMOS
   subscription; the provider may bill its own usage.
 

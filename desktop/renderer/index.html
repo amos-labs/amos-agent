@@ -152,14 +152,14 @@
               </div>
               <div class="onboarding-choice-grid">
                 <button id="onboardHostedButton" class="intelligence-choice-card" type="button">
-                  <span class="start-mode-kicker">AMOS HARDWARE</span>
+                  <span class="start-mode-kicker">DEFAULT · AMOS HOSTED</span>
                   <strong>AMOS Intelligence</strong>
-                  <small>Included with an AMOS account. Runs on AMOS, not Bedrock. Sign in. You can connect company systems next.</small>
+                  <small>AMOS Hosted is selected. Included with an AMOS account. Connect Platform later if you want company systems.</small>
                 </button>
                 <button id="localModeButton" class="intelligence-choice-card" type="button">
                   <span class="start-mode-kicker">THIS COMPUTER</span>
                   <strong>AMOS Local</strong>
-                  <small>No AMOS subscription. Use an installed local model. Capability depends on your hardware.</small>
+                  <small>No AMOS subscription. The recommended local model for this computer is selected automatically.</small>
                 </button>
                 <button id="onboardByokButton" class="intelligence-choice-card" type="button">
                   <span class="start-mode-kicker">YOUR KEY</span>
@@ -168,12 +168,35 @@
                 </button>
               </div>
               <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint">
-                AMOS Local and your key work without an AMOS account. AMOS Intelligence needs a sign-in so we can run it on AMOS hardware.
+                AMOS Hosted is the default. Local and your key stay on this screen — you do not need to leave setup.
               </p>
+              <div id="onboardingLocalPane" class="onboarding-follow-on hidden">
+                <p class="onboarding-intelligence-hint">
+                  The recommended local model for this computer is selected. Install it if it is not on disk yet, or pick another.
+                </p>
+                <div id="onboardingLocalModelList" class="onboarding-local-models"></div>
+              </div>
+              <div id="onboardingByokPane" class="onboarding-follow-on hidden">
+                <label class="onboarding-byok-field">
+                  <span>Provider</span>
+                  <select id="onboardingByokProvider" aria-label="Bring-your-own-key provider">
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="xai">xAI (Grok)</option>
+                    <option value="kimi">Moonshot (Kimi)</option>
+                    <option value="openai-compatible">Compatible endpoint</option>
+                  </select>
+                </label>
+                <label class="onboarding-byok-field">
+                  <span>API key</span>
+                  <input id="onboardingByokKey" type="password" autocomplete="off" spellcheck="false" />
+                </label>
+                <button id="onboardingByokSave" class="button secondary" type="button">Save key</button>
+              </div>
               <button class="onboarding-provider-link" data-open-settings type="button">
                 <span class="onboarding-provider-button-copy">
                   <small>Intelligence settings</small>
-                  <span id="onboardingProviderText">Choose intelligence</span>
+                  <span id="onboardingProviderText">AMOS Intelligence · Hosted</span>
                 </span>
                 <span class="onboarding-provider-button-arrow" aria-hidden="true">→</span>
               </button>

@@ -691,6 +691,54 @@ html[data-platform="win32"] .sidebar-toggle {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+.onboarding-follow-on {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.onboarding-local-models {
+  display: grid;
+  gap: 8px;
+}
+.onboarding-local-model {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-softer);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.onboarding-local-model:hover { border-color: var(--blue); }
+.onboarding-local-model.selected,
+.onboarding-local-model.recommended.selected {
+  border-color: var(--green);
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+.onboarding-local-model strong { font-size: 13px; }
+.onboarding-local-model small { color: var(--muted); font-size: 11px; }
+.onboarding-byok-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.onboarding-byok-field input,
+.onboarding-byok-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+}
 .onboarding-why {
   display: grid;
   gap: 6px;
