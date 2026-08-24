@@ -167,8 +167,8 @@ test("intelligence settings stay independent from workspace selection and are na
     readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
   ]);
 
-  assert.match(html, /class="onboarding-provider-link" data-open-settings/);
-  assert.match(html, /Intelligence settings/);
+  assert.match(html, /id="onboardingModelSelect"/);
+  assert.match(html, /Intelligence &amp; Settings/);
   assert.match(html, /id="settingsBackButton"[^>]*>← Back to setup</);
   assert.match(html, /Choosing intelligence never requires choosing a workspace/);
   assert.match(html, /id="intelligenceTestStatus"[^>]*role="status"[^>]*aria-live="polite"/);
@@ -883,19 +883,23 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /<strong>Bring my own key<\/strong>/);
   assert.match(onboarding, /DEFAULT · AMOS HOSTED/);
   assert.match(onboarding, /AMOS Hosted is selected/);
-  assert.match(onboarding, /id="onboardingLocalModelList"/);
-  assert.match(onboarding, /The recommended local model for this computer is selected/);
+  assert.match(onboarding, /id="onboardingModelSelect"/);
+  assert.match(onboarding, /id="onboardingByokKey"/);
+  assert.match(onboarding, /The recommended local model for this computer is selected automatically/);
+  assert.doesNotMatch(onboarding, /data-open-settings/);
   assert.match(onboarding, /No AMOS subscription\. Use OpenAI, Claude, Grok, Kimi/);
   assert.match(onboarding, /Connect the systems you already run/);
   assert.match(javascript, /function chooseHostedIntelligence/);
-  assert.match(javascript, /async function startPersonal\(providerId = "ollama"\)/);
+  assert.match(javascript, /async function chooseOnboardingDoor/);
   assert.match(javascript, /function recommendedOnboardingLocalModel/);
+  assert.match(javascript, /function renderOnboardingPicker/);
   assert.match(javascript, /hostedReady \|\| \(startingPointSelected && state\.configured\)/);
   assert.match(javascript, /renderStep\(elements\.providerCheck, intelligenceReady\)/);
   assert.match(css, /#telemetryConsent\s*{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(css, /#telemetryConsent > div:first-child\s*{ min-width: 0; }/);
   assert.match(css, /\.onboarding\s*{[\s\S]*?justify-content: center;/);
   assert.match(html, /AMOS Hosted is the default/);
+  assert.match(html, /pick a model here/);
   assert.match(html, /id="demoConnectButton"[^>]*>Connect my company<\/button>/);
   assert.match(html, /id="demoChangeIntelligenceButton"[^>]*>Change intelligence<\/button>/);
   assert.match(html, /id="demoLeaveButton"[^>]*>Leave demo<\/button>/);

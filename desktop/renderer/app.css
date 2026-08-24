@@ -691,6 +691,7 @@ html[data-platform="win32"] .sidebar-toggle {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+.onboarding-picker,
 .onboarding-follow-on {
   display: grid;
   gap: 10px;

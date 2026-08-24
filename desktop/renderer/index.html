@@ -168,38 +168,19 @@
                 </button>
               </div>
               <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint">
-                AMOS Hosted is the default. Local and your key stay on this screen — you do not need to leave setup.
+                AMOS Hosted is the default. Local and your key stay on this screen — pick a model here.
               </p>
-              <div id="onboardingLocalPane" class="onboarding-follow-on hidden">
-                <p class="onboarding-intelligence-hint">
-                  The recommended local model for this computer is selected. Install it if it is not on disk yet, or pick another.
-                </p>
-                <div id="onboardingLocalModelList" class="onboarding-local-models"></div>
-              </div>
-              <div id="onboardingByokPane" class="onboarding-follow-on hidden">
+              <div id="onboardingPicker" class="onboarding-picker">
                 <label class="onboarding-byok-field">
-                  <span>Provider</span>
-                  <select id="onboardingByokProvider" aria-label="Bring-your-own-key provider">
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="xai">xAI (Grok)</option>
-                    <option value="kimi">Moonshot (Kimi)</option>
-                    <option value="openai-compatible">Compatible endpoint</option>
-                  </select>
+                  <span id="onboardingPickerLabel">Model</span>
+                  <select id="onboardingModelSelect" aria-label="Selected model"></select>
                 </label>
-                <label class="onboarding-byok-field">
+                <label id="onboardingKeyField" class="onboarding-byok-field hidden">
                   <span>API key</span>
                   <input id="onboardingByokKey" type="password" autocomplete="off" spellcheck="false" />
                 </label>
-                <button id="onboardingByokSave" class="button secondary" type="button">Save key</button>
+                <p id="onboardingProviderText" class="onboarding-intelligence-hint">AMOS Intelligence · Hosted</p>
               </div>
-              <button class="onboarding-provider-link" data-open-settings type="button">
-                <span class="onboarding-provider-button-copy">
-                  <small>Intelligence settings</small>
-                  <span id="onboardingProviderText">AMOS Intelligence · Hosted</span>
-                </span>
-                <span class="onboarding-provider-button-arrow" aria-hidden="true">→</span>
-              </button>
             </section>
 
             <section class="onboarding-step recommended" aria-labelledby="onboardingPlatformTitle">
