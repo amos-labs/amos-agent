@@ -764,10 +764,10 @@ function render() {
   } else if (state.mode?.personal) {
     elements.operatorEyebrow.textContent = "WORK FROM THIS COMPUTER";
     elements.readyTitle.textContent = shouldPushConnectSystems()
-      ? "Chat is ready. Connect your applications next."
+      ? "Chat is ready. Connect your company next."
       : "Your workspace is ready.";
     elements.readyDescription.textContent = shouldPushConnectSystems()
-      ? "Local chat and coding work now. Connecting the apps you already run is the single biggest reason a customer stays."
+      ? "Local chat and coding work now. Connecting the company — then automating app-to-app on a schedule or ad hoc — is the single biggest reason a customer stays."
       : "Understand code, research, create, and automate locally. Nothing here receives company authority.";
     elements.promptInput.placeholder =
       "Ask about this project, attach a document, paste a screenshot, or describe work to move forward…";
@@ -781,10 +781,10 @@ function render() {
   } else {
     elements.operatorEyebrow.textContent = "OPERATE THE COMPANY";
     elements.readyTitle.textContent = shouldPushConnectSystems()
-      ? "Connect your applications. That is the product."
+      ? "Connect your company. That is the product."
       : "AMOS is ready.";
     elements.readyDescription.textContent = shouldPushConnectSystems()
-      ? "Ask anything now. AMOS only becomes the company brain after it can see the apps you already run — and that is when people stay."
+      ? "Ask anything now. AMOS becomes the company OS after it can see your apps and run work on a schedule, ad hoc, or app-to-app — and that is when people stay."
       : "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
     elements.promptInput.placeholder =
       "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
@@ -850,24 +850,20 @@ function render() {
     ? "YOUR APPLICATIONS · CONNECT NEXT"
     : "THE PRODUCT · 14-DAY TRIAL";
   connectTitle.textContent = activeAccount
-    ? `Connect applications for ${activeCompanyName()}`
-    : state.connected && !demo
-      ? "Connect your applications"
-      : "Connect your applications";
+    ? `Connect ${activeCompanyName()}`
+    : "Connect your company";
   connectDescription.textContent = activeAccount
-    ? "Attach the apps this company already runs. AMOS is guessing from chat until those systems are connected."
-    : "Sign in, then attach the apps the business already runs. That is the moment AMOS stops being a chat window and starts operating the company.";
+    ? "Attach the apps this company already runs, then automate them on a schedule or ad hoc — app to app. AMOS is guessing from chat until those systems are connected."
+    : "Sign in, attach the apps the business already runs, then let AMOS move work between them on a schedule or when you ask.";
   connectPlan.textContent = activeAccount
-    ? "Signed in · connect applications to stay"
+    ? "Signed in · connect the company to stay"
     : "14-day free trial · Plans start at $99/month";
-  connectAction.textContent = activeAccount
-    ? "Connect applications →"
-    : "Connect your applications →";
+  connectAction.textContent = "Connect your company →";
   elements.connectButton.disabled = false;
   elements.boundaryReadinessText.textContent = demo
     ? "Northwind sample is connected. Real retention starts when you connect your own applications."
     : state.connected
-      ? "Signed in. Connect your applications now — that is the single biggest reason customers stay."
+      ? "Signed in. Connect your company now — that is the single biggest reason customers stay."
       : state.mode?.offline
         ? "Local-only. You can chat. Connecting applications is how AMOS becomes the company OS."
         : state.mode?.personal
@@ -6526,7 +6522,7 @@ function shouldPushConnectSystems() {
 function renderConnectSystemsPush({ hasConversation = false } = {}) {
   const visible = shouldPushConnectSystems() && !hasConversation;
   elements.connectSystemsPush.classList.toggle("hidden", !visible);
-  elements.connectSystemsPushButton.textContent = "Connect your applications";
+  elements.connectSystemsPushButton.textContent = "Connect your company";
 }
 
 async function startConnectApplications() {

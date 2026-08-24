@@ -863,7 +863,7 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(controller, /onboardingCompletedAt: completedAt/);
   assert.match(controller, /onboardingBoundary: "northwind",\s*onboardingCompletedAt: ""/);
 
-  assert.match(onboarding, /Get a working brain\. Then connect your applications\./);
+  assert.match(onboarding, /Get a working brain\. Then connect your company\./);
   assert.doesNotMatch(onboarding, /Connect your company\.<br>Put AMOS to work\./);
   assert.doesNotMatch(onboarding, /class="onboarding-copy"/);
   assert.match(onboarding, /class="onboarding-step required"/);
@@ -872,10 +872,10 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /id="onboardHostedButton"/);
   assert.match(onboarding, /id="onboardByokButton"/);
   assert.match(onboarding, /id="connectButton" class="start-mode-card featured primary-path"/);
-  assert.match(onboarding, /<strong>Connect your applications<\/strong>/);
+  assert.match(onboarding, /<strong>Connect your company<\/strong>/);
+  assert.match(onboarding, /Run automations on a schedule or ad hoc/);
   assert.match(onboarding, /Connect the systems you already run so AMOS is not guessing from chat/);
   assert.match(onboarding, /Keep durable company memory, policy, approvals, and receipts/);
-  assert.match(onboarding, /Run automations after you close Desktop/);
   assert.match(onboarding, /Almost nobody stays if they never connect an application/);
   assert.match(onboarding, /14-day free trial · Plans start at \$99\/month/);
   assert.match(onboarding, /<strong>Explore the Northwind demo<\/strong>/);
@@ -926,7 +926,7 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(javascript, /function workspaceFolderName/);
   assert.match(css, /\.onboarding\s*{[\s\S]*?minmax\(0, 1fr\)/);
   assert.match(html, /id="connectSystemsPush"/);
-  assert.match(html, /Connect your applications — this is why customers stay/);
+  assert.match(html, /Connect your company — this is why customers stay/);
   assert.match(html, /Estimate savings/);
   assert.match(javascript, /AMOS_SAVINGS_AUDIT_PROMPT/);
   assert.match(javascript, /type === "connect_platform"/);

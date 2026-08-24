@@ -168,13 +168,13 @@ function systemsPushActions(state, {
   const connect = state.connected || connectionCatalogAvailable
     ? {
         id: "connect-first-system",
-        label: "Connect your applications",
+        label: "Connect your company",
         type: "view",
         view: "connections"
       }
     : {
         id: "connect-business-systems",
-        label: "Connect your applications",
+        label: "Connect your company",
         type: "connect_platform"
       };
   return [

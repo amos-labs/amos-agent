@@ -36,17 +36,19 @@ First-run asks how AMOS should think before it asks for a company:
 
 Personal + AMOS Intelligence + no OAuth stays **not configured**.
 
-## Connect your applications — the retention step
+## Connect your company — the retention step
 
-The applications step is optional for Enter and required for a customer that
-stays. Chat without connected apps is a trial. AMOS becomes the company brain
-only after it can see the systems they already run.
+The company step is optional for Enter and required for a customer that
+stays. Chat without the company is a trial. AMOS becomes the operating
+system after it can see their apps and run work on a schedule, ad hoc, or
+app-to-app.
 
-Copy states why:
+Copy states why, automations first:
 
+- Run automations on a schedule or ad hoc — app to app, inbox to ledger,
+  ticket to fix — after you close Desktop.
 - Connect the systems you already run so AMOS is not guessing from chat.
 - Keep durable company memory, policy, approvals, and receipts.
-- Run automations after you close Desktop.
 
 The commercial boundary is a 14-day free trial and plans starting at
 $99/month. Skipping it does not block Enter. Operator then hits the same
