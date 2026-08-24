@@ -873,7 +873,7 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /id="onboardByokButton"/);
   assert.match(onboarding, /id="connectButton" class="start-mode-card featured primary-path"/);
   assert.match(onboarding, /<strong>Connect your company<\/strong>/);
-  assert.match(onboarding, /Run automations on a schedule or ad hoc/);
+  assert.match(onboarding, /Run automations on a schedule or ad hoc — app to app, inbox to ledger, ticket to fix — that run outside of Desktop/);
   assert.match(onboarding, /Connect the systems you already run so AMOS is not guessing from chat/);
   assert.match(onboarding, /Keep durable company memory, policy, approvals, and receipts/);
   assert.match(onboarding, /Almost nobody stays if they never connect an application/);

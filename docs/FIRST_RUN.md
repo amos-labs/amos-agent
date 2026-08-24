@@ -46,7 +46,7 @@ app-to-app.
 Copy states why, automations first:
 
 - Run automations on a schedule or ad hoc — app to app, inbox to ledger,
-  ticket to fix — after you close Desktop.
+  ticket to fix — that run outside of Desktop.
 - Connect the systems you already run so AMOS is not guessing from chat.
 - Keep durable company memory, policy, approvals, and receipts.
 
