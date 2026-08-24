@@ -73,6 +73,22 @@ test("the renderer paints live thinking traces during a run", async () => {
   assert.match(css, /\.message-thought-body/);
 });
 
+test("the sidebar stays reachable on short Windows windows", async () => {
+  const [javascript, css] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+  ]);
+  assert.match(javascript, /function explainOnboardingGate/);
+  assert.match(javascript, /function applyPlatformShell/);
+  assert.match(javascript, /document\.documentElement\.dataset\.platform = platform/);
+  assert.match(css, /\.sidebar\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow-y: auto;/);
+  assert.match(css, /\.sidebar\s*\{[\s\S]*?-webkit-app-region: no-drag;/);
+  assert.match(css, /\.nav\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow-y: auto;/);
+  assert.match(css, /\.sidebar-bottom\s*\{[\s\S]*?flex-shrink: 0;/);
+  assert.match(css, /html\[data-platform="win32"\] \.sidebar/);
+  assert.match(css, /@media \(max-height: 820px\)/);
+});
+
 test("the running-task composer stays available for steering through the allowlisted IPC bridge", async () => {
   const [javascript, preload, main] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
@@ -152,8 +168,8 @@ test("intelligence settings stay independent from workspace selection and are na
     readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
   ]);
 
-  assert.match(html, /class="onboarding-provider-link" data-open-settings/);
-  assert.match(html, /Intelligence settings/);
+  assert.match(html, /id="onboardingModelSelect"/);
+  assert.match(html, /Intelligence &amp; Settings/);
   assert.match(html, /id="settingsBackButton"[^>]*>← Back to setup</);
   assert.match(html, /Choosing intelligence never requires choosing a workspace/);
   assert.match(html, /id="intelligenceTestStatus"[^>]*role="status"[^>]*aria-live="polite"/);
@@ -167,7 +183,7 @@ test("intelligence settings stay independent from workspace selection and are na
   );
   assert.match(
     javascript,
-    /async function activateLocalModel[\s\S]*?render\(\);\s*showView\("settings"\);/
+    /async function activateLocalModel[\s\S]*?render\(\);\s*if \(!firstRunNeeded\(\)\) showView\("settings"\);/
   );
   assert.match(preload, /"desktop:navigate"/);
   assert.match(main, /label: "Intelligence & Settings…"/);
@@ -847,10 +863,20 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(controller, /onboardingCompletedAt: completedAt/);
   assert.match(controller, /onboardingBoundary: "northwind",\s*onboardingCompletedAt: ""/);
 
-  assert.match(onboarding, /Connect your company\.<br>Put AMOS to work\./);
-  assert.match(onboarding, /Connect<\/span><i>→<\/i><span>Learn<\/span><i>→<\/i><span>Act<\/span><i>→<\/i><span>Measure/);
+  assert.match(onboarding, /Get a working brain\. Then connect your company\./);
+  assert.doesNotMatch(onboarding, /Connect your company\.<br>Put AMOS to work\./);
+  assert.doesNotMatch(onboarding, /class="onboarding-copy"/);
+  assert.match(onboarding, /class="onboarding-step required"/);
+  assert.match(onboarding, /class="onboarding-step recommended onboarding-step-retention"/);
+  assert.match(onboarding, /class="onboarding-step optional"/);
+  assert.match(onboarding, /id="onboardHostedButton"/);
+  assert.match(onboarding, /id="onboardByokButton"/);
   assert.match(onboarding, /id="connectButton" class="start-mode-card featured primary-path"/);
-  assert.match(onboarding, /<strong>Connect my company<\/strong>/);
+  assert.match(onboarding, /<strong>Connect your company<\/strong>/);
+  assert.match(onboarding, /Run automations on a schedule or ad hoc — app to app, inbox to ledger, ticket to fix — that run outside of Desktop/);
+  assert.match(onboarding, /Connect the systems you already run so AMOS is not guessing from chat/);
+  assert.match(onboarding, /Keep durable company memory, policy, approvals, and receipts/);
+  assert.match(onboarding, /Almost nobody stays if they never connect an application/);
   assert.match(onboarding, /14-day free trial · Plans start at \$99\/month/);
   assert.match(onboarding, /<strong>Explore the Northwind demo<\/strong>/);
   assert.match(onboarding, /Limited hosted turns included · Local and BYOK available/);
@@ -860,16 +886,28 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /AMOS subscription required for ongoing use\. Northwind includes limited hosted demo turns/);
   assert.match(onboarding, /<strong>AMOS Local<\/strong>/);
   assert.match(onboarding, /<strong>Bring my own key<\/strong>/);
-  assert.match(onboarding, /<strong>Use AMOS as a personal AI workspace<\/strong>/);
-  assert.match(onboarding, /No AMOS subscription required · AMOS Local · OpenAI · Claude · Grok · Kimi · compatible endpoints/);
-  assert.match(onboarding, /No AMOS subscription required\. Use an installed local model/);
-  assert.match(onboarding, /No AMOS subscription required\. Use OpenAI, Claude, Grok, Kimi/);
-  assert.match(javascript, /const intelligenceReady = Boolean\(startingPointSelected && state\.configured\)/);
+  assert.match(onboarding, /DEFAULT · AMOS HOSTED/);
+  assert.match(onboarding, /AMOS Hosted is selected/);
+  assert.match(html, /id="onboardingGateModal"/);
+  assert.match(html, /Enter AMOS Desktop first\./);
+  assert.match(javascript, /function explainOnboardingGate/);
+  assert.match(onboarding, /id="onboardingModelSelect"/);
+  assert.match(onboarding, /id="onboardingByokKey"/);
+  assert.match(onboarding, /The recommended local model for this computer is selected automatically/);
+  assert.doesNotMatch(onboarding, /data-open-settings/);
+  assert.match(onboarding, /No AMOS subscription\. Use OpenAI, Claude, Grok, Kimi/);
+  assert.match(onboarding, /Connect the systems you already run/);
+  assert.match(javascript, /function chooseHostedIntelligence/);
+  assert.match(javascript, /async function chooseOnboardingDoor/);
+  assert.match(javascript, /function recommendedOnboardingLocalModel/);
+  assert.match(javascript, /function renderOnboardingPicker/);
+  assert.match(javascript, /hostedReady \|\| \(startingPointSelected && state\.configured\)/);
   assert.match(javascript, /renderStep\(elements\.providerCheck, intelligenceReady\)/);
   assert.match(css, /#telemetryConsent\s*{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(css, /#telemetryConsent > div:first-child\s*{ min-width: 0; }/);
-  assert.match(css, /\.onboarding\s*{[\s\S]*?align-items: start;/);
-  assert.match(html, /Choose AMOS Local, OpenAI, Anthropic \(Claude\), Kimi, or any OpenAI-compatible endpoint/);
+  assert.match(css, /\.onboarding\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(html, /AMOS Hosted is the default/);
+  assert.match(html, /pick a model here/);
   assert.match(html, /id="demoConnectButton"[^>]*>Connect my company<\/button>/);
   assert.match(html, /id="demoChangeIntelligenceButton"[^>]*>Change intelligence<\/button>/);
   assert.match(html, /id="demoLeaveButton"[^>]*>Leave demo<\/button>/);
@@ -879,10 +917,20 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(javascript, /async function leaveDemo/);
   assert.match(javascript, /personalNeedsIntelligence/);
   assert.match(javascript, /Choose a local profile or your own key/);
-  assert.match(
-    javascript,
-    /enterButton\.disabled = !\(\s*\(state\.connected \|\| state\.mode\?\.personal \|\| state\.mode\?\.offline\) &&\s*state\.configured &&\s*state\.settings\.workspace/
-  );
+  assert.match(javascript, /enterButton\.disabled = !\(intelligenceReady && state\.mode\?\.valid !== false\)/);
+  assert.match(javascript, /async function activateRecommendedOnboardingLocal/);
+  assert.doesNotMatch(javascript, /liveBoundary/);
+  assert.match(onboarding, /id="onboardingWorkspaceButton" class="onboarding-provider-link"/);
+  assert.match(onboarding, /id="onboardingWorkspaceText"/);
+  assert.match(onboarding, /A workspace is a folder on this computer AMOS may read and change/);
+  assert.match(javascript, /function workspaceFolderName/);
+  assert.match(css, /\.onboarding\s*{[\s\S]*?minmax\(0, 1fr\)/);
+  assert.match(html, /id="connectSystemsPush"/);
+  assert.match(html, /Connect your company — this is why customers stay/);
+  assert.match(html, /Estimate savings/);
+  assert.match(javascript, /AMOS_SAVINGS_AUDIT_PROMPT/);
+  assert.match(javascript, /type === "connect_platform"/);
+  assert.match(css, /\.setup-readiness\s*{[\s\S]*?grid-template-columns: 1fr;/);
   assert.match(
     controller,
     /settings\.operatingMode === "personal" &&\s*settings\.provider === "amos-hosted" &&\s*!useOAuth/

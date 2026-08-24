@@ -6,9 +6,14 @@ import {
   mappingRowsForOperation,
   previewAutomationMappings
 } from "../../src/desktop/automationSetup.js";
-import { selectJourneyStarterActions } from "../../src/desktop/journeyStarterActions.js";
+import {
+  AMOS_SAVINGS_AUDIT_PROMPT,
+  selectJourneyStarterActions
+} from "../../src/desktop/journeyStarterActions.js";
 
 const api = window.amosDesktop;
+
+applyPlatformShell();
 
 const providerDefaults = {
   kimi: {
@@ -97,6 +102,7 @@ const listPages = { tasks: 1, projects: 1, briefings: 1 };
 const listQueryKeys = { tasks: "", projects: "", briefings: "" };
 const expandedProjectAccordions = new Set();
 const projectActivityFilters = new Map();
+let onboardingDoor = "hosted";
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
@@ -112,14 +118,18 @@ const elements = Object.fromEntries(
     "decisionBadge", "privateMemoryBadge", "projectBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
-    "connectButton", "localModeButton", "demoModeButton", "connectCheck",
+    "connectButton", "localModeButton", "demoModeButton", "onboardHostedButton", "onboardByokButton", "connectCheck",
+    "onboardingPicker", "onboardingPickerLabel", "onboardingModelSelect", "onboardingKeyField", "onboardingByokKey",
     "northwindIntelligenceChoice", "northwindUsageSummary", "northwindCurrentIntelligence",
     "demoHostedIntelligenceButton", "demoLocalIntelligenceButton", "demoByokIntelligenceButton",
     "providerCheck", "onboardingProviderText", "onboardingIntelligenceHint",
-    "workspaceCheck", "enterButton", "boundaryReadinessText",
+    "workspaceCheck", "onboardingWorkspaceText", "onboardingWorkspaceHint", "enterButton", "boundaryReadinessText",
+    "onboardingGateModal", "onboardingGateTitle", "onboardingGateMessage", "onboardingGateClose",
     "personalIntelligenceCallout",
     "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
-    "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
+    "conversation", "conversationHeading", "welcomeMessage",
+    "connectSystemsPush", "connectSystemsPushButton", "savingsAuditButton",
+    "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "chatRunStatus", "chatRunStatusText", "chatRunActivityButton",
     "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
@@ -241,7 +251,13 @@ async function initialize() {
 
 function bindActions() {
   for (const button of document.querySelectorAll(".nav-item")) {
-    button.addEventListener("click", () => showView(button.dataset.view));
+    button.addEventListener("click", () => {
+      if (firstRunNeeded()) {
+        explainOnboardingGate();
+        return;
+      }
+      showView(button.dataset.view);
+    });
   }
   elements.sidebarToggle.addEventListener("click", toggleSidebar);
   bindContextResize();
@@ -249,8 +265,12 @@ function bindActions() {
     button.addEventListener("click", openIntelligenceSettings);
   }
   elements.settingsBackButton.addEventListener("click", returnFromIntelligenceSettings);
-  elements.connectButton.addEventListener("click", connectAmos);
-  elements.localModeButton.addEventListener("click", startPersonal);
+  elements.connectButton.addEventListener("click", startConnectApplications);
+  elements.onboardHostedButton.addEventListener("click", chooseHostedIntelligence);
+  elements.localModeButton.addEventListener("click", () => chooseOnboardingDoor("local"));
+  elements.onboardByokButton.addEventListener("click", () => chooseOnboardingDoor("byok"));
+  elements.onboardingModelSelect.addEventListener("change", commitOnboardingPicker);
+  elements.onboardingByokKey.addEventListener("change", commitOnboardingPicker);
   elements.demoModeButton.addEventListener("click", startDemo);
   elements.demoConnectButton.addEventListener("click", connectAmos);
   elements.demoHostedIntelligenceButton.addEventListener("click", useDemoHostedIntelligence);
@@ -272,6 +292,12 @@ function bindActions() {
   elements.enterButton.addEventListener("click", () => {
     completeOnboarding().catch((error) => toast(error.message, true));
   });
+  elements.onboardingGateClose.addEventListener("click", closeOnboardingGate);
+  elements.onboardingGateModal.addEventListener("click", (event) => {
+    if (event.target === elements.onboardingGateModal) closeOnboardingGate();
+  });
+  elements.connectSystemsPushButton.addEventListener("click", pushConnectSystems);
+  elements.savingsAuditButton.addEventListener("click", runSavingsAudit);
   elements.promptForm.addEventListener("submit", runTask);
   elements.cancelButton.addEventListener("click", cancelTask);
   elements.promptInput.addEventListener("keydown", (event) => {
@@ -543,6 +569,17 @@ function bindEvents() {
     if (!state) return;
     state.offline = offline;
     renderOfflineModels();
+    if (onboardingDoor === "local") {
+      const recommended = recommendedOnboardingLocalModel();
+      if (
+        recommended?.installed &&
+        !(state.settings.provider === "ollama" && state.settings.model)
+      ) {
+        activateRecommendedOnboardingLocal().then(() => render()).catch((error) => toast(error.message, true));
+        return;
+      }
+      renderOnboardingPicker();
+    }
   });
   api.on("offline-proposals:changed", (offlineProposals) => {
     if (!state) return;
@@ -726,9 +763,12 @@ function render() {
       "Ask about this project, attach a document, paste a screenshot, or describe offline work…";
   } else if (state.mode?.personal) {
     elements.operatorEyebrow.textContent = "WORK FROM THIS COMPUTER";
-    elements.readyTitle.textContent = "Your workspace is ready.";
-    elements.readyDescription.textContent =
-      "Understand code, research, create, and automate locally. Nothing here receives company authority.";
+    elements.readyTitle.textContent = shouldPushConnectSystems()
+      ? "Chat is ready. Connect your company next."
+      : "Your workspace is ready.";
+    elements.readyDescription.textContent = shouldPushConnectSystems()
+      ? "Local chat and coding work now. Connecting the company — then automating app-to-app on a schedule or ad hoc — is the single biggest reason a customer stays."
+      : "Understand code, research, create, and automate locally. Nothing here receives company authority.";
     elements.promptInput.placeholder =
       "Ask about this project, attach a document, paste a screenshot, or describe work to move forward…";
   } else if (demo) {
@@ -740,9 +780,12 @@ function render() {
       "Ask about Northwind, create something, or make a governed sample-company change…";
   } else {
     elements.operatorEyebrow.textContent = "OPERATE THE COMPANY";
-    elements.readyTitle.textContent = "AMOS is ready.";
-    elements.readyDescription.textContent =
-      "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
+    elements.readyTitle.textContent = shouldPushConnectSystems()
+      ? "Connect your company. That is the product."
+      : "AMOS is ready.";
+    elements.readyDescription.textContent = shouldPushConnectSystems()
+      ? "Ask anything now. AMOS becomes the company OS after it can see your apps and run work on a schedule, ad hoc, or app-to-app — and that is when people stay."
+      : "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
     elements.promptInput.placeholder =
       "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
   }
@@ -772,10 +815,25 @@ function render() {
       : taskLocalApproval
         ? "Local work allowed for task"
         : "Auto-approve local work";
-  elements.localModeButton.classList.toggle(
-    "selected",
-    Boolean((state.mode?.personal || state.mode?.offline) && !demo)
+  const personalLocal = Boolean(
+    (state.mode?.personal || state.mode?.offline) &&
+    ["ollama", "llama-cpp"].includes(state.settings.provider)
   );
+  const personalByok = Boolean(
+    state.mode?.personal &&
+    !demo &&
+    !["amos-hosted", "ollama", "llama-cpp"].includes(state.settings.provider)
+  );
+  if (["ollama", "llama-cpp"].includes(state.settings.provider)) onboardingDoor = "local";
+  else if (state.mode?.personal && !["amos-hosted", "ollama", "llama-cpp"].includes(state.settings.provider)) {
+    onboardingDoor = "byok";
+  } else if (state.settings.provider === "amos-hosted" && !state.mode?.personal && !state.mode?.offline) {
+    onboardingDoor = "hosted";
+  }
+  elements.onboardHostedButton.classList.toggle("selected", onboardingDoor === "hosted" && !demo);
+  elements.localModeButton.classList.toggle("selected", onboardingDoor === "local" && !demo);
+  elements.onboardByokButton.classList.toggle("selected", onboardingDoor === "byok" && !demo);
+  renderOnboardingPicker();
   elements.demoModeButton.classList.toggle("selected", demo);
   elements.demoModeButton.disabled = demo;
   elements.demoModeButton.classList.toggle("hidden", activeAccount);
@@ -789,56 +847,52 @@ function render() {
   const connectPlan = elements.connectButton.querySelector(".company-plan");
   const connectAction = elements.connectButton.querySelector("em");
   connectKicker.textContent = activeAccount
-    ? "YOUR ACTIVE AMOS COMPANY"
-    : "RECOMMENDED · FULL AMOS EXPERIENCE";
+    ? "YOUR APPLICATIONS · CONNECT NEXT"
+    : "THE PRODUCT · 14-DAY TRIAL";
   connectTitle.textContent = activeAccount
-    ? `Continue with ${activeCompanyName()}`
-    : state.connected && !demo
-      ? "Activate my company"
-      : "Connect my company";
+    ? `Connect ${activeCompanyName()}`
+    : "Connect your company";
   connectDescription.textContent = activeAccount
-    ? "Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof."
-    : "Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof. AMOS guides what to connect and what to tackle first.";
+    ? "Attach the apps this company already runs, then automate them on a schedule or ad hoc — app to app. AMOS is guessing from chat until those systems are connected."
+    : "Sign in, attach the apps the business already runs, then let AMOS move work between them on a schedule or when you ask.";
   connectPlan.textContent = activeAccount
-    ? "AMOS company connected · Managed intelligence available"
+    ? "Signed in · connect the company to stay"
     : "14-day free trial · Plans start at $99/month";
-  connectAction.textContent = activeAccount
-    ? "Company connected · continue below ↓"
-    : "Start my free trial →";
-  elements.connectButton.disabled = activeAccount;
+  connectAction.textContent = "Connect your company →";
+  elements.connectButton.disabled = false;
   elements.boundaryReadinessText.textContent = demo
-    ? "Northwind demo"
+    ? "Northwind sample is connected. Real retention starts when you connect your own applications."
     : state.connected
-      ? "Company connected"
+      ? "Signed in. Connect your company now — that is the single biggest reason customers stay."
       : state.mode?.offline
-        ? "Local-only"
+        ? "Local-only. You can chat. Connecting applications is how AMOS becomes the company OS."
         : state.mode?.personal
-          ? "Personal workspace"
-          : "Choose a starting point";
+          ? "This computer works for chat and code. Connecting applications is how a trial becomes a customer."
+          : "You can enter without this. Chat without applications is a trial. Connecting apps is the product.";
   const startingPointSelected = Boolean(
     state.connected || state.mode?.personal || state.mode?.offline
   );
-  const intelligenceReady = Boolean(startingPointSelected && state.configured);
+  const hostedReady = Boolean(
+    state.settings.provider === "amos-hosted" && !state.mode?.personal && !state.mode?.offline
+  );
+  const intelligenceReady = Boolean(
+    hostedReady || (startingPointSelected && state.configured) || (demo && state.configured)
+  );
   renderStep(elements.connectCheck, startingPointSelected);
   renderStep(elements.providerCheck, intelligenceReady);
   renderStep(elements.workspaceCheck, Boolean(state.settings.workspace));
+  elements.onboardingWorkspaceText.textContent = state.settings.workspace
+    ? workspaceFolderName(state.settings.workspace)
+    : "Choose a folder AMOS may work in";
+  elements.onboardingWorkspaceButton.title = state.settings.workspace ||
+    "A workspace is optional. Chat works without one.";
   const personalNeedsIntelligence = Boolean(
     state.mode?.personal && !state.connected && !state.configured
   );
-  elements.onboardingProviderText.textContent = intelligenceReady
-    ? providerStatusLabel()
-    : personalNeedsIntelligence
-      ? "Choose a local profile or your own key"
-      : "Choose intelligence";
   elements.settingsBackButton.textContent = firstRunNeeded(state)
     ? "← Back to setup"
     : "← Back to AMOS";
-  elements.enterButton.disabled = !(
-    (state.connected || state.mode?.personal || state.mode?.offline) &&
-    state.configured &&
-    state.settings.workspace &&
-    state.mode?.valid !== false
-  );
+  elements.enterButton.disabled = !(intelligenceReady && state.mode?.valid !== false);
   elements.enterButton.textContent = onboardingEnterLabel();
   elements.disconnectButton.classList.toggle("hidden", !state.connected);
   elements.disconnectButton.textContent = state.accounts?.currentAccountId
@@ -896,6 +950,16 @@ function render() {
   renderCanvas();
   renderStarterActions();
   renderConversationChrome();
+}
+
+function applyPlatformShell() {
+  const ua = navigator.userAgent || "";
+  const platform = /Windows/i.test(ua)
+    ? "win32"
+    : /Mac OS X|Macintosh/i.test(ua)
+      ? "darwin"
+      : "linux";
+  document.documentElement.dataset.platform = platform;
 }
 
 function restoreShellPreferences() {
@@ -972,14 +1036,25 @@ function bindContextResize() {
 
 function firstRunNeeded(current = state) {
   if (!current) return true;
-  const liveBoundary = Boolean(
-    current.connected || current.mode?.personal || current.mode?.offline
-  );
   return (
     current.connectionMode === "demo_expired" ||
-    !liveBoundary ||
     !current.settings?.onboardingCompletedAt
   );
+}
+
+function explainOnboardingGate() {
+  const ready = elements.enterButton && !elements.enterButton.disabled;
+  elements.onboardingGateMessage.textContent = ready
+    ? "Operator, Connections, and the rest of the sidebar unlock after you enter AMOS Desktop. Intelligence is already selected — use Enter AMOS Desktop on this screen."
+    : "Operator, Connections, and the rest of the sidebar unlock after setup. Finish choosing intelligence on this screen, then enter AMOS Desktop.";
+  elements.onboardingGateModal.classList.remove("hidden");
+  elements.onboardingGateClose.focus();
+}
+
+function closeOnboardingGate() {
+  elements.onboardingGateModal.classList.add("hidden");
+  elements.enterButton?.scrollIntoView?.({ block: "nearest" });
+  elements.enterButton?.focus?.();
 }
 
 function openIntelligenceSettings() {
@@ -6432,6 +6507,48 @@ async function handleAccountUpdate() {
   }
 }
 
+function connectedCompanySystems() {
+  return (state?.connectionsCatalog?.connections || []).filter(
+    (item) => item.status === "connected" && item.usable !== false
+  );
+}
+
+function shouldPushConnectSystems() {
+  return Boolean(state) &&
+    state.connectionMode !== "demo" &&
+    connectedCompanySystems().length === 0;
+}
+
+function renderConnectSystemsPush({ hasConversation = false } = {}) {
+  const visible = shouldPushConnectSystems() && !hasConversation;
+  elements.connectSystemsPush.classList.toggle("hidden", !visible);
+  elements.connectSystemsPushButton.textContent = "Connect your company";
+}
+
+async function startConnectApplications() {
+  if (state.connected && state.connectionMode !== "demo") {
+    if (firstRunNeeded()) {
+      await completeOnboarding().catch((error) => toast(error.message, true));
+    }
+    showView("connections");
+    return;
+  }
+  await connectAmos();
+  if (state.connected) showView("connections");
+}
+
+async function pushConnectSystems() {
+  await startConnectApplications();
+}
+
+async function runSavingsAudit() {
+  await runTask(null, {
+    privateAction: true,
+    prompt: AMOS_SAVINGS_AUDIT_PROMPT,
+    displayText: "See what AMOS could replace"
+  });
+}
+
 function renderStarterActions() {
   if (!state || !elements.starterActions) return;
   const actions = selectJourneyStarterActions(state);
@@ -6451,6 +6568,10 @@ async function executeStarterAction(action, button) {
   if (running) return;
   if (action.type === "view") {
     showView(action.view);
+    return;
+  }
+  if (action.type === "connect_platform") {
+    await pushConnectSystems();
     return;
   }
   if (action.type === "resume") {
@@ -6487,6 +6608,7 @@ function renderConversationChrome() {
   elements.conversation.classList.toggle("has-project", Boolean(project));
   elements.conversationHeading.classList.toggle("hidden", hasConversation || Boolean(project));
   elements.welcomeMessage.classList.toggle("hidden", hasConversation);
+  renderConnectSystemsPush({ hasConversation });
   elements.starterActions.classList.toggle("hidden", hasConversation || Boolean(project));
   elements.clearButton.classList.toggle("hidden", !hasConversation);
   if (project) {
@@ -8060,17 +8182,196 @@ function onboardingBoundaryFromState(current) {
   return current?.settings?.onboardingBoundary || "";
 }
 
-async function startPersonal() {
-  setButtonBusy(elements.localModeButton, true, "Preparing…");
+async function chooseOnboardingDoor(door) {
+  onboardingDoor = door;
+  renderOnboardingPicker();
+  if (door === "hosted") {
+    await chooseHostedIntelligence();
+    return;
+  }
+  const button = door === "byok" ? elements.onboardByokButton : elements.localModeButton;
+  setButtonBusy(button, true, "Preparing…");
   try {
     state = await api.startPersonal();
-    toast("Personal workspace selected. Choose a local profile or your own key to begin.");
+    if (door === "local") {
+      if (!state.offline) state.offline = await api.refreshOffline();
+      await activateRecommendedOnboardingLocal();
+    }
     render();
-    if (!state.configured || state.settings.provider === "amos-hosted") showView("settings");
   } catch (error) {
     toast(error.message, true);
   } finally {
-    setButtonBusy(elements.localModeButton, false, "My workspace");
+    setButtonBusy(button, false, door === "byok" ? "Bring my own key" : "AMOS Local");
+  }
+}
+
+async function chooseHostedIntelligence() {
+  onboardingDoor = "hosted";
+  setButtonBusy(elements.onboardHostedButton, true, "Selecting…");
+  try {
+    state = await api.saveSettings({
+      provider: "amos-hosted",
+      model: "auto",
+      baseUrl: "",
+      intelligenceProfile: "auto",
+      reasoningEffort: "",
+      operatingMode: "online"
+    });
+    selectedProvider = "amos-hosted";
+    render();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.onboardHostedButton, false, "AMOS Intelligence");
+  }
+}
+
+function recommendedOnboardingLocalModel() {
+  const models = state.offline?.models || [];
+  return models.find((model) => model.recommended) ||
+    models.find((model) =>
+      model.installed && ["qualified", "conditional"].includes(model.qualification?.status)
+    ) ||
+    null;
+}
+
+function preferredOnboardingLocalRuntime(model) {
+  const accelerator = state.offline?.accelerator || null;
+  return accelerator?.sourceModelId === model?.id && accelerator.available ? "mtplx" : "ollama";
+}
+
+async function activateRecommendedOnboardingLocal() {
+  const recommended = recommendedOnboardingLocalModel();
+  if (!recommended?.installed) return;
+  state = await api.activateLocalModel(
+    recommended.id,
+    "personal",
+    preferredOnboardingLocalRuntime(recommended)
+  );
+  selectedProvider = "ollama";
+}
+
+function byokOnboardingOptions() {
+  const allowed = new Set(["anthropic", "openai", "xai", "kimi"]);
+  const options = [];
+  for (const provider of state.providers || []) {
+    if (!allowed.has(provider.id)) continue;
+    const models = Array.isArray(provider.models) && provider.models.length > 0
+      ? provider.models
+      : [{ id: provider.defaultModel, label: provider.defaultModel }];
+    for (const model of models) {
+      options.push({
+        value: `${provider.id}::${model.id}`,
+        label: `${model.label || model.id} · ${provider.displayName}`
+      });
+    }
+  }
+  return options;
+}
+
+function renderOnboardingPicker() {
+  const select = elements.onboardingModelSelect;
+  if (!select) return;
+  const previous = select.value;
+  select.replaceChildren();
+  select.disabled = false;
+  elements.onboardingKeyField.classList.toggle("hidden", onboardingDoor !== "byok");
+  if (onboardingDoor === "hosted") {
+    elements.onboardingPickerLabel.textContent = "Model";
+    select.append(option("hosted", "AMOS Intelligence · Hosted"));
+    select.value = "hosted";
+    select.disabled = true;
+    elements.onboardingProviderText.textContent = "AMOS Hosted is selected. Connect Platform later if you want company systems.";
+    return;
+  }
+  if (onboardingDoor === "local") {
+    elements.onboardingPickerLabel.textContent = "Local model";
+    const models = state.offline?.models || [];
+    const recommended = recommendedOnboardingLocalModel();
+    const activeId = state.settings.provider === "ollama"
+      ? state.settings.model
+      : recommended?.id;
+    if (models.length === 0) {
+      select.append(option("", "Preparing local models…"));
+      select.disabled = true;
+      elements.onboardingProviderText.textContent = "AMOS Local is preparing model choices for this computer.";
+      return;
+    }
+    for (const model of models) {
+      const suffix = model.recommended
+        ? " · recommended"
+        : model.installed
+          ? ""
+          : " · install needed";
+      select.append(option(model.id, `${model.name}${suffix}`));
+    }
+    select.value = models.some((model) => model.id === activeId)
+      ? activeId
+      : models.some((model) => model.id === previous)
+        ? previous
+        : recommended?.id || models[0].id;
+    elements.onboardingProviderText.textContent = "The recommended local model is selected. Change it here without leaving setup.";
+    return;
+  }
+  elements.onboardingPickerLabel.textContent = "Model";
+  const options = byokOnboardingOptions();
+  const current = `${state.settings.provider}::${state.settings.model}`;
+  for (const item of options) select.append(option(item.value, item.label));
+  select.value = options.some((item) => item.value === current)
+    ? current
+    : options.some((item) => item.value === previous)
+      ? previous
+      : options[0]?.value || "";
+  elements.onboardingProviderText.textContent = "Choose a model, then enter its API key. Stay on this screen.";
+}
+
+async function commitOnboardingPicker() {
+  if (onboardingDoor === "hosted") return;
+  if (onboardingDoor === "local") {
+    const model = (state.offline?.models || []).find((item) =>
+      item.id === elements.onboardingModelSelect.value
+    );
+    if (model) await chooseOnboardingLocalModel(model);
+    return;
+  }
+  const [providerId, modelId] = String(elements.onboardingModelSelect.value || "").split("::");
+  const apiKey = elements.onboardingByokKey.value.trim();
+  if (!providerId || !modelId || !apiKey) return;
+  const provider = (state.providers || []).find((item) => item.id === providerId);
+  const defaults = providerDefaults[providerId] || {};
+  try {
+    if (!state.mode?.personal) state = await api.startPersonal();
+    state = await api.saveSettings({
+      provider: providerId,
+      model: modelId,
+      baseUrl: provider?.defaultBaseUrl || defaults.baseUrl || "",
+      apiKey,
+      operatingMode: "personal"
+    });
+    selectedProvider = providerId;
+    render();
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+
+async function chooseOnboardingLocalModel(model) {
+  try {
+    if (!model.installed) {
+      await api.installOfflineModel(model.id);
+      toast(`Installing ${model.name}…`);
+      return;
+    }
+    if (!state.mode?.personal) state = await api.startPersonal();
+    state = await api.activateLocalModel(
+      model.id,
+      "personal",
+      preferredOnboardingLocalRuntime(model)
+    );
+    selectedProvider = "ollama";
+    render();
+  } catch (error) {
+    toast(error.message, true);
   }
 }
 
@@ -8079,9 +8380,8 @@ async function startDemo() {
   try {
     state = await api.startDemo();
     selectedProvider = state.settings.provider;
-    toast("Northwind Labs is connected. Choose how to power the demo, then enter.");
+    toast("Northwind Labs is connected. Stay here to choose intelligence, then enter.");
     render();
-    showView("operator");
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -8180,7 +8480,14 @@ function activeCompanyName() {
   )?.tenant_name || state?.identity?.tenant_slug || "the selected company";
 }
 
+function workspaceFolderName(path) {
+  const parts = String(path || "").split(/[/\\]/).filter(Boolean);
+  return parts.at(-1) || String(path || "");
+}
+
 async function chooseWorkspace() {
+  const buttons = [elements.onboardingWorkspaceButton, elements.workspaceButton];
+  for (const button of buttons) button.disabled = true;
   try {
     const previousWorkspace = state.settings.workspace;
     state = await api.chooseWorkspace();
@@ -8190,6 +8497,8 @@ async function chooseWorkspace() {
     }
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    for (const button of buttons) button.disabled = false;
   }
 }
 
@@ -8391,7 +8700,7 @@ async function activateLocalModel(modelId, operatingMode, localRuntime = "auto")
       ? `${modelName} is active in local-only mode through ${selectedRuntime}.`
       : `${modelName} is active through ${selectedRuntime}.`);
     render();
-    showView("settings");
+    if (!firstRunNeeded()) showView("settings");
   } catch (error) {
     toast(error.message, true);
   }

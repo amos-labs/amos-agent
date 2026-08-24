@@ -1,4 +1,12 @@
-const MAX_STARTER_ACTIONS = 4;
+const MAX_STARTER_ACTIONS = 5;
+
+export const AMOS_SAVINGS_AUDIT_PROMPT = [
+  "I want an AMOS replacement audit for the apps and SaaS this company currently pays for.",
+  "If systems are already connected, use the live catalog. Otherwise ask me which tools we pay for before estimating anything.",
+  "For each app, say whether AMOS Platform can absorb the workflow by connecting the system, automating it, or hosting a replacement app.",
+  "Give a conservative savings case only from costs I provide or from connected receipts. Do not invent dollar amounts.",
+  "Do not claim a system is connected unless the catalog shows it. Do not activate, migrate, or disconnect anything."
+].join(" ");
 
 const COMPANY_OUTCOME_STATES = new Set([
   "executed",
@@ -62,33 +70,33 @@ function companyStarterActions(state) {
     });
   }
 
-  if (connectionCatalogAvailable && connectedSystems.length === 0) {
-    actions.push({
-      id: "connect-first-system",
-      label: "Connect your first system",
-      type: "view",
-      view: "connections"
-    });
-  } else if (automationNeedsAttention) {
-    actions.push({
-      id: "review-automation-issues",
-      label: "Review automation issues",
-      type: "view",
-      view: "automations"
-    });
-  } else if (connectedSystems.length > 0 && automationCount === 0) {
-    actions.push({
-      id: "build-first-automation",
-      label: "Build your first automation",
-      type: "automation_builder"
-    });
-  } else if (automationCount > 0) {
-    actions.push({
-      id: "manage-automations",
-      label: `Manage ${automationCount} ${plural(automationCount, "automation")}`,
-      type: "view",
-      view: "automations"
-    });
+  actions.push(...systemsPushActions(state, {
+    connectedSystems,
+    connectionCatalogAvailable
+  }));
+
+  if (connectedSystems.length > 0) {
+    if (automationNeedsAttention) {
+      actions.push({
+        id: "review-automation-issues",
+        label: "Review automation issues",
+        type: "view",
+        view: "automations"
+      });
+    } else if (automationCount === 0) {
+      actions.push({
+        id: "build-first-automation",
+        label: "Build your first automation",
+        type: "automation_builder"
+      });
+    } else {
+      actions.push({
+        id: "manage-automations",
+        label: `Manage ${automationCount} ${plural(automationCount, "automation")}`,
+        type: "view",
+        view: "automations"
+      });
+    }
   }
 
   if (companyOutcomes.length > 0) {
@@ -150,8 +158,40 @@ function demoStarterActions() {
   ];
 }
 
+function systemsPushActions(state, {
+  connectedSystems = array(state.connectionsCatalog?.connections).filter(
+    (item) => item.status === "connected" && item.usable !== false
+  ),
+  connectionCatalogAvailable = true
+} = {}) {
+  if (state.connectionMode === "demo" || connectedSystems.length > 0) return [];
+  const connect = state.connected || connectionCatalogAvailable
+    ? {
+        id: "connect-first-system",
+        label: "Connect your company",
+        type: "view",
+        view: "connections"
+      }
+    : {
+        id: "connect-business-systems",
+        label: "Connect your company",
+        type: "connect_platform"
+      };
+  return [
+    connect,
+    runAction(
+      "amos-savings-audit",
+      "See what AMOS could replace",
+      AMOS_SAVINGS_AUDIT_PROMPT
+    )
+  ];
+}
+
 function personalStarterActions(state) {
-  const actions = [];
+  const actions = systemsPushActions(state, {
+    connectedSystems: [],
+    connectionCatalogAvailable: Boolean(state.connected)
+  });
   const conversations = array(state.tasks?.tasks).filter((task) => !task.archivedAt && !task.archived);
   if (conversations.length > 0) {
     actions.push({

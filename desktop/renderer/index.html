@@ -131,53 +131,93 @@
         </header>
 
         <section id="onboardingView" class="view onboarding hidden">
-          <div class="onboarding-copy">
-            <span class="eyebrow accent">WELCOME TO AMOS DESKTOP</span>
-            <h1>Connect your company.<br>Put AMOS to work.</h1>
-            <p>
-              AMOS learns how your company operates from its systems and context, then helps
-              you understand what is happening, decide what to do, automate the work, and
-              measure the outcome.
-            </p>
-            <div class="operating-path" aria-label="How AMOS works">
-              <span>Connect</span><i>→</i><span>Learn</span><i>→</i><span>Act</span><i>→</i><span>Measure</span>
-            </div>
-            <div class="principles">
-              <span>Durable company memory</span>
-              <span>Managed AMOS Intelligence</span>
-              <span>Governed automation</span>
-              <span>Outcomes you can prove</span>
-            </div>
-          </div>
-
           <div class="setup-panel">
             <div class="setup-heading">
-              <span class="eyebrow">START WITH AMOS</span>
-              <h2>How would you like to begin?</h2>
+              <span class="eyebrow accent">WELCOME TO AMOS DESKTOP</span>
+              <h1>Get a working brain. Then connect your company.</h1>
+              <p>
+                Intelligence is required so you can enter. Connecting the company is why a
+                customer stays: automations, apps talking to apps, memory and proof. A folder is optional.
+              </p>
             </div>
-            <div class="start-mode-grid">
-              <button id="connectButton" class="start-mode-card featured primary-path" type="button">
-                <span class="start-mode-kicker">RECOMMENDED · FULL AMOS EXPERIENCE</span>
-                <strong>Connect my company</strong>
-                <span>Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof. AMOS guides what to connect and what to tackle first.</span>
-                <span class="start-mode-options company-plan">14-day free trial · Plans start at $99/month</span>
-                <em>Start my free trial →</em>
-              </button>
-              <button id="demoModeButton" class="start-mode-card" type="button">
-                <span class="start-mode-kicker">LIVE SAMPLE COMPANY</span>
-                <strong>Explore the Northwind demo</strong>
-                <span>Experience AMOS with realistic sample data, tools, approvals, and automations. Some integrations, history, and real-world actions are intentionally limited.</span>
-                <span class="start-mode-options">Limited hosted turns included · Local and BYOK available</span>
-                <em>Choose intelligence and explore →</em>
-              </button>
-              <button id="localModeButton" class="start-mode-card tertiary-path" type="button">
-                <span class="start-mode-kicker">LOCAL OR BRING YOUR OWN MODEL</span>
-                <strong>Use AMOS as a personal AI workspace</strong>
-                <span>Work privately with chat, coding, files, and local tools using a local model or your own frontier-model API key. Connect a company later without losing this workspace.</span>
-                <span class="start-mode-options">No AMOS subscription required · AMOS Local · OpenAI · Claude · Grok · Kimi · compatible endpoints</span>
-                <em>Configure my intelligence →</em>
-              </button>
-            </div>
+
+            <section class="onboarding-step required" aria-labelledby="onboardingIntelligenceTitle">
+              <div class="onboarding-step-heading">
+                <span id="providerCheck" class="step-check">—</span>
+                <div>
+                  <span class="onboarding-step-badge">Required</span>
+                  <h2 id="onboardingIntelligenceTitle">Choose intelligence</h2>
+                  <p>How AMOS thinks on this computer. Change this later from Intelligence &amp; Settings.</p>
+                </div>
+              </div>
+              <div class="onboarding-choice-grid">
+                <button id="onboardHostedButton" class="intelligence-choice-card" type="button">
+                  <span class="start-mode-kicker">DEFAULT · AMOS HOSTED</span>
+                  <strong>AMOS Intelligence</strong>
+                  <small>AMOS Hosted is selected. Included with an AMOS account. Connect Platform later if you want company systems.</small>
+                </button>
+                <button id="localModeButton" class="intelligence-choice-card" type="button">
+                  <span class="start-mode-kicker">THIS COMPUTER</span>
+                  <strong>AMOS Local</strong>
+                  <small>No AMOS subscription. The recommended local model for this computer is selected automatically.</small>
+                </button>
+                <button id="onboardByokButton" class="intelligence-choice-card" type="button">
+                  <span class="start-mode-kicker">YOUR KEY</span>
+                  <strong>Bring my own key</strong>
+                  <small>No AMOS subscription. Use OpenAI, Claude, Grok, Kimi, or a compatible endpoint. Provider charges may apply.</small>
+                </button>
+              </div>
+              <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint">
+                AMOS Hosted is the default. Local and your key stay on this screen — pick a model here.
+              </p>
+              <div id="onboardingPicker" class="onboarding-picker">
+                <label class="onboarding-byok-field">
+                  <span id="onboardingPickerLabel">Model</span>
+                  <select id="onboardingModelSelect" aria-label="Selected model"></select>
+                </label>
+                <label id="onboardingKeyField" class="onboarding-byok-field hidden">
+                  <span>API key</span>
+                  <input id="onboardingByokKey" type="password" autocomplete="off" spellcheck="false" />
+                </label>
+                <p id="onboardingProviderText" class="onboarding-intelligence-hint">AMOS Intelligence · Hosted</p>
+              </div>
+            </section>
+
+            <section class="onboarding-step recommended onboarding-step-retention" aria-labelledby="onboardingPlatformTitle">
+              <div class="onboarding-step-heading">
+                <span id="connectCheck" class="step-check">—</span>
+                <div>
+                  <span class="onboarding-step-badge recommended">Do this next · where customers stay</span>
+                  <h2 id="onboardingPlatformTitle">Connect your company</h2>
+                  <p id="boundaryReadinessText">Chat without the company is a trial. AMOS becomes the operating system after it can see your apps and run work on a schedule, ad hoc, or app-to-app.</p>
+                </div>
+              </div>
+              <ul class="onboarding-why">
+                <li>Run automations on a schedule or ad hoc — app to app, inbox to ledger, ticket to fix — that run outside of Desktop.</li>
+                <li>Connect the systems you already run so AMOS is not guessing from chat.</li>
+                <li>Keep durable company memory, policy, approvals, and receipts.</li>
+              </ul>
+              <div class="start-mode-grid">
+                <button id="connectButton" class="start-mode-card featured primary-path" type="button">
+                  <span class="start-mode-kicker">THE PRODUCT · 14-DAY TRIAL</span>
+                  <strong>Connect your company</strong>
+                  <span>Sign in, attach the apps the business already runs, then let AMOS move work between them on a schedule or when you ask. Plans start at $99/month after the trial.</span>
+                  <span class="start-mode-options company-plan">14-day free trial · Plans start at $99/month</span>
+                  <em>Connect your company →</em>
+                </button>
+                <button id="demoModeButton" class="start-mode-card" type="button">
+                  <span class="start-mode-kicker">SAMPLE COMPANY</span>
+                  <strong>Explore the Northwind demo</strong>
+                  <span>See AMOS on realistic sample data, tools, approvals, and automations. Some integrations and real-world actions are limited.</span>
+                  <span class="start-mode-options">Limited hosted turns included · Local and BYOK available</span>
+                  <em>Try the sample company →</em>
+                </button>
+              </div>
+              <p class="onboarding-intelligence-hint">
+                You can enter without this. Almost nobody stays if they never connect an application.
+              </p>
+            </section>
+
             <section id="northwindIntelligenceChoice" class="northwind-intelligence-choice hidden" aria-labelledby="northwindIntelligenceTitle">
               <div class="northwind-intelligence-heading">
                 <div>
@@ -205,29 +245,28 @@
               </div>
               <p id="northwindCurrentIntelligence" class="northwind-current-intelligence"></p>
             </section>
-            <div class="setup-readiness">
-              <div>
-                <span id="connectCheck" class="step-check">—</span>
-                <span id="boundaryReadinessText">Choose a starting point</span>
-              </div>
-              <div>
-                <span id="providerCheck" class="step-check">—</span>
-                <button class="onboarding-provider-link" data-open-settings type="button">
-                  <span class="onboarding-provider-button-copy">
-                    <small>Intelligence settings</small>
-                    <span id="onboardingProviderText">Choose intelligence</span>
-                  </span>
-                  <span class="onboarding-provider-button-arrow" aria-hidden="true">→</span>
-                </button>
-              </div>
-              <div>
+
+            <section class="onboarding-step optional" aria-labelledby="onboardingWorkspaceTitle">
+              <div class="onboarding-step-heading">
                 <span id="workspaceCheck" class="step-check">—</span>
-                <button id="onboardingWorkspaceButton" class="text-button">Choose workspace</button>
+                <div>
+                  <span class="onboarding-step-badge optional">Optional</span>
+                  <h2 id="onboardingWorkspaceTitle">Workspace folder</h2>
+                  <p id="onboardingWorkspaceHint">
+                    A workspace is a folder on this computer AMOS may read and change, with your approval.
+                    You want one for code, files, and local tools. Skip it to chat first.
+                  </p>
+                </div>
               </div>
-            </div>
-            <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint">
-              Choose AMOS Local, OpenAI, Anthropic (Claude), Kimi, or any OpenAI-compatible endpoint. Change intelligence at any time from AMOS Desktop → Intelligence &amp; Settings. AMOS Local and BYOK require no AMOS subscription; only AMOS-hosted Intelligence does.
-            </p>
+              <button id="onboardingWorkspaceButton" class="onboarding-provider-link" type="button">
+                <span class="onboarding-provider-button-copy">
+                  <small>Local folder · optional</small>
+                  <span id="onboardingWorkspaceText">Choose a folder AMOS may work in</span>
+                </span>
+                <span class="onboarding-provider-button-arrow" aria-hidden="true">→</span>
+              </button>
+            </section>
+
             <div id="telemetryConsent" class="local-setup-callout">
               <div>
                 <strong>Help make AMOS better</strong>
@@ -272,6 +311,20 @@
                       Ask about the company, create something new, or make a change.
                       Consequential actions still wait for the right approval.
                     </p>
+                  </div>
+                </div>
+                <div id="connectSystemsPush" class="connect-systems-push hidden">
+                  <div>
+                    <strong>Connect your company — this is why customers stay</strong>
+                    <p>
+                      Chat is the door. Connecting the company is the product: automations on
+                      a schedule or ad hoc, app-to-app work, memory, and proof. We can also
+                      audit which paid tools AMOS could host or replace.
+                    </p>
+                  </div>
+                  <div class="connect-systems-push-actions">
+                    <button id="connectSystemsPushButton" class="button primary" type="button">Connect your company</button>
+                    <button id="savingsAuditButton" class="button ghost" type="button">Estimate savings</button>
                   </div>
                 </div>
                 <div id="starterActions" class="starter-actions"></div>
@@ -613,11 +666,11 @@
           <div class="section-heading connections-heading">
             <div>
               <span class="eyebrow">GOVERNED COMPANY SOURCES</span>
-              <h1>Your systems, without moving credentials into Desktop.</h1>
+              <h1>Connect the systems the business already runs.</h1>
               <p>
-                This catalog is projected from the AMOS platform. Connection ownership,
-                status, and availability are visible here; tokens and secrets remain in
-                the governed platform vault.
+                This is how AMOS stops guessing from chat. The catalog is projected from
+                the AMOS platform. Connection ownership, status, and availability are
+                visible here; tokens and secrets remain in the governed platform vault.
               </p>
             </div>
             <div class="connection-boundary">
@@ -1312,6 +1365,19 @@
       </div>
     </div>
 
+    <div id="onboardingGateModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="onboardingGateTitle">
+      <div class="connection-modal onboarding-gate-modal">
+        <span class="eyebrow accent">FINISH SETUP</span>
+        <h2 id="onboardingGateTitle">Enter AMOS Desktop first.</h2>
+        <p id="onboardingGateMessage">
+          Operator, Connections, and the rest of the sidebar unlock after setup.
+          Intelligence is already selected. Use Enter AMOS Desktop on this screen.
+        </p>
+        <div class="connection-modal-actions">
+          <button id="onboardingGateClose" class="button primary" type="button">Back to setup</button>
+        </div>
+      </div>
+    </div>
     <div id="toast" class="toast hidden"></div>
     <script type="module" src="./app.js"></script>
   </body>
