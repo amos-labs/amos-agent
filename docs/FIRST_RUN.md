@@ -36,14 +36,21 @@ First-run asks how AMOS should think before it asks for a company:
 
 Personal + AMOS Intelligence + no OAuth stays **not configured**.
 
-## AMOS Platform — recommended
+## Connect your applications — the retention step
 
-The Platform step is optional. It states why someone would connect: systems
-they already run, durable company memory, policy and approvals, and
-automations that keep running after Desktop closes. The commercial boundary
-is a 14-day free trial and plans starting at $99/month. OAuth supplies
-company memory, applications, engines, goals, policies, approvals, and
-receipts. Skipping Platform does not block Enter once intelligence is ready.
+The applications step is optional for Enter and required for a customer that
+stays. Chat without connected apps is a trial. AMOS becomes the company brain
+only after it can see the systems they already run.
+
+Copy states why:
+
+- Connect the systems you already run so AMOS is not guessing from chat.
+- Keep durable company memory, policy, approvals, and receipts.
+- Run automations after you close Desktop.
+
+The commercial boundary is a 14-day free trial and plans starting at
+$99/month. Skipping it does not block Enter. Operator then hits the same
+message again until at least one application is connected.
 
 Returning users see their active company instead of trial acquisition copy.
 "Reconnect" is reserved for an authentication session that actually needs to

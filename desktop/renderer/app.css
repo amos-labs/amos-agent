@@ -657,6 +657,13 @@ html[data-platform="win32"] .sidebar-toggle {
   background: var(--surface-softer);
 }
 .onboarding-step.required { border-color: rgba(109,147,255,.38); }
+.onboarding-step-retention {
+  border-color: rgba(59,213,143,.45);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(59,213,143,.12), transparent 46%),
+    var(--surface-softer);
+  box-shadow: inset 0 0 0 1px rgba(59,213,143,.08);
+}
 .onboarding-step-heading {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);

@@ -265,7 +265,7 @@ function bindActions() {
     button.addEventListener("click", openIntelligenceSettings);
   }
   elements.settingsBackButton.addEventListener("click", returnFromIntelligenceSettings);
-  elements.connectButton.addEventListener("click", connectAmos);
+  elements.connectButton.addEventListener("click", startConnectApplications);
   elements.onboardHostedButton.addEventListener("click", chooseHostedIntelligence);
   elements.localModeButton.addEventListener("click", () => chooseOnboardingDoor("local"));
   elements.onboardByokButton.addEventListener("click", () => chooseOnboardingDoor("byok"));
@@ -764,10 +764,10 @@ function render() {
   } else if (state.mode?.personal) {
     elements.operatorEyebrow.textContent = "WORK FROM THIS COMPUTER";
     elements.readyTitle.textContent = shouldPushConnectSystems()
-      ? "Chat is ready. Connect the business next."
+      ? "Chat is ready. Connect your applications next."
       : "Your workspace is ready.";
     elements.readyDescription.textContent = shouldPushConnectSystems()
-      ? "Local chat and coding work now. Connecting AMOS Platform and your business systems is how AMOS becomes the company brain — and why teams stay."
+      ? "Local chat and coding work now. Connecting the apps you already run is the single biggest reason a customer stays."
       : "Understand code, research, create, and automate locally. Nothing here receives company authority.";
     elements.promptInput.placeholder =
       "Ask about this project, attach a document, paste a screenshot, or describe work to move forward…";
@@ -781,10 +781,10 @@ function render() {
   } else {
     elements.operatorEyebrow.textContent = "OPERATE THE COMPANY";
     elements.readyTitle.textContent = shouldPushConnectSystems()
-      ? "Connect a system to make AMOS the company brain."
+      ? "Connect your applications. That is the product."
       : "AMOS is ready.";
     elements.readyDescription.textContent = shouldPushConnectSystems()
-      ? "Ask anything now. Connecting billing, books, code, and the rest is how AMOS learns the business — and the moment users stick."
+      ? "Ask anything now. AMOS only becomes the company brain after it can see the apps you already run — and that is when people stay."
       : "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
     elements.promptInput.placeholder =
       "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
@@ -847,32 +847,32 @@ function render() {
   const connectPlan = elements.connectButton.querySelector(".company-plan");
   const connectAction = elements.connectButton.querySelector("em");
   connectKicker.textContent = activeAccount
-    ? "YOUR ACTIVE AMOS COMPANY"
-    : "RECOMMENDED · FULL AMOS EXPERIENCE";
+    ? "YOUR APPLICATIONS · CONNECT NEXT"
+    : "THE PRODUCT · 14-DAY TRIAL";
   connectTitle.textContent = activeAccount
-    ? `Continue with ${activeCompanyName()}`
+    ? `Connect applications for ${activeCompanyName()}`
     : state.connected && !demo
-      ? "Activate my company"
-      : "Connect my company";
+      ? "Connect your applications"
+      : "Connect your applications";
   connectDescription.textContent = activeAccount
-    ? "Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof."
-    : "Use AMOS Intelligence with your applications, context, durable memory, policies, approvals, and proof. AMOS guides what to connect and what to tackle first.";
+    ? "Attach the apps this company already runs. AMOS is guessing from chat until those systems are connected."
+    : "Sign in, then attach the apps the business already runs. That is the moment AMOS stops being a chat window and starts operating the company.";
   connectPlan.textContent = activeAccount
-    ? "AMOS company connected · Managed intelligence available"
+    ? "Signed in · connect applications to stay"
     : "14-day free trial · Plans start at $99/month";
   connectAction.textContent = activeAccount
-    ? "Company connected · continue below ↓"
-    : "Start my free trial →";
-  elements.connectButton.disabled = activeAccount;
+    ? "Connect applications →"
+    : "Connect your applications →";
+  elements.connectButton.disabled = false;
   elements.boundaryReadinessText.textContent = demo
-    ? "Northwind sample is connected. Optional: skip this and still use Desktop."
+    ? "Northwind sample is connected. Real retention starts when you connect your own applications."
     : state.connected
-      ? "AMOS account connected. Connect systems later from Connections if you have not already."
+      ? "Signed in. Connect your applications now — that is the single biggest reason customers stay."
       : state.mode?.offline
-        ? "Local-only. Platform is optional — Desktop still works."
+        ? "Local-only. You can chat. Connecting applications is how AMOS becomes the company OS."
         : state.mode?.personal
-          ? "Using this computer. Platform is optional — Desktop still works."
-          : "Optional. Skip this and Desktop still works for chat, files, and coding.";
+          ? "This computer works for chat and code. Connecting applications is how a trial becomes a customer."
+          : "You can enter without this. Chat without applications is a trial. Connecting apps is the product.";
   const startingPointSelected = Boolean(
     state.connected || state.mode?.personal || state.mode?.offline
   );
@@ -6526,18 +6526,23 @@ function shouldPushConnectSystems() {
 function renderConnectSystemsPush({ hasConversation = false } = {}) {
   const visible = shouldPushConnectSystems() && !hasConversation;
   elements.connectSystemsPush.classList.toggle("hidden", !visible);
-  elements.connectSystemsPushButton.textContent = state.connected
-    ? "Connect systems"
-    : "Connect AMOS Platform";
+  elements.connectSystemsPushButton.textContent = "Connect your applications";
 }
 
-async function pushConnectSystems() {
-  if (state.connected) {
+async function startConnectApplications() {
+  if (state.connected && state.connectionMode !== "demo") {
+    if (firstRunNeeded()) {
+      await completeOnboarding().catch((error) => toast(error.message, true));
+    }
     showView("connections");
     return;
   }
   await connectAmos();
   if (state.connected) showView("connections");
+}
+
+async function pushConnectSystems() {
+  await startConnectApplications();
 }
 
 async function runSavingsAudit() {

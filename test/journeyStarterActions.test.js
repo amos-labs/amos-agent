@@ -25,7 +25,7 @@ test("company quick actions follow deterministic journey state", () => {
     ["review-decisions", "connect-first-system", "amos-savings-audit", "review-recent-proof", "open-briefings"]
   );
   assert.equal(actions[0].label, "Review 1 decision");
-  assert.equal(actions[1].label, "Connect your business systems");
+  assert.equal(actions[1].label, "Connect your applications");
   assert.equal(actions[2].label, "See what AMOS could replace");
   assert.equal(actions[0].type, "view");
 });
@@ -87,7 +87,7 @@ test("personal workspaces surface existing conversations before project prompts"
   assert.equal(actions.length, 5);
   assert.deepEqual(actions[0], {
     id: "connect-business-systems",
-    label: "Connect your business systems",
+    label: "Connect your applications",
     type: "connect_platform"
   });
   assert.equal(actions[1].id, "amos-savings-audit");
