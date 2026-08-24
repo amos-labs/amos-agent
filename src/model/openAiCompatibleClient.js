@@ -30,7 +30,8 @@ export class OpenAICompatibleClient {
     promptSessionId = null,
     promptContractHash = null,
     preclassifiedRouting = null,
-    skipLocalRouting = false
+    skipLocalRouting = false,
+    reasoningEffortOverride = null
   }) {
     throwIfAborted(signal);
     const requestStartedAt = performance.now();
@@ -53,10 +54,11 @@ export class OpenAICompatibleClient {
     });
     throwIfAborted(signal);
 
-    if (this.config.reasoningEffort && this.config.capabilities?.reasoning !== false) {
+    const reasoningEffort = reasoningEffortOverride || this.config.reasoningEffort;
+    if (reasoningEffort && this.config.capabilities?.reasoning !== false) {
       if (
         this.config.provider === "ollama" &&
-        this.config.reasoningEffort === "none" &&
+        reasoningEffort === "none" &&
         /qwen3/i.test(this.config.model)
       ) {
         // Qwen-compatible local servers use the vLLM/SGLang thinking control.
@@ -65,7 +67,7 @@ export class OpenAICompatibleClient {
         body.enable_thinking = false;
         body.chat_template_kwargs = { enable_thinking: false };
       } else {
-        body.reasoning_effort = this.config.reasoningEffort;
+        body.reasoning_effort = reasoningEffort;
       }
     }
     if (this.config.maxCompletionTokens > 0) {
@@ -396,6 +398,15 @@ function reasoningFallbackFromTemplateError(message, current) {
   return (preferences[current] || preferences.medium).find((effort) => supported.includes(effort)) || null;
 }
 
+function streamReasoningDelta(delta) {
+  if (!delta || typeof delta !== "object") return "";
+  if (typeof delta.reasoning_content === "string") return delta.reasoning_content;
+  if (typeof delta.reasoning === "string") return delta.reasoning;
+  if (typeof delta.reasoning?.content === "string") return delta.reasoning.content;
+  if (typeof delta.thinking === "string") return delta.thinking;
+  return "";
+}
+
 function routerFailureCode(error) {
   const message = String(error?.message || "").toLowerCase();
   if (message.includes("timed out")) return "local_router_timeout";
@@ -468,6 +479,15 @@ async function readStreamingResponse(response, {
       message.content += delta.content;
       onDelta(delta.content, message.content);
     }
+    const reasoningDelta = streamReasoningDelta(delta);
+    if (reasoningDelta) {
+      firstOutputAt ||= performance.now();
+      message.reasoning_content = `${message.reasoning_content || ""}${reasoningDelta}`;
+      onDelta("", message.content, {
+        channel: "thinking",
+        thinking: message.reasoning_content
+      });
+    }
     for (const part of delta.tool_calls || []) {
       firstOutputAt ||= performance.now();
       const index = Number.isInteger(part.index) ? part.index : toolCalls.size;
@@ -478,7 +498,13 @@ async function readStreamingResponse(response, {
       };
       if (part.id) current.id += part.id;
       if (part.type) current.type = part.type;
-      if (part.function?.name) current.function.name += part.function.name;
+      if (part.function?.name) {
+        current.function.name += part.function.name;
+        onDelta("", message.content, {
+          channel: "tool",
+          toolName: current.function.name
+        });
+      }
       if (part.function?.arguments) current.function.arguments += part.function.arguments;
       toolCalls.set(index, current);
     }

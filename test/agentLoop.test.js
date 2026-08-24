@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { AgentLoop } from "../src/agentLoop.js";
+import {
+  AgentLoop,
+  gatherReasoningEffortForModel,
+  shouldUseGatherReasoning
+} from "../src/agentLoop.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 import { attachModelEvidence } from "../src/model/evidence.js";
 
@@ -786,7 +790,7 @@ test("agent selects a visible skill-backed workflow and injects bounded guidance
   );
 });
 
-test("agent loop hides internal tool-turn narration and cancels an active tool", async () => {
+test("agent loop streams tool-turn narration and cancels an active tool", async () => {
   const registry = new ToolRegistry();
   registry.register({
     name: "long_work",
@@ -836,8 +840,43 @@ test("agent loop hides internal tool-turn narration and cancels an active tool",
     }
   });
   await assert.rejects(pending, { name: "AbortError" });
-  assert.equal(events.some((event) => event.type === "assistant_delta" && event.text === "Working"), false);
+  assert.ok(events.some((event) => event.type === "assistant_delta" && event.text === "Working"));
   assert.ok(events.some((event) => event.type === "phase" && event.phase === "acting"));
+});
+
+test("gather hops request lower reasoning effort than the configured synthesis default", async () => {
+  const efforts = [];
+  const loop = new AgentLoop({
+    config: {
+      agent: {},
+      model: {
+        provider: "xai",
+        reasoningEffort: "high",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh"]
+      }
+    },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ reasoningEffortOverride }) {
+        efforts.push(reasoningEffortOverride);
+        return { message: { role: "assistant", content: "done" } };
+      }
+    }
+  });
+  await loop.run("hello");
+  assert.equal(gatherReasoningEffortForModel({
+    reasoningEffort: "high",
+    supportedReasoningEfforts: ["low", "medium", "high", "xhigh"]
+  }), "low");
+  assert.equal(shouldUseGatherReasoning({
+    turn: 0,
+    completedToolActions: 0,
+    lastToolNames: [],
+    gatherTurns: 0
+  }), true);
+  assert.equal(efforts[0], "low");
 });
 
 test("parallel-safe read-only tools execute concurrently and preserve transcript order", async () => {

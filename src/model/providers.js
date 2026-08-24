@@ -271,6 +271,9 @@ export function resolveModelConfig(env = process.env) {
       requestedReasoningEffort,
       modelProfile
     ),
+    supportedReasoningEfforts: [
+      ...(modelProfile?.supportedReasoningEfforts || provider.supportedReasoningEfforts || [])
+    ],
     maxCompletionTokens: boundedInt(
       env.AMOS_MODEL_MAX_COMPLETION_TOKENS ||
         (provider.id === "kimi" ? env.KIMI_MAX_COMPLETION_TOKENS : ""),

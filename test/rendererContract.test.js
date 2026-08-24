@@ -62,6 +62,17 @@ test("the coding work surface renders deterministic file trees and inert line-nu
   assert.match(tool, /Desktop reads Git and the filesystem directly/);
 });
 
+test("the renderer paints live thinking traces during a run", async () => {
+  const [javascript, css] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+  ]);
+  assert.match(javascript, /channel === "thinking"/);
+  assert.match(javascript, /function updateStreamingThought/);
+  assert.match(javascript, /className = "message-thought"/);
+  assert.match(css, /\.message-thought-body/);
+});
+
 test("the running-task composer stays available for steering through the allowlisted IPC bridge", async () => {
   const [javascript, preload, main] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),

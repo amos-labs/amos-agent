@@ -201,6 +201,7 @@ function canonicalAnthropicMessage(content) {
 async function readAnthropicStream(response, { signal, displayName, onDelta, onActivity }) {
   const blocks = new Map();
   let visibleText = "";
+  let thinkingText = "";
   let usage = null;
   let stopReason = "";
   let failure = null;
@@ -221,9 +222,15 @@ async function readAnthropicStream(response, { signal, displayName, onDelta, onA
       } else if (type === "content_block_start") {
         blocks.set(data.index, structuredClone(data.content_block || {}));
       } else if (type === "content_block_delta") {
-        applyAnthropicDelta(blocks, data.index, data.delta || {}, (delta) => {
-          visibleText += delta;
-          onDelta(delta, visibleText);
+        applyAnthropicDelta(blocks, data.index, data.delta || {}, {
+          emitText: (delta) => {
+            visibleText += delta;
+            onDelta(delta, visibleText);
+          },
+          emitThinking: (delta) => {
+            thinkingText += delta;
+            onDelta("", visibleText, { channel: "thinking", thinking: thinkingText });
+          }
         });
       } else if (type === "content_block_stop") {
         const block = blocks.get(data.index);
@@ -269,7 +276,10 @@ function emptyAnthropicResponseError(payload, content, displayName) {
   return error;
 }
 
-function applyAnthropicDelta(blocks, index, delta, emitText) {
+function applyAnthropicDelta(blocks, index, delta, {
+  emitText = () => {},
+  emitThinking = () => {}
+} = {}) {
   const block = blocks.get(index) || {};
   if (delta.type === "text_delta") {
     block.type ||= "text";
@@ -281,6 +291,7 @@ function applyAnthropicDelta(blocks, index, delta, emitText) {
   } else if (delta.type === "thinking_delta") {
     block.type ||= "thinking";
     block.thinking = `${block.thinking || ""}${delta.thinking || ""}`;
+    if (delta.thinking) emitThinking(delta.thinking);
   } else if (delta.type === "signature_delta") {
     block.signature = `${block.signature || ""}${delta.signature || ""}`;
   }

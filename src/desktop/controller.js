@@ -4981,6 +4981,7 @@ export class DesktopController {
     }
     if (!active?.checkpointed) return;
     if (event.type === "assistant_delta") {
+      if (event.channel === "thinking" || event.channel === "tool") return;
       const text = String(event.text || "");
       const elapsed = Date.now() - Number(active.lastCheckpointAt || 0);
       if (text.length - Number(active.partialLength || 0) < 500 && elapsed < 2_000) return;
@@ -7553,11 +7554,15 @@ function publicAutomationActivation(value) {
 
 function sanitizeAgentEvent(event) {
   if (event.type === "assistant_delta") {
+    const channel = ["thinking", "tool"].includes(event.channel) ? event.channel : "text";
     return {
       type: event.type,
       turn: Number(event.turn || 0),
       delta: String(event.delta || ""),
-      text: String(event.text || "")
+      text: String(event.text || ""),
+      channel,
+      thinking: String(event.thinking || "").slice(-8_000),
+      toolName: String(event.toolName || "").slice(0, 80)
     };
   }
   if (event.type === "phase") {
@@ -8001,7 +8006,11 @@ function summarizeApprovalOutcome(result) {
 function toolEventSummary(event) {
   if (event.type === "workflow") return `Selected workflow: ${event.title}`;
   if (event.type === "phase") return event.summary || `Task ${event.phase}`;
-  if (event.type === "assistant_delta") return "Streaming response";
+  if (event.type === "assistant_delta") {
+    if (event.channel === "thinking") return "Thinking";
+    if (event.channel === "tool" && event.toolName) return `Preparing ${event.toolName}`;
+    return "Streaming response";
+  }
   if (event.type === "research_checkpoint") {
     return event.summary || "Recorded the user's research direction";
   }
