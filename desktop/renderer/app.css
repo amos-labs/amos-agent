@@ -613,12 +613,11 @@ html[data-platform="win32"] .sidebar-toggle {
 .view { height: calc(100vh - 78px); overflow: auto; }
 .onboarding {
   display: grid;
-  grid-template-columns: minmax(0, 760px);
-  justify-content: center;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   min-width: 0;
   overflow-x: hidden;
-  padding: clamp(24px, 3.5vh, 48px) 28px 7vh;
+  padding: clamp(20px, 3vh, 36px) 28px 7vh;
   background:
     linear-gradient(rgba(83, 112, 181, .035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(83, 112, 181, .035) 1px, transparent 1px),
@@ -642,8 +641,8 @@ html[data-platform="win32"] .sidebar-toggle {
 .setup-heading { margin-bottom: 22px; }
 .setup-heading h1 {
   margin: 8px 0 10px;
-  max-width: 22ch;
-  font-size: clamp(28px, 3.6vw, 40px);
+  max-width: none;
+  font-size: clamp(28px, 3.2vw, 42px);
   letter-spacing: -.035em;
   line-height: 1.05;
 }
@@ -1001,6 +1000,28 @@ html[data-platform="win32"] .sidebar-toggle {
   cursor: pointer;
 }
 .starter-action:hover { border-color: var(--blue); background: rgba(109,147,255,.08); }
+.connect-systems-push {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: min(960px, 92%);
+  margin: 0 0 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(109,147,255,.4);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(109,147,255,.16), transparent 48%),
+    var(--surface-softer);
+}
+.connect-systems-push strong { display: block; font-size: 14px; }
+.connect-systems-push p { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.connect-systems-push-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .message { padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; }
 .message.user { margin-left: auto; background: rgba(109,147,255,.09); }
 .message.assistant { background: var(--surface-softer); }
@@ -4253,6 +4274,7 @@ html[data-platform="win32"] .sidebar-toggle {
   .app-shell { --sidebar-width: 220px; }
   .app-shell.nav-collapsed { --sidebar-width: 78px; }
   .onboarding { padding-top: 36px; }
+  .connect-systems-push { flex-direction: column; }
   .onboarding-choice-grid,
   .northwind-intelligence-options { grid-template-columns: 1fr; }
   .operator-grid { grid-template-columns: minmax(0, 1fr); }

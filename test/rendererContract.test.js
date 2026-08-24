@@ -897,7 +897,7 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(javascript, /renderStep\(elements\.providerCheck, intelligenceReady\)/);
   assert.match(css, /#telemetryConsent\s*{\s*display: grid;\s*grid-template-columns: minmax\(0, 1fr\) auto/);
   assert.match(css, /#telemetryConsent > div:first-child\s*{ min-width: 0; }/);
-  assert.match(css, /\.onboarding\s*{[\s\S]*?justify-content: center;/);
+  assert.match(css, /\.onboarding\s*{[\s\S]*?grid-template-columns: minmax\(0, 1fr\);/);
   assert.match(html, /AMOS Hosted is the default/);
   assert.match(html, /pick a model here/);
   assert.match(html, /id="demoConnectButton"[^>]*>Connect my company<\/button>/);
@@ -916,7 +916,12 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /id="onboardingWorkspaceText"/);
   assert.match(onboarding, /A workspace is a folder on this computer AMOS may read and change/);
   assert.match(javascript, /function workspaceFolderName/);
-  assert.match(css, /\.onboarding\s*{[\s\S]*?minmax\(0, 760px\)/);
+  assert.match(css, /\.onboarding\s*{[\s\S]*?minmax\(0, 1fr\)/);
+  assert.match(html, /id="connectSystemsPush"/);
+  assert.match(html, /Connect your business systems/);
+  assert.match(html, /Estimate savings/);
+  assert.match(javascript, /AMOS_SAVINGS_AUDIT_PROMPT/);
+  assert.match(javascript, /type === "connect_platform"/);
   assert.match(css, /\.setup-readiness\s*{[\s\S]*?grid-template-columns: 1fr;/);
   assert.match(
     controller,

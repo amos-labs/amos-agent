@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { selectJourneyStarterActions } from "../src/desktop/journeyStarterActions.js";
+import {
+  AMOS_SAVINGS_AUDIT_PROMPT,
+  selectJourneyStarterActions
+} from "../src/desktop/journeyStarterActions.js";
 
 test("company quick actions follow deterministic journey state", () => {
   const actions = selectJourneyStarterActions({
@@ -19,9 +22,11 @@ test("company quick actions follow deterministic journey state", () => {
 
   assert.deepEqual(
     actions.map((action) => action.id),
-    ["review-decisions", "connect-first-system", "review-recent-proof", "open-briefings"]
+    ["review-decisions", "connect-first-system", "amos-savings-audit", "review-recent-proof", "open-briefings"]
   );
   assert.equal(actions[0].label, "Review 1 decision");
+  assert.equal(actions[1].label, "Connect your business systems");
+  assert.equal(actions[2].label, "See what AMOS could replace");
   assert.equal(actions[0].type, "view");
 });
 
@@ -79,14 +84,25 @@ test("personal workspaces surface existing conversations before project prompts"
     }
   });
 
-  assert.equal(actions.length, 4);
+  assert.equal(actions.length, 5);
   assert.deepEqual(actions[0], {
+    id: "connect-business-systems",
+    label: "Connect your business systems",
+    type: "connect_platform"
+  });
+  assert.equal(actions[1].id, "amos-savings-audit");
+  assert.deepEqual(actions[2], {
     id: "open-conversations",
     label: "Open 1 conversation",
     type: "view",
     view: "tasks"
   });
-  assert.equal(actions[1].type, "run");
+  assert.equal(actions[3].type, "run");
+});
+
+test("the AMOS savings audit never invents a dollar amount", () => {
+  assert.match(AMOS_SAVINGS_AUDIT_PROMPT, /Do not invent dollar amounts/);
+  assert.match(AMOS_SAVINGS_AUDIT_PROMPT, /Do not claim a system is connected unless the catalog shows it/);
 });
 
 test("demo quick actions remain bounded code-owned requests", () => {

@@ -6,7 +6,10 @@ import {
   mappingRowsForOperation,
   previewAutomationMappings
 } from "../../src/desktop/automationSetup.js";
-import { selectJourneyStarterActions } from "../../src/desktop/journeyStarterActions.js";
+import {
+  AMOS_SAVINGS_AUDIT_PROMPT,
+  selectJourneyStarterActions
+} from "../../src/desktop/journeyStarterActions.js";
 
 const api = window.amosDesktop;
 
@@ -123,7 +126,9 @@ const elements = Object.fromEntries(
     "workspaceCheck", "onboardingWorkspaceText", "onboardingWorkspaceHint", "enterButton", "boundaryReadinessText",
     "personalIntelligenceCallout",
     "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
-    "conversation", "conversationHeading", "welcomeMessage", "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
+    "conversation", "conversationHeading", "welcomeMessage",
+    "connectSystemsPush", "connectSystemsPushButton", "savingsAuditButton",
+    "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
     "chatRunStatus", "chatRunStatusText", "chatRunActivityButton",
     "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
@@ -280,6 +285,8 @@ function bindActions() {
   elements.enterButton.addEventListener("click", () => {
     completeOnboarding().catch((error) => toast(error.message, true));
   });
+  elements.connectSystemsPushButton.addEventListener("click", pushConnectSystems);
+  elements.savingsAuditButton.addEventListener("click", runSavingsAudit);
   elements.promptForm.addEventListener("submit", runTask);
   elements.cancelButton.addEventListener("click", cancelTask);
   elements.promptInput.addEventListener("keydown", (event) => {
@@ -745,9 +752,12 @@ function render() {
       "Ask about this project, attach a document, paste a screenshot, or describe offline work…";
   } else if (state.mode?.personal) {
     elements.operatorEyebrow.textContent = "WORK FROM THIS COMPUTER";
-    elements.readyTitle.textContent = "Your workspace is ready.";
-    elements.readyDescription.textContent =
-      "Understand code, research, create, and automate locally. Nothing here receives company authority.";
+    elements.readyTitle.textContent = shouldPushConnectSystems()
+      ? "Chat is ready. Connect the business next."
+      : "Your workspace is ready.";
+    elements.readyDescription.textContent = shouldPushConnectSystems()
+      ? "Local chat and coding work now. Connecting AMOS Platform and your business systems is how AMOS becomes the company brain — and why teams stay."
+      : "Understand code, research, create, and automate locally. Nothing here receives company authority.";
     elements.promptInput.placeholder =
       "Ask about this project, attach a document, paste a screenshot, or describe work to move forward…";
   } else if (demo) {
@@ -759,9 +769,12 @@ function render() {
       "Ask about Northwind, create something, or make a governed sample-company change…";
   } else {
     elements.operatorEyebrow.textContent = "OPERATE THE COMPANY";
-    elements.readyTitle.textContent = "AMOS is ready.";
-    elements.readyDescription.textContent =
-      "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
+    elements.readyTitle.textContent = shouldPushConnectSystems()
+      ? "Connect a system to make AMOS the company brain."
+      : "AMOS is ready.";
+    elements.readyDescription.textContent = shouldPushConnectSystems()
+      ? "Ask anything now. Connecting billing, books, code, and the rest is how AMOS learns the business — and the moment users stick."
+      : "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
     elements.promptInput.placeholder =
       "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
   }
@@ -6472,6 +6485,43 @@ async function handleAccountUpdate() {
   }
 }
 
+function connectedCompanySystems() {
+  return (state?.connectionsCatalog?.connections || []).filter(
+    (item) => item.status === "connected" && item.usable !== false
+  );
+}
+
+function shouldPushConnectSystems() {
+  return Boolean(state) &&
+    state.connectionMode !== "demo" &&
+    connectedCompanySystems().length === 0;
+}
+
+function renderConnectSystemsPush({ hasConversation = false } = {}) {
+  const visible = shouldPushConnectSystems() && !hasConversation;
+  elements.connectSystemsPush.classList.toggle("hidden", !visible);
+  elements.connectSystemsPushButton.textContent = state.connected
+    ? "Connect systems"
+    : "Connect AMOS Platform";
+}
+
+async function pushConnectSystems() {
+  if (state.connected) {
+    showView("connections");
+    return;
+  }
+  await connectAmos();
+  if (state.connected) showView("connections");
+}
+
+async function runSavingsAudit() {
+  await runTask(null, {
+    privateAction: true,
+    prompt: AMOS_SAVINGS_AUDIT_PROMPT,
+    displayText: "See what AMOS could replace"
+  });
+}
+
 function renderStarterActions() {
   if (!state || !elements.starterActions) return;
   const actions = selectJourneyStarterActions(state);
@@ -6491,6 +6541,10 @@ async function executeStarterAction(action, button) {
   if (running) return;
   if (action.type === "view") {
     showView(action.view);
+    return;
+  }
+  if (action.type === "connect_platform") {
+    await pushConnectSystems();
     return;
   }
   if (action.type === "resume") {
@@ -6527,6 +6581,7 @@ function renderConversationChrome() {
   elements.conversation.classList.toggle("has-project", Boolean(project));
   elements.conversationHeading.classList.toggle("hidden", hasConversation || Boolean(project));
   elements.welcomeMessage.classList.toggle("hidden", hasConversation);
+  renderConnectSystemsPush({ hasConversation });
   elements.starterActions.classList.toggle("hidden", hasConversation || Boolean(project));
   elements.clearButton.classList.toggle("hidden", !hasConversation);
   if (project) {
