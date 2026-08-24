@@ -61,7 +61,7 @@ test("OpenAI-compatible streaming emits text deltas and assembles tool calls", a
   });
 
   assert.equal(requestBody.stream, true);
-  assert.deepEqual(deltas, [
+  assert.deepEqual(deltas.filter((item) => item.delta), [
     { delta: "Checking ", text: "Checking " },
     { delta: "now.", text: "Checking now." }
   ]);
@@ -77,6 +77,44 @@ test("OpenAI-compatible streaming emits text deltas and assembles tool calls", a
   assert.equal(result.usage.model, "test-model");
   assert.ok(result.usage.latency_ms >= 0);
   assert.ok(result.usage.time_to_first_output_ms >= 0);
+});
+
+test("OpenAI-compatible streaming surfaces reasoning content as thinking deltas", async () => {
+  const events = [
+    { choices: [{ delta: { reasoning_content: "Look up engines first." } }] },
+    { choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", type: "function", function: { name: "amos_list_engines", arguments: "{}" } }] } }] }
+  ];
+  const fetchImpl = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    assert.equal(body.reasoning_effort, "low");
+    const payload = events
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join("") + "data: [DONE]\n\n";
+    return new Response(payload, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" }
+    });
+  };
+  const deltas = [];
+  const result = await new OpenAICompatibleClient(
+    {
+      apiKey: "test",
+      baseUrl: "https://models.example/v1",
+      model: "grok-4.6",
+      reasoningEffort: "high",
+      capabilities: { tools: true, reasoning: true }
+    },
+    fetchImpl
+  ).chat({
+    messages: [{ role: "user", content: "start" }],
+    reasoningEffortOverride: "low",
+    onDelta: (delta, text, meta = {}) => deltas.push({ delta, text, ...meta })
+  });
+  assert.equal(deltas[0].channel, "thinking");
+  assert.equal(deltas[0].thinking, "Look up engines first.");
+  assert.equal(deltas[1].channel, "tool");
+  assert.equal(deltas[1].toolName, "amos_list_engines");
+  assert.equal(result.message.tool_calls[0].function.name, "amos_list_engines");
 });
 
 test("OpenAI-compatible streaming aborts the actual request", async () => {

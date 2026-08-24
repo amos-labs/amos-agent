@@ -7,6 +7,13 @@ used from different models and deployment boundaries.
 Provider choice changes where inference happens. It does not change AMOS
 identity or authority.
 
+The destination product is three doors — **AMOS Intelligence (hosted organism)**,
+**this computer**, and **your key** — with Hosted at a known AMOS GPU cost rather
+than a vendor pass-through. That contract is
+[INTELLIGENCE_PRODUCT.md](INTELLIGENCE_PRODUCT.md). This file remains the live
+profile and protocol reference until Hosted `auto` stops routing to managed
+frontier overflow.
+
 ## Infrastructure summary
 
 | Profile | Inference location | Credential | Best fit |

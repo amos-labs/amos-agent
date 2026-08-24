@@ -75,6 +75,9 @@ let capsuleFlow = null;
 let connectionSetupProvider = null;
 let currentTaskId = null;
 let streamingMessage = null;
+let lastThoughtPaintAt = 0;
+let pendingThoughtText = "";
+let thoughtPaintTimer = null;
 let canvasSidecarOpen = false;
 let currentPanelTab = "activity";
 let runTerminalState = "idle";
@@ -9210,6 +9213,56 @@ function finishInlineActivity(status = runTerminalState) {
   setPanelBadge(failed ? "error" : activeCanvasId ? "artifact" : "");
 }
 
+function updateStreamingDraft(text) {
+  if (!streamingMessage) return;
+  streamingMessage.className = "message assistant streaming";
+  let markdown = streamingMessage.querySelector(".markdown-content");
+  if (!markdown) {
+    markdown = document.createElement("div");
+    markdown.className = "markdown-content";
+    streamingMessage.append(markdown);
+  }
+  renderMarkdown(markdown, text);
+  elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
+function updateStreamingThought(text) {
+  pendingThoughtText = String(text || "");
+  const now = Date.now();
+  if (now - lastThoughtPaintAt < 80 && pendingThoughtText.length > 0) {
+    if (!thoughtPaintTimer) {
+      thoughtPaintTimer = setTimeout(() => {
+        thoughtPaintTimer = null;
+        paintStreamingThought(pendingThoughtText);
+      }, 80);
+    }
+    return;
+  }
+  paintStreamingThought(pendingThoughtText);
+}
+
+function paintStreamingThought(text) {
+  if (!streamingMessage || !text) return;
+  lastThoughtPaintAt = Date.now();
+  streamingMessage.className = "message assistant streaming";
+  let thought = streamingMessage.querySelector(".message-thought");
+  if (!thought) {
+    thought = document.createElement("details");
+    thought.className = "message-thought";
+    thought.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = "Thinking";
+    const body = document.createElement("pre");
+    body.className = "message-thought-body";
+    thought.append(summary, body);
+    streamingMessage.prepend(thought);
+  }
+  const body = thought.querySelector(".message-thought-body");
+  const clipped = text.length > 4_000 ? text.slice(-4_000) : text;
+  body.textContent = clipped;
+  elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
 function updateChatRunStatus(message, status = "active") {
   elements.chatRunStatus.classList.remove("hidden", "active", "waiting", "failed", "completed");
   elements.chatRunStatus.classList.add(status);
@@ -9322,16 +9375,18 @@ function renderGovernedUiActions() {
 
 function renderLiveEvent(event) {
   if (event.type === "assistant_delta") {
-    updateChatRunStatus("Writing the response…", "active");
-    if (streamingMessage) {
-      streamingMessage.className = "message assistant streaming";
-      streamingMessage.replaceChildren();
-      const markdown = document.createElement("div");
-      markdown.className = "markdown-content";
-      renderMarkdown(markdown, event.text || "");
-      streamingMessage.append(markdown);
-      elements.messages.scrollTop = elements.messages.scrollHeight;
+    const channel = event.channel || "text";
+    if (channel === "thinking") {
+      updateChatRunStatus("Thinking…", "active");
+      updateStreamingThought(event.thinking || event.delta || "");
+      return;
     }
+    if (channel === "tool" && event.toolName) {
+      updateChatRunStatus(`Preparing ${humanizeTool(event.toolName)}…`, "active");
+      return;
+    }
+    updateChatRunStatus("Writing the response…", "active");
+    updateStreamingDraft(event.text || "");
     return;
   }
   captureGovernedUiActions(event);

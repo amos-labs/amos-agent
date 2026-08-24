@@ -181,6 +181,7 @@ async function readResponsesStream(response, { signal, displayName, onDelta, onA
   let incomplete = null;
   let failure = null;
   let visibleText = "";
+  let thinkingText = "";
   const items = new Map();
   const result = await readSseEvents(response, {
     signal,
@@ -192,6 +193,9 @@ async function readResponsesStream(response, { signal, displayName, onDelta, onA
       if (type === "response.output_text.delta" && typeof data.delta === "string") {
         visibleText += data.delta;
         onDelta(data.delta, visibleText);
+      } else if (typeof data.delta === "string" && String(type).includes("reasoning")) {
+        thinkingText += data.delta;
+        onDelta("", visibleText, { channel: "thinking", thinking: thinkingText });
       } else if (type === "response.output_item.added" && data.item) {
         items.set(data.output_index ?? items.size, structuredClone(data.item));
       } else if (type === "response.function_call_arguments.delta") {

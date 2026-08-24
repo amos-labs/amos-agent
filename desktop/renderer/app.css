@@ -884,6 +884,30 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message.error { border-color: rgba(255,117,87,.3); color: var(--danger-text); }
 .message p { margin: 0; white-space: pre-wrap; line-height: 1.62; }
 .message.pending { color: var(--muted); }
+.message-thought {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(109,147,255,.05);
+  color: var(--muted);
+}
+.message-thought summary {
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.message-thought-body {
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+}
 .message.assistant { display: grid; }
 .message-task-actions {
   display: flex;

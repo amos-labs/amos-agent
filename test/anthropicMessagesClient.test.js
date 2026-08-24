@@ -160,10 +160,12 @@ test("Anthropic Messages streaming preserves signed thinking and assembles tool 
   const deltas = [];
   const result = await client(fetchImpl).chat({
     messages: [{ role: "user", content: "Check unit 42" }],
-    onDelta: (delta, text) => deltas.push({ delta, text })
+    onDelta: (delta, text, meta = {}) => deltas.push({ delta, text, ...meta })
   });
 
-  assert.deepEqual(deltas, [
+  assert.equal(deltas[0].channel, "thinking");
+  assert.equal(deltas[0].thinking, "private state");
+  assert.deepEqual(deltas.slice(1), [
     { delta: "Checking ", text: "Checking " },
     { delta: "now.", text: "Checking now." }
   ]);

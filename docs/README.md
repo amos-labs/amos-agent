@@ -12,6 +12,8 @@
 - [Parked follow-ups](FOLLOWUPS.md)
 - [Authentication and identity](AUTHENTICATION.md)
 - [Intelligence and infrastructure profiles](INTELLIGENCE_PROVIDERS.md)
+- [Intelligence product: Hosted, Local, Your key](INTELLIGENCE_PRODUCT.md)
+- [Desktop latency profile](DESKTOP_LATENCY.md)
 - [Safety model](SAFETY.md)
 - [Signed offline company context](OFFLINE_COMPANY_CONTEXT.md)
 - [Offline draft reconciliation](OFFLINE_RECONCILIATION.md)

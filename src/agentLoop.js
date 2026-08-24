@@ -35,6 +35,21 @@ const COMPANY_VIEW_TOOL = "desktop_present_company_view";
 const CANVAS_UPDATE_TOOL = "desktop_update_canvas";
 const WORK_SURFACE_REQUEST_TOOL = "desktop_request_work_surface";
 const CODE_WORKSPACE_TOOL = "desktop_present_code_workspace";
+export const GATHER_TOOL_NAMES = new Set([
+  "amos_get_started",
+  "amos_whoami",
+  "amos_resume_company",
+  "amos_company_overview",
+  "amos_list_engines",
+  "amos_load_engine_tools",
+  "desktop_activate_toolkit",
+  "desktop_focus_workspace",
+  "desktop_inspect_project",
+  "search_files",
+  "git_status",
+  "git_diff"
+]);
+const MAX_GATHER_REASONING_TURNS = 4;
 const DEFAULT_LOCAL_PREFERRED_INPUT_TOKENS = 8_192;
 const DEFAULT_LOCAL_PROMPT_TARGET_MS = 60_000;
 const MIN_LOCAL_PREFERRED_INPUT_TOKENS = 4_096;
@@ -232,6 +247,8 @@ export class AgentLoop {
       let pendingRoutingDecision = routingDecision?.minimumClass
         ? routingDecision
         : null;
+      let lastToolNames = [];
+      let gatherTurns = 0;
 
       while (true) {
         throwIfAborted(signal);
@@ -261,6 +278,14 @@ export class AgentLoop {
         onEvent({ type: "context_compiled", ...contextReceipt });
         let partialResponse = "";
         let response;
+        const gatherEffort = this.gatherReasoningEffort();
+        const useGatherReasoning = Boolean(gatherEffort) && shouldUseGatherReasoning({
+          turn,
+          completedToolActions,
+          lastToolNames,
+          gatherTurns
+        });
+        if (useGatherReasoning) gatherTurns += 1;
         try {
           response = await this.modelClient.chat({
             messages,
@@ -269,11 +294,22 @@ export class AgentLoop {
             promptSessionId: this.activePromptSessionId,
             promptContractHash: this.pendingPromptContract?.sha256 || null,
             preclassifiedRouting: pendingRoutingDecision,
+            reasoningEffortOverride: useGatherReasoning ? gatherEffort : null,
             onRoutingDecision: (decision) => {
               onEvent({ type: "routing", turn, ...decision });
             },
-            onDelta: (delta, text) => {
-              partialResponse = String(text || partialResponse);
+            onDelta: (delta, text, meta = {}) => {
+              const channel = meta.channel || "text";
+              if (channel === "text" && text) partialResponse = String(text);
+              onEvent({
+                type: "assistant_delta",
+                turn,
+                delta: channel === "text" ? String(delta || "") : "",
+                text: String(text || ""),
+                channel,
+                thinking: String(meta.thinking || ""),
+                toolName: String(meta.toolName || "")
+              });
             }
           });
           assertValidModelToolArguments(response, {
@@ -558,6 +594,7 @@ export class AgentLoop {
           });
           outcomes.push({ name, rawArgs, failed, result });
         }
+        lastToolNames = outcomes.map((outcome) => outcome.name);
 
         this.compactProcessedToolEvidence();
 
@@ -1141,6 +1178,10 @@ export class AgentLoop {
     return this.lastContextReceipt;
   }
 
+  gatherReasoningEffort() {
+    return gatherReasoningEffortForModel(this.config?.model);
+  }
+
   availableToolsForModel() {
     return canonicalizePromptTools(this.registry.openAiTools({ activeOnly: true }).filter((tool) => {
       const name = tool?.function?.name;
@@ -1673,6 +1714,29 @@ function researchCheckpointChoiceSummary(choice) {
   if (choice.action === "autonomous") return "The user chose to continue without timed research check-ins";
   const minutes = Math.max(1, Math.round(choice.extensionMs / 60_000));
   return `The user chose to continue research for ${minutes} more minute${minutes === 1 ? "" : "s"}`;
+}
+
+export function gatherReasoningEffortForModel(model = {}) {
+  const supported = Array.isArray(model.supportedReasoningEfforts)
+    ? model.supportedReasoningEfforts
+    : [];
+  const current = String(model.reasoningEffort || "");
+  if (supported.includes("low") && current !== "low") return "low";
+  if (supported.includes("medium") && !["low", "medium"].includes(current)) return "medium";
+  return null;
+}
+
+export function shouldUseGatherReasoning({
+  turn = 0,
+  completedToolActions = 0,
+  lastToolNames = [],
+  gatherTurns = 0
+} = {}) {
+  if (gatherTurns >= MAX_GATHER_REASONING_TURNS) return false;
+  if (completedToolActions === 0 && turn <= 2) return true;
+  return Array.isArray(lastToolNames) &&
+    lastToolNames.length > 0 &&
+    lastToolNames.every((name) => GATHER_TOOL_NAMES.has(name));
 }
 
 function usageEventFromResponse(usage, turn) {
