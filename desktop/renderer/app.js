@@ -124,6 +124,7 @@ const elements = Object.fromEntries(
     "demoHostedIntelligenceButton", "demoLocalIntelligenceButton", "demoByokIntelligenceButton",
     "providerCheck", "onboardingProviderText", "onboardingIntelligenceHint",
     "workspaceCheck", "onboardingWorkspaceText", "onboardingWorkspaceHint", "enterButton", "boundaryReadinessText",
+    "onboardingGateModal", "onboardingGateTitle", "onboardingGateMessage", "onboardingGateClose",
     "personalIntelligenceCallout",
     "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
     "conversation", "conversationHeading", "welcomeMessage",
@@ -250,7 +251,13 @@ async function initialize() {
 
 function bindActions() {
   for (const button of document.querySelectorAll(".nav-item")) {
-    button.addEventListener("click", () => showView(button.dataset.view));
+    button.addEventListener("click", () => {
+      if (firstRunNeeded()) {
+        explainOnboardingGate();
+        return;
+      }
+      showView(button.dataset.view);
+    });
   }
   elements.sidebarToggle.addEventListener("click", toggleSidebar);
   bindContextResize();
@@ -284,6 +291,10 @@ function bindActions() {
   });
   elements.enterButton.addEventListener("click", () => {
     completeOnboarding().catch((error) => toast(error.message, true));
+  });
+  elements.onboardingGateClose.addEventListener("click", closeOnboardingGate);
+  elements.onboardingGateModal.addEventListener("click", (event) => {
+    if (event.target === elements.onboardingGateModal) closeOnboardingGate();
   });
   elements.connectSystemsPushButton.addEventListener("click", pushConnectSystems);
   elements.savingsAuditButton.addEventListener("click", runSavingsAudit);
@@ -1033,6 +1044,21 @@ function firstRunNeeded(current = state) {
     current.connectionMode === "demo_expired" ||
     !current.settings?.onboardingCompletedAt
   );
+}
+
+function explainOnboardingGate() {
+  const ready = elements.enterButton && !elements.enterButton.disabled;
+  elements.onboardingGateMessage.textContent = ready
+    ? "Operator, Connections, and the rest of the sidebar unlock after you enter AMOS Desktop. Intelligence is already selected — use Enter AMOS Desktop on this screen."
+    : "Operator, Connections, and the rest of the sidebar unlock after setup. Finish choosing intelligence on this screen, then enter AMOS Desktop.";
+  elements.onboardingGateModal.classList.remove("hidden");
+  elements.onboardingGateClose.focus();
+}
+
+function closeOnboardingGate() {
+  elements.onboardingGateModal.classList.add("hidden");
+  elements.enterButton?.scrollIntoView?.({ block: "nearest" });
+  elements.enterButton?.focus?.();
 }
 
 function openIntelligenceSettings() {

@@ -78,6 +78,7 @@ test("the sidebar stays reachable on short Windows windows", async () => {
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
   ]);
+  assert.match(javascript, /function explainOnboardingGate/);
   assert.match(javascript, /function applyPlatformShell/);
   assert.match(javascript, /document\.documentElement\.dataset\.platform = platform/);
   assert.match(css, /\.sidebar\s*\{[\s\S]*?min-height: 0;[\s\S]*?overflow-y: auto;/);
@@ -883,6 +884,9 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /<strong>Bring my own key<\/strong>/);
   assert.match(onboarding, /DEFAULT · AMOS HOSTED/);
   assert.match(onboarding, /AMOS Hosted is selected/);
+  assert.match(html, /id="onboardingGateModal"/);
+  assert.match(html, /Enter AMOS Desktop first\./);
+  assert.match(javascript, /function explainOnboardingGate/);
   assert.match(onboarding, /id="onboardingModelSelect"/);
   assert.match(onboarding, /id="onboardingByokKey"/);
   assert.match(onboarding, /The recommended local model for this computer is selected automatically/);
