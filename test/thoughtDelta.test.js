@@ -26,3 +26,33 @@ test("thought streams collapse growing prefixes into one line", () => {
   assert.match(collapsed, /local fix/);
   assert.doesNotMatch(collapsed, /^CI\nCI failed/m);
 });
+
+test("thought deltas replace last-line retransmissions without stacking the line", () => {
+  assert.equal(
+    mergeThoughtDelta("The user asked about CI.\nI should inspect", "I should inspect the logs."),
+    "The user asked about CI.\nI should inspect the logs."
+  );
+  assert.equal(
+    mergeThoughtDelta(
+      "The user asked about CI.\nI should inspect the logs.",
+      "I should inspect the logs.\nThen patch the collision."
+    ),
+    "The user asked about CI.\nI should inspect the logs.\nThen patch the collision."
+  );
+});
+
+test("thought streams keep distinct lines and drop replayed snapshots", () => {
+  const streamed = [
+    "The user asked about CI.",
+    "The user asked about CI.",
+    "I should inspect the logs.",
+    "The user asked about CI.",
+    "I should inspect the logs.",
+    "Then patch the collision."
+  ].join("\n");
+  const collapsed = collapseThoughtStream(streamed);
+  assert.equal(
+    collapsed,
+    "The user asked about CI.\nI should inspect the logs.\nThen patch the collision."
+  );
+});
