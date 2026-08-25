@@ -85,6 +85,7 @@ let lastThoughtPaintAt = 0;
 let pendingThoughtText = "";
 let thoughtPaintTimer = null;
 let canvasSidecarOpen = false;
+let panelUserClosed = false;
 let currentPanelTab = "activity";
 let runTerminalState = "idle";
 let activeUiRunToken = 0;
@@ -494,6 +495,9 @@ function bindActions() {
     if (elements.accountMenu.contains(event.target) || elements.accountMenuButton.contains(event.target)) return;
     closeAccountMenu();
   });
+  window.addEventListener("resize", () => {
+    if (!elements.accountMenu.classList.contains("hidden")) placeAccountMenu();
+  });
 }
 
 function bindEvents() {
@@ -553,7 +557,7 @@ function bindEvents() {
     state.canvases = canvasState.canvases || [];
     state.activeCanvasId = canvasState.activeCanvasId || null;
     activeCanvasId = state.activeCanvasId;
-    if (activeCanvasId) {
+    if (activeCanvasId && !panelUserClosed) {
       canvasSidecarOpen = true;
       currentPanelTab = "canvas";
       setPanelBadge("artifact");
@@ -4287,7 +4291,7 @@ function renderCanvas() {
   const hasBlocks = Boolean(canvas?.blocks?.length);
   const setupVisible = Boolean(automationSetupDraft && currentView === "operator");
   renderBriefingLibrary();
-  if (setupVisible) {
+  if (setupVisible && !panelUserClosed) {
     canvasSidecarOpen = true;
   }
   const sidecarVisible = Boolean(canvasSidecarOpen && currentView === "operator");
@@ -5868,21 +5872,21 @@ function openCanvasSidecar(id = activeCanvasId) {
 function openPanel(tab = currentPanelTab) {
   currentPanelTab = tab === "canvas" ? "canvas" : "activity";
   canvasSidecarOpen = true;
+  panelUserClosed = false;
   showView("operator");
   renderCanvas();
 }
 
 function closeCanvasSidecar() {
   canvasSidecarOpen = false;
+  panelUserClosed = true;
   renderCanvas();
   elements.promptInput.focus();
 }
 
 function toggleCanvasSidecar() {
-  // A manual toggle should win over the auto-open heuristic for this view, so
-  // just flip the flag and re-render. Closing behaves exactly like the ×
-  // button; opening shows the most recent canvas.
   canvasSidecarOpen = !canvasSidecarOpen;
+  panelUserClosed = !canvasSidecarOpen;
   if (canvasSidecarOpen && !activeCanvasId) currentPanelTab = "activity";
   renderCanvas();
   if (!canvasSidecarOpen) elements.promptInput.focus();
@@ -6456,9 +6460,29 @@ function accountInitial(account) {
 
 function toggleAccountMenu() {
   const open = elements.accountMenu.classList.contains("hidden");
+  if (open) {
+    renderAccountMenu();
+    placeAccountMenu();
+  }
   elements.accountMenu.classList.toggle("hidden", !open);
   elements.accountMenuButton.setAttribute("aria-expanded", String(open));
-  if (open) renderAccountMenu();
+}
+
+function placeAccountMenu() {
+  const button = elements.accountMenuButton.getBoundingClientRect();
+  const menu = elements.accountMenu;
+  const width = Math.min(390, Math.max(280, window.innerWidth - 24));
+  let left = button.right + 12;
+  if (left + width > window.innerWidth - 12) {
+    left = Math.max(12, button.left - 12 - width);
+  }
+  const bottom = Math.max(12, window.innerHeight - button.bottom);
+  menu.style.position = "fixed";
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.right = "auto";
+  menu.style.top = "auto";
+  menu.style.bottom = `${Math.round(bottom)}px`;
+  menu.style.width = `${Math.round(width)}px`;
 }
 
 function closeAccountMenu() {
@@ -9189,6 +9213,7 @@ function resetSessionView() {
   pendingUiActions = [];
   pendingGenericConnectCalls = 0;
   canvasSidecarOpen = false;
+  panelUserClosed = false;
   currentPanelTab = "activity";
   runTerminalState = "idle";
   setPanelBadge("");

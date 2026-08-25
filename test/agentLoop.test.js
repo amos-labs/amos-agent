@@ -1225,6 +1225,62 @@ test("a model timeout after completed tools exposes recoverable progress", async
   assert.ok(events.some((event) => event.type === "phase" && event.phase === "interrupted"));
 });
 
+test("a hosted timeout after tool progress continues remaining work once", async () => {
+  const registry = new ToolRegistry();
+  let writes = 0;
+  registry.register({
+    name: "write_part",
+    async handler() {
+      writes += 1;
+      return { ok: true, path: "finished.txt" };
+    }
+  });
+  let turn = 0;
+  const events = [];
+  const loop = new AgentLoop({
+    config: {
+      agent: { maxModelTransientRetries: 0 },
+      model: { deployment: "customer-cloud", displayName: "Amazon Bedrock" }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "write-1",
+                function: { name: "write_part", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        if (turn === 3) {
+          assert.match(JSON.stringify(messages), /amos_timeout_continuation/);
+        }
+        throw new Error("Amazon Bedrock (Claude Fable 5) request timed out after becoming inactive");
+      }
+    }
+  });
+
+  await assert.rejects(
+    loop.run("build it", { onEvent: (event) => events.push(event) }),
+    (error) => {
+      assert.equal(error.code, "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS");
+      assert.equal(error.completedToolActions, 1);
+      return true;
+    }
+  );
+  assert.equal(writes, 1);
+  assert.equal(turn, 3);
+  assert.ok(events.some((event) => /continuing remaining work/.test(event.summary || "")));
+});
+
 test("a stalled empty model response retries the same turn without replaying completed tools", async () => {
   const registry = new ToolRegistry();
   let writes = 0;

@@ -249,6 +249,7 @@ export class AgentLoop {
         : null;
       let lastToolNames = [];
       let gatherTurns = 0;
+      let timeoutContinuations = 0;
 
       while (true) {
         throwIfAborted(signal);
@@ -375,6 +376,17 @@ export class AgentLoop {
             continue;
           }
           if (isModelTimeout(error) && completedToolActions > 0) {
+            if (this.config.model?.deployment !== "local" && timeoutContinuations < 1) {
+              timeoutContinuations += 1;
+              modelRetryGuidance = timeoutContinuationMessage();
+              onEvent({
+                type: "phase",
+                phase: "retrying",
+                turn,
+                summary: `The model stalled after ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}; continuing remaining work without replay`
+              });
+              continue;
+            }
             error.code = "AMOS_MODEL_TIMEOUT_AFTER_PROGRESS";
             error.completedToolActions = completedToolActions;
             error.failedToolActions = failedToolActions;
@@ -1638,6 +1650,18 @@ function invalidToolArgumentsRetryMessage(error) {
       "Do not repeat any completed tool call already represented by a tool result in the conversation.",
       "If the input would be large, split the work into bounded calls instead of placing a large document or dataset in one argument.",
       "</amos_tool_call_correction>"
+    ].join("\n")
+  };
+}
+
+function timeoutContinuationMessage() {
+  return {
+    role: "user",
+    content: [
+      "<amos_timeout_continuation>",
+      "The previous model request stalled after completed tool work.",
+      "Do not replay completed actions. Inspect what already landed, then finish only the remaining unfinished work.",
+      "</amos_timeout_continuation>"
     ].join("\n")
   };
 }

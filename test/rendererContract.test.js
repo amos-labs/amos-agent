@@ -89,6 +89,10 @@ test("the sidebar stays reachable on short Windows windows", async () => {
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
   ]);
+  assert.match(javascript, /function placeAccountMenu/);
+  assert.match(javascript, /panelUserClosed/);
+  assert.match(css, /\.account-menu\s*\{[\s\S]*?position:\s*fixed/);
+  assert.match(css, /\.brand\s*\{[\s\S]*?-webkit-app-region:\s*no-drag/);
   assert.match(javascript, /function explainOnboardingGate/);
   assert.match(javascript, /function applyPlatformShell/);
   assert.match(javascript, /document\.documentElement\.dataset\.platform = platform/);
