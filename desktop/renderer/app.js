@@ -10,6 +10,7 @@ import {
   AMOS_SAVINGS_AUDIT_PROMPT,
   selectJourneyStarterActions
 } from "../../src/desktop/journeyStarterActions.js";
+import { collapseThoughtStream } from "../../src/model/thoughtDelta.js";
 
 const api = window.amosDesktop;
 
@@ -65,7 +66,7 @@ const providerDefaults = {
 };
 
 const LIVE_EVENT_VISIBLE_COUNT = 20;
-const INLINE_LIVE_STEP_LIMIT = 8;
+const LIVE_THOUGHT_VISIBLE_LINES = 4;
 const LIST_PAGE_SIZE = 15;
 let state = null;
 let currentView = "operator";
@@ -8976,13 +8977,6 @@ async function runTask(event, options = {}) {
   );
   transientTaskMessages.add(pending);
   streamingMessage = pending;
-  setInlineLiveStatus(
-    automaticResume
-      ? "Revalidating context…"
-      : privateAction
-        ? "Starting that request…"
-        : "Starting…"
-  );
   setRunning(true);
 
   try {
@@ -9097,7 +9091,6 @@ async function steerTask(direction) {
       const pending = addMessage("pending", "AMOS received your answer and is continuing now…");
       transientTaskMessages.add(pending);
       streamingMessage = pending;
-      setInlineLiveStatus("Using your answer and continuing…");
       updateChatRunStatus("Using your answer and continuing…", "active");
       elements.promptInput.focus();
       return;
@@ -9111,7 +9104,7 @@ async function steerTask(direction) {
     const pending = addMessage("pending", "AMOS is applying your new direction at the next safe boundary…");
     transientTaskMessages.add(pending);
     streamingMessage = pending;
-    setInlineLiveStatus("Applying your direction…");
+    updateChatRunStatus("Applying your direction…", "active");
     elements.promptInput.focus();
   } catch (error) {
     toast(error.message, true);
@@ -9591,89 +9584,23 @@ function updateStreamingThought(text) {
 }
 
 function paintStreamingThought(text) {
-  if (!text || !ensureStreamingMessage()) return;
-  lastThoughtPaintAt = Date.now();
-  hideInlinePlaceholder();
-  streamingMessage.classList.add("live-run", "streaming");
-  const liveStatus = streamingMessage.querySelector(".message-live-status");
-  if (liveStatus) liveStatus.classList.add("hidden");
   const collapsed = collapseThoughtStream(text);
-  let thought = streamingMessage.querySelector(".message-thought");
-  if (!thought) {
-    thought = document.createElement("div");
-    thought.className = "message-thought";
-    const header = document.createElement("button");
-    header.type = "button";
-    header.className = "message-thought-toggle";
-    const dots = document.createElement("span");
-    dots.className = "message-live-dots";
-    dots.setAttribute("aria-hidden", "true");
-    for (let index = 0; index < 3; index += 1) dots.append(document.createElement("i"));
-    const label = document.createElement("span");
-    label.className = "message-thought-label";
-    label.textContent = "Thinking";
-    const expand = document.createElement("span");
-    expand.className = "message-thought-expand";
-    expand.textContent = "Expand";
-    header.append(dots, label, expand);
-    header.addEventListener("click", () => {
-      const open = thought.classList.toggle("expanded");
-      expand.textContent = open ? "Show less" : "Expand";
-      header.setAttribute("aria-expanded", open ? "true" : "false");
-      scrollThoughtStream(thought);
-    });
-    const stream = document.createElement("div");
-    stream.className = "message-thought-stream";
-    const body = document.createElement("p");
-    body.className = "message-thought-body";
-    stream.append(body);
-    thought.append(header, stream);
-    streamingMessage.prepend(thought);
-  }
-  thought.querySelector(".message-thought-body").textContent = collapsed;
+  if (!collapsed) return;
+  lastThoughtPaintAt = Date.now();
   const snippet = thoughtTickerSnippet(collapsed);
   if (elements.chatRunThoughtSnippet) {
     elements.chatRunThoughtSnippet.textContent = snippet;
     elements.chatRunThoughtSnippet.classList.toggle("hidden", !snippet);
   }
-  requestAnimationFrame(() => scrollThoughtStream(thought));
-  elements.messages.scrollTop = elements.messages.scrollHeight;
-}
-
-function collapseThoughtStream(text) {
-  const lines = String(text || "")
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return "";
-  const normalize = (value) => value.replace(/[`*_~]/g, "").replace(/\s+/g, " ").trim();
-  return lines.reduce((merged, line) => {
-    if (!merged) return line;
-    const previous = normalize(merged);
-    const next = normalize(line);
-    if (next.startsWith(previous) || previous.startsWith(next)) {
-      return next.length >= previous.length ? line : merged;
-    }
-    return merged + line;
-  }, "");
 }
 
 function thoughtTickerSnippet(text) {
-  const compact = String(text || "").replace(/\s+/g, " ").trim();
-  if (!compact) return "";
-  return compact.length > 140 ? compact.slice(-140) : compact;
-}
-
-function scrollThoughtStream(thought) {
-  const stream = thought?.querySelector(".message-thought-stream");
-  if (!stream) return;
-  if (thought.classList.contains("expanded")) stream.scrollTop = stream.scrollHeight;
-  else stream.scrollLeft = stream.scrollWidth;
+  const lines = String(text || "").split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return "";
+  return lines.slice(-LIVE_THOUGHT_VISIBLE_LINES).join("\n");
 }
 
 function hideInlineThoughtSnippet() {
-  streamingMessage?.querySelector(".message-thought")?.remove();
   if (elements.chatRunThoughtSnippet) {
     elements.chatRunThoughtSnippet.textContent = "";
     elements.chatRunThoughtSnippet.classList.add("hidden");
@@ -9691,70 +9618,8 @@ function ensureStreamingMessage() {
 function hideInlinePlaceholder() {
   if (!streamingMessage) return;
   for (const paragraph of streamingMessage.querySelectorAll(":scope > p")) {
-    if (paragraph.classList.contains("message-live-status")) continue;
-    if (paragraph.classList.contains("message-thought-body")) continue;
     paragraph.remove();
   }
-}
-
-function setInlineLiveStatus(text) {
-  if (!ensureStreamingMessage()) return;
-  hideInlinePlaceholder();
-  streamingMessage.className = "message pending streaming live-run";
-  let status = streamingMessage.querySelector(".message-live-status");
-  if (!status) {
-    status = document.createElement("p");
-    status.className = "message-live-status";
-    const dots = document.createElement("span");
-    dots.className = "message-live-dots";
-    dots.setAttribute("aria-hidden", "true");
-    for (let index = 0; index < 3; index += 1) dots.append(document.createElement("i"));
-    const label = document.createElement("span");
-    label.className = "message-live-status-text";
-    status.append(dots, label);
-    streamingMessage.prepend(status);
-  }
-  status.querySelector(".message-live-status-text").textContent = String(text || "AMOS is working…");
-}
-
-function appendInlineLiveStep(title, detail) {
-  if (!ensureStreamingMessage()) return;
-  hideInlinePlaceholder();
-  streamingMessage.classList.add("live-run");
-  streamingMessage.querySelector(".message-live-status")?.classList.remove("hidden");
-  let list = streamingMessage.querySelector(".message-live-steps");
-  if (!list) {
-    list = document.createElement("ol");
-    list.className = "message-live-steps";
-    streamingMessage.append(list);
-  }
-  const label = String(title || "").trim();
-  if (!label) return;
-  const last = list.querySelector("li:last-child");
-  if (last?.dataset.title === label) {
-    const meta = last.querySelector("small");
-    if (detail && meta) meta.textContent = detail;
-    last.classList.add("current");
-    for (const item of list.querySelectorAll("li")) {
-      if (item !== last) item.classList.remove("current");
-    }
-    return;
-  }
-  for (const item of list.querySelectorAll("li")) item.classList.remove("current");
-  const item = document.createElement("li");
-  item.className = "current";
-  item.dataset.title = label;
-  const name = document.createElement("span");
-  name.textContent = label;
-  item.append(name);
-  if (detail) {
-    const meta = document.createElement("small");
-    meta.textContent = detail;
-    item.append(meta);
-  }
-  list.append(item);
-  while (list.children.length > INLINE_LIVE_STEP_LIMIT) list.firstChild.remove();
-  elements.messages.scrollTop = elements.messages.scrollHeight;
 }
 
 function updateChatRunStatus(message, status = "active") {
@@ -9878,14 +9743,10 @@ function renderLiveEvent(event) {
       return;
     }
     if (channel === "tool" && event.toolName) {
-      const preparing = `Preparing ${humanizeTool(event.toolName)}…`;
-      updateChatRunStatus(preparing, "active");
-      setInlineLiveStatus(preparing);
-      appendInlineLiveStep(humanizeTool(event.toolName), "Preparing the tool call");
+      updateChatRunStatus(`Preparing ${humanizeTool(event.toolName)}…`, "active");
       return;
     }
     updateChatRunStatus("Writing the response…", "active");
-    setInlineLiveStatus("Writing the response…");
     updateStreamingDraft(event.text || "");
     return;
   }
@@ -9893,7 +9754,6 @@ function renderLiveEvent(event) {
   const transientStatus = chatStatusForEvent(event);
   if (transientStatus) {
     updateChatRunStatus(transientStatus.message, transientStatus.status);
-    setInlineLiveStatus(transientStatus.message);
   }
   if (event.type === "tool_error") setPanelBadge("error");
   else if (running) setPanelBadge("working");
@@ -9903,7 +9763,6 @@ function renderLiveEvent(event) {
     return;
   }
   const copy = liveEventCopy(event);
-  if (copy.inline) appendInlineLiveStep(copy.title, copy.detail);
   if (copy.skipCard) return;
   const card = document.createElement("div");
   card.className = [
@@ -10032,7 +9891,7 @@ function liveToolArgSummary(args) {
 }
 
 function updateLiveThinkingCard(text) {
-  const snippet = String(text || "").trim();
+  const snippet = collapseThoughtStream(text);
   if (!snippet) return;
   let card = elements.liveEvents.querySelector(".event-card.thinking-live");
   if (!card) {
