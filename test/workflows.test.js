@@ -97,6 +97,23 @@ test("unmatched work receives a general evidence-and-verification workflow", () 
   );
 });
 
+test("PR rework language selects the GitHub diagnosis route", () => {
+  assert.equal(
+    selectTaskWorkflow({ objective: "ok.... 637 is still in rework, fix the PR" }).id,
+    "github-issue-diagnosis"
+  );
+});
+
+test("an inherited coding work frame keeps follow-ups on the coding toolkit", () => {
+  assert.equal(
+    resolveTaskWorkflow({
+      objective: "ok...it seems like we are goign in circles here?",
+      workFrame: { family: "coding", pullRequest: "https://github.com/amos-labs/amos-managed-platform/pull/637" }
+    }).id,
+    "github-issue-diagnosis"
+  );
+});
+
 test("the classifier catalog maps workflows to bounded initial toolkits", () => {
   const catalog = taskWorkflowCatalog();
   assert.deepEqual(

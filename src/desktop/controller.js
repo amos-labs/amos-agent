@@ -96,6 +96,11 @@ import {
   continuityScope
 } from "./sessionContinuity.js";
 import {
+  compileWorkFrame,
+  workFramePrompt,
+  workflowSelectionText
+} from "./workFrame.js";
+import {
   compileRelationshipProfile,
   emptyRelationshipProfile,
   profileCatalog,
@@ -2348,6 +2353,16 @@ export class DesktopController {
     await this.adoptConversationObjective(objective, settings).catch((error) => {
       this.record("task", `Could not name the new conversation: ${error.message}`);
     });
+    const conversationTask = await this.activeTaskRecord(settings);
+    const conversationCheckpoint = resumedCheckpoint
+      || await this.latestConversationCheckpoint();
+    const workFrame = compileWorkFrame({
+      task: conversationTask,
+      settings,
+      checkpoint: conversationCheckpoint,
+      prompt
+    });
+    const workflowObjective = workflowSelectionText(workFrame, objective);
     const abortController = new AbortController();
     const lane = this.runManager.current();
     if (lane) lane.abortController = abortController;
@@ -2408,15 +2423,16 @@ export class DesktopController {
       const routingDecision = await this.classifyTaskRouting({
         settings,
         boundary,
-        prompt: objective,
+        prompt: workflowObjective,
         attachmentNames,
         pairing,
         signal: abortController.signal
       });
       const classifiedWorkflow = resolveTaskWorkflow({
-        objective,
+        objective: workflowObjective,
         attachmentNames,
-        routedWorkflowId: routingDecision?.workflow
+        routedWorkflowId: routingDecision?.workflow,
+        workFrame
       });
       const previewWorkflow = pairing.enabled && classifiedWorkflow?.family === "coding"
         ? withWorkflowToolkits(classifiedWorkflow, ["collaboration"])
@@ -2493,7 +2509,7 @@ export class DesktopController {
         runtime.registry?.activateToolkit?.(toolkit, { mode: "add" });
       }
       const modelContent = this.attachments.buildMessageContent(
-        prompt,
+        [workFramePrompt(workFrame), prompt].filter(Boolean).join("\n\n"),
         references,
         {
           ...config.model.capabilities,
@@ -5848,6 +5864,16 @@ export class DesktopController {
     return this.taskStore.get(scope, this.activeTaskRecordId);
   }
 
+  async latestConversationCheckpoint() {
+    if (!this.taskCheckpointStore || !this.activeTaskRecordId) return null;
+    const taskRecordId = this.activeTaskRecordId;
+    const contextKey = this.activeContextKey || "";
+    const rows = await this.taskCheckpointStore.list().catch(() => []);
+    return rows.find((checkpoint) => checkpoint.conversation?.taskRecordId === taskRecordId)
+      || rows.find((checkpoint) => contextKey && checkpoint.conversation?.contextKey === contextKey)
+      || null;
+  }
+
   async persistWorkspaceFocus(result) {
     const settings = await this.settingsStore.read();
     if (!this.taskStore || !this.activeTaskRecordId) return result;
@@ -7421,12 +7447,14 @@ export function desktopSystemPrompt(basePrompt, settings, config, extras = {}) {
   const focus = config?.safety?.workspaceFocus || workspace;
   const focusNote = focus && focus !== workspace
     ? `- Active work item: ${focus}. Default local reads, writes, Git, and shell start here. This does not replace the workspace grant.`
-    : "- If this conversation is about a nested project, use desktop_focus_workspace to bind that folder. Do not treat a nested repo as a new grant.";
+    : "- If this conversation is about a nested project and none is bound, ask which folder before searching the grant. Use desktop_focus_workspace after they choose. Do not treat a nested repo as a new grant.";
   return `${basePrompt}
 
 Current Desktop workspace grant:
 - The user selected this exact local project root for the current runtime: ${workspace}
 - Treat that folder as the current project when the user says “this project,” “the folder,” or “the workspace.”
+- An attached active work frame is current conversation state. Stay on that work for follow-ups unless the user clearly switches.
+- If the user's goal or which nested repo they mean is unclear, ask with desktop_request_decision before searching the workspace grant.
 ${focusNote}
 - With an active work item, "." resolves to it. A first path segment that exists at the grant root resolves grant-relative; a segment that exists only inside the work item resolves focus-relative. If a segment exists in both, the grant copy wins — pass the grant-root-relative path to reach the nested one.
 - Inspect the project with local read tools when its contents are relevant; do not claim the folder is missing without first checking it.
