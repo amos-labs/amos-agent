@@ -131,7 +131,7 @@ const elements = Object.fromEntries(
     "conversation", "conversationHeading", "welcomeMessage",
     "connectSystemsPush", "connectSystemsPushButton", "savingsAuditButton",
     "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
-    "chatRunStatus", "chatRunStatusText", "chatRunActivityButton",
+    "chatRunStatus", "chatRunStatusText", "chatRunThoughtSnippet", "chatRunActivityButton",
     "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
     "canvasSidecar", "contextResizeHandle", "panelActivityTab", "panelCanvasTab",
@@ -8952,6 +8952,13 @@ async function runTask(event, options = {}) {
   );
   transientTaskMessages.add(pending);
   streamingMessage = pending;
+  setInlineLiveStatus(
+    automaticResume
+      ? "Revalidating context…"
+      : privateAction
+        ? "Starting that request…"
+        : "Starting…"
+  );
   setRunning(true);
 
   try {
@@ -9066,6 +9073,7 @@ async function steerTask(direction) {
       const pending = addMessage("pending", "AMOS received your answer and is continuing now…");
       transientTaskMessages.add(pending);
       streamingMessage = pending;
+      setInlineLiveStatus("Using your answer and continuing…");
       updateChatRunStatus("Using your answer and continuing…", "active");
       elements.promptInput.focus();
       return;
@@ -9079,6 +9087,7 @@ async function steerTask(direction) {
     const pending = addMessage("pending", "AMOS is applying your new direction at the next safe boundary…");
     transientTaskMessages.add(pending);
     streamingMessage = pending;
+    setInlineLiveStatus("Applying your direction…");
     elements.promptInput.focus();
   } catch (error) {
     toast(error.message, true);
@@ -9090,6 +9099,7 @@ async function steerTask(direction) {
 function clearTransientTaskMessages() {
   for (const message of transientTaskMessages) message.remove();
   transientTaskMessages.clear();
+  hideInlineThoughtSnippet();
 }
 
 async function cancelTask() {
@@ -9230,7 +9240,9 @@ function addMessage(role, content, { eventId = "" } = {}) {
     paragraph.textContent = content;
     message.append(paragraph);
   }
-  elements.messages.append(message);
+  const anchor = elements.chatRunStatus;
+  if (anchor?.parentNode === elements.messages) elements.messages.insertBefore(message, anchor);
+  else elements.messages.append(message);
   renderConversationChrome();
   elements.messages.scrollTop = elements.messages.scrollHeight;
   return message;
@@ -9527,6 +9539,7 @@ function updateStreamingDraft(text) {
   if (!ensureStreamingMessage()) return;
   streamingMessage.className = "message assistant streaming live-run";
   hideInlinePlaceholder();
+  hideInlineThoughtSnippet();
   let markdown = streamingMessage.querySelector(".markdown-content");
   if (!markdown) {
     markdown = document.createElement("div");
@@ -9555,28 +9568,95 @@ function updateStreamingThought(text) {
 function paintStreamingThought(text) {
   if (!text || !ensureStreamingMessage()) return;
   lastThoughtPaintAt = Date.now();
-  streamingMessage.className = "message assistant streaming live-run";
   hideInlinePlaceholder();
+  streamingMessage.classList.add("live-run", "streaming");
+  const liveStatus = streamingMessage.querySelector(".message-live-status");
+  if (liveStatus) liveStatus.classList.add("hidden");
+  const collapsed = collapseThoughtStream(text);
   let thought = streamingMessage.querySelector(".message-thought");
   if (!thought) {
-    thought = document.createElement("details");
+    thought = document.createElement("div");
     thought.className = "message-thought";
-    thought.open = true;
-    const summary = document.createElement("summary");
-    summary.textContent = "Thinking";
-    const body = document.createElement("pre");
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "message-thought-toggle";
+    const dots = document.createElement("span");
+    dots.className = "message-live-dots";
+    dots.setAttribute("aria-hidden", "true");
+    for (let index = 0; index < 3; index += 1) dots.append(document.createElement("i"));
+    const label = document.createElement("span");
+    label.className = "message-thought-label";
+    label.textContent = "Thinking";
+    const expand = document.createElement("span");
+    expand.className = "message-thought-expand";
+    expand.textContent = "Expand";
+    header.append(dots, label, expand);
+    header.addEventListener("click", () => {
+      const open = thought.classList.toggle("expanded");
+      expand.textContent = open ? "Show less" : "Expand";
+      header.setAttribute("aria-expanded", open ? "true" : "false");
+      scrollThoughtStream(thought);
+    });
+    const stream = document.createElement("div");
+    stream.className = "message-thought-stream";
+    const body = document.createElement("p");
     body.className = "message-thought-body";
-    thought.append(summary, body);
-    const status = streamingMessage.querySelector(".message-live-status");
-    if (status) streamingMessage.insertBefore(thought, status.nextSibling);
-    else streamingMessage.prepend(thought);
+    stream.append(body);
+    thought.append(header, stream);
+    streamingMessage.prepend(thought);
   }
-  const body = thought.querySelector(".message-thought-body");
-  const clipped = text.length > 4_000 ? text.slice(-4_000) : text;
-  body.textContent = clipped;
-  body.scrollTop = body.scrollHeight;
-  setInlineLiveStatus("Thinking…");
+  thought.querySelector(".message-thought-body").textContent = collapsed;
+  const snippet = thoughtTickerSnippet(collapsed);
+  if (elements.chatRunThoughtSnippet) {
+    elements.chatRunThoughtSnippet.textContent = snippet;
+    elements.chatRunThoughtSnippet.classList.toggle("hidden", !snippet);
+  }
+  requestAnimationFrame(() => scrollThoughtStream(thought));
   elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
+function collapseThoughtStream(text) {
+  const lines = String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length <= 1) return lines[0] || String(text || "").trim();
+  const collapsed = [];
+  for (const line of lines) {
+    const previous = collapsed.at(-1) || "";
+    if (!previous) {
+      collapsed.push(line);
+      continue;
+    }
+    if (line.startsWith(previous) || previous.startsWith(line)) {
+      collapsed[collapsed.length - 1] = line.length >= previous.length ? line : previous;
+      continue;
+    }
+    collapsed.push(line);
+  }
+  return collapsed.join("\n");
+}
+
+function thoughtTickerSnippet(text) {
+  const compact = String(text || "").replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  return compact.length > 140 ? compact.slice(-140) : compact;
+}
+
+function scrollThoughtStream(thought) {
+  const stream = thought?.querySelector(".message-thought-stream");
+  if (!stream) return;
+  if (thought.classList.contains("expanded")) stream.scrollTop = stream.scrollHeight;
+  else stream.scrollLeft = stream.scrollWidth;
+}
+
+function hideInlineThoughtSnippet() {
+  streamingMessage?.querySelector(".message-thought")?.remove();
+  if (elements.chatRunThoughtSnippet) {
+    elements.chatRunThoughtSnippet.textContent = "";
+    elements.chatRunThoughtSnippet.classList.add("hidden");
+  }
 }
 
 function ensureStreamingMessage() {
@@ -9589,27 +9669,38 @@ function ensureStreamingMessage() {
 
 function hideInlinePlaceholder() {
   if (!streamingMessage) return;
-  const placeholder = streamingMessage.querySelector("p:not(.message-live-status)");
-  if (placeholder) placeholder.remove();
+  for (const paragraph of streamingMessage.querySelectorAll(":scope > p")) {
+    if (paragraph.classList.contains("message-live-status")) continue;
+    if (paragraph.classList.contains("message-thought-body")) continue;
+    paragraph.remove();
+  }
 }
 
 function setInlineLiveStatus(text) {
   if (!ensureStreamingMessage()) return;
   hideInlinePlaceholder();
-  streamingMessage.classList.add("live-run");
+  streamingMessage.className = "message pending streaming live-run";
   let status = streamingMessage.querySelector(".message-live-status");
   if (!status) {
     status = document.createElement("p");
     status.className = "message-live-status";
+    const dots = document.createElement("span");
+    dots.className = "message-live-dots";
+    dots.setAttribute("aria-hidden", "true");
+    for (let index = 0; index < 3; index += 1) dots.append(document.createElement("i"));
+    const label = document.createElement("span");
+    label.className = "message-live-status-text";
+    status.append(dots, label);
     streamingMessage.prepend(status);
   }
-  status.textContent = String(text || "AMOS is working…");
+  status.querySelector(".message-live-status-text").textContent = String(text || "AMOS is working…");
 }
 
 function appendInlineLiveStep(title, detail) {
   if (!ensureStreamingMessage()) return;
   hideInlinePlaceholder();
   streamingMessage.classList.add("live-run");
+  streamingMessage.querySelector(".message-live-status")?.classList.remove("hidden");
   let list = streamingMessage.querySelector(".message-live-steps");
   if (!list) {
     list = document.createElement("ol");
@@ -9649,6 +9740,7 @@ function updateChatRunStatus(message, status = "active") {
   elements.chatRunStatus.classList.remove("hidden", "active", "waiting", "failed", "completed");
   elements.chatRunStatus.classList.add(status);
   elements.chatRunStatusText.textContent = String(message || "AMOS is working…");
+  if (status === "completed" || status === "failed") hideInlineThoughtSnippet();
 }
 
 function setPanelBadge(status = "") {

@@ -63,17 +63,24 @@ test("the coding work surface renders deterministic file trees and inert line-nu
 });
 
 test("the renderer paints live thinking traces during a run", async () => {
-  const [javascript, css] = await Promise.all([
+  const [javascript, css, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
   ]);
   assert.match(javascript, /channel === "thinking"/);
   assert.match(javascript, /function updateStreamingThought/);
-  assert.match(javascript, /className = "message-thought"/);
+  assert.match(javascript, /function collapseThoughtStream/);
+  assert.match(javascript, /className = "message-thought-stream"/);
+  assert.match(javascript, /className = "message-thought-toggle"/);
+  assert.match(javascript, /className = "message-live-dots"/);
   assert.match(javascript, /className = "message-live-steps"/);
   assert.match(javascript, /LIVE_EVENT_VISIBLE_COUNT = 20/);
   assert.match(javascript, /Context is ready\. Waiting for the model/);
-  assert.match(css, /\.message-thought-body/);
+  assert.match(html, /id="chatRunThoughtSnippet"/);
+  assert.match(css, /\.message-thought-stream/);
+  assert.match(css, /\.message-thought\.expanded/);
+  assert.match(css, /\.message-live-dots/);
   assert.match(css, /\.message-live-steps/);
 });
 
