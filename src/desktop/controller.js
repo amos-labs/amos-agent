@@ -7454,7 +7454,7 @@ Current Desktop workspace grant:
 - The user selected this exact local project root for the current runtime: ${workspace}
 - Treat that folder as the current project when the user says “this project,” “the folder,” or “the workspace.”
 - An attached active work frame is current conversation state. Stay on that work for follow-ups unless the user clearly switches.
-- If the user's goal or which nested repo they mean is unclear, ask with desktop_request_decision before searching the workspace grant.
+- If the user's goal or which nested repo they mean is unclear, ask in the conversation before searching the workspace grant.
 ${focusNote}
 - With an active work item, "." resolves to it. A first path segment that exists at the grant root resolves grant-relative; a segment that exists only inside the work item resolves focus-relative. If a segment exists in both, the grant copy wins — pass the grant-root-relative path to reach the nested one.
 - Inspect the project with local read tools when its contents are relevant; do not claim the folder is missing without first checking it.
@@ -8121,7 +8121,7 @@ function autonomousGoalPrompt(enabled) {
     "Autonomous Project goal:",
     "- The user gave you this goal and left you to pursue it in the background.",
     "- Continue until the goal is complete, blocked, or you need a consequential answer.",
-    "- Park that question with desktop_request_decision. Do not invent a second waiting UI.",
+    "- Ask that question in the conversation and wait. Do not invent a form or second waiting UI.",
     "- Autonomy does not grant extra approval, spending, or execution authority.",
     "- Do not claim completion unless a tool result or receipt proves it.",
     ""

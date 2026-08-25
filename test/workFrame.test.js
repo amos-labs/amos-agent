@@ -46,7 +46,7 @@ test("a circling follow-up stays on the conversation's PR instead of the generic
 
   const prompt = workFramePrompt(frame);
   assert.match(prompt, /Bound project: none/);
-  assert.match(prompt, /desktop_request_decision before searching/);
+  assert.match(prompt, /ask in the conversation before searching/);
   assert.match(prompt, /pull\/637/);
 });
 

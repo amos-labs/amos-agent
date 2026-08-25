@@ -43,8 +43,8 @@ transcripts and do not grant approval or execution authority.
 A Project starts a conversation or an autonomous goal. Tasks remain the
 internal unit of work and are not a user-facing control. Give it a goal leaves
 AMOS working in the background under that Project's dollar cap. When AMOS
-needs a consequential answer, it parks the question in Decisions with
-`desktop_request_decision` instead of inventing a second input surface.
+needs a consequential answer, it asks in the conversation and waits for the
+next user message instead of inventing a form or second input surface.
 
 Each Project card can open accordions for conversations, background activity,
 and parked decisions. Activity still projects the Platform task-run inbox:

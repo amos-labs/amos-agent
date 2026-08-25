@@ -54,11 +54,14 @@ test("canvas guidance defaults to chat and requires a material visual advantage"
 });
 
 test("the shared AMOS constitution is versioned and used on every boundary", () => {
-  assert.equal(AMOS_OPERATOR_CONSTITUTION_VERSION, 2);
+  assert.equal(AMOS_OPERATOR_CONSTITUTION_VERSION, 3);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Questioning is part of the work/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /ask until the user's\s+intent is clear/);
-  assert.match(AMOS_OPERATOR_CONSTITUTION, /desktop_request_decision/);
-  assert.match(SYSTEM_PROMPT, /call desktop_request_decision/);
+  assert.match(AMOS_OPERATOR_CONSTITUTION, /ask it in the conversation/);
+  assert.match(AMOS_OPERATOR_CONSTITUTION, /that question is the whole turn/);
+  assert.match(SYSTEM_PROMPT, /ask the question in the conversation/);
+  assert.doesNotMatch(AMOS_OPERATOR_CONSTITUTION, /park that question with desktop_request_decision/);
+  assert.doesNotMatch(SYSTEM_PROMPT, /call desktop_request_decision and wait/);
   assert.doesNotMatch(AMOS_OPERATOR_CONSTITUTION, /Investigate before interrogating/);
   assert.doesNotMatch(AMOS_OPERATOR_CONSTITUTION, /What kind of business/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Do not run a personality survey or a fixed questionnaire/);
@@ -68,7 +71,7 @@ test("the shared AMOS constitution is versioned and used on every boundary", () 
     PERSONAL_SYSTEM_PROMPT,
     OFFLINE_SYSTEM_PROMPT
   ]) {
-    assert.match(prompt, /AMOS Operator constitution v2/);
+    assert.match(prompt, /AMOS Operator constitution v3/);
     assert.match(prompt, /Questioning is part of the work/);
   }
 });

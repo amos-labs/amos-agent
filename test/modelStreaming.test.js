@@ -79,6 +79,34 @@ test("OpenAI-compatible streaming emits text deltas and assembles tool calls", a
   assert.ok(result.usage.time_to_first_output_ms >= 0);
 });
 
+test("OpenAI-compatible streaming replaces cumulative content snapshots", async () => {
+  const events = [
+    { choices: [{ delta: { content: "I" } }] },
+    { choices: [{ delta: { content: "I see" } }] },
+    { choices: [{ delta: { content: "I see you've sent hello." } }] }
+  ];
+  const fetchImpl = async () => {
+    const body = events
+      .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+      .join("") + "data: [DONE]\n\n";
+    return new Response(body, {
+      status: 200,
+      headers: { "content-type": "text/event-stream" }
+    });
+  };
+  const texts = [];
+  const result = await client(fetchImpl).chat({
+    messages: [{ role: "user", content: "hello" }],
+    onDelta: (_delta, text) => texts.push(text)
+  });
+  assert.deepEqual(texts, [
+    "I",
+    "I see",
+    "I see you've sent hello."
+  ]);
+  assert.equal(result.message.content, "I see you've sent hello.");
+});
+
 test("OpenAI-compatible streaming surfaces reasoning content as thinking deltas", async () => {
   const events = [
     { choices: [{ delta: { reasoning_content: "Look up engines first." } }] },
