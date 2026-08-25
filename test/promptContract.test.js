@@ -58,6 +58,7 @@ test("the shared AMOS constitution is versioned and used on every boundary", () 
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Questioning is part of the work/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /ask until the user's\s+intent is clear/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /ask it in the conversation/);
+  assert.match(AMOS_OPERATOR_CONSTITUTION, /that question is the whole turn/);
   assert.match(SYSTEM_PROMPT, /ask the question in the conversation/);
   assert.doesNotMatch(AMOS_OPERATOR_CONSTITUTION, /park that question with desktop_request_decision/);
   assert.doesNotMatch(SYSTEM_PROMPT, /call desktop_request_decision and wait/);
