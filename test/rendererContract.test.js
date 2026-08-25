@@ -70,6 +70,9 @@ test("the renderer paints live thinking traces during a run", async () => {
   ]);
   assert.match(javascript, /channel === "thinking"/);
   assert.match(javascript, /function updateStreamingThought/);
+  assert.match(javascript, /function renderMarkdown\(container, source\) \{[\s\S]{0,120}container\.replaceChildren\(\)/);
+  assert.match(javascript, /renderMarkdown\(markdown, text\)/);
+  assert.doesNotMatch(javascript, /renderMarkdown\(markdown, collapseThoughtStream\(text\)\)/);
   assert.match(javascript, /from "\.\.\/\.\.\/src\/model\/thoughtDelta\.js"/);
   assert.match(javascript, /LIVE_THOUGHT_VISIBLE_LINES = 6/);
   assert.match(javascript, /LIVE_EVENT_VISIBLE_COUNT = 20/);

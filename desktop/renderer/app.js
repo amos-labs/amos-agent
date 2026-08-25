@@ -9370,6 +9370,7 @@ function restoreInteractiveState(snapshot) {
 }
 
 function renderMarkdown(container, source) {
+  container.replaceChildren();
   for (const block of parseMarkdown(source)) {
     if (block.type === "heading") {
       const heading = document.createElement(`h${block.level}`);
@@ -9554,7 +9555,7 @@ function updateStreamingDraft(text) {
     markdown.className = "markdown-content";
     streamingMessage.append(markdown);
   }
-  renderMarkdown(markdown, collapseThoughtStream(text));
+  renderMarkdown(markdown, text);
   elements.messages.scrollTop = elements.messages.scrollHeight;
 }
 
