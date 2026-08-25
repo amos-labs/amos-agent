@@ -44,7 +44,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   reasoningEffort: "",
   localRuntime: "ollama",
   operatingMode: "online",
-  researchCheckpointMinutes: 5,
+  researchCheckpointMinutes: 0,
   autonomousCheckpointMinutes: 0,
   appearance: "system",
   workspace: "",
@@ -211,7 +211,7 @@ export function sanitizeSettings(input = {}) {
         : "medium",
     localRuntime: input.localRuntime === "mtplx" ? "mtplx" : "ollama",
     operatingMode,
-    researchCheckpointMinutes: checkpointMinutes(input.researchCheckpointMinutes, 5),
+    researchCheckpointMinutes: checkpointMinutes(input.researchCheckpointMinutes, 0),
     autonomousCheckpointMinutes: checkpointMinutes(input.autonomousCheckpointMinutes, 0),
     appearance: ["system", "light", "dark"].includes(input.appearance)
       ? input.appearance

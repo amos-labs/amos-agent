@@ -8038,13 +8038,15 @@ function desktopResearchCheckpointPolicy({ settings = {}, input = {}, lane = nul
   const background = lane?.taskKind === "goal_pursuit" ||
     Boolean(lane?.parentTaskId) ||
     lane?.select === false;
-  const fallback = background
-    ? settings.autonomousCheckpointMinutes
-    : settings.researchCheckpointMinutes;
-  const requested = input?.researchCheckpointMinutes ?? fallback;
+  // Interactive Operator can already stop and steer. Timed research check-ins
+  // only interrupt the run; do not use them on the conversation path.
+  if (!background) {
+    return { enabled: false, afterMs: 0, extensionMs: 0, afterToolCycles: Number.POSITIVE_INFINITY };
+  }
+  const requested = input?.researchCheckpointMinutes ?? settings.autonomousCheckpointMinutes;
   const minutes = [0, 2, 5, 10, 15, 30, 60].includes(Number(requested))
     ? Number(requested)
-    : (background ? 0 : 5);
+    : 0;
   if (minutes <= 0) {
     return { enabled: false, afterMs: 0, extensionMs: 0, afterToolCycles: Number.POSITIVE_INFINITY };
   }

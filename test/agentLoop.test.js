@@ -1042,6 +1042,7 @@ test("agent turns reuse one opaque prompt session and expose prefix telemetry", 
   registry.register({ name: "inspect", handler: () => ({ ok: true }) });
   const requests = [];
   const receipts = [];
+  const waitingForModel = [];
   let turn = 0;
   const loop = new AgentLoop({
     config: {
@@ -1086,6 +1087,9 @@ test("agent turns reuse one opaque prompt session and expose prefix telemetry", 
     },
     onEvent: (event) => {
       if (event.type === "context_compiled") receipts.push(event);
+      if (event.type === "phase" && /Waiting for the model/.test(event.summary || "")) {
+        waitingForModel.push(event);
+      }
     }
   });
 
@@ -1095,6 +1099,8 @@ test("agent turns reuse one opaque prompt session and expose prefix telemetry", 
   assert.equal(requests[0].promptContractHash, requests[1].promptContractHash);
   assert.equal(receipts[0].prefixCache.contractReused, false);
   assert.equal(receipts[1].prefixCache.contractReused, true);
+  assert.equal(waitingForModel.length, 2);
+  assert.match(waitingForModel[0].summary, /Waiting for the model to think and respond/);
   assert.equal(receipts[1].prefixCache.sharedMessageCount, 2);
   assert.ok(receipts[1].prefixCache.reusableInputTokens > 0);
   assert.doesNotMatch(JSON.stringify(receipts), /tenant-secret|\/private\/customer/);

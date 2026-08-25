@@ -16,7 +16,7 @@ test("desktop defaults to zero-config AMOS Hosted intelligence", () => {
   assert.equal(DEFAULT_DESKTOP_SETTINGS.baseUrl, "");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.intelligenceProfile, "auto");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.reasoningEffort, "");
-  assert.equal(DEFAULT_DESKTOP_SETTINGS.researchCheckpointMinutes, 5);
+  assert.equal(DEFAULT_DESKTOP_SETTINGS.researchCheckpointMinutes, 0);
   assert.equal(DEFAULT_DESKTOP_SETTINGS.autonomousCheckpointMinutes, 0);
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalMode, "ask");
   assert.equal(DEFAULT_DESKTOP_SETTINGS.localApprovalWorkspace, "");
@@ -39,7 +39,7 @@ test("research checkpoint settings are bounded while autonomous goals may run un
     ...DEFAULT_DESKTOP_SETTINGS,
     researchCheckpointMinutes: 999,
     autonomousCheckpointMinutes: -1
-  }).researchCheckpointMinutes, 5);
+  }).researchCheckpointMinutes, 0);
   assert.equal(sanitizeSettings({
     ...DEFAULT_DESKTOP_SETTINGS,
     researchCheckpointMinutes: 999,

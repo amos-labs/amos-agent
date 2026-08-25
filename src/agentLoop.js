@@ -276,6 +276,14 @@ export class AgentLoop {
           : preparedMessages;
         const contextReceipt = this.captureContextReceipt({ messages, tools, turn });
         onEvent({ type: "context_compiled", ...contextReceipt });
+        onEvent({
+          type: "phase",
+          phase: "thinking",
+          turn,
+          summary: turn === 0
+            ? "Waiting for the model to think and respond"
+            : "Waiting for the model to continue"
+        });
         let partialResponse = "";
         let response;
         const gatherEffort = this.gatherReasoningEffort();

@@ -1059,6 +1059,40 @@ html[data-platform="win32"] .sidebar-toggle {
   font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--muted);
 }
+.message.live-run { gap: 8px; }
+.message-live-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.message-live-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.message-live-steps li {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.message-live-steps li.current {
+  border-color: rgba(109,147,255,.4);
+  background: rgba(109,147,255,.06);
+  color: var(--ink);
+}
+.message-live-steps small {
+  color: var(--muted-2);
+  font-size: 10px;
+}
 .message.assistant { display: grid; }
 .message-task-actions {
   display: flex;
@@ -1440,6 +1474,8 @@ html[data-platform="win32"] .sidebar-toggle {
 .event-card.workflow span { line-height: 1.5; }
 .event-card.coding-lifecycle { border-color: rgba(59,213,143,.22); background: rgba(59,213,143,.045); }
 .event-card.coding-lifecycle strong { color: var(--green); text-transform: capitalize; }
+.event-card.usage strong { text-transform: none; white-space: normal; }
+.event-card.thinking-live span { white-space: pre-wrap; max-height: 4.5em; overflow: hidden; }
 .event-card.event-card-trimmed { display: none; }
 .live-events-toggle {
   justify-self: center;

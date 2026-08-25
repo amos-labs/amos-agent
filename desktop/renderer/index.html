@@ -941,32 +941,17 @@
                 </select>
                 <small>Personal mode can use your chosen cloud model without company access. Local-only never uses network tools.</small>
               </div>
-              <div class="field-row">
-                <div class="field">
-                  <label for="researchCheckpointInput">Interactive research check-in</label>
-                  <select id="researchCheckpointInput" name="researchCheckpointMinutes">
-                    <option value="0">Do not use timed check-ins</option>
-                    <option value="2">After 2 minutes</option>
-                    <option value="5">After 5 minutes</option>
-                    <option value="10">After 10 minutes</option>
-                    <option value="15">After 15 minutes</option>
-                    <option value="30">After 30 minutes</option>
-                    <option value="60">After 1 hour</option>
-                  </select>
-                  <small>AMOS pauses safely between tool cycles and asks whether to answer or keep researching.</small>
-                </div>
-                <div class="field">
-                  <label for="autonomousCheckpointInput">Project goals and background work</label>
-                  <select id="autonomousCheckpointInput" name="autonomousCheckpointMinutes">
-                    <option value="0">Only when a decision is needed (recommended)</option>
-                    <option value="5">Check in after 5 minutes</option>
-                    <option value="10">Check in after 10 minutes</option>
-                    <option value="15">Check in after 15 minutes</option>
-                    <option value="30">Check in after 30 minutes</option>
-                    <option value="60">Check in after 1 hour</option>
-                  </select>
-                  <small>Zero allows multi-hour goals. Progress, budgets, approvals, and genuine decision boundaries still apply.</small>
-                </div>
+              <div class="field">
+                <label for="autonomousCheckpointInput">Project goals and background work</label>
+                <select id="autonomousCheckpointInput" name="autonomousCheckpointMinutes">
+                  <option value="0">Only when a decision is needed (recommended)</option>
+                  <option value="5">Check in after 5 minutes</option>
+                  <option value="10">Check in after 10 minutes</option>
+                  <option value="15">Check in after 15 minutes</option>
+                  <option value="30">Check in after 30 minutes</option>
+                  <option value="60">Check in after 1 hour</option>
+                </select>
+                <small>Operator conversations are never paused for a research check-in. Stop or steer at any time. For left-running goals, zero still allows multi-hour work; budgets, approvals, and genuine decision boundaries still apply.</small>
               </div>
               <div id="localSetupField" class="local-setup-callout hidden">
                 <div>

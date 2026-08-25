@@ -70,7 +70,11 @@ test("the renderer paints live thinking traces during a run", async () => {
   assert.match(javascript, /channel === "thinking"/);
   assert.match(javascript, /function updateStreamingThought/);
   assert.match(javascript, /className = "message-thought"/);
+  assert.match(javascript, /className = "message-live-steps"/);
+  assert.match(javascript, /LIVE_EVENT_VISIBLE_COUNT = 20/);
+  assert.match(javascript, /Context is ready\. Waiting for the model/);
   assert.match(css, /\.message-thought-body/);
+  assert.match(css, /\.message-live-steps/);
 });
 
 test("the sidebar stays reachable on short Windows windows", async () => {
@@ -507,6 +511,9 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(controller, /isolate: true/);
   assert.match(javascript, /function decisionInputCard\(/);
   assert.match(javascript, /request\.decisionType === "research-checkpoint"/);
+  assert.doesNotMatch(html, /Interactive research check-in/);
+  assert.doesNotMatch(html, /id="researchCheckpointInput"/);
+  assert.match(controller, /Interactive Operator can already stop and steer/);
   assert.match(javascript, /resolveDecisionInput\(request, option, chip, true\)/);
   assert.match(javascript, /api\.resolveDecisionInput\(/);
   assert.match(preload, /desktop:resolve-decision-input/);
