@@ -893,7 +893,7 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(onboarding, /Run automations on a schedule or ad hoc — app to app, inbox to ledger, ticket to fix — that run outside of Desktop/);
   assert.match(onboarding, /Connect the systems you already run so AMOS is not guessing from chat/);
   assert.match(onboarding, /Keep durable company memory, policy, approvals, and receipts/);
-  assert.match(onboarding, /Almost nobody stays if they never connect an application/);
+  assert.match(onboarding, /You can skip this for now and connect apps later/);
   assert.match(onboarding, /14-day free trial · Plans start at \$99\/month/);
   assert.match(onboarding, /<strong>Explore the Northwind demo<\/strong>/);
   assert.match(onboarding, /Limited hosted turns included · Local and BYOK available/);
@@ -943,7 +943,11 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(javascript, /function workspaceFolderName/);
   assert.match(css, /\.onboarding\s*{[\s\S]*?minmax\(0, 1fr\)/);
   assert.match(html, /id="connectSystemsPush"/);
-  assert.match(html, /Connect your company — this is why customers stay/);
+  assert.match(html, /<strong>Connect your apps<\/strong>/);
+  assert.doesNotMatch(html, /this is why customers stay/);
+  assert.doesNotMatch(html, /That is the product/);
+  assert.doesNotMatch(javascript, /That is the product/);
+  assert.doesNotMatch(javascript, /customers stay/);
   assert.match(html, /Estimate savings/);
   assert.match(javascript, /AMOS_SAVINGS_AUDIT_PROMPT/);
   assert.match(javascript, /type === "connect_platform"/);

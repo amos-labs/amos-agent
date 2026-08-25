@@ -768,11 +768,9 @@ function render() {
       "Ask about this project, attach a document, paste a screenshot, or describe offline work…";
   } else if (state.mode?.personal) {
     elements.operatorEyebrow.textContent = "WORK FROM THIS COMPUTER";
-    elements.readyTitle.textContent = shouldPushConnectSystems()
-      ? "Chat is ready. Connect your company next."
-      : "Your workspace is ready.";
+    elements.readyTitle.textContent = "Your workspace is ready.";
     elements.readyDescription.textContent = shouldPushConnectSystems()
-      ? "Local chat and coding work now. Connecting the company — then automating app-to-app on a schedule or ad hoc — is the single biggest reason a customer stays."
+      ? "Ask about this project, or connect your apps when you want AMOS to run work across them."
       : "Understand code, research, create, and automate locally. Nothing here receives company authority.";
     elements.promptInput.placeholder =
       "Ask about this project, attach a document, paste a screenshot, or describe work to move forward…";
@@ -785,12 +783,9 @@ function render() {
       "Ask about Northwind, create something, or make a governed sample-company change…";
   } else {
     elements.operatorEyebrow.textContent = "OPERATE THE COMPANY";
-    elements.readyTitle.textContent = shouldPushConnectSystems()
-      ? "Connect your company. That is the product."
-      : "AMOS is ready.";
-    elements.readyDescription.textContent = shouldPushConnectSystems()
-      ? "Ask anything now. AMOS becomes the company OS after it can see your apps and run work on a schedule, ad hoc, or app-to-app — and that is when people stay."
-      : "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
+    elements.readyTitle.textContent = "AMOS is ready.";
+    elements.readyDescription.textContent =
+      "Ask about the company, create something new, or make a change. Consequential actions still wait for the right approval.";
     elements.promptInput.placeholder =
       "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
   }
@@ -853,7 +848,7 @@ function render() {
   const connectAction = elements.connectButton.querySelector("em");
   connectKicker.textContent = activeAccount
     ? "YOUR APPLICATIONS · CONNECT NEXT"
-    : "THE PRODUCT · 14-DAY TRIAL";
+    : "14-DAY TRIAL";
   connectTitle.textContent = activeAccount
     ? `Connect ${activeCompanyName()}`
     : "Connect your company";
@@ -861,19 +856,19 @@ function render() {
     ? "Attach the apps this company already runs, then automate them on a schedule or ad hoc — app to app. AMOS is guessing from chat until those systems are connected."
     : "Sign in, attach the apps the business already runs, then let AMOS move work between them on a schedule or when you ask.";
   connectPlan.textContent = activeAccount
-    ? "Signed in · connect the company to stay"
+    ? "Signed in · connect your apps"
     : "14-day free trial · Plans start at $99/month";
   connectAction.textContent = "Connect your company →";
   elements.connectButton.disabled = false;
   elements.boundaryReadinessText.textContent = demo
-    ? "Northwind sample is connected. Real retention starts when you connect your own applications."
+    ? "Northwind sample is connected. Connect your own apps when you want AMOS on your company."
     : state.connected
-      ? "Signed in. Connect your company now — that is the single biggest reason customers stay."
+      ? "Signed in. Connect the apps this company already runs."
       : state.mode?.offline
-        ? "Local-only. You can chat. Connecting applications is how AMOS becomes the company OS."
+        ? "Local-only. You can chat now and connect apps later."
         : state.mode?.personal
-          ? "This computer works for chat and code. Connecting applications is how a trial becomes a customer."
-          : "You can enter without this. Chat without applications is a trial. Connecting apps is the product.";
+          ? "This computer is ready for chat and code. Connect apps when you want AMOS across the business."
+          : "You can skip this for now. Connect apps when you want AMOS to run work across them.";
   const startingPointSelected = Boolean(
     state.connected || state.mode?.personal || state.mode?.offline
   );
