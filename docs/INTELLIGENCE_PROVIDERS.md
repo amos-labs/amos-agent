@@ -53,10 +53,14 @@ provider, and hardware profile may therefore evolve independently from AMOS
 Desktop.
 
 Desktop presents one **AMOS Intelligence · Automatic** route. It sends no
-managed reasoning-tier hint. The platform evaluates each task step against its
-modality, workflow, context, consequence, privacy, latency, cost, and measured
-capability requirements. It selects the least expensive qualified route and
-escalates only when a stronger model or reviewer is required.
+managed reasoning-tier hint. The signed local 0.8B router classifies each step
+as `routine`, `balanced`, `deep`, or `frontier` and attaches that floor under
+`amos_routing`. The platform maps routine / balanced / deep to the owned Qwen
+cell (thinking off / medium / high) when the Qwen cortex URL is configured,
+and maps frontier to Bedrock Claude Opus 5. Deep can later be pinned to
+Sonnet high-thinking with a platform env override. The platform—not Desktop—
+selects the provider. Until the Qwen URL is live, non-frontier classes keep
+the current Claude compatibility routes.
 
 The underlying provider and model remain available in private diagnostics and
 receipts, but they are not routine product choices. The business remains

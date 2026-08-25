@@ -58,8 +58,12 @@ when a step looks hard.
 - Receipts may name the digest and organism generation. Marketing does not
   require the user to shop models.
 
-Until that cutover, live Hosted `auto` may still select a qualified managed
-route. Do not describe that interim as the fixed-cost organism.
+Live Hosted `auto` still means Desktop sends the stable alias plus the local
+router class. The platform maps **routine / balanced / deep** onto the owned
+Qwen cell once `AMOS__HOSTED_INTELLIGENCE__QWEN_BASE_URL` is set, with
+per-class thinking depth, and maps **frontier** to Bedrock Claude Opus 5.
+Qwen failures do not overflow onto Claude. Until that URL is configured,
+non-frontier classes keep the current Claude compatibility routes.
 
 ### Local
 
