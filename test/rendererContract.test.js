@@ -63,14 +63,26 @@ test("the coding work surface renders deterministic file trees and inert line-nu
 });
 
 test("the renderer paints live thinking traces during a run", async () => {
-  const [javascript, css] = await Promise.all([
+  const [javascript, css, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
-    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
   ]);
   assert.match(javascript, /channel === "thinking"/);
   assert.match(javascript, /function updateStreamingThought/);
-  assert.match(javascript, /className = "message-thought"/);
-  assert.match(css, /\.message-thought-body/);
+  assert.match(javascript, /function collapseThoughtStream/);
+  assert.match(javascript, /\\*_~/);
+  assert.match(javascript, /className = "message-thought-stream"/);
+  assert.match(javascript, /className = "message-thought-toggle"/);
+  assert.match(javascript, /className = "message-live-dots"/);
+  assert.match(javascript, /className = "message-live-steps"/);
+  assert.match(javascript, /LIVE_EVENT_VISIBLE_COUNT = 20/);
+  assert.match(javascript, /Context is ready\. Waiting for the model/);
+  assert.match(html, /id="chatRunThoughtSnippet"/);
+  assert.match(css, /\.message-thought-stream/);
+  assert.match(css, /\.message-thought\.expanded/);
+  assert.match(css, /\.message-live-dots/);
+  assert.match(css, /\.message-live-steps/);
 });
 
 test("the sidebar stays reachable on short Windows windows", async () => {
@@ -78,6 +90,10 @@ test("the sidebar stays reachable on short Windows windows", async () => {
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
   ]);
+  assert.match(javascript, /function placeAccountMenu/);
+  assert.match(javascript, /panelUserClosed/);
+  assert.match(css, /\.account-menu\s*\{[\s\S]*?position:\s*fixed/);
+  assert.match(css, /\.brand\s*\{[\s\S]*?-webkit-app-region:\s*no-drag/);
   assert.match(javascript, /function explainOnboardingGate/);
   assert.match(javascript, /function applyPlatformShell/);
   assert.match(javascript, /document\.documentElement\.dataset\.platform = platform/);
@@ -507,6 +523,9 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(controller, /isolate: true/);
   assert.match(javascript, /function decisionInputCard\(/);
   assert.match(javascript, /request\.decisionType === "research-checkpoint"/);
+  assert.doesNotMatch(html, /Interactive research check-in/);
+  assert.doesNotMatch(html, /id="researchCheckpointInput"/);
+  assert.match(controller, /Interactive Operator can already stop and steer/);
   assert.match(javascript, /resolveDecisionInput\(request, option, chip, true\)/);
   assert.match(javascript, /api\.resolveDecisionInput\(/);
   assert.match(preload, /desktop:resolve-decision-input/);

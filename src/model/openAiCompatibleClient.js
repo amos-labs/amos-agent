@@ -10,6 +10,7 @@ import {
   isAmosDesktopRoutingConfig
 } from "./intelligenceRouter.js";
 import { normalizedUsage } from "./protocol.js";
+import { mergeThoughtDelta } from "./thoughtDelta.js";
 
 function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item != null && item !== ""));
@@ -482,7 +483,7 @@ async function readStreamingResponse(response, {
     const reasoningDelta = streamReasoningDelta(delta);
     if (reasoningDelta) {
       firstOutputAt ||= performance.now();
-      message.reasoning_content = `${message.reasoning_content || ""}${reasoningDelta}`;
+      message.reasoning_content = mergeThoughtDelta(message.reasoning_content, reasoningDelta);
       onDelta("", message.content, {
         channel: "thinking",
         thinking: message.reasoning_content

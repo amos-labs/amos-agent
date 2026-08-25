@@ -64,7 +64,8 @@ const providerDefaults = {
   }
 };
 
-const LIVE_EVENT_VISIBLE_COUNT = 3;
+const LIVE_EVENT_VISIBLE_COUNT = 20;
+const INLINE_LIVE_STEP_LIMIT = 8;
 const LIST_PAGE_SIZE = 15;
 let state = null;
 let currentView = "operator";
@@ -84,6 +85,7 @@ let lastThoughtPaintAt = 0;
 let pendingThoughtText = "";
 let thoughtPaintTimer = null;
 let canvasSidecarOpen = false;
+let panelUserClosed = false;
 let currentPanelTab = "activity";
 let runTerminalState = "idle";
 let activeUiRunToken = 0;
@@ -130,7 +132,7 @@ const elements = Object.fromEntries(
     "conversation", "conversationHeading", "welcomeMessage",
     "connectSystemsPush", "connectSystemsPushButton", "savingsAuditButton",
     "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
-    "chatRunStatus", "chatRunStatusText", "chatRunActivityButton",
+    "chatRunStatus", "chatRunStatusText", "chatRunThoughtSnippet", "chatRunActivityButton",
     "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
     "canvasSidecar", "contextResizeHandle", "panelActivityTab", "panelCanvasTab",
@@ -149,7 +151,7 @@ const elements = Object.fromEntries(
     "intelligenceRolesField", "intelligenceRolesEnabled", "intelligenceRoleControls", "plannerRoleInput",
     "implementerRoleInput", "checkerRoleInput",
     "apiKeyInput", "apiKeyHelp", "reasoningInput", "operatingModeInput", "mcpInput",
-    "researchCheckpointInput", "autonomousCheckpointInput",
+    "autonomousCheckpointInput",
     "taskRoleBar", "plannerRoleButton", "implementerRoleButton", "checkerRoleButton",
     "taskUsageLine",
     "settingsBackButton", "settingsError", "intelligenceTestStatus", "intelligenceTestIcon",
@@ -493,6 +495,9 @@ function bindActions() {
     if (elements.accountMenu.contains(event.target) || elements.accountMenuButton.contains(event.target)) return;
     closeAccountMenu();
   });
+  window.addEventListener("resize", () => {
+    if (!elements.accountMenu.classList.contains("hidden")) placeAccountMenu();
+  });
 }
 
 function bindEvents() {
@@ -552,7 +557,7 @@ function bindEvents() {
     state.canvases = canvasState.canvases || [];
     state.activeCanvasId = canvasState.activeCanvasId || null;
     activeCanvasId = state.activeCanvasId;
-    if (activeCanvasId) {
+    if (activeCanvasId && !panelUserClosed) {
       canvasSidecarOpen = true;
       currentPanelTab = "canvas";
       setPanelBadge("artifact");
@@ -4286,7 +4291,7 @@ function renderCanvas() {
   const hasBlocks = Boolean(canvas?.blocks?.length);
   const setupVisible = Boolean(automationSetupDraft && currentView === "operator");
   renderBriefingLibrary();
-  if (setupVisible) {
+  if (setupVisible && !panelUserClosed) {
     canvasSidecarOpen = true;
   }
   const sidecarVisible = Boolean(canvasSidecarOpen && currentView === "operator");
@@ -5867,21 +5872,21 @@ function openCanvasSidecar(id = activeCanvasId) {
 function openPanel(tab = currentPanelTab) {
   currentPanelTab = tab === "canvas" ? "canvas" : "activity";
   canvasSidecarOpen = true;
+  panelUserClosed = false;
   showView("operator");
   renderCanvas();
 }
 
 function closeCanvasSidecar() {
   canvasSidecarOpen = false;
+  panelUserClosed = true;
   renderCanvas();
   elements.promptInput.focus();
 }
 
 function toggleCanvasSidecar() {
-  // A manual toggle should win over the auto-open heuristic for this view, so
-  // just flip the flag and re-render. Closing behaves exactly like the ×
-  // button; opening shows the most recent canvas.
   canvasSidecarOpen = !canvasSidecarOpen;
+  panelUserClosed = !canvasSidecarOpen;
   if (canvasSidecarOpen && !activeCanvasId) currentPanelTab = "activity";
   renderCanvas();
   if (!canvasSidecarOpen) elements.promptInput.focus();
@@ -6455,9 +6460,29 @@ function accountInitial(account) {
 
 function toggleAccountMenu() {
   const open = elements.accountMenu.classList.contains("hidden");
+  if (open) {
+    renderAccountMenu();
+    placeAccountMenu();
+  }
   elements.accountMenu.classList.toggle("hidden", !open);
   elements.accountMenuButton.setAttribute("aria-expanded", String(open));
-  if (open) renderAccountMenu();
+}
+
+function placeAccountMenu() {
+  const button = elements.accountMenuButton.getBoundingClientRect();
+  const menu = elements.accountMenu;
+  const width = Math.min(390, Math.max(280, window.innerWidth - 24));
+  let left = button.right + 12;
+  if (left + width > window.innerWidth - 12) {
+    left = Math.max(12, button.left - 12 - width);
+  }
+  const bottom = Math.max(12, window.innerHeight - button.bottom);
+  menu.style.position = "fixed";
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.right = "auto";
+  menu.style.top = "auto";
+  menu.style.bottom = `${Math.round(bottom)}px`;
+  menu.style.width = `${Math.round(width)}px`;
 }
 
 function closeAccountMenu() {
@@ -7426,7 +7451,7 @@ function renderSettings() {
     ? "api-key"
     : "sigv4";
   elements.operatingModeInput.value = settings.operatingMode || "online";
-  elements.researchCheckpointInput.value = String(settings.researchCheckpointMinutes ?? 5);
+
   elements.autonomousCheckpointInput.value = String(settings.autonomousCheckpointMinutes ?? 0);
   elements.appearanceInput.value = settings.appearance || "system";
   elements.mcpInput.value = settings.amosMcpUrl;
@@ -8613,7 +8638,7 @@ async function persistSettings() {
       ? ""
       : elements.reasoningInput.value,
     operatingMode: elements.operatingModeInput.value,
-    researchCheckpointMinutes: Number(elements.researchCheckpointInput.value),
+    researchCheckpointMinutes: 0,
     autonomousCheckpointMinutes: Number(elements.autonomousCheckpointInput.value),
     appearance: elements.appearanceInput.value,
     amosMcpUrl: elements.mcpInput.value
@@ -8946,11 +8971,18 @@ async function runTask(event, options = {}) {
     automaticResume
       ? "AMOS is revalidating current context and continuing only the work that remains…"
       : privateAction
-        ? "AMOS is loading the relevant context and carrying out that request…"
-        : "AMOS is loading company context and determining the next action…"
+        ? "AMOS is starting that request…"
+        : "AMOS is starting…"
   );
   transientTaskMessages.add(pending);
   streamingMessage = pending;
+  setInlineLiveStatus(
+    automaticResume
+      ? "Revalidating context…"
+      : privateAction
+        ? "Starting that request…"
+        : "Starting…"
+  );
   setRunning(true);
 
   try {
@@ -9065,6 +9097,7 @@ async function steerTask(direction) {
       const pending = addMessage("pending", "AMOS received your answer and is continuing now…");
       transientTaskMessages.add(pending);
       streamingMessage = pending;
+      setInlineLiveStatus("Using your answer and continuing…");
       updateChatRunStatus("Using your answer and continuing…", "active");
       elements.promptInput.focus();
       return;
@@ -9078,6 +9111,7 @@ async function steerTask(direction) {
     const pending = addMessage("pending", "AMOS is applying your new direction at the next safe boundary…");
     transientTaskMessages.add(pending);
     streamingMessage = pending;
+    setInlineLiveStatus("Applying your direction…");
     elements.promptInput.focus();
   } catch (error) {
     toast(error.message, true);
@@ -9089,6 +9123,7 @@ async function steerTask(direction) {
 function clearTransientTaskMessages() {
   for (const message of transientTaskMessages) message.remove();
   transientTaskMessages.clear();
+  hideInlineThoughtSnippet();
 }
 
 async function cancelTask() {
@@ -9178,6 +9213,7 @@ function resetSessionView() {
   pendingUiActions = [];
   pendingGenericConnectCalls = 0;
   canvasSidecarOpen = false;
+  panelUserClosed = false;
   currentPanelTab = "activity";
   runTerminalState = "idle";
   setPanelBadge("");
@@ -9229,7 +9265,9 @@ function addMessage(role, content, { eventId = "" } = {}) {
     paragraph.textContent = content;
     message.append(paragraph);
   }
-  elements.messages.append(message);
+  const anchor = elements.chatRunStatus;
+  if (anchor?.parentNode === elements.messages) elements.messages.insertBefore(message, anchor);
+  else elements.messages.append(message);
   renderConversationChrome();
   elements.messages.scrollTop = elements.messages.scrollHeight;
   return message;
@@ -9523,8 +9561,10 @@ function finishInlineActivity(status = runTerminalState) {
 }
 
 function updateStreamingDraft(text) {
-  if (!streamingMessage) return;
-  streamingMessage.className = "message assistant streaming";
+  if (!ensureStreamingMessage()) return;
+  streamingMessage.className = "message assistant streaming live-run";
+  hideInlinePlaceholder();
+  hideInlineThoughtSnippet();
   let markdown = streamingMessage.querySelector(".markdown-content");
   if (!markdown) {
     markdown = document.createElement("div");
@@ -9551,24 +9591,169 @@ function updateStreamingThought(text) {
 }
 
 function paintStreamingThought(text) {
-  if (!streamingMessage || !text) return;
+  if (!text || !ensureStreamingMessage()) return;
   lastThoughtPaintAt = Date.now();
-  streamingMessage.className = "message assistant streaming";
+  hideInlinePlaceholder();
+  streamingMessage.classList.add("live-run", "streaming");
+  const liveStatus = streamingMessage.querySelector(".message-live-status");
+  if (liveStatus) liveStatus.classList.add("hidden");
+  const collapsed = collapseThoughtStream(text);
   let thought = streamingMessage.querySelector(".message-thought");
   if (!thought) {
-    thought = document.createElement("details");
+    thought = document.createElement("div");
     thought.className = "message-thought";
-    thought.open = true;
-    const summary = document.createElement("summary");
-    summary.textContent = "Thinking";
-    const body = document.createElement("pre");
+    const header = document.createElement("button");
+    header.type = "button";
+    header.className = "message-thought-toggle";
+    const dots = document.createElement("span");
+    dots.className = "message-live-dots";
+    dots.setAttribute("aria-hidden", "true");
+    for (let index = 0; index < 3; index += 1) dots.append(document.createElement("i"));
+    const label = document.createElement("span");
+    label.className = "message-thought-label";
+    label.textContent = "Thinking";
+    const expand = document.createElement("span");
+    expand.className = "message-thought-expand";
+    expand.textContent = "Expand";
+    header.append(dots, label, expand);
+    header.addEventListener("click", () => {
+      const open = thought.classList.toggle("expanded");
+      expand.textContent = open ? "Show less" : "Expand";
+      header.setAttribute("aria-expanded", open ? "true" : "false");
+      scrollThoughtStream(thought);
+    });
+    const stream = document.createElement("div");
+    stream.className = "message-thought-stream";
+    const body = document.createElement("p");
     body.className = "message-thought-body";
-    thought.append(summary, body);
+    stream.append(body);
+    thought.append(header, stream);
     streamingMessage.prepend(thought);
   }
-  const body = thought.querySelector(".message-thought-body");
-  const clipped = text.length > 4_000 ? text.slice(-4_000) : text;
-  body.textContent = clipped;
+  thought.querySelector(".message-thought-body").textContent = collapsed;
+  const snippet = thoughtTickerSnippet(collapsed);
+  if (elements.chatRunThoughtSnippet) {
+    elements.chatRunThoughtSnippet.textContent = snippet;
+    elements.chatRunThoughtSnippet.classList.toggle("hidden", !snippet);
+  }
+  requestAnimationFrame(() => scrollThoughtStream(thought));
+  elements.messages.scrollTop = elements.messages.scrollHeight;
+}
+
+function collapseThoughtStream(text) {
+  const lines = String(text || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return "";
+  const normalize = (value) => value.replace(/[`*_~]/g, "").replace(/\s+/g, " ").trim();
+  return lines.reduce((merged, line) => {
+    if (!merged) return line;
+    const previous = normalize(merged);
+    const next = normalize(line);
+    if (next.startsWith(previous) || previous.startsWith(next)) {
+      return next.length >= previous.length ? line : merged;
+    }
+    return merged + line;
+  }, "");
+}
+
+function thoughtTickerSnippet(text) {
+  const compact = String(text || "").replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  return compact.length > 140 ? compact.slice(-140) : compact;
+}
+
+function scrollThoughtStream(thought) {
+  const stream = thought?.querySelector(".message-thought-stream");
+  if (!stream) return;
+  if (thought.classList.contains("expanded")) stream.scrollTop = stream.scrollHeight;
+  else stream.scrollLeft = stream.scrollWidth;
+}
+
+function hideInlineThoughtSnippet() {
+  streamingMessage?.querySelector(".message-thought")?.remove();
+  if (elements.chatRunThoughtSnippet) {
+    elements.chatRunThoughtSnippet.textContent = "";
+    elements.chatRunThoughtSnippet.classList.add("hidden");
+  }
+}
+
+function ensureStreamingMessage() {
+  if (streamingMessage) return streamingMessage;
+  const pending = addMessage("pending", "AMOS is working…");
+  transientTaskMessages.add(pending);
+  streamingMessage = pending;
+  return streamingMessage;
+}
+
+function hideInlinePlaceholder() {
+  if (!streamingMessage) return;
+  for (const paragraph of streamingMessage.querySelectorAll(":scope > p")) {
+    if (paragraph.classList.contains("message-live-status")) continue;
+    if (paragraph.classList.contains("message-thought-body")) continue;
+    paragraph.remove();
+  }
+}
+
+function setInlineLiveStatus(text) {
+  if (!ensureStreamingMessage()) return;
+  hideInlinePlaceholder();
+  streamingMessage.className = "message pending streaming live-run";
+  let status = streamingMessage.querySelector(".message-live-status");
+  if (!status) {
+    status = document.createElement("p");
+    status.className = "message-live-status";
+    const dots = document.createElement("span");
+    dots.className = "message-live-dots";
+    dots.setAttribute("aria-hidden", "true");
+    for (let index = 0; index < 3; index += 1) dots.append(document.createElement("i"));
+    const label = document.createElement("span");
+    label.className = "message-live-status-text";
+    status.append(dots, label);
+    streamingMessage.prepend(status);
+  }
+  status.querySelector(".message-live-status-text").textContent = String(text || "AMOS is working…");
+}
+
+function appendInlineLiveStep(title, detail) {
+  if (!ensureStreamingMessage()) return;
+  hideInlinePlaceholder();
+  streamingMessage.classList.add("live-run");
+  streamingMessage.querySelector(".message-live-status")?.classList.remove("hidden");
+  let list = streamingMessage.querySelector(".message-live-steps");
+  if (!list) {
+    list = document.createElement("ol");
+    list.className = "message-live-steps";
+    streamingMessage.append(list);
+  }
+  const label = String(title || "").trim();
+  if (!label) return;
+  const last = list.querySelector("li:last-child");
+  if (last?.dataset.title === label) {
+    const meta = last.querySelector("small");
+    if (detail && meta) meta.textContent = detail;
+    last.classList.add("current");
+    for (const item of list.querySelectorAll("li")) {
+      if (item !== last) item.classList.remove("current");
+    }
+    return;
+  }
+  for (const item of list.querySelectorAll("li")) item.classList.remove("current");
+  const item = document.createElement("li");
+  item.className = "current";
+  item.dataset.title = label;
+  const name = document.createElement("span");
+  name.textContent = label;
+  item.append(name);
+  if (detail) {
+    const meta = document.createElement("small");
+    meta.textContent = detail;
+    item.append(meta);
+  }
+  list.append(item);
+  while (list.children.length > INLINE_LIVE_STEP_LIMIT) list.firstChild.remove();
   elements.messages.scrollTop = elements.messages.scrollHeight;
 }
 
@@ -9576,6 +9761,7 @@ function updateChatRunStatus(message, status = "active") {
   elements.chatRunStatus.classList.remove("hidden", "active", "waiting", "failed", "completed");
   elements.chatRunStatus.classList.add(status);
   elements.chatRunStatusText.textContent = String(message || "AMOS is working…");
+  if (status === "completed" || status === "failed") hideInlineThoughtSnippet();
 }
 
 function setPanelBadge(status = "") {
@@ -9688,60 +9874,53 @@ function renderLiveEvent(event) {
     if (channel === "thinking") {
       updateChatRunStatus("Thinking…", "active");
       updateStreamingThought(event.thinking || event.delta || "");
+      updateLiveThinkingCard(event.thinking || event.delta || "");
       return;
     }
     if (channel === "tool" && event.toolName) {
-      updateChatRunStatus(`Preparing ${humanizeTool(event.toolName)}…`, "active");
+      const preparing = `Preparing ${humanizeTool(event.toolName)}…`;
+      updateChatRunStatus(preparing, "active");
+      setInlineLiveStatus(preparing);
+      appendInlineLiveStep(humanizeTool(event.toolName), "Preparing the tool call");
       return;
     }
     updateChatRunStatus("Writing the response…", "active");
+    setInlineLiveStatus("Writing the response…");
     updateStreamingDraft(event.text || "");
     return;
   }
   captureGovernedUiActions(event);
   const transientStatus = chatStatusForEvent(event);
-  if (transientStatus) updateChatRunStatus(transientStatus.message, transientStatus.status);
+  if (transientStatus) {
+    updateChatRunStatus(transientStatus.message, transientStatus.status);
+    setInlineLiveStatus(transientStatus.message);
+  }
   if (event.type === "tool_error") setPanelBadge("error");
   else if (running) setPanelBadge("working");
+  if (event.type === "context_compiled") {
+    // Compiling context is instantaneous next to the model wait. Keep the
+    // conversation on "waiting for the model" instead of appearing stuck.
+    return;
+  }
+  const copy = liveEventCopy(event);
+  if (copy.inline) appendInlineLiveStep(copy.title, copy.detail);
+  if (copy.skipCard) return;
   const card = document.createElement("div");
-  card.className = `event-card${event.type === "tool_error" ? " error" : ""}${event.type === "phase" ? " phase" : ""}${event.type === "workflow" ? " workflow" : ""}${event.type === "coding_lifecycle" ? " coding-lifecycle" : ""}`;
+  card.className = [
+    "event-card",
+    event.type === "tool_error" ? "error" : "",
+    event.type === "phase" ? "phase" : "",
+    event.type === "workflow" ? "workflow" : "",
+    event.type === "coding_lifecycle" ? "coding-lifecycle" : "",
+    event.type === "usage" ? "usage" : ""
+  ].filter(Boolean).join(" ");
   const title = document.createElement("strong");
-  // Tool events carry `name`; phase/workflow/coding events carry their own
-  // label. Every other event type (intelligence, context_compiled, text, …)
-  // has neither, so label it by summary/type instead of printing `undefined`.
-  const fallbackLabel = event.name || event.title || event.summary || humanizeTool(String(event.type || "event"));
-  if (event.type === "workflow") {
-    title.textContent = `◇ ${event.title || fallbackLabel}`;
-  } else if (event.type === "coding_lifecycle") {
-    title.textContent = `↻ Coding · ${humanizeTool(event.state?.role || event.phase || "workflow")}`;
-  } else if (event.type === "phase") {
-    title.textContent = `◌ ${event.phase || fallbackLabel}`;
-  } else if (event.type === "tool_start") {
-    title.textContent = `→ ${event.name || fallbackLabel}`;
-  } else if (event.type === "tool_error") {
-    title.textContent = `× ${event.name || fallbackLabel}`;
-  } else {
-    title.textContent = event.name ? `✓ ${event.name}` : `◌ ${fallbackLabel}`;
-  }
+  title.textContent = copy.title;
   const detail = document.createElement("span");
-  if (event.type === "workflow") {
-    detail.textContent = `${event.steps?.join(" → ") || event.summary}${event.doneWhen ? ` · Done when: ${event.doneWhen}` : ""}`;
-  } else if (event.type === "coding_lifecycle") {
-    detail.textContent = event.summary || "";
-  } else if (event.type === "phase") {
-    detail.textContent = event.summary || "";
-  } else if (event.type === "tool_error") {
-    detail.textContent = event.error || "Tool returned an error";
-  } else if (event.type === "tool_start") {
-    detail.textContent = humanizeTool(event.name || "");
-  } else if (event.type === "tool_end") {
-    detail.textContent = "Completed with a recorded result";
-  } else {
-    // Nameless event: the title already shows the summary, so only add detail
-    // when there is a distinct summary to avoid duplicating the title.
-    detail.textContent = event.summary && event.summary !== fallbackLabel ? event.summary : "";
-  }
+  detail.textContent = copy.detail;
   card.append(title, detail);
+  const thinkingCard = elements.liveEvents.querySelector(".event-card.thinking-live");
+  if (thinkingCard) thinkingCard.classList.remove("thinking-live");
   elements.liveEvents.append(card);
   elements.panelActivityCount.textContent = String(
     elements.liveEvents.querySelectorAll(".event-card").length
@@ -9750,6 +9929,125 @@ function renderLiveEvent(event) {
   if (canvasSidecarOpen && currentPanelTab === "activity") {
     elements.activityStream.scrollTop = elements.activityStream.scrollHeight;
   }
+}
+
+function liveEventCopy(event) {
+  if (event.type === "workflow") {
+    return {
+      title: event.title || "Plan",
+      detail: `${event.steps?.join(" → ") || event.summary || ""}${event.doneWhen ? ` · Done when: ${event.doneWhen}` : ""}`.trim(),
+      inline: true
+    };
+  }
+  if (event.type === "coding_lifecycle") {
+    return {
+      title: `Coding · ${humanizeTool(event.state?.role || event.phase || "workflow")}`,
+      detail: event.summary || "",
+      inline: true
+    };
+  }
+  if (event.type === "phase") {
+    const waitingForModel = /waiting for the model/i.test(event.summary || "");
+    return {
+      title: waitingForModel ? "Waiting for the model" : humanizeTool(event.phase || "working"),
+      detail: event.summary || "",
+      inline: true
+    };
+  }
+  if (event.type === "tool_error") {
+    return {
+      title: humanizeTool(event.name || "tool"),
+      detail: event.error || "Tool returned an error",
+      inline: true
+    };
+  }
+  if (event.type === "tool_start") {
+    return {
+      title: humanizeTool(event.name || "tool"),
+      detail: liveToolArgSummary(event.args) || "Started",
+      inline: true
+    };
+  }
+  if (event.type === "tool_end") {
+    return {
+      title: humanizeTool(event.name || "tool"),
+      detail: "Finished with a recorded result",
+      inline: true
+    };
+  }
+  if (event.type === "usage") {
+    return {
+      title: event.model || event.runtime || "Model turn",
+      detail: liveUsageSummary(event),
+      inline: false
+    };
+  }
+  if (event.type === "routing") {
+    return {
+      title: "Routing",
+      detail: event.summary || [
+        event.selectedProvider,
+        event.selectedModel,
+        event.minimumClass
+      ].filter(Boolean).join(" · "),
+      inline: true
+    };
+  }
+  const fallback = event.name || event.title || event.summary || humanizeTool(String(event.type || "event"));
+  return {
+    title: event.name ? humanizeTool(event.name) : fallback,
+    detail: event.summary && event.summary !== fallback ? event.summary : "",
+    inline: Boolean(event.summary || event.name)
+  };
+}
+
+function liveUsageSummary(event) {
+  const tokens = Number(event.totalTokens || 0)
+    || (Number(event.inputTokens || 0) + Number(event.outputTokens || 0));
+  const ms = Number(event.latencyMs || 0);
+  const parts = [];
+  if (ms > 0) parts.push(ms >= 10_000 ? `${Math.round(ms / 1000)}s` : `${(ms / 1000).toFixed(1)}s`);
+  if (tokens > 0) parts.push(`${tokens.toLocaleString()} tokens`);
+  if (Number(event.outputTokens || 0) > 0) {
+    parts.push(`${Number(event.outputTokens).toLocaleString()} out`);
+  }
+  if (event.generationTokensPerSecond) {
+    parts.push(`${Number(event.generationTokensPerSecond).toFixed(1)} tok/s`);
+  }
+  return parts.join(" · ") || "Turn usage recorded";
+}
+
+function liveToolArgSummary(args) {
+  if (!args || typeof args !== "object") return "";
+  const skip = new Set(["auth", "token", "secret", "password", "apiKey", "api_key"]);
+  const parts = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (skip.has(key) || value == null || value === "") continue;
+    const text = typeof value === "string" ? value : typeof value === "number" ? String(value) : "";
+    if (!text) continue;
+    parts.push(`${key} ${text.length > 80 ? `${text.slice(0, 77)}…` : text}`);
+    if (parts.length >= 2) break;
+  }
+  return parts.join(" · ");
+}
+
+function updateLiveThinkingCard(text) {
+  const snippet = String(text || "").trim();
+  if (!snippet) return;
+  let card = elements.liveEvents.querySelector(".event-card.thinking-live");
+  if (!card) {
+    card = document.createElement("div");
+    card.className = "event-card phase thinking-live";
+    card.append(document.createElement("strong"), document.createElement("span"));
+    elements.liveEvents.append(card);
+    elements.panelActivityCount.textContent = String(
+      elements.liveEvents.querySelectorAll(".event-card").length
+    );
+  }
+  card.querySelector("strong").textContent = "Thinking";
+  const clipped = snippet.length > 240 ? snippet.slice(-240) : snippet;
+  card.querySelector("span").textContent = clipped;
+  trimLiveEvents();
 }
 
 function chatStatusForEvent(event) {
@@ -9769,6 +10067,9 @@ function chatStatusForEvent(event) {
       return { message: event.summary || "AMOS needs your input to continue.", status: "waiting" };
     }
     if (["completed", "interrupted", "failed"].includes(event.phase)) return null;
+    if (/waiting for the model/i.test(event.summary || "")) {
+      return { message: event.summary, status: "active" };
+    }
     return { message: event.summary || humanizeTool(event.phase || "Working"), status: "active" };
   }
   if (event.type === "workflow") {
@@ -9784,14 +10085,14 @@ function chatStatusForEvent(event) {
     return { message: "Choosing the right intelligence for this step…", status: "active" };
   }
   if (event.type === "context_compiled") {
-    return { message: "Using the relevant company and task context…", status: "active" };
+    return { message: "Context is ready. Waiting for the model…", status: "active" };
   }
   return null;
 }
 
-// Default the work stream to the most recent few steps. Older cards stay in
-// the DOM (hidden) so a single "show all" reveals them, and a control at the
-// bottom of the expanded list collapses back down.
+// Default the sidebar stream to the most recent steps. Older cards stay in
+// the DOM (hidden) so expand reveals them. The toggle stays at the top so
+// new cards cannot bury it.
 function trimLiveEvents() {
   const container = elements.liveEvents;
   if (!container) return;
@@ -9813,16 +10114,17 @@ function trimLiveEvents() {
     toggle.addEventListener("click", () => {
       const nowExpanded = container.classList.toggle("expanded");
       trimLiveEvents();
-      if (!nowExpanded) {
+      if (nowExpanded) {
         container.scrollIntoView({ block: "nearest" });
+      } else {
+        elements.activityStream.scrollTop = elements.activityStream.scrollHeight;
       }
-      elements.activityStream.scrollTop = elements.activityStream.scrollHeight;
     });
-    container.append(toggle);
   }
+  container.prepend(toggle);
   toggle.textContent = expanded
-    ? `Show fewer events ↑`
-    : `Show ${overflow} earlier event${overflow === 1 ? "" : "s"} ↓`;
+    ? `Show latest ${LIVE_EVENT_VISIBLE_COUNT}`
+    : `Show ${overflow} earlier event${overflow === 1 ? "" : "s"}`;
 }
 
 const CONSEQUENTIAL_RECEIPT_STATES = new Set([

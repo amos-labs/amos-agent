@@ -5,6 +5,7 @@ import {
   readJsonResponse,
   readSseEvents
 } from "./protocol.js";
+import { mergeThoughtDelta } from "./thoughtDelta.js";
 
 const PROTOCOL = "anthropic-messages";
 
@@ -228,7 +229,7 @@ async function readAnthropicStream(response, { signal, displayName, onDelta, onA
             onDelta(delta, visibleText);
           },
           emitThinking: (delta) => {
-            thinkingText += delta;
+            thinkingText = mergeThoughtDelta(thinkingText, delta);
             onDelta("", visibleText, { channel: "thinking", thinking: thinkingText });
           }
         });
@@ -290,7 +291,7 @@ function applyAnthropicDelta(blocks, index, delta, {
     block._partialJson = `${block._partialJson || ""}${delta.partial_json || ""}`;
   } else if (delta.type === "thinking_delta") {
     block.type ||= "thinking";
-    block.thinking = `${block.thinking || ""}${delta.thinking || ""}`;
+    block.thinking = mergeThoughtDelta(block.thinking, delta.thinking || "");
     if (delta.thinking) emitThinking(delta.thinking);
   } else if (delta.type === "signature_delta") {
     block.signature = `${block.signature || ""}${delta.signature || ""}`;

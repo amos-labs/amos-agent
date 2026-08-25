@@ -6,6 +6,7 @@ import {
   readJsonResponse,
   readSseEvents
 } from "./protocol.js";
+import { mergeThoughtDelta } from "./thoughtDelta.js";
 
 const PROTOCOL = "openai-responses";
 
@@ -194,7 +195,7 @@ async function readResponsesStream(response, { signal, displayName, onDelta, onA
         visibleText += data.delta;
         onDelta(data.delta, visibleText);
       } else if (typeof data.delta === "string" && String(type).includes("reasoning")) {
-        thinkingText += data.delta;
+        thinkingText = mergeThoughtDelta(thinkingText, data.delta);
         onDelta("", visibleText, { channel: "thinking", thinking: thinkingText });
       } else if (type === "response.output_item.added" && data.item) {
         items.set(data.output_index ?? items.size, structuredClone(data.item));
