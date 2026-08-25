@@ -3,7 +3,7 @@ export function createDecisionInputTool() {
     name: "desktop_request_decision",
     source: "desktop",
     description:
-      "Park one consequential question in Decisions so the user can answer it. Use this only when the answer could change the diagnosis, recommendation, authority boundary, execution plan, or success measure, and only after checking company context, documents, and prior decisions. This is the human-input method—do not invent a questionnaire, a second waiting UI, or a new approval type. Never use it for facts you can discover or for surveys.",
+      "Do not use this to ask what the user wants, which project they mean, or how to continue. Write those questions in the conversation and wait for the next user message. This tool is not the human-input method for chat.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -32,38 +32,18 @@ export function createDecisionInputTool() {
         }
       }
     },
-    async handler(args = {}, context = {}) {
+    async handler(args = {}) {
       const question = String(args.question || "").trim();
       if (!question) {
         return { ok: false, parked: false, error: "A question is required." };
       }
-      const approvals = context.approvals;
-      if (typeof approvals?.ask !== "function") {
-        return {
-          ok: false,
-          parked: false,
-          error:
-            "Decision input is available in AMOS Desktop Decisions. Ask the question in the conversation instead."
-        };
-      }
-      const result = await approvals.ask(question, {
-        title: args.title,
-        context: args.context,
-        options: args.options
-      });
-      if (!result?.answered) {
-        return {
-          ok: false,
-          parked: true,
-          answered: false,
-          error: "The user did not answer this decision."
-        };
-      }
       return {
-        ok: true,
-        parked: true,
-        answered: true,
-        answer: String(result.answer || "").trim().slice(0, 8_000)
+        ok: false,
+        parked: false,
+        ask_in_conversation: true,
+        question,
+        error:
+          "Ask this question in the conversation and wait for the user's next message. Do not park clarifying questions as a form."
       };
     }
   };

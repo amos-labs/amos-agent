@@ -477,7 +477,10 @@ async function readStreamingResponse(response, {
     }
     if (typeof delta.content === "string" && delta.content.length > 0) {
       firstOutputAt ||= performance.now();
-      message.content += delta.content;
+      // Some OpenAI-compatible servers (including vLLM Qwen) retransmit the
+      // whole answer so far in each delta. Replace growing snapshots instead
+      // of concatenating them into a staircase.
+      message.content = mergeThoughtDelta(message.content, delta.content);
       onDelta(delta.content, message.content);
     }
     const reasoningDelta = streamReasoningDelta(delta);

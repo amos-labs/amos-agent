@@ -71,7 +71,7 @@ test("the renderer paints live thinking traces during a run", async () => {
   assert.match(javascript, /channel === "thinking"/);
   assert.match(javascript, /function updateStreamingThought/);
   assert.match(javascript, /from "\.\.\/\.\.\/src\/model\/thoughtDelta\.js"/);
-  assert.match(javascript, /LIVE_THOUGHT_VISIBLE_LINES = 4/);
+  assert.match(javascript, /LIVE_THOUGHT_VISIBLE_LINES = 6/);
   assert.match(javascript, /LIVE_EVENT_VISIBLE_COUNT = 20/);
   assert.doesNotMatch(javascript, /className = "message-thought-stream"/);
   assert.doesNotMatch(javascript, /className = "message-live-steps"/);
@@ -80,7 +80,7 @@ test("the renderer paints live thinking traces during a run", async () => {
   assert.match(html, /id="chatRunThoughtSnippet"/);
   assert.match(css, /\.chat-run-thought/);
   assert.match(css, /\.chat-run-thought[\s\S]*?white-space:\s*pre-wrap/);
-  assert.match(css, /\.chat-run-thought[\s\S]*?max-height:\s*5\.6em/);
+  assert.match(css, /\.chat-run-thought[\s\S]*?max-height:\s*8\.4em/);
 });
 
 test("the sidebar stays reachable on short Windows windows", async () => {
@@ -621,7 +621,7 @@ test("Operator is chat-first with transient progress and detailed activity in th
   assert.match(javascript, /function beginInlineActivity\(\)/);
   assert.match(javascript, /function finishInlineActivity\(status = runTerminalState\)/);
   assert.match(javascript, /function renderInlineDecisionRequest\(/);
-  assert.match(javascript, /renderInlineDecisionRequest\(approval, \{ focus: true \}\)/);
+  assert.doesNotMatch(javascript, /renderInlineDecisionRequest\(approval, \{ focus: true \}\)/);
   assert.match(javascript, /decisionInputDrafts\.set\(request\.id, textarea\.value\)/);
   assert.match(javascript, /function captureInteractiveState\(\)/);
   assert.match(javascript, /restoreInteractiveState\(interaction\)/);

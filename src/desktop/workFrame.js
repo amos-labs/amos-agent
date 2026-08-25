@@ -59,7 +59,7 @@ export function workFramePrompt(frame) {
       : "",
     frame.pullRequest ? `Pull request: ${frame.pullRequest}` : "",
     frame.lastOutcome ? `Last result: ${frame.lastOutcome}` : "",
-    "If the goal or project is unclear, ask with desktop_request_decision before searching.",
+    "If the goal or project is unclear, ask in the conversation before searching.",
     "</amos_work_frame>"
   ].filter(Boolean).join("\n");
 }

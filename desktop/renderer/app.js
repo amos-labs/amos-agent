@@ -66,7 +66,7 @@ const providerDefaults = {
 };
 
 const LIVE_EVENT_VISIBLE_COUNT = 20;
-const LIVE_THOUGHT_VISIBLE_LINES = 4;
+const LIVE_THOUGHT_VISIBLE_LINES = 6;
 const LIST_PAGE_SIZE = 15;
 let state = null;
 let currentView = "operator";
@@ -651,7 +651,6 @@ function bindEvents() {
         state.pendingInputs = [...pending, approval];
       }
       renderDecisions();
-      renderInlineDecisionRequest(approval, { focus: true });
       updateChatRunStatus(approval.message || "AMOS needs your input to continue.", "waiting");
       setPanelBadge("waiting");
       return;
@@ -6750,9 +6749,6 @@ function renderDecisions() {
   for (const card of elements.messages.querySelectorAll(".decision-card.inline-decision")) {
     if (!pendingIds.has(card.dataset.inputId)) card.remove();
   }
-  if (running) {
-    for (const request of pendingInputs) renderInlineDecisionRequest(request);
-  }
 }
 
 function taskCheckpointCard(checkpoint) {
@@ -9557,14 +9553,13 @@ function updateStreamingDraft(text) {
   if (!ensureStreamingMessage()) return;
   streamingMessage.className = "message assistant streaming live-run";
   hideInlinePlaceholder();
-  hideInlineThoughtSnippet();
   let markdown = streamingMessage.querySelector(".markdown-content");
   if (!markdown) {
     markdown = document.createElement("div");
     markdown.className = "markdown-content";
     streamingMessage.append(markdown);
   }
-  renderMarkdown(markdown, text);
+  renderMarkdown(markdown, collapseThoughtStream(text));
   elements.messages.scrollTop = elements.messages.scrollHeight;
 }
 
