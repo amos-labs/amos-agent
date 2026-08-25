@@ -109,6 +109,8 @@ const RECIPES = Object.freeze([
       "github issue",
       "pull request",
       "plumbline issue",
+      "in rework",
+      "rework",
       "checks failed",
       "ci failed",
       "rework status",
@@ -361,10 +363,15 @@ export function selectTaskWorkflow({ objective, attachmentNames = [] } = {}) {
 export function resolveTaskWorkflow({
   objective,
   attachmentNames = [],
-  routedWorkflowId = ""
+  routedWorkflowId = "",
+  workFrame = null
 } = {}) {
   const deterministic = selectTaskWorkflow({ objective, attachmentNames });
   if (deterministic.id !== DEFAULT_RECIPE.id) return deterministic;
+  if (workFrame?.family === "coding") {
+    return taskWorkflowFromId(workFrame.pullRequest ? "github-issue-diagnosis" : "code-change")
+      || deterministic;
+  }
   return taskWorkflowFromId(routedWorkflowId) || deterministic;
 }
 
