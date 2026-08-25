@@ -9646,21 +9646,17 @@ function collapseThoughtStream(text) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  if (lines.length <= 1) return lines[0] || String(text || "").trim();
-  const collapsed = [];
-  for (const line of lines) {
-    const previous = collapsed.at(-1) || "";
-    if (!previous) {
-      collapsed.push(line);
-      continue;
+  if (lines.length === 0) return "";
+  const normalize = (value) => value.replace(/[`*_~]/g, "").replace(/\s+/g, " ").trim();
+  return lines.reduce((merged, line) => {
+    if (!merged) return line;
+    const previous = normalize(merged);
+    const next = normalize(line);
+    if (next.startsWith(previous) || previous.startsWith(next)) {
+      return next.length >= previous.length ? line : merged;
     }
-    if (line.startsWith(previous) || previous.startsWith(line)) {
-      collapsed[collapsed.length - 1] = line.length >= previous.length ? line : previous;
-      continue;
-    }
-    collapsed.push(line);
-  }
-  return collapsed.join("\n");
+    return merged + line;
+  }, "");
 }
 
 function thoughtTickerSnippet(text) {

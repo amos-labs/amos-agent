@@ -71,6 +71,7 @@ test("the renderer paints live thinking traces during a run", async () => {
   assert.match(javascript, /channel === "thinking"/);
   assert.match(javascript, /function updateStreamingThought/);
   assert.match(javascript, /function collapseThoughtStream/);
+  assert.match(javascript, /\\*_~/);
   assert.match(javascript, /className = "message-thought-stream"/);
   assert.match(javascript, /className = "message-thought-toggle"/);
   assert.match(javascript, /className = "message-live-dots"/);

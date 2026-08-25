@@ -1100,7 +1100,7 @@ html[data-platform="win32"] .sidebar-toggle {
   -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black 86%, transparent);
   mask-image: linear-gradient(to right, transparent, black 16px, black 86%, transparent);
 }
-.message-thought-body {
+.message .message-thought-body {
   margin: 0;
   white-space: nowrap;
 }
@@ -1112,7 +1112,7 @@ html[data-platform="win32"] .sidebar-toggle {
   -webkit-mask-image: none;
   mask-image: none;
 }
-.message-thought.expanded .message-thought-body {
+.message .message-thought.expanded .message-thought-body {
   white-space: pre-wrap;
 }
 .message-live-steps {
