@@ -46,10 +46,61 @@ export function normalizedUsage(usage) {
   });
 }
 
+export function jsonObjectArgumentString(value) {
+  if (value == null) return "{}";
+  if (typeof value === "object") {
+    if (Array.isArray(value)) return "{}";
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "{}";
+    }
+  }
+  if (typeof value !== "string") return "{}";
+  const trimmed = value.trim();
+  if (!trimmed) return "{}";
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") return "{}";
+    return trimmed;
+  } catch {
+    return "{}";
+  }
+}
+
+export function canonicalizeMessageToolCalls(message) {
+  if (!message || !Array.isArray(message.tool_calls) || message.tool_calls.length === 0) {
+    return message;
+  }
+  return {
+    ...message,
+    tool_calls: message.tool_calls.map((call) => ({
+      ...call,
+      function: {
+        ...(call?.function || {}),
+        arguments: jsonObjectArgumentString(call?.function?.arguments)
+      }
+    }))
+  };
+}
+
+export function canonicalizeChatMessages(messages = []) {
+  return messages.map((message) => canonicalizeMessageToolCalls(message));
+}
+
 export function assertValidModelToolArguments(response, { displayName = "Model" } = {}) {
   for (const call of response?.message?.tool_calls || []) {
-    const rawArguments = call?.function?.arguments;
-    const candidate = rawArguments == null || rawArguments === "" ? "{}" : rawArguments;
+    if (!call.function || typeof call.function !== "object") continue;
+    const rawArguments = call.function.arguments;
+    if (rawArguments == null || (typeof rawArguments === "string" && !rawArguments.trim())) {
+      call.function.arguments = "{}";
+      continue;
+    }
+    if (typeof rawArguments === "object" && !Array.isArray(rawArguments)) {
+      call.function.arguments = jsonObjectArgumentString(rawArguments);
+      continue;
+    }
+    const candidate = rawArguments;
     let parsed;
     let problem = "invalid_json";
     try {
@@ -59,6 +110,7 @@ export function assertValidModelToolArguments(response, { displayName = "Model" 
         problem = "non_object";
         throw new TypeError("Tool arguments must be a JSON object");
       }
+      call.function.arguments = candidate;
     } catch {
       throw invalidModelToolArgumentsError({
         displayName,
