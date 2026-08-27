@@ -109,6 +109,97 @@ test("hosted cell estimates compact a long tool session into the live 32k window
   );
 });
 
+test("compaction pins recent and longest user statements, not the first chat message", () => {
+  const greeting = { role: "user", content: "hey" };
+  const tax = {
+    role: "user",
+    content: "Update tax_behavior to inclusive on these three Stripe prices"
+  };
+  const followUp = { role: "user", content: "this issue should be fixed...lets try it again" };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      greeting,
+      { role: "assistant", content: "hello" },
+      { role: "user", content: "ok" },
+      { role: "assistant", content: "ready" },
+      { role: "user", content: "thanks" },
+      { role: "assistant", content: "x".repeat(80_000) },
+      tax,
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "one", function: { name: "connection_call", arguments: "{}" } }]
+      },
+      {
+        role: "tool",
+        tool_call_id: "one",
+        content: JSON.stringify({ status: 403, body: "<html>403 Forbidden</html>", ok: false })
+      },
+      followUp
+    ],
+    contextTokens: 4_096,
+    maxOutputTokens: 1_024,
+    charsPerToken: 2,
+    activeTask: followUp,
+    workingObjective: tax.content,
+    recentJobs: [
+      "Help me build a Stripe to QuickBooks integration",
+      "We need to add these accounts to QBO",
+      tax.content
+    ]
+  });
+
+  const userText = compiled.messages
+    .filter((message) => message.role === "user")
+    .map((message) => String(message.content))
+    .join("\n");
+  assert.match(userText, /Update tax_behavior to inclusive/);
+  assert.match(userText, /lets try it again/);
+  assert.doesNotMatch(userText, /^hey$/m);
+  const compiledText = compiled.messages.map((message) => String(message.content)).join("\n");
+  assert.match(compiledText, /desktop_inspect_conversation/);
+  assert.match(compiledText, /<amos_scratchpad>/);
+  assert.match(compiledText, /add these accounts to QBO/);
+  assert.match(compiledText, /Stripe to QuickBooks integration/);
+});
+
+test("scratch pad is injected even when the window is not compacted", () => {
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      { role: "user", content: "try again" }
+    ],
+    contextTokens: 32_768,
+    maxOutputTokens: 1_024,
+    workingObjective: "Update tax_behavior to inclusive on these three Stripe prices",
+    recentJobs: [
+      "Help me build a Stripe to QuickBooks integration",
+      "We need to add these accounts to QBO"
+    ],
+    scratchpad: {
+      currentJob: "Update tax_behavior to inclusive on these three Stripe prices",
+      jobs: [
+        { title: "Help me build a Stripe to QuickBooks integration", status: "parked" },
+        { title: "We need to add these accounts to QBO", status: "parked" },
+        { title: "Update tax_behavior to inclusive on these three Stripe prices", status: "current" }
+      ],
+      openLoops: ["Confirm inclusive tax on the three prices"],
+      notes: "Stripe writes are form-urlencoded POST."
+    }
+  });
+
+  assert.equal(compiled.plan.compacted, false);
+  const text = compiled.messages.map((message) => String(message.content)).join("\n");
+  assert.match(text, /<amos_scratchpad>/);
+  assert.match(text, /not a Project/);
+  assert.match(text, /try again/);
+  assert.match(text, /Stripe to QuickBooks integration/);
+  assert.match(text, /add these accounts to QBO/);
+  assert.match(text, /Confirm inclusive tax/);
+  assert.match(text, /form-urlencoded POST/);
+});
+
 test("follow-up compaction keeps the original objective and latest steering", () => {
   const root = { role: "user", content: "Update tax_behavior to inclusive on these three Stripe prices" };
   const followUp = { role: "user", content: "this issue should be fixed...lets try it again" };
@@ -148,7 +239,7 @@ test("follow-up compaction keeps the original objective and latest steering", ()
   assert.match(userText, /lets try it again/);
   assert.ok(
     compiled.messages.some((message) =>
-      String(message.content).includes("<amos_working_state>")
+      String(message.content).includes("<amos_scratchpad>")
     )
   );
   assert.ok(

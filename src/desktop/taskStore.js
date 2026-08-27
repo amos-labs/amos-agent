@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+import { normalizeScratchpad } from "../model/conversationScratchpad.js";
+
 const VERSION = 1;
 const MAX_TASKS = 100;
 const MAX_STORE_CHARS = 16 * 1024 * 1024;
@@ -13,10 +15,12 @@ const CONTEXT_SCOPES = new Set(["everything", "from_here", "selected_artifacts"]
 /**
  * Encrypted, user-private Desktop metadata for durable AMOS tasks.
  *
- * This store owns local-only presentation and workspace state. It deliberately
- * does not persist transcripts, provider credentials, approvals, queued writes,
- * tool arguments, or execution authority. Model-run checkpoints remain in the
- * separate TaskCheckpointStore.
+ * This store owns local-only presentation and workspace state. Conversation
+ * scratch pads (job lists for this thread, not transcripts) persist on the
+ * task. A task may have no Project; the pad never lives on a Project.
+ * This store does not persist transcripts, provider credentials, approvals,
+ * queued writes, tool arguments, or execution authority. Model-run checkpoints
+ * remain in the separate TaskCheckpointStore.
  */
 export class DesktopTaskStore {
   constructor({
@@ -44,7 +48,7 @@ export class DesktopTaskStore {
     return store.tasks
       .filter((task) => sameOwner(task.owner, owner))
       .filter((task) => includeArchived || !task.archivedAt)
-      .filter((task) => !search || `${task.title}\n${task.objective}`.toLowerCase().includes(search))
+      .filter((task) => !search || taskSearchText(task).includes(search))
       .sort((left, right) => {
         if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
         return right.updatedAt.localeCompare(left.updatedAt);
@@ -177,6 +181,7 @@ export class DesktopTaskStore {
       ...(Object.hasOwn(changes, "canvasState") ? { canvasState: changes.canvasState } : {}),
       ...(Object.hasOwn(changes, "workspace") ? { workspace: changes.workspace } : {}),
       ...(Object.hasOwn(changes, "outcome") ? { outcome: changes.outcome } : {}),
+      ...(Object.hasOwn(changes, "scratchpad") ? { scratchpad: changes.scratchpad } : {}),
       updatedAt: this.now().toISOString()
     });
     store.tasks[index] = updated;
@@ -285,6 +290,7 @@ function normalizeTask(value) {
     forkManifest: normalizeForkManifest(value?.forkManifest),
     canvasState: normalizeCanvasState(value?.canvasState),
     outcome: normalizeTaskOutcome(value?.outcome),
+    scratchpad: normalizeScratchpad(value?.scratchpad, { redact }),
     owner: normalizeOwner(value?.owner),
     selectedAt: optionalTimestamp(value?.selectedAt),
     createdAt: normalizeTimestamp(value?.createdAt),
@@ -378,6 +384,15 @@ function normalizeForkManifest(value) {
 
 function publicTask(task) {
   return JSON.parse(JSON.stringify(task));
+}
+
+function taskSearchText(task) {
+  return [
+    task.title,
+    task.objective,
+    task.scratchpad?.currentJob,
+    ...(Array.isArray(task.scratchpad?.jobs) ? task.scratchpad.jobs.map((job) => job.title) : [])
+  ].join("\n").toLowerCase();
 }
 
 function sameOwner(left, right) {

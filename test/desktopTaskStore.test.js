@@ -190,6 +190,49 @@ test("DesktopTaskStore supports all explicit workspace fork modes", async () => 
   }
 });
 
+test("DesktopTaskStore persists a conversation scratch pad without requiring a Project", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-task-scratchpad-"));
+  const filePath = join(directory, "tasks.json");
+  const owner = taskOwnerScope({ boundary: "personal", workspace: "/workspace" });
+  const store = new DesktopTaskStore({
+    filePath,
+    ...codec(),
+    now: clock("2026-08-27T10:00:00.000Z", "2026-08-27T10:01:00.000Z")
+  });
+  const task = await store.create(owner, {
+    id: "solo",
+    title: "Ops thread",
+    objective: "Build the integration"
+  });
+  assert.equal(task.projectId, "");
+  assert.equal(task.scratchpad.currentJob, "");
+  assert.deepEqual(task.scratchpad.jobs, []);
+
+  const updated = await store.update(owner, "solo", {
+    scratchpad: {
+      currentJob: "Fix Stripe tax_behavior on three prices",
+      jobs: [
+        { title: "Build Stripe to QBO integration", status: "parked", note: "waiting on connection" },
+        { title: "Add accounts to QBO", status: "parked" },
+        { title: "Fix Stripe tax_behavior on three prices", status: "current" }
+      ],
+      openLoops: ["Confirm inclusive tax"],
+      notes: "Use password=hunter2 never"
+    }
+  });
+  assert.equal(updated.projectId, "");
+  assert.equal(updated.scratchpad.currentJob, "Fix Stripe tax_behavior on three prices");
+  assert.equal(updated.scratchpad.jobs.length, 3);
+  assert.match(updated.scratchpad.notes, /password=\[REDACTED\]/);
+  assert.equal((await store.list(owner, { query: "Stripe tax" }))[0].id, "solo");
+
+  const restarted = new DesktopTaskStore({ filePath, ...codec() });
+  const restored = await restarted.get(owner, "solo");
+  assert.equal(restored.scratchpad.jobs[0].status, "parked");
+  assert.equal(restored.scratchpad.currentJob, "Fix Stripe tax_behavior on three prices");
+  assert.equal(restored.projectId, "");
+});
+
 test("taskWorkspaceFocus keeps a live nested focus and drops a stale one", async () => {
   const grant = await mkdtemp(join(tmpdir(), "amos-focus-grant-"));
   await mkdir(join(grant, "nested-repo"));

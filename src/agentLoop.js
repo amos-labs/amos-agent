@@ -11,6 +11,20 @@ import {
   estimateMessageTokens,
   modelContentLength
 } from "./model/contextCompiler.js";
+import { createConversationInspectTool } from "./model/conversationInspect.js";
+import {
+  createScratchpadTools,
+  emptyScratchpad,
+  normalizeScratchpad,
+  scratchpadHasWork,
+  syncScratchpadWithObjective
+} from "./model/conversationScratchpad.js";
+import {
+  isThinFollowUp,
+  pushRecentJob,
+  selectWorkingObjective,
+  userMessageText
+} from "./model/workingObjective.js";
 import {
   evaluateCompactionEconomics,
   evaluatePreferredCompaction,
@@ -29,6 +43,7 @@ import {
 } from "./model/protocol.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
+const MAX_LIVE_TRANSCRIPT_MESSAGES = 800;
 // Leave headroom below AMOS Hosted's 256-message boundary while allowing long
 // governed tasks to retain substantially more complete tool/result blocks.
 const DEFAULT_MODEL_MESSAGE_LIMIT = 224;
@@ -48,6 +63,8 @@ export const GATHER_TOOL_NAMES = new Set([
   "desktop_activate_toolkit",
   "desktop_focus_workspace",
   "desktop_inspect_project",
+  "desktop_inspect_conversation",
+  "desktop_read_scratchpad",
   "search_files",
   "git_status",
   "git_diff"
@@ -69,7 +86,9 @@ export class AgentLoop {
     systemPrompt = SYSTEM_PROMPT,
     workflowSelector = selectTaskWorkflow,
     onToolResult = null,
-    now = () => Date.now()
+    now = () => Date.now(),
+    scratchpad = null,
+    onScratchpadChange = null
   }) {
     this.config = config;
     this.modelClient = modelClient || kimiClient;
@@ -96,7 +115,14 @@ export class AgentLoop {
     this.lastPromptCacheState = null;
     this.lastPromptCacheUsage = null;
     this.lastCompactionDecision = null;
+    this.workingObjective = "";
+    this.recentJobs = [];
+    this.scratchpad = emptyScratchpad();
+    this.onScratchpadChange = typeof onScratchpadChange === "function" ? onScratchpadChange : null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
+    this.installConversationInspectTool();
+    this.installScratchpadTools();
+    this.loadScratchpad(scratchpad);
   }
 
   clear() {
@@ -116,6 +142,9 @@ export class AgentLoop {
     this.lastPromptCacheState = null;
     this.lastPromptCacheUsage = null;
     this.lastCompactionDecision = null;
+    this.workingObjective = "";
+    this.recentJobs = [];
+    this.scratchpad = emptyScratchpad();
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -182,6 +211,10 @@ export class AgentLoop {
   ) {
     throwIfAborted(signal);
     this.configurePromptSession(promptSession);
+    const incomingText = userMessageText(userContent);
+    this.workingObjective = selectWorkingObjective(this.workingObjective, incomingText);
+    this.recentJobs = pushRecentJob(this.recentJobs, incomingText);
+    await this.syncScratchpadFromObjective(incomingText);
     this.compactCompletedHistory();
     this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
     // The canvas lives in Desktop, not in the model transcript. Preserve its
@@ -256,7 +289,7 @@ export class AgentLoop {
 
       while (true) {
         throwIfAborted(signal);
-        const steeringBeforeThinking = this.applySteering(takeSteering, onEvent, turn);
+        const steeringBeforeThinking = await this.applySteering(takeSteering, onEvent, turn);
         if (steeringBeforeThinking > 0) {
           previousToolFingerprint = null;
           repeatedToolCycles = 0;
@@ -443,7 +476,7 @@ export class AgentLoop {
 
         const toolCalls = assistantMessage.tool_calls || [];
         if (toolCalls.length === 0) {
-          const steeringAfterResponse = this.applySteering(takeSteering, onEvent, turn);
+          const steeringAfterResponse = await this.applySteering(takeSteering, onEvent, turn);
           if (steeringAfterResponse > 0) {
             previousToolFingerprint = null;
             repeatedToolCycles = 0;
@@ -631,7 +664,7 @@ export class AgentLoop {
           rejectedCompletions = 0;
         }
 
-        const steeringAfterTools = this.applySteering(takeSteering, onEvent, turn);
+        const steeringAfterTools = await this.applySteering(takeSteering, onEvent, turn);
         if (steeringAfterTools > 0) {
           previousToolFingerprint = null;
           repeatedToolCycles = 0;
@@ -713,7 +746,7 @@ export class AgentLoop {
     return activations;
   }
 
-  applySteering(takeSteering, onEvent, turn) {
+  async applySteering(takeSteering, onEvent, turn) {
     const queued = takeSteering?.();
     const messages = Array.isArray(queued) ? queued : queued ? [queued] : [];
     const steering = messages
@@ -722,6 +755,9 @@ export class AgentLoop {
       .filter(Boolean);
     if (steering.length === 0) return 0;
     for (const content of steering) {
+      this.workingObjective = selectWorkingObjective(this.workingObjective, content);
+      this.recentJobs = pushRecentJob(this.recentJobs, content);
+      await this.syncScratchpadFromObjective(content);
       this.messages.push({ role: "user", content });
       this.applyCanvasIntent(content);
     }
@@ -767,9 +803,9 @@ export class AgentLoop {
     if (this.activeTaskMessage) return false;
     const limit = boundedInteger(
       this.config.agent?.completedHistoryMessages,
-      DEFAULT_COMPLETED_HISTORY_LIMIT,
-      8,
-      DEFAULT_MODEL_MESSAGE_LIMIT
+      MAX_LIVE_TRANSCRIPT_MESSAGES,
+      64,
+      2_000
     );
     if (this.messages.length <= limit) return false;
 
@@ -778,22 +814,10 @@ export class AgentLoop {
       role: "system",
       content: this.systemPrompt
     };
-    const firstUser = this.messages.find((message) => message.role === "user");
-    const milestones = this.messages.slice(1).filter((message) =>
-      message.role === "user" ||
-      (message.role === "assistant" && !hasToolCalls(message) && message.content)
-    );
-    const laterMilestones = firstUser
-      ? milestones.filter((message) => message !== firstUser)
-      : milestones;
-    const reserved = firstUser ? 1 : 0;
-    const tail = laterMilestones.slice(-(Math.max(0, limit - 1 - reserved)));
-    this.messages = firstUser
-      ? [systemMessage, firstUser, ...tail]
-      : [systemMessage, ...tail];
+    this.messages = [systemMessage, ...this.messages.slice(-(limit - 1))];
     this.lastCompactionDecision = forcedCompactionStatus({
       scope: "completed_history",
-      reason: "completed_history_message_limit",
+      reason: "live_transcript_memory_limit",
       beforeMessages: previousMessages,
       afterMessages: this.messages,
       rebuildMessages: this.messages.slice(1),
@@ -873,7 +897,10 @@ export class AgentLoop {
       tools: this.availableToolsForModel(),
       ...this.modelContextOptions(),
       preferredInputTokens: null,
-      activeTask: this.activeTaskMessage
+      activeTask: this.activeTaskMessage,
+      workingObjective: this.workingObjective,
+      recentJobs: this.recentJobs,
+      scratchpad: this.scratchpad
     }).plan;
     const decision = evaluateCompactionEconomics({
       tokensSaved,
@@ -895,8 +922,11 @@ export class AgentLoop {
       preservedExactBlocks: 2
     };
     if (!decision.shouldCompact) return false;
-    this.messages = candidateMessages;
-    return true;
+    this.lastCompactionDecision = {
+      ...this.lastCompactionDecision,
+      liveTranscriptRetained: true
+    };
+    return false;
   }
 
   prepareMessagesForModel(tools = []) {
@@ -915,19 +945,16 @@ export class AgentLoop {
       role: "system",
       content: this.systemPrompt
     };
-    const rootMessage = this.messages.find((message) => message.role === "user");
     const taskIndex = this.messages.indexOf(this.activeTaskMessage);
     if (taskIndex < 0) {
-      this.compactCompletedHistory();
-      return this.compileContext(
-        this.withContinuityContext(this.messages.slice(0, effectiveLimit)),
-        tools
-      );
+      const rest = this.messages.filter((message) => message !== systemMessage);
+      const outbound = [systemMessage, ...rest.slice(-(effectiveLimit - 1))];
+      return this.compileContext(this.withContinuityContext(outbound), tools);
     }
 
-    const pinRoot = Boolean(rootMessage) && rootMessage !== this.activeTaskMessage;
+    const pinnedUsers = this.pinnedUserMessages();
     const selected = [];
-    let remaining = effectiveLimit - (pinRoot ? 3 : 2);
+    let remaining = Math.max(0, effectiveLimit - 1 - pinnedUsers.length);
     const blocks = historyBlocks(this.messages.slice(taskIndex + 1));
     for (let index = blocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
       const block = blocks[index];
@@ -940,19 +967,96 @@ export class AgentLoop {
       remaining -= block.length;
     }
 
-    const previousMessages = this.messages;
-    this.messages = pinRoot
-      ? [systemMessage, rootMessage, this.activeTaskMessage, ...selected.flat()]
-      : [systemMessage, this.activeTaskMessage, ...selected.flat()];
+    const include = new Set([...pinnedUsers, ...selected.flat()]);
+    const outbound = [systemMessage];
+    for (const message of this.messages) {
+      if (message === systemMessage) continue;
+      if (include.has(message)) outbound.push(message);
+    }
     this.lastCompactionDecision = forcedCompactionStatus({
       scope: "active_history",
       reason: "active_history_message_limit",
-      beforeMessages: previousMessages,
-      afterMessages: this.messages,
-      rebuildMessages: this.messages.slice(2),
+      beforeMessages: this.messages,
+      afterMessages: outbound,
+      rebuildMessages: outbound.slice(2),
       messageLimit: effectiveLimit
     });
-    return this.compileContext(this.withContinuityContext(this.messages), tools);
+    return this.compileContext(this.withContinuityContext(outbound), tools);
+  }
+
+  pinnedUserMessages() {
+    const users = this.messages.filter((message) => message.role === "user");
+    if (users.length === 0) return [];
+    const recent = users.slice(-3);
+    const longest = users.reduce((best, message) => (
+      modelContentLength(message.content) > modelContentLength(best.content) ? message : best
+    ), users[0]);
+    const unique = [];
+    for (const message of [longest, ...recent]) {
+      if (!unique.includes(message)) unique.push(message);
+    }
+    return unique;
+  }
+
+  installConversationInspectTool() {
+    if (!this.registry?.register) return;
+    try {
+      this.registry.register(createConversationInspectTool(() => this.messages));
+    } catch (error) {
+      if (!/collision/i.test(String(error?.message || ""))) throw error;
+    }
+  }
+
+  installScratchpadTools() {
+    if (!this.registry?.register) return;
+    for (const tool of createScratchpadTools({
+      getPad: () => this.scratchpad,
+      setPad: (pad) => this.setScratchpad(pad)
+    })) {
+      try {
+        this.registry.register(tool);
+      } catch (error) {
+        if (!/collision/i.test(String(error?.message || ""))) throw error;
+      }
+    }
+  }
+
+  loadScratchpad(value, { replace = false } = {}) {
+    const incoming = normalizeScratchpad(value);
+    if (!replace && (scratchpadHasWork(this.scratchpad) || !scratchpadHasWork(incoming))) {
+      return this.scratchpad;
+    }
+    this.scratchpad = incoming;
+    if (!this.workingObjective) this.workingObjective = incoming.currentJob;
+    if (this.recentJobs.length === 0) {
+      this.recentJobs = incoming.jobs.map((job) => job.title).filter(Boolean);
+    }
+    return this.scratchpad;
+  }
+
+  async setScratchpad(value) {
+    this.scratchpad = normalizeScratchpad(value);
+    if (this.scratchpad.currentJob) {
+      this.workingObjective = this.scratchpad.currentJob;
+    }
+    if (this.scratchpad.jobs.length > 0) {
+      this.recentJobs = this.scratchpad.jobs.map((job) => job.title).filter(Boolean);
+    }
+    await this.onScratchpadChange?.(this.scratchpad);
+    return this.scratchpad;
+  }
+
+  async syncScratchpadFromObjective(text) {
+    if (isThinFollowUp(text) && scratchpadHasWork(this.scratchpad)) return this.scratchpad;
+    const current = String(this.workingObjective || text || "").trim();
+    if (!current) return this.scratchpad;
+    const next = syncScratchpadWithObjective(this.scratchpad, current);
+    const same = next.currentJob === this.scratchpad.currentJob
+      && next.jobs.length === this.scratchpad.jobs.length
+      && next.jobs.every((job, index) => job.title === this.scratchpad.jobs[index]?.title
+        && job.status === this.scratchpad.jobs[index]?.status);
+    if (same && scratchpadHasWork(this.scratchpad)) return this.scratchpad;
+    return this.setScratchpad(next);
   }
 
   compileContext(messages, tools) {
@@ -964,7 +1068,10 @@ export class AgentLoop {
       tools,
       ...this.modelContextOptions(),
       preferredInputTokens,
-      activeTask: this.activeTaskMessage
+      activeTask: this.activeTaskMessage,
+      workingObjective: this.workingObjective,
+      recentJobs: this.recentJobs,
+      scratchpad: this.scratchpad
     });
     let preferredCompaction = null;
     if (compiled.plan.compactionReason === "preferred_input_budget") {
@@ -982,7 +1089,10 @@ export class AgentLoop {
           tools,
           ...this.modelContextOptions(),
           preferredInputTokens: null,
-          activeTask: this.activeTaskMessage
+          activeTask: this.activeTaskMessage,
+          workingObjective: this.workingObjective,
+          recentJobs: this.recentJobs,
+          scratchpad: this.scratchpad
         });
         compiled = {
           ...hardOnly,

@@ -14,6 +14,10 @@ import {
   createCapsuleManifest,
   validateCapsuleManifest
 } from "./memoryContract.js";
+import {
+  normalizePortableScratchpads,
+  PORTABLE_SCRATCHPAD_KIND
+} from "../model/conversationScratchpad.js";
 
 export const ENCRYPTED_CAPSULE_FORMAT = "amos-encrypted-memory-capsule";
 export const ENCRYPTED_CAPSULE_VERSION = "1";
@@ -38,6 +42,7 @@ export async function writePrivateMemoryCapsule({
   subjectId,
   tenantId = null,
   memories,
+  scratchpads = [],
   journal = [],
   parentCapsuleId = null,
   now = new Date(),
@@ -45,8 +50,11 @@ export async function writePrivateMemoryCapsule({
 }) {
   if (!filePath) throw new Error("Choose where to save the AMOS memory capsule");
   const secret = validPassphrase(passphrase);
-  const records = normalizePrivateRecords(memories);
-  if (records.length === 0) throw new Error("Choose at least one private memory to export");
+  const records = normalizePrivateRecords(memories || []);
+  const portableScratchpads = withScratchpadSizes(normalizePortableScratchpads(scratchpads));
+  if (records.length === 0 && portableScratchpads.length === 0) {
+    throw new Error("Choose at least one private memory to export");
+  }
   if (records.length > MAX_MEMORIES) {
     throw new Error(`AMOS memory capsules support up to ${MAX_MEMORIES} private items`);
   }
@@ -59,24 +67,38 @@ export async function writePrivateMemoryCapsule({
     tenantId,
     createdAt,
     parentCapsuleId,
-    entries: records.map((record) => ({
-      id: record.id,
-      memory_class: "private",
-      source_id: record.id,
-      content_hash: portableRecordHash(record),
-      media_type: record.mime,
-      created_at: record.createdAt,
-      refreshed_at: record.updatedAt,
-      visibility: "private",
-      allowed_use: "context"
-    })),
+    entries: [
+      ...records.map((record) => ({
+        id: record.id,
+        memory_class: "private",
+        source_id: record.id,
+        content_hash: portableRecordHash(record),
+        media_type: record.mime,
+        created_at: record.createdAt,
+        refreshed_at: record.updatedAt,
+        visibility: "private",
+        allowed_use: "context"
+      })),
+      ...portableScratchpads.map((record) => ({
+        id: record.id,
+        memory_class: "private",
+        source_id: record.taskId,
+        content_hash: portableRecordHash(portableScratchpadHashBody(record)),
+        media_type: "application/json",
+        created_at: record.updatedAt || createdAt,
+        refreshed_at: record.updatedAt || createdAt,
+        visibility: "private",
+        allowed_use: PORTABLE_SCRATCHPAD_KIND
+      }))
+    ],
     journal: journal.filter((entry) => recordById.has(entry?.memory_id))
   });
   const plaintext = Buffer.from(JSON.stringify({
     format: CAPSULE_FORMAT,
     version: CAPSULE_VERSION,
     manifest,
-    private_records: records
+    private_records: records,
+    conversation_scratchpads: portableScratchpads.map(portableScratchpadHashBody)
   }), "utf8");
   if (plaintext.length > MAX_CAPSULE_BYTES) {
     throw new Error("This private-memory selection is too large for one portable capsule");
@@ -119,7 +141,7 @@ export async function writePrivateMemoryCapsule({
     throw new Error("The encrypted AMOS memory capsule exceeds the portable size limit");
   }
   await atomicPrivateWrite(filePath, serialized);
-  return capsuleSummary(manifest, records, serialized.length, filePath);
+  return capsuleSummary(manifest, records, portableScratchpads, serialized.length, filePath);
 }
 
 export async function readPrivateMemoryCapsule({ filePath, passphrase }) {
@@ -173,24 +195,31 @@ export async function readPrivateMemoryCapsule({ filePath, passphrase }) {
     throw new Error("This AMOS memory capsule has expired");
   }
 
-  const records = normalizePrivateRecords(payload.private_records);
-  if (records.length !== payload.manifest.entries.length) {
+  const records = normalizePrivateRecords(payload.private_records || []);
+  const portableScratchpads = withScratchpadSizes(
+    normalizePortableScratchpads(payload.conversation_scratchpads)
+  );
+  if (records.length + portableScratchpads.length !== payload.manifest.entries.length) {
     throw new Error("AMOS memory capsule content does not match its manifest");
   }
   const recordsById = new Map(records.map((record) => [record.id, record]));
+  const scratchpadsById = new Map(portableScratchpads.map((record) => [record.id, record]));
   for (const entry of payload.manifest.entries) {
     if (entry.memory_class !== "private") {
       throw new Error("This Desktop release imports private memory only");
     }
     const record = recordsById.get(entry.id);
-    if (!record || portableRecordHash(record) !== entry.content_hash) {
+    const scratchpad = scratchpadsById.get(entry.id);
+    const portable = record || (scratchpad ? portableScratchpadHashBody(scratchpad) : null);
+    if (!portable || portableRecordHash(portable) !== entry.content_hash) {
       throw new Error(`AMOS memory capsule failed integrity validation for ${entry.id}`);
     }
   }
   return {
     manifest: payload.manifest,
     records,
-    summary: capsuleSummary(payload.manifest, records, details.size, filePath)
+    scratchpads: portableScratchpads,
+    summary: capsuleSummary(payload.manifest, records, portableScratchpads, details.size, filePath)
   };
 }
 
@@ -228,26 +257,60 @@ function portableRecordHash(record) {
   return createHash("sha256").update(JSON.stringify(record)).digest("hex");
 }
 
-function capsuleSummary(manifest, records, bytes, filePath) {
+function capsuleSummary(manifest, records, scratchpads = [], bytes, filePath) {
+  const pads = Array.isArray(scratchpads) ? scratchpads : [];
   return {
     capsuleId: manifest.capsule_id,
     parentCapsuleId: manifest.parent_capsule_id,
     subjectId: manifest.subject_id,
     tenantId: manifest.tenant_id,
     createdAt: manifest.created_at,
-    itemCount: records.length,
-    totalBytes: records.reduce((total, record) => total + record.size, 0),
+    itemCount: records.length + pads.length,
+    memoryCount: records.length,
+    scratchpadCount: pads.length,
+    totalBytes: records.reduce((total, record) => total + record.size, 0)
+      + pads.reduce((total, record) => total + (record.size || 0), 0),
     encryptedBytes: bytes,
     filePath,
-    items: records.map((record) => ({
-      id: record.id,
-      name: record.name,
-      kind: record.kind,
-      mime: record.mime,
-      size: record.size,
-      updatedAt: record.updatedAt
-    }))
+    items: [
+      ...records.map((record) => ({
+        id: record.id,
+        name: record.name,
+        kind: record.kind,
+        mime: record.mime,
+        size: record.size,
+        updatedAt: record.updatedAt
+      })),
+      ...pads.map((record) => ({
+        id: record.id,
+        name: record.title,
+        kind: PORTABLE_SCRATCHPAD_KIND,
+        mime: "application/json",
+        size: record.size || 0,
+        updatedAt: record.updatedAt
+      }))
+    ]
   };
+}
+
+function portableScratchpadHashBody(record) {
+  return {
+    id: record.id,
+    kind: PORTABLE_SCRATCHPAD_KIND,
+    taskId: record.taskId,
+    contextKey: record.contextKey,
+    title: record.title,
+    objective: record.objective,
+    scratchpad: record.scratchpad,
+    updatedAt: record.updatedAt
+  };
+}
+
+function withScratchpadSizes(records) {
+  return records.map((record) => ({
+    ...record,
+    size: Buffer.byteLength(JSON.stringify(portableScratchpadHashBody(record)), "utf8")
+  }));
 }
 
 function validateEncryptedEnvelope(value) {

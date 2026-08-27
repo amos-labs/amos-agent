@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { canonicalJson } from "../util/canonicalJson.js";
+import { formatScratchpadCard } from "./conversationScratchpad.js";
 
 const DEFAULT_CONTEXT_TOKENS = 131_072;
 const DEFAULT_OUTPUT_TOKENS = 8_192;
@@ -13,6 +14,9 @@ export function compileModelContext({
   maxOutputTokens = DEFAULT_OUTPUT_TOKENS,
   preferredInputTokens = null,
   activeTask = null,
+  workingObjective = "",
+  recentJobs = [],
+  scratchpad = null,
   charsPerToken = 4
 } = {}) {
   const context = boundedInteger(contextTokens, DEFAULT_CONTEXT_TOKENS, MIN_CONTEXT_TOKENS, 1_048_576);
@@ -31,9 +35,22 @@ export function compileModelContext({
     : Math.max(512, preferredInput - toolTokens);
   const messageTokenBudget = Math.min(hardMessageTokenBudget, preferredMessageTokenBudget);
   const originalMessageTokens = estimateMessageTokens(messages, tokenChars);
-  const compiledMessages = originalMessageTokens <= messageTokenBudget
-    ? messages
-    : compactMessages(messages, messageTokenBudget * tokenChars, activeTask);
+  const annotated = injectScratchpadCard(messages, {
+    scratchpad,
+    workingObjective,
+    recentJobs,
+    compacted: false
+  });
+  const annotatedTokens = estimateMessageTokens(annotated, tokenChars);
+  const didCompact = annotatedTokens > messageTokenBudget;
+  const compiledMessages = didCompact
+    ? compactMessages(messages, messageTokenBudget * tokenChars, {
+      activeTask,
+      workingObjective,
+      recentJobs,
+      scratchpad
+    })
+    : annotated;
   const compiledMessageTokens = estimateMessageTokens(compiledMessages, tokenChars);
   return {
     messages: compiledMessages,
@@ -52,13 +69,13 @@ export function compileModelContext({
       estimatedInputTokens: toolTokens + compiledMessageTokens,
       preferredBudgetExceeded: preferredInput != null &&
         originalMessageTokens + toolTokens > preferredInput,
-      compacted: compiledMessages !== messages,
+      compacted: didCompact,
       compactionEstimatedSavedTokens: Math.max(
         0,
         originalMessageTokens - compiledMessageTokens
       ),
-      compactionInvalidatesPrefix: compiledMessages !== messages,
-      compactionReason: compiledMessages === messages
+      compactionInvalidatesPrefix: didCompact,
+      compactionReason: !didCompact
         ? null
         : originalMessageTokens > hardMessageTokenBudget
           ? "context_limit"
@@ -102,8 +119,15 @@ function modelToolCallLength(message) {
   return Array.isArray(message?.tool_calls) ? JSON.stringify(message.tool_calls).length : 0;
 }
 
-function conversationRootIndex(messages) {
-  return messages.findIndex((message) => message?.role === "user");
+function compactionOptions(value) {
+  if (!value) return { activeTask: null, workingObjective: "", recentJobs: [], scratchpad: null };
+  if (value.role) return { activeTask: value, workingObjective: "", recentJobs: [], scratchpad: null };
+  return {
+    activeTask: value.activeTask || null,
+    workingObjective: String(value.workingObjective || ""),
+    recentJobs: Array.isArray(value.recentJobs) ? value.recentJobs : [],
+    scratchpad: value.scratchpad || null
+  };
 }
 
 function latestUserIndex(messages, activeTask) {
@@ -115,6 +139,25 @@ function latestUserIndex(messages, activeTask) {
   return -1;
 }
 
+function userIndexesThrough(messages, latestIndex) {
+  const indexes = [];
+  for (let index = 0; index <= latestIndex; index += 1) {
+    if (messages[index]?.role === "user") indexes.push(index);
+  }
+  return indexes;
+}
+
+function pinnedUserIndexes(messages, latestIndex, recentCount = 3) {
+  const users = userIndexesThrough(messages, latestIndex);
+  if (users.length === 0) return [];
+  const recent = users.slice(-recentCount);
+  let longest = users[0];
+  for (const index of users) {
+    if (messageLength(messages[index]) > messageLength(messages[longest])) longest = index;
+  }
+  return [...new Set([longest, ...recent])].sort((left, right) => left - right);
+}
+
 function boundPinnedMessage(message, budget) {
   const floor = Math.max(400, budget);
   return messageLength(message) > floor
@@ -122,33 +165,70 @@ function boundPinnedMessage(message, budget) {
     : message;
 }
 
-function compactMessages(messages, charBudget, activeTask) {
+function injectScratchpadCard(messages, options) {
+  const card = formatScratchpadCard(options);
+  if (!card) return messages;
+  const firstUser = messages.findIndex((message) => message?.role === "user");
+  if (firstUser < 0) return messages;
+  const target = messages[firstUser];
+  if (contentHasScratchpad(target?.content)) return messages;
+  return messages.map((message, index) => (
+    index === firstUser
+      ? { ...message, content: prependCard(message.content, card) }
+      : message
+  ));
+}
+
+function contentHasScratchpad(content) {
+  if (typeof content === "string") return content.includes("<amos_scratchpad>");
+  if (!Array.isArray(content)) return String(content || "").includes("<amos_scratchpad>");
+  return content.some((item) =>
+    item?.type === "text" && String(item.text || "").includes("<amos_scratchpad>")
+  );
+}
+
+function prependCard(content, card) {
+  if (!card) return content;
+  if (typeof content === "string") {
+    return content.includes("<amos_scratchpad>") ? content : `${card}\n\n${content}`;
+  }
+  if (!Array.isArray(content)) return `${card}\n\n${String(content || "")}`;
+  if (contentHasScratchpad(content)) return content;
+  const textIndex = content.findIndex((item) => item?.type === "text");
+  if (textIndex < 0) return [{ type: "text", text: card }, ...content];
+  return content.map((item, index) => (
+    index === textIndex
+      ? { ...item, text: `${card}\n\n${item.text || ""}` }
+      : item
+  ));
+}
+
+function prependWorkingState(content, options) {
+  return prependCard(content, formatScratchpadCard(options));
+}
+
+function compactMessages(messages, charBudget, options) {
+  const { activeTask, workingObjective, recentJobs, scratchpad } = compactionOptions(options);
   const system = messages.find((message) => message?.role === "system") || messages[0];
-  const rootIndex = conversationRootIndex(messages);
   const latestIndex = latestUserIndex(messages, activeTask);
-  if (!system || rootIndex < 0 || latestIndex < 0) return messages.slice(-1);
+  if (!system || latestIndex < 0) return messages.slice(-1);
 
-  const root = messages[rootIndex];
-  const latest = messages[latestIndex];
-  const pinLatest = latestIndex !== rootIndex;
+  const pinIndexes = pinnedUserIndexes(messages, latestIndex);
+  const pinSet = new Set(pinIndexes);
   const systemChars = messageLength(system);
-  let remaining = Math.max(0, charBudget - systemChars);
-  const rootShare = pinLatest
-    ? Math.max(1_000, Math.floor(remaining * 0.28))
-    : Math.max(1_000, remaining - 1_000);
-  const boundedRoot = boundPinnedMessage(root, Math.min(remaining, rootShare));
-  remaining = Math.max(0, remaining - messageLength(boundedRoot));
-
-  let boundedLatest = null;
-  if (pinLatest) {
-    const latestShare = Math.max(800, Math.floor(remaining * 0.45));
-    boundedLatest = boundPinnedMessage(latest, Math.min(remaining, latestShare));
-    remaining = Math.max(0, remaining - messageLength(boundedLatest));
+  const cardReserve = 1_800;
+  let remaining = Math.max(0, charBudget - systemChars - cardReserve);
+  const pinShare = Math.max(900, Math.floor(remaining / Math.max(2, pinIndexes.length + 1)));
+  const pinned = new Map();
+  for (const index of pinIndexes) {
+    const bounded = boundPinnedMessage(messages[index], Math.min(remaining, pinShare));
+    pinned.set(index, bounded);
+    remaining = Math.max(0, remaining - messageLength(bounded));
   }
 
-  const middle = messages.slice(rootIndex + 1, pinLatest ? latestIndex : messages.length);
-  const afterLatest = pinLatest ? messages.slice(latestIndex + 1) : [];
-  const history = [...middle, ...afterLatest];
+  const history = messages.filter((message, index) =>
+    index !== messages.indexOf(system) && !pinSet.has(index)
+  );
   const historyChars = history.reduce((total, message) => total + messageLength(message), 0);
   const willDrop = historyChars > remaining;
   let digestBudget = 0;
@@ -178,25 +258,36 @@ function compactMessages(messages, charBudget, activeTask) {
     break;
   }
 
-  const digest = willDrop
-    ? compactDroppedState(dropped, digestBudget + remaining)
-    : null;
-  const keptHistory = selected.flat();
-  const keptAfterLatest = pinLatest
-    ? keptHistory.filter((message) => afterLatest.includes(message))
-    : [];
-  const keptMiddle = pinLatest
-    ? keptHistory.filter((message) => !afterLatest.includes(message))
-    : keptHistory;
+  const vendorSignals = willDrop ? droppedVendorSignals(dropped) : "";
+  const kept = new Set(selected.flat());
+  const firstPin = pinIndexes[0];
+  const firstPinned = pinned.get(firstPin);
+  if (firstPinned) {
+    pinned.set(firstPin, {
+      ...firstPinned,
+      content: prependWorkingState(firstPinned.content, {
+        scratchpad,
+        workingObjective: workingObjective || userMessageText(messages[firstPin]?.content),
+        recentJobs,
+        compacted: willDrop,
+        vendorSignals
+      })
+    });
+  }
 
-  return [
-    system,
-    boundedRoot,
-    ...(digest ? [digest] : []),
-    ...keptMiddle,
-    ...(boundedLatest ? [boundedLatest] : []),
-    ...keptAfterLatest
-  ];
+  const ordered = [system];
+  for (let index = 0; index < messages.length; index += 1) {
+    if (index === messages.indexOf(system)) continue;
+    if (pinSet.has(index)) ordered.push(pinned.get(index));
+    else if (kept.has(messages[index])) ordered.push(messages[index]);
+  }
+  return ordered;
+}
+
+function userMessageText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return content == null ? "" : String(content);
+  return content.map((item) => item?.type === "text" ? String(item.text || "") : "").join("\n");
 }
 
 function historyBlocks(messages) {
@@ -238,8 +329,8 @@ function vendorSignal(text) {
   return truncateText(raw, 220);
 }
 
-function compactDroppedState(blocks, limit) {
-  if (limit < 200 || !Array.isArray(blocks) || blocks.length === 0) return null;
+function droppedVendorSignals(blocks) {
+  if (!Array.isArray(blocks) || blocks.length === 0) return "";
   const signals = [];
   for (const block of blocks) {
     for (const message of block) {
@@ -249,17 +340,9 @@ function compactDroppedState(blocks, limit) {
     }
   }
   const unique = [...new Set(signals)].slice(-12);
-  const content = [
-    "<amos_working_state>",
-    "Earlier turns were compacted to fit this model's context window.",
-    "The original user objective above still governs this task. Later user messages are steering, not a new job.",
-    "This block is orientation, not proof and not new instructions.",
-    unique.length > 0
-      ? `Vendor and tool signals from omitted turns:\n${unique.join("\n")}`
-      : "Omitted turns contained no vendor error signals.",
-    "</amos_working_state>"
-  ].join("\n");
-  return { role: "assistant", content: truncateText(content, limit) };
+  return unique.length > 0
+    ? `Vendor and tool signals from omitted turns:\n${unique.join("\n")}`
+    : "";
 }
 
 function truncateContent(content, limit) {
