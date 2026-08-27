@@ -92,6 +92,13 @@ test("automation setup waits for understanding instead of launching immediately"
   assert.match(SYSTEM_PROMPT, /Never collect credentials in chat/);
 });
 
+test("company agent uses a connected OAuth system instead of asking to reconnect", () => {
+  assert.match(SYSTEM_PROMPT, /If list_connections shows a provider connected and usable, use it/);
+  assert.match(SYSTEM_PROMPT, /Leave path placeholders like \{realm_id\} literal/);
+  assert.match(SYSTEM_PROMPT, /Hosted OAuth connections use connect_link, not set_billing_key/);
+  assert.doesNotMatch(SYSTEM_PROMPT, /ask the user to reconnect QuickBooks/i);
+});
+
 test("consultative doctrine is not a questionnaire, regex router, or second model", async () => {
   const prompts = await readFile(new URL("../src/prompts.js", import.meta.url), "utf8");
   assert.doesNotMatch(prompts, /services · trades · e-commerce/);
