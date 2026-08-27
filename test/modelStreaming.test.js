@@ -426,6 +426,89 @@ test("hosted streaming retains signed reasoning continuity without rendering it"
   assert.equal(result.message.amos_bedrock_reasoning[0].signature, "signed");
 });
 
+function hostedClient(fetchImpl) {
+  return new OpenAICompatibleClient(
+    {
+      provider: "amos-hosted",
+      apiKey: "test",
+      baseUrl: "https://app.amoslabs.com/v1",
+      model: "auto",
+      displayName: "AMOS Hosted",
+      requestTimeoutMs: 5_000,
+      capabilities: { tools: true }
+    },
+    fetchImpl
+  );
+}
+
+test("hosted retries a stream drop once when no visible output was sent", async () => {
+  let calls = 0;
+  const failing = {
+    error: {
+      code: "provider_stream_error",
+      message: "AMOS Hosted's model stream stopped unexpectedly.",
+      correlation_id: "bea0680f-8402-4aa3-8336-a40765716455"
+    }
+  };
+  const ok = [
+    { choices: [{ delta: { role: "assistant", content: "Connected." } }] },
+    {
+      choices: [{ delta: {}, finish_reason: "stop" }],
+      usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 }
+    }
+  ];
+  const result = await hostedClient(async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response(`data: ${JSON.stringify(failing)}\n\n`, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" }
+      });
+    }
+    return new Response(
+      `${ok.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`,
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    );
+  }).chat({
+    messages: [{ role: "user", content: "hello" }],
+    onDelta: () => {}
+  });
+  assert.equal(calls, 2);
+  assert.equal(result.message.content, "Connected.");
+});
+
+test("hosted does not retry a stream drop after visible output", async () => {
+  let calls = 0;
+  const events = [
+    { choices: [{ delta: { role: "assistant", content: "Partial" } }] },
+    {
+      error: {
+        code: "provider_stream_error",
+        message: "AMOS Hosted's model stream stopped unexpectedly.",
+        correlation_id: "9f7d7a8f-ecf7-4ec9-9438-b9852e9b67f8"
+      }
+    }
+  ];
+  await assert.rejects(
+    hostedClient(async () => {
+      calls += 1;
+      return new Response(
+        events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""),
+        { status: 200, headers: { "content-type": "text/event-stream" } }
+      );
+    }).chat({
+      messages: [{ role: "user", content: "hello" }],
+      onDelta: () => {}
+    }),
+    (error) => {
+      assert.equal(error.code, "provider_stream_error");
+      assert.equal(error.hadVisibleOutput, true);
+      return true;
+    }
+  );
+  assert.equal(calls, 1);
+});
+
 test("a structured provider error aborts a stream even after partial output", async () => {
   const correlationId = "9f7d7a8f-ecf7-4ec9-9438-b9852e9b67f8";
   const events = [

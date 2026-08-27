@@ -224,7 +224,7 @@ test("AMOS-hosted provider derives its endpoint and reuses the AMOS identity", (
   assert.equal(config.reasoningEffort, "");
   assert.equal(config.apiKey, "");
   assert.equal(config.maxCompletionTokens, 32_768);
-  assert.equal(config.contextTokens, 131_072);
+  assert.equal(config.contextTokens, 32_768);
   assert.equal(config.requestTimeoutMs, 660_000);
   assert.equal(config.localRouterMode, "active");
 });

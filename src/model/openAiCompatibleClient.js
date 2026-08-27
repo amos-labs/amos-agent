@@ -180,25 +180,44 @@ export class OpenAICompatibleClient {
       }
 
       if (typeof onDelta === "function") {
-        const result = await readStreamingResponse(response, {
-          onDelta,
-          signal,
-          displayName: this.config.displayName || "Model",
-          requestStartedAt,
-          onActivity: refreshTimeout
-        });
-        result.usage = withRequestMetrics(result.usage, {
-          config: requestConfig,
-          requestedConfig: this.config,
-          fallbackUsed: usedLocalFallback,
-          requestStartedAt,
-          firstOutputAt: result.timing?.firstOutputAt || null,
-          bufferedResponse: result.timing?.buffered === true,
-          completedAt: performance.now(),
-          raw: result.raw
-        });
-        this.emitHostedRoutingOutcome({ localRouting, raw: result.raw, onRoutingDecision });
-        return result;
+        let streamResponse = response;
+        let hostedStreamRetry = false;
+        while (true) {
+          try {
+            const result = await readStreamingResponse(streamResponse, {
+              onDelta,
+              signal,
+              displayName: this.config.displayName || "Model",
+              requestStartedAt,
+              onActivity: refreshTimeout
+            });
+            result.usage = withRequestMetrics(result.usage, {
+              config: requestConfig,
+              requestedConfig: this.config,
+              fallbackUsed: usedLocalFallback,
+              requestStartedAt,
+              firstOutputAt: result.timing?.firstOutputAt || null,
+              bufferedResponse: result.timing?.buffered === true,
+              completedAt: performance.now(),
+              raw: result.raw
+            });
+            this.emitHostedRoutingOutcome({ localRouting, raw: result.raw, onRoutingDecision });
+            return result;
+          } catch (error) {
+            if (
+              !hostedStreamRetry &&
+              isRetryableHostedStreamError(error) &&
+              this.config.provider === "amos-hosted"
+            ) {
+              hostedStreamRetry = true;
+              refreshTimeout();
+              streamResponse = await sendRequest();
+              if (!streamResponse.ok) throw error;
+              continue;
+            }
+            throw error;
+          }
+        }
       }
 
       const text = await response.text();
@@ -472,6 +491,7 @@ async function readStreamingResponse(response, {
         payload.error.correlation_id
       ));
       error.code = payload.error.code || "AMOS_PROVIDER_STREAM_ERROR";
+      error.hadVisibleOutput = Boolean(message.content) || toolCalls.size > 0;
       throw error;
     }
     finalPayload = payload ? { ...(finalPayload || {}), ...payload } : finalPayload;
@@ -583,6 +603,15 @@ async function readStreamingResponse(response, {
 function withCorrelationReference(message, correlationId) {
   const reference = String(correlationId || "").trim();
   return reference ? `${message} Reference: ${reference}.` : message;
+}
+
+function isRetryableHostedStreamError(error) {
+  if (error?.hadVisibleOutput) return false;
+  const code = String(error?.code || "");
+  if (code === "provider_stream_error" || code === "AMOS_PROVIDER_STREAM_ERROR") return true;
+  const message = String(error?.message || "").toLowerCase();
+  return message.includes("stream stopped unexpectedly")
+    || message.includes("stopped receiving model output");
 }
 
 function modelTimeoutError(config, requestStartedAt, lastActivityAt, phase) {
