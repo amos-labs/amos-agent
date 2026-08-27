@@ -142,7 +142,12 @@ test("compaction pins recent and longest user statements, not the first chat mes
     maxOutputTokens: 1_024,
     charsPerToken: 2,
     activeTask: followUp,
-    workingObjective: tax.content
+    workingObjective: tax.content,
+    recentJobs: [
+      "Help me build a Stripe to QuickBooks integration",
+      "We need to add these accounts to QBO",
+      tax.content
+    ]
   });
 
   const userText = compiled.messages
@@ -152,10 +157,10 @@ test("compaction pins recent and longest user statements, not the first chat mes
   assert.match(userText, /Update tax_behavior to inclusive/);
   assert.match(userText, /lets try it again/);
   assert.doesNotMatch(userText, /^hey$/m);
-  assert.match(
-    compiled.messages.map((message) => String(message.content)).join("\n"),
-    /desktop_inspect_conversation/
-  );
+  const compiledText = compiled.messages.map((message) => String(message.content)).join("\n");
+  assert.match(compiledText, /desktop_inspect_conversation/);
+  assert.match(compiledText, /add these accounts to QBO/);
+  assert.match(compiledText, /Stripe to QuickBooks integration/);
 });
 
 test("follow-up compaction keeps the original objective and latest steering", () => {

@@ -4,7 +4,7 @@ import {
   inspectConversation,
   createConversationInspectTool
 } from "../src/model/conversationInspect.js";
-import { selectWorkingObjective } from "../src/model/workingObjective.js";
+import { pushRecentJob, selectWorkingObjective } from "../src/model/workingObjective.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 import { inferToolToolkit } from "../src/tools/toolkitCatalog.js";
 
@@ -16,6 +16,21 @@ test("selectWorkingObjective keeps a specific job across short follow-ups", () =
     selectWorkingObjective(job, "Please refund $105.00 to the ten customers whose PaymentIntents never captured after 2D-auth, and document that we will eat the $8.58 tax."),
     "Please refund $105.00 to the ten customers whose PaymentIntents never captured after 2D-auth, and document that we will eat the $8.58 tax."
   );
+});
+
+test("a shorter new statement still hops jobs the way Desktop users actually work", () => {
+  let jobs = [];
+  const integration = "Help me build a Stripe to QuickBooks integration for AMOS Labs";
+  const qbo = "We need to add these accounts to QBO";
+  const tax = "Fix tax_behavior on the three Stripe prices";
+  jobs = pushRecentJob(jobs, integration);
+  jobs = pushRecentJob(jobs, qbo);
+  jobs = pushRecentJob(jobs, tax);
+  jobs = pushRecentJob(jobs, "try again");
+  assert.deepEqual(jobs, [integration, qbo, tax]);
+  assert.equal(selectWorkingObjective(integration, qbo), qbo);
+  assert.equal(selectWorkingObjective(qbo, tax), tax);
+  assert.equal(selectWorkingObjective(tax, "try again"), tax);
 });
 
 test("inspectConversation returns exact excerpts from omitted turns", () => {

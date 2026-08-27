@@ -14,6 +14,7 @@ export function compileModelContext({
   preferredInputTokens = null,
   activeTask = null,
   workingObjective = "",
+  recentJobs = [],
   charsPerToken = 4
 } = {}) {
   const context = boundedInteger(contextTokens, DEFAULT_CONTEXT_TOKENS, MIN_CONTEXT_TOKENS, 1_048_576);
@@ -36,7 +37,8 @@ export function compileModelContext({
     ? messages
     : compactMessages(messages, messageTokenBudget * tokenChars, {
       activeTask,
-      workingObjective
+      workingObjective,
+      recentJobs
     });
   const compiledMessageTokens = estimateMessageTokens(compiledMessages, tokenChars);
   return {
@@ -111,7 +113,8 @@ function compactionOptions(value) {
   if (value.role) return { activeTask: value, workingObjective: "" };
   return {
     activeTask: value.activeTask || null,
-    workingObjective: String(value.workingObjective || "")
+    workingObjective: String(value.workingObjective || ""),
+    recentJobs: Array.isArray(value.recentJobs) ? value.recentJobs : []
   };
 }
 
@@ -150,14 +153,29 @@ function boundPinnedMessage(message, budget) {
     : message;
 }
 
-function prependWorkingState(content, { workingObjective, compacted, vendorSignals = "" }) {
+function prependWorkingState(content, {
+  workingObjective,
+  recentJobs = [],
+  compacted,
+  vendorSignals = ""
+}) {
   const vendorText = String(vendorSignals || "").trim();
+  const jobs = [...new Set(
+    (Array.isArray(recentJobs) ? recentJobs : [])
+      .map((job) => String(job || "").trim())
+      .filter(Boolean)
+  )].slice(-8);
+  const otherJobs = jobs.filter((job) => job !== String(workingObjective || "").trim());
+  const jobLines = otherJobs.length > 0
+    ? otherJobs.map((job, index) => `${index + 1}. ${job.slice(0, 220)}`).join("\n")
+    : "";
   const card = [
     "<amos_working_state>",
-    "Pinned work for this turn. This is not necessarily the first message in the chat, and a short follow-up does not replace a more specific job.",
+    "Users hop jobs in one thread (build an integration, then QBO accounts, then Stripe tax). That is expected. The first chat message is not the whole conversation.",
     workingObjective ? `Current job:\n${String(workingObjective).slice(0, 1_500)}` : "Current job: (not yet stated)",
+    jobLines ? `Other jobs still in this thread:\n${jobLines}` : "",
     compacted
-      ? "Older turns were omitted to fit the model window. Call desktop_inspect_conversation with a search query to recover exact earlier messages. Do not invent a different job."
+      ? "Older turns were omitted to fit the model window. Call desktop_inspect_conversation with a word from an earlier job (QBO, Stripe, tax, integration) to recover exact messages. Do not invent a different job."
       : "",
     vendorText && compacted ? vendorText : "",
     "</amos_working_state>"
@@ -174,7 +192,7 @@ function prependWorkingState(content, { workingObjective, compacted, vendorSigna
 }
 
 function compactMessages(messages, charBudget, options) {
-  const { activeTask, workingObjective } = compactionOptions(options);
+  const { activeTask, workingObjective, recentJobs } = compactionOptions(options);
   const system = messages.find((message) => message?.role === "system") || messages[0];
   const latestIndex = latestUserIndex(messages, activeTask);
   if (!system || latestIndex < 0) return messages.slice(-1);
@@ -232,6 +250,7 @@ function compactMessages(messages, charBudget, options) {
       ...firstPinned,
       content: prependWorkingState(firstPinned.content, {
         workingObjective: workingObjective || userMessageText(messages[firstPin]?.content),
+        recentJobs,
         compacted: willDrop,
         vendorSignals
       })

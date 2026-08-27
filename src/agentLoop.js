@@ -12,7 +12,11 @@ import {
   modelContentLength
 } from "./model/contextCompiler.js";
 import { createConversationInspectTool } from "./model/conversationInspect.js";
-import { selectWorkingObjective, userMessageText } from "./model/workingObjective.js";
+import {
+  pushRecentJob,
+  selectWorkingObjective,
+  userMessageText
+} from "./model/workingObjective.js";
 import {
   evaluateCompactionEconomics,
   evaluatePreferredCompaction,
@@ -101,6 +105,7 @@ export class AgentLoop {
     this.lastPromptCacheUsage = null;
     this.lastCompactionDecision = null;
     this.workingObjective = "";
+    this.recentJobs = [];
     this.messages = [{ role: "system", content: this.systemPrompt }];
     this.installConversationInspectTool();
   }
@@ -123,6 +128,7 @@ export class AgentLoop {
     this.lastPromptCacheUsage = null;
     this.lastCompactionDecision = null;
     this.workingObjective = "";
+    this.recentJobs = [];
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -189,10 +195,9 @@ export class AgentLoop {
   ) {
     throwIfAborted(signal);
     this.configurePromptSession(promptSession);
-    this.workingObjective = selectWorkingObjective(
-      this.workingObjective,
-      userMessageText(userContent)
-    );
+    const incomingText = userMessageText(userContent);
+    this.workingObjective = selectWorkingObjective(this.workingObjective, incomingText);
+    this.recentJobs = pushRecentJob(this.recentJobs, incomingText);
     this.compactCompletedHistory();
     this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
     // The canvas lives in Desktop, not in the model transcript. Preserve its
@@ -989,7 +994,8 @@ export class AgentLoop {
       ...this.modelContextOptions(),
       preferredInputTokens,
       activeTask: this.activeTaskMessage,
-      workingObjective: this.workingObjective
+      workingObjective: this.workingObjective,
+      recentJobs: this.recentJobs
     });
     let preferredCompaction = null;
     if (compiled.plan.compactionReason === "preferred_input_budget") {
@@ -1008,7 +1014,8 @@ export class AgentLoop {
           ...this.modelContextOptions(),
           preferredInputTokens: null,
           activeTask: this.activeTaskMessage,
-          workingObjective: this.workingObjective
+          workingObjective: this.workingObjective,
+          recentJobs: this.recentJobs
         });
         compiled = {
           ...hardOnly,
