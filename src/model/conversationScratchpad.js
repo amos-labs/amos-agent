@@ -293,10 +293,10 @@ export function createScratchpadTools({ getPad, setPad }) {
           }
         }
       },
-      handler(args = {}) {
+      async handler(args = {}) {
         const current = typeof getPad === "function" ? getPad() : getPad;
         const next = applyScratchpadPatch(current, args);
-        if (typeof setPad === "function") setPad(next);
+        if (typeof setPad === "function") await setPad(next);
         return { ok: true, scratchpad: next };
       }
     }

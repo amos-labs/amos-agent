@@ -2756,7 +2756,8 @@ export class DesktopController {
           if (scope) {
             await this.taskStore.update(scope, this.activeTaskRecordId, {
               status: "interrupted",
-              canvasState: this.canvases.state()
+              canvasState: this.canvases.state(),
+              ...this.liveScratchpadPatch()
             }).catch(() => {});
           }
         }
@@ -2913,7 +2914,8 @@ export class DesktopController {
         if (scope) {
           await this.taskStore.update(scope, this.activeTaskRecordId, {
             status: canceled ? "interrupted" : "failed",
-            canvasState: this.canvases.state()
+            canvasState: this.canvases.state(),
+            ...this.liveScratchpadPatch()
           }).catch(() => {});
         }
       }
@@ -3179,7 +3181,8 @@ export class DesktopController {
       if (scope) {
         await this.taskStore.update(scope, this.activeTaskRecordId, {
           status: "interrupted",
-          canvasState: this.canvases.state()
+          canvasState: this.canvases.state(),
+          ...this.liveScratchpadPatch()
         }).catch(() => {});
       }
     }
@@ -3201,6 +3204,7 @@ export class DesktopController {
     const lanes = this.runManager.nonTerminal();
     if (lanes.length === 0) return false;
     await Promise.all(lanes.map((lane) => this.runManager.withLane(lane, async () => {
+      await this.snapshotActiveTask().catch(() => {});
       const active = this.activeTask;
       if (active?.checkpointed) {
         await this.queueCheckpointUpdate(active.id, {
@@ -5825,21 +5829,26 @@ export class DesktopController {
           ...task.workspace,
           localPath: task.workspace?.localPath || currentSettings.workspace || ""
         };
-    const livePad = this.runtime?.runtime?.loop?.scratchpad;
     return this.taskStore.update(scope, task.id, {
       canvasState: durableCanvasState(this.canvases.state()),
       workspace,
-      scratchpad: scratchpadHasWork(livePad) ? livePad : task.scratchpad
+      ...this.liveScratchpadPatch(task.scratchpad)
     });
+  }
+
+  liveScratchpadPatch(fallback = null) {
+    const livePad = this.runtime?.runtime?.loop?.scratchpad;
+    if (scratchpadHasWork(livePad)) return { scratchpad: livePad };
+    if (scratchpadHasWork(fallback)) return { scratchpad: fallback };
+    return {};
   }
 
   bindConversationScratchpad(runtimeState, task) {
     const loop = runtimeState?.runtime?.loop;
     if (!loop) return;
     const taskId = task?.id || this.activeTaskRecordId;
-    loop.onScratchpadChange = (pad) => {
-      void this.persistConversationScratchpad(pad, taskId);
-    };
+    if (typeof loop.loadScratchpad !== "function") return;
+    loop.onScratchpadChange = (pad) => this.persistConversationScratchpad(pad, taskId);
     loop.loadScratchpad(task?.scratchpad);
   }
 

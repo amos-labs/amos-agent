@@ -214,7 +214,7 @@ export class AgentLoop {
     const incomingText = userMessageText(userContent);
     this.workingObjective = selectWorkingObjective(this.workingObjective, incomingText);
     this.recentJobs = pushRecentJob(this.recentJobs, incomingText);
-    this.syncScratchpadFromObjective(incomingText);
+    await this.syncScratchpadFromObjective(incomingText);
     this.compactCompletedHistory();
     this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
     // The canvas lives in Desktop, not in the model transcript. Preserve its
@@ -289,7 +289,7 @@ export class AgentLoop {
 
       while (true) {
         throwIfAborted(signal);
-        const steeringBeforeThinking = this.applySteering(takeSteering, onEvent, turn);
+        const steeringBeforeThinking = await this.applySteering(takeSteering, onEvent, turn);
         if (steeringBeforeThinking > 0) {
           previousToolFingerprint = null;
           repeatedToolCycles = 0;
@@ -476,7 +476,7 @@ export class AgentLoop {
 
         const toolCalls = assistantMessage.tool_calls || [];
         if (toolCalls.length === 0) {
-          const steeringAfterResponse = this.applySteering(takeSteering, onEvent, turn);
+          const steeringAfterResponse = await this.applySteering(takeSteering, onEvent, turn);
           if (steeringAfterResponse > 0) {
             previousToolFingerprint = null;
             repeatedToolCycles = 0;
@@ -664,7 +664,7 @@ export class AgentLoop {
           rejectedCompletions = 0;
         }
 
-        const steeringAfterTools = this.applySteering(takeSteering, onEvent, turn);
+        const steeringAfterTools = await this.applySteering(takeSteering, onEvent, turn);
         if (steeringAfterTools > 0) {
           previousToolFingerprint = null;
           repeatedToolCycles = 0;
@@ -746,7 +746,7 @@ export class AgentLoop {
     return activations;
   }
 
-  applySteering(takeSteering, onEvent, turn) {
+  async applySteering(takeSteering, onEvent, turn) {
     const queued = takeSteering?.();
     const messages = Array.isArray(queued) ? queued : queued ? [queued] : [];
     const steering = messages
@@ -757,7 +757,7 @@ export class AgentLoop {
     for (const content of steering) {
       this.workingObjective = selectWorkingObjective(this.workingObjective, content);
       this.recentJobs = pushRecentJob(this.recentJobs, content);
-      this.syncScratchpadFromObjective(content);
+      await this.syncScratchpadFromObjective(content);
       this.messages.push({ role: "user", content });
       this.applyCanvasIntent(content);
     }
@@ -1034,7 +1034,7 @@ export class AgentLoop {
     return this.scratchpad;
   }
 
-  setScratchpad(value) {
+  async setScratchpad(value) {
     this.scratchpad = normalizeScratchpad(value);
     if (this.scratchpad.currentJob) {
       this.workingObjective = this.scratchpad.currentJob;
@@ -1042,11 +1042,11 @@ export class AgentLoop {
     if (this.scratchpad.jobs.length > 0) {
       this.recentJobs = this.scratchpad.jobs.map((job) => job.title).filter(Boolean);
     }
-    this.onScratchpadChange?.(this.scratchpad);
+    await this.onScratchpadChange?.(this.scratchpad);
     return this.scratchpad;
   }
 
-  syncScratchpadFromObjective(text) {
+  async syncScratchpadFromObjective(text) {
     if (isThinFollowUp(text) && scratchpadHasWork(this.scratchpad)) return this.scratchpad;
     const current = String(this.workingObjective || text || "").trim();
     if (!current) return this.scratchpad;
