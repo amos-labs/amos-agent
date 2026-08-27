@@ -9,7 +9,12 @@ import {
   intelligenceRoutingEnvelope,
   isAmosDesktopRoutingConfig
 } from "./intelligenceRouter.js";
-import { normalizedUsage } from "./protocol.js";
+import {
+  canonicalizeChatMessages,
+  canonicalizeMessageToolCalls,
+  jsonObjectArgumentString,
+  normalizedUsage
+} from "./protocol.js";
 import { mergeThoughtDelta } from "./thoughtDelta.js";
 
 function compactObject(value) {
@@ -36,9 +41,11 @@ export class OpenAICompatibleClient {
   }) {
     throwIfAborted(signal);
     const requestStartedAt = performance.now();
-    const outboundMessages = this.config.provider === "ollama"
-      ? canonicalizeStrictSystemMessages(messages)
-      : messages;
+    const outboundMessages = canonicalizeChatMessages(
+      this.config.provider === "ollama"
+        ? canonicalizeStrictSystemMessages(messages)
+        : messages
+    );
     const body = {
       model: this.config.model,
       messages: outboundMessages.map(({ provider_state: _providerState, ...message }) => message)
@@ -207,7 +214,7 @@ export class OpenAICompatibleClient {
       }
 
       const result = {
-        message: choice.message,
+        message: canonicalizeMessageToolCalls(choice.message),
         usage: withRequestMetrics(normalizedUsage(payload.usage), {
           config: requestConfig,
           requestedConfig: this.config,
@@ -509,7 +516,11 @@ async function readStreamingResponse(response, {
           toolName: current.function.name
         });
       }
-      if (part.function?.arguments) current.function.arguments += part.function.arguments;
+      if (part.function?.arguments != null && part.function.arguments !== "") {
+        const chunk = part.function.arguments;
+        if (typeof chunk === "string") current.function.arguments += chunk;
+        else current.function.arguments = jsonObjectArgumentString(chunk);
+      }
       toolCalls.set(index, current);
     }
   };
@@ -544,7 +555,13 @@ async function readStreamingResponse(response, {
   if (toolCalls.size > 0) {
     message.tool_calls = [...toolCalls.entries()]
       .sort(([left], [right]) => left - right)
-      .map(([, value]) => value);
+      .map(([, value]) => ({
+        ...value,
+        function: {
+          ...value.function,
+          arguments: jsonObjectArgumentString(value.function?.arguments)
+        }
+      }));
   }
   if (!message.content && toolCalls.size === 0) {
     throw new Error(`${displayName} streaming response did not include content or tool calls`);

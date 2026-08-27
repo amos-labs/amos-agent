@@ -23,7 +23,10 @@ import {
   derivePromptSessionId,
   promptContractConfig
 } from "./model/promptContract.js";
-import { assertValidModelToolArguments } from "./model/protocol.js";
+import {
+  assertValidModelToolArguments,
+  canonicalizeMessageToolCalls
+} from "./model/protocol.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
 // Leave headroom below AMOS Hosted's 256-message boundary while allowing long
@@ -435,7 +438,7 @@ export class AgentLoop {
         onEvent(usageEvent);
 
         throwIfAborted(signal);
-        const assistantMessage = response.message;
+        const assistantMessage = canonicalizeMessageToolCalls(response.message);
         this.messages.push(assistantMessage);
 
         const toolCalls = assistantMessage.tool_calls || [];
