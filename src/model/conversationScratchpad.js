@@ -5,7 +5,9 @@ const MAX_NOTES = 1_500;
 const MAX_CURRENT = 1_500;
 const MAX_OPEN_LOOPS = 8;
 const MAX_LOOP = 280;
+const MAX_PORTABLE_SCRATCHPADS = 100;
 const JOB_STATUSES = new Set(["open", "current", "parked", "done"]);
+export const PORTABLE_SCRATCHPAD_KIND = "conversation_scratchpad";
 
 export function emptyScratchpad() {
   return {
@@ -366,6 +368,68 @@ function ensureJobId(value, title, used) {
 
 function createJobId(title) {
   return ensureJobId("", title, new Set());
+}
+
+export function portableScratchpadFromTask(task) {
+  const scratchpad = normalizeScratchpad(task?.scratchpad);
+  if (!scratchpadHasWork(scratchpad)) return null;
+  const taskId = cleanText(task?.id, 128);
+  if (!taskId) return null;
+  const title = cleanText(task?.title, 160) || scratchpad.currentJob.slice(0, 160) || "Imported conversation";
+  return {
+    id: `scratchpad:${taskId}`.slice(0, 128),
+    kind: PORTABLE_SCRATCHPAD_KIND,
+    taskId,
+    contextKey: cleanText(task?.contextKey || `task:${taskId}`, 128),
+    title,
+    objective: cleanText(task?.objective, MAX_CURRENT) || scratchpad.currentJob,
+    scratchpad,
+    updatedAt: scratchpad.updatedAt || optionalTimestamp(task?.updatedAt)
+  };
+}
+
+export function normalizePortableScratchpads(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("AMOS memory capsules require conversation scratch pads as an array");
+  }
+  const ids = new Set();
+  return value.flatMap((item) => {
+    const record = normalizePortableScratchpad(item);
+    if (!record) return [];
+    if (ids.has(record.id)) throw new Error(`Duplicate conversation scratch pad ID: ${record.id}`);
+    ids.add(record.id);
+    return [record];
+  }).slice(0, MAX_PORTABLE_SCRATCHPADS);
+}
+
+export function shouldReplaceScratchpad(local, incoming) {
+  if (!scratchpadHasWork(incoming)) return false;
+  if (!scratchpadHasWork(local)) return true;
+  const localAt = Date.parse(local?.updatedAt || 0);
+  const incomingAt = Date.parse(incoming?.updatedAt || 0);
+  if (!Number.isFinite(incomingAt)) return true;
+  if (!Number.isFinite(localAt)) return true;
+  return incomingAt >= localAt;
+}
+
+function normalizePortableScratchpad(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const scratchpad = normalizeScratchpad(source.scratchpad);
+  if (!scratchpadHasWork(scratchpad)) return null;
+  const taskId = cleanText(source.taskId || source.task_id, 128);
+  if (!taskId) return null;
+  const title = cleanText(source.title, 160) || scratchpad.currentJob.slice(0, 160) || "Imported conversation";
+  return {
+    id: cleanText(source.id, 128) || `scratchpad:${taskId}`.slice(0, 128),
+    kind: PORTABLE_SCRATCHPAD_KIND,
+    taskId,
+    contextKey: cleanText(source.contextKey || source.context_key || `task:${taskId}`, 128),
+    title,
+    objective: cleanText(source.objective, MAX_CURRENT) || scratchpad.currentJob,
+    scratchpad,
+    updatedAt: scratchpad.updatedAt || optionalTimestamp(source.updatedAt)
+  };
 }
 
 function uniqueText(value, maxItems, maxLength, redact = identity) {

@@ -8,6 +8,7 @@ import {
   createScratchpadTools,
   emptyScratchpad,
   formatScratchpadCard,
+  portableScratchpadFromTask,
   scratchpadHasWork,
   syncScratchpadWithObjective
 } from "../src/model/conversationScratchpad.js";
@@ -46,6 +47,23 @@ test("thin follow-ups do not replace the current job when sync is skipped by the
   assert.match(card, /not a Project/);
   assert.match(card, /tax_behavior/);
   assert.doesNotMatch(card, /desktop_inspect_conversation with a word from an earlier job/);
+});
+
+test("portable scratch pads come from the conversation, not a Project", () => {
+  const record = portableScratchpadFromTask({
+    id: "task-tax",
+    contextKey: "task:task-tax",
+    title: "Ops thread",
+    objective: "Fix Stripe tax",
+    projectId: "",
+    scratchpad: {
+      currentJob: "Fix tax_behavior on the three Stripe prices",
+      jobs: [{ title: "Build Stripe to QBO integration", status: "parked" }]
+    }
+  });
+  assert.equal(record.kind, "conversation_scratchpad");
+  assert.equal(record.taskId, "task-tax");
+  assert.equal(portableScratchpadFromTask({ id: "empty", scratchpad: {} }), null);
 });
 
 test("scratch pad tools are core and the update path does not ask for approval", async () => {

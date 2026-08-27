@@ -1021,9 +1021,9 @@ export class AgentLoop {
     }
   }
 
-  loadScratchpad(value) {
+  loadScratchpad(value, { replace = false } = {}) {
     const incoming = normalizeScratchpad(value);
-    if (scratchpadHasWork(this.scratchpad) || !scratchpadHasWork(incoming)) {
+    if (!replace && (scratchpadHasWork(this.scratchpad) || !scratchpadHasWork(incoming))) {
       return this.scratchpad;
     }
     this.scratchpad = incoming;

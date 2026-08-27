@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { DesktopController } from "../src/desktop/controller.js";
 import { PrivateMemoryStore } from "../src/desktop/privateMemoryStore.js";
+import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
 
 function privateStore(root) {
   return new PrivateMemoryStore({
@@ -122,4 +123,84 @@ test("desktop previews encrypted capsules before importing private memory", asyn
     destinationController.importPrivateMemoryCapsule(preview.previewId),
     /preview expired/
   );
+});
+
+test("desktop capsules restore conversation scratch pads onto another computer", async () => {
+  const sourceRoot = await mkdtemp(join(tmpdir(), "amos-desktop-capsule-pad-source-"));
+  const destinationRoot = await mkdtemp(join(tmpdir(), "amos-desktop-capsule-pad-dest-"));
+  const codec = {
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8")
+  };
+  const sourceStore = privateStore(sourceRoot);
+  const sourceTasks = new DesktopTaskStore({
+    filePath: join(sourceRoot, "tasks.json"),
+    ...codec
+  });
+  const sourceScope = taskOwnerScope({ boundary: "personal", workspace: sourceRoot });
+  await sourceStore.add({
+    name: "portable-context.md",
+    mime: "text/markdown",
+    kind: "document",
+    size: 19,
+    sha256: "8".repeat(64),
+    text: "Portable context"
+  }, { ownerSubjectId: "local-owner", ownerTenantId: "" });
+  await sourceTasks.create(sourceScope, {
+    id: "task-tax",
+    contextKey: "task:task-tax",
+    title: "Ops thread",
+    objective: "Fix Stripe tax",
+    scratchpad: {
+      currentJob: "Fix tax_behavior on the three Stripe prices",
+      jobs: [
+        { title: "Build Stripe to QBO integration", status: "parked" },
+        { title: "Fix tax_behavior on the three Stripe prices", status: "current" }
+      ],
+      notes: "Stripe writes are form-urlencoded POST."
+    }
+  });
+  const sourceController = new DesktopController({
+    userDataPath: sourceRoot,
+    settingsStore: { read: async () => ({ operatingMode: "personal", workspace: sourceRoot }) },
+    privateMemoryStore: sourceStore,
+    taskStore: sourceTasks,
+    openBrowser() {},
+    emit() {}
+  });
+  const filePath = join(sourceRoot, "portable.amos-memory");
+  const exported = await sourceController.exportPrivateMemoryCapsule({
+    filePath,
+    passphrase: "portable private passphrase",
+    ids: null
+  });
+  assert.equal(exported.memoryCount, 1);
+  assert.equal(exported.scratchpadCount, 1);
+
+  const destinationStore = privateStore(destinationRoot);
+  const destinationTasks = new DesktopTaskStore({
+    filePath: join(destinationRoot, "tasks.json"),
+    ...codec
+  });
+  const destinationController = new DesktopController({
+    userDataPath: destinationRoot,
+    settingsStore: { read: async () => ({ operatingMode: "personal", workspace: destinationRoot }) },
+    privateMemoryStore: destinationStore,
+    taskStore: destinationTasks,
+    openBrowser() {},
+    emit() {}
+  });
+  const preview = await destinationController.previewPrivateMemoryCapsule({
+    filePath,
+    passphrase: "portable private passphrase"
+  });
+  assert.equal(preview.scratchpadCount, 1);
+  const imported = await destinationController.importPrivateMemoryCapsule(preview.previewId);
+  assert.equal(imported.importedCount, 1);
+  assert.equal(imported.scratchpadImportedCount, 1);
+  const destScope = taskOwnerScope({ boundary: "personal", workspace: destinationRoot });
+  const restored = await destinationTasks.get(destScope, "task-tax");
+  assert.equal(restored.scratchpad.currentJob, "Fix tax_behavior on the three Stripe prices");
+  assert.equal(restored.scratchpad.jobs.length, 2);
+  assert.match(restored.scratchpad.notes, /form-urlencoded/);
 });

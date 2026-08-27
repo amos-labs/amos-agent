@@ -85,6 +85,61 @@ test("capsules reject a wrong passphrase and modified ciphertext", async () => {
   );
 });
 
+test("memory capsules include conversation scratch pads and omit them from the ciphertext envelope", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-memory-capsule-scratchpad-"));
+  const filePath = join(root, "portable.amos-memory");
+  const written = await writePrivateMemoryCapsule({
+    filePath,
+    passphrase,
+    subjectId: "user-1",
+    memories: [privateDocument()],
+    scratchpads: [{
+      taskId: "task-tax",
+      contextKey: "task:task-tax",
+      title: "Ops thread",
+      objective: "Fix Stripe tax",
+      scratchpad: {
+        currentJob: "Fix tax_behavior on the three Stripe prices",
+        jobs: [
+          { title: "Build Stripe to QBO integration", status: "parked" },
+          { title: "Fix tax_behavior on the three Stripe prices", status: "current" }
+        ],
+        notes: "Use password=hunter2 never"
+      }
+    }],
+    capsuleId: "capsule-pads"
+  });
+
+  assert.equal(written.memoryCount, 1);
+  assert.equal(written.scratchpadCount, 1);
+  assert.equal(written.itemCount, 2);
+  const raw = await readFile(filePath, "utf8");
+  assert.doesNotMatch(raw, /tax_behavior|password=hunter2|Ops thread/);
+
+  const unlocked = await readPrivateMemoryCapsule({ filePath, passphrase });
+  assert.equal(unlocked.records.length, 1);
+  assert.equal(unlocked.scratchpads.length, 1);
+  assert.equal(unlocked.scratchpads[0].taskId, "task-tax");
+  assert.equal(unlocked.scratchpads[0].scratchpad.currentJob, "Fix tax_behavior on the three Stripe prices");
+  assert.equal(unlocked.scratchpads[0].scratchpad.jobs.length, 2);
+  assert.equal(unlocked.summary.items[1].kind, "conversation_scratchpad");
+});
+
+test("capsules still read a payload that has no conversation scratch pads", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-memory-capsule-legacy-"));
+  const filePath = join(root, "portable.amos-memory");
+  await writePrivateMemoryCapsule({
+    filePath,
+    passphrase,
+    subjectId: "user-1",
+    memories: [privateDocument()],
+    capsuleId: "capsule-legacy"
+  });
+  const unlocked = await readPrivateMemoryCapsule({ filePath, passphrase });
+  assert.equal(unlocked.scratchpads.length, 0);
+  assert.equal(unlocked.summary.scratchpadCount, 0);
+});
+
 test("capsules export only private memory and require a strong passphrase", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-memory-capsule-policy-"));
   const filePath = join(root, "portable.amos-memory");

@@ -6171,8 +6171,8 @@ function openCapsuleFlow(mode, ids = null) {
       : "Encrypt your private memory."
     : "Unlock a private-memory capsule.";
   elements.capsuleModalMessage.textContent = exporting
-    ? "Create a passphrase with at least 12 characters. AMOS cannot recover it, and the capsule never includes your AMOS login, provider keys, or other application credentials."
-    : "Enter the capsule passphrase, then choose the .amos-memory file. AMOS validates and previews every item before anything is added to this computer.";
+    ? "Create a passphrase with at least 12 characters. AMOS cannot recover it. The capsule includes private files and conversation scratch pads, never your AMOS login, provider keys, or other application credentials."
+    : "Enter the capsule passphrase, then choose the .amos-memory file. AMOS validates and previews every item, including conversation scratch pads, before anything is added to this computer.";
   elements.capsuleConfirmField.classList.toggle("hidden", !exporting);
   elements.capsuleConfirmInput.required = exporting;
   elements.capsuleContinueButton.textContent = exporting
@@ -6211,7 +6211,12 @@ async function handleCapsulePassphrase(event) {
       const summary = result.summary;
       await closeCapsuleModal();
       const lineage = summary.parentCapsuleId ? " with fork lineage preserved" : "";
-      toast(`Encrypted ${summary.itemCount} private ${summary.itemCount === 1 ? "memory" : "memories"}${lineage}.`);
+      const pads = summary.scratchpadCount
+        ? ` and ${summary.scratchpadCount} conversation ${summary.scratchpadCount === 1 ? "scratch pad" : "scratch pads"}`
+        : "";
+      toast(`Encrypted ${summary.memoryCount ?? summary.itemCount} private ${
+        (summary.memoryCount ?? summary.itemCount) === 1 ? "memory" : "memories"
+      }${pads}${lineage}.`);
       return;
     }
     const result = await api.previewPrivateMemoryCapsule({ passphrase });
@@ -6234,13 +6239,16 @@ async function handleCapsulePassphrase(event) {
 function renderCapsulePreview(preview) {
   elements.capsulePassphraseForm.classList.add("hidden");
   elements.capsulePreview.classList.remove("hidden");
+  const memoryCount = preview.memoryCount ?? preview.items?.filter((item) => item.kind !== "conversation_scratchpad").length ?? preview.itemCount;
+  const scratchpadCount = preview.scratchpadCount || 0;
   elements.capsulePreviewSummary.textContent = [
-    `${preview.itemCount} private ${preview.itemCount === 1 ? "memory" : "memories"}`,
+    `${memoryCount} private ${memoryCount === 1 ? "memory" : "memories"}`,
+    scratchpadCount ? `${scratchpadCount} conversation ${scratchpadCount === 1 ? "scratch pad" : "scratch pads"}` : null,
     formatBytes(preview.totalBytes),
     preview.parentCapsuleId
       ? `forked from ${shortId(preview.parentCapsuleId)}`
       : `capsule ${shortId(preview.capsuleId)}`
-  ].join(" · ");
+  ].filter(Boolean).join(" · ");
   elements.capsulePreviewItems.replaceChildren();
   for (const item of preview.items) {
     const row = document.createElement("div");
@@ -6248,7 +6256,12 @@ function renderCapsulePreview(preview) {
     const name = document.createElement("strong");
     name.textContent = item.name;
     const detail = document.createElement("span");
-    detail.textContent = `${item.kind === "image" ? "Image" : "Document"} · ${formatBytes(item.size)}`;
+    const kindLabel = item.kind === "image"
+      ? "Image"
+      : item.kind === "conversation_scratchpad"
+        ? "Conversation scratch pad"
+        : "Document";
+    detail.textContent = `${kindLabel} · ${formatBytes(item.size)}`;
     row.append(name, detail);
     elements.capsulePreviewItems.append(row);
   }
@@ -6271,7 +6284,16 @@ async function confirmCapsuleImport() {
     const duplicates = result.duplicateCount
       ? ` ${result.duplicateCount} existing ${result.duplicateCount === 1 ? "item was" : "items were"} skipped.`
       : "";
-    toast(`Imported ${result.importedCount} private ${result.importedCount === 1 ? "memory" : "memories"}.${duplicates}`);
+    const pads = result.scratchpadImportedCount || result.scratchpadUpdatedCount
+      ? ` Restored ${
+        (result.scratchpadImportedCount || 0) + (result.scratchpadUpdatedCount || 0)
+      } conversation ${
+        ((result.scratchpadImportedCount || 0) + (result.scratchpadUpdatedCount || 0)) === 1
+          ? "scratch pad"
+          : "scratch pads"
+      }.`
+      : "";
+    toast(`Imported ${result.importedCount} private ${result.importedCount === 1 ? "memory" : "memories"}.${duplicates}${pads}`);
   } catch (error) {
     elements.capsulePreviewWarning.textContent = error.message;
     elements.capsulePreviewWarning.classList.remove("hidden");

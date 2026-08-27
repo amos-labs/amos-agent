@@ -108,7 +108,11 @@ import {
   setExplicitPreference
 } from "./relationshipProfile.js";
 import { profileOwnerScope } from "./relationshipProfileStore.js";
-import { scratchpadHasWork } from "../model/conversationScratchpad.js";
+import {
+  portableScratchpadFromTask,
+  scratchpadHasWork,
+  shouldReplaceScratchpad
+} from "../model/conversationScratchpad.js";
 import { taskOwnerScope } from "./taskStore.js";
 import { DesktopRunManager, DesktopRunSupervisor } from "./runManager.js";
 import {
@@ -1206,12 +1210,14 @@ export class DesktopController {
     const store = this.requirePrivateMemory();
     const scope = privateMemoryScope(this.identity);
     const memories = await store.exportRecords(ids, scope);
+    const scratchpads = await this.collectConversationScratchpads();
     const summary = await writePrivateMemoryCapsule({
       filePath,
       passphrase,
       subjectId: privateMemorySubject(this.identity),
       tenantId: privateMemoryTenant(this.identity),
       memories,
+      scratchpads,
       journal: await store.journal(scope),
       parentCapsuleId: commonParentCapsule(memories)
     });
@@ -1286,25 +1292,33 @@ export class DesktopController {
     this.capsulePreviews.delete(previewId);
     const store = this.requirePrivateMemory();
     const scope = privateMemoryScope(this.identity);
-    const result = await store.importCapsuleRecords(staged.capsule.records, {
-      capsuleId: staged.capsule.manifest.capsule_id,
-      parentCapsuleId: staged.capsule.manifest.parent_capsule_id,
-      scope
-    });
+    const result = staged.capsule.records?.length
+      ? await store.importCapsuleRecords(staged.capsule.records, {
+        capsuleId: staged.capsule.manifest.capsule_id,
+        parentCapsuleId: staged.capsule.manifest.parent_capsule_id,
+        scope
+      })
+      : { imported: [], duplicates: [] };
+    const scratchpads = await this.importConversationScratchpads(staged.capsule.scratchpads);
     this.record(
       "memory",
       `Imported ${result.imported.length} private ${result.imported.length === 1 ? "memory" : "memories"} from capsule`,
       {
         capsule_id: staged.capsule.manifest.capsule_id,
         imported: result.imported.length,
-        duplicates: result.duplicates.length
+        duplicates: result.duplicates.length,
+        scratchpads_imported: scratchpads.imported,
+        scratchpads_updated: scratchpads.updated
       }
     );
     return {
       privateMemory: await store.list(scope),
       capsuleId: staged.capsule.manifest.capsule_id,
       importedCount: result.imported.length,
-      duplicateCount: result.duplicates.length
+      duplicateCount: result.duplicates.length,
+      scratchpadImportedCount: scratchpads.imported,
+      scratchpadUpdatedCount: scratchpads.updated,
+      scratchpadSkippedCount: scratchpads.skipped
     };
   }
 
@@ -5852,6 +5866,77 @@ export class DesktopController {
     loop.loadScratchpad(task?.scratchpad);
   }
 
+  async collectConversationScratchpads(settings = null) {
+    if (!this.taskStore) return [];
+    const currentSettings = settings || await this.settingsStore.read().catch(() => null);
+    if (!currentSettings) return [];
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return [];
+    const tasks = await this.taskStore.list(scope, { includeArchived: true });
+    return tasks.map(portableScratchpadFromTask).filter(Boolean);
+  }
+
+  async importConversationScratchpads(scratchpads, settings = null) {
+    const result = { imported: 0, updated: 0, skipped: 0 };
+    if (!this.taskStore || !Array.isArray(scratchpads) || scratchpads.length === 0) return result;
+    const currentSettings = settings || await this.settingsStore.read().catch(() => null);
+    if (!currentSettings) return result;
+    const scope = this.taskScope(currentSettings);
+    if (!scope) return result;
+    for (const item of scratchpads) {
+      const portable = portableScratchpadFromTask({
+        id: item.taskId,
+        contextKey: item.contextKey,
+        title: item.title,
+        objective: item.objective,
+        scratchpad: item.scratchpad,
+        updatedAt: item.updatedAt
+      });
+      if (!portable) {
+        result.skipped += 1;
+        continue;
+      }
+      let task = await this.taskStore.get(scope, portable.taskId).catch(() => null)
+        || await this.taskStore.findByContext(scope, portable.contextKey).catch(() => null);
+      if (!task) {
+        try {
+          task = await this.taskStore.create(scope, {
+            id: portable.taskId,
+            contextKey: portable.contextKey,
+            title: portable.title,
+            objective: portable.objective || portable.scratchpad.currentJob || portable.title,
+            status: "interrupted",
+            scratchpad: portable.scratchpad
+          });
+        } catch {
+          try {
+            task = await this.taskStore.create(scope, {
+              title: portable.title,
+              objective: portable.objective || portable.scratchpad.currentJob || portable.title,
+              status: "interrupted",
+              scratchpad: portable.scratchpad
+            });
+          } catch {
+            result.skipped += 1;
+            continue;
+          }
+        }
+        result.imported += 1;
+        continue;
+      }
+      if (!shouldReplaceScratchpad(task.scratchpad, portable.scratchpad)) {
+        result.skipped += 1;
+        continue;
+      }
+      await this.taskStore.update(scope, task.id, { scratchpad: portable.scratchpad });
+      if (task.id === this.activeTaskRecordId) {
+        this.runtime?.runtime?.loop?.loadScratchpad?.(portable.scratchpad, { replace: true });
+      }
+      result.updated += 1;
+    }
+    return result;
+  }
+
   async persistConversationScratchpad(pad, taskRecordId = this.activeTaskRecordId) {
     if (!this.taskStore || !taskRecordId) return null;
     const settings = this.runManager.current()?.settings || await this.settingsStore.read();
@@ -7305,6 +7390,8 @@ function publicCapsuleSummary(summary) {
     tenantId: summary.tenantId,
     createdAt: summary.createdAt,
     itemCount: summary.itemCount,
+    memoryCount: summary.memoryCount ?? summary.itemCount,
+    scratchpadCount: summary.scratchpadCount || 0,
     totalBytes: summary.totalBytes,
     encryptedBytes: summary.encryptedBytes,
     filePath: summary.filePath,
