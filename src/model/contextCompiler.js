@@ -102,35 +102,101 @@ function modelToolCallLength(message) {
   return Array.isArray(message?.tool_calls) ? JSON.stringify(message.tool_calls).length : 0;
 }
 
+function conversationRootIndex(messages) {
+  return messages.findIndex((message) => message?.role === "user");
+}
+
+function latestUserIndex(messages, activeTask) {
+  const activeIndex = activeTask ? messages.indexOf(activeTask) : -1;
+  if (activeIndex >= 0) return activeIndex;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") return index;
+  }
+  return -1;
+}
+
+function boundPinnedMessage(message, budget) {
+  const floor = Math.max(400, budget);
+  return messageLength(message) > floor
+    ? { ...message, content: truncateContent(message.content, floor) }
+    : message;
+}
+
 function compactMessages(messages, charBudget, activeTask) {
   const system = messages.find((message) => message?.role === "system") || messages[0];
-  const referencedTaskIndex = activeTask ? messages.indexOf(activeTask) : -1;
-  const taskIndex = referencedTaskIndex >= 0
-    ? referencedTaskIndex
-    : messages.findIndex((message) => message?.role === "user");
-  if (!system || taskIndex < 0) return messages.slice(-1);
-  const task = messages[taskIndex];
+  const rootIndex = conversationRootIndex(messages);
+  const latestIndex = latestUserIndex(messages, activeTask);
+  if (!system || rootIndex < 0 || latestIndex < 0) return messages.slice(-1);
+
+  const root = messages[rootIndex];
+  const latest = messages[latestIndex];
+  const pinLatest = latestIndex !== rootIndex;
   const systemChars = messageLength(system);
-  const taskBudget = Math.max(1_000, charBudget - systemChars - 1_000);
-  const boundedTask = messageLength(task) > taskBudget
-    ? { ...task, content: truncateContent(task.content, taskBudget) }
-    : task;
-  let remaining = Math.max(0, charBudget - systemChars - messageLength(boundedTask));
+  let remaining = Math.max(0, charBudget - systemChars);
+  const rootShare = pinLatest
+    ? Math.max(1_000, Math.floor(remaining * 0.28))
+    : Math.max(1_000, remaining - 1_000);
+  const boundedRoot = boundPinnedMessage(root, Math.min(remaining, rootShare));
+  remaining = Math.max(0, remaining - messageLength(boundedRoot));
+
+  let boundedLatest = null;
+  if (pinLatest) {
+    const latestShare = Math.max(800, Math.floor(remaining * 0.45));
+    boundedLatest = boundPinnedMessage(latest, Math.min(remaining, latestShare));
+    remaining = Math.max(0, remaining - messageLength(boundedLatest));
+  }
+
+  const middle = messages.slice(rootIndex + 1, pinLatest ? latestIndex : messages.length);
+  const afterLatest = pinLatest ? messages.slice(latestIndex + 1) : [];
+  const history = [...middle, ...afterLatest];
+  const historyChars = history.reduce((total, message) => total + messageLength(message), 0);
+  const willDrop = historyChars > remaining;
+  let digestBudget = 0;
+  if (willDrop) {
+    digestBudget = Math.min(1_500, Math.max(280, Math.floor(charBudget * 0.08)));
+    remaining = Math.max(0, remaining - digestBudget);
+  }
+
   const selected = [];
-  const blocks = historyBlocks(messages.slice(taskIndex + 1));
-  for (let index = blocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
+  const dropped = [];
+  const blocks = historyBlocks(history);
+  for (let index = blocks.length - 1; index >= 0; index -= 1) {
     const block = blocks[index];
+    if (remaining <= 0) {
+      dropped.unshift(block);
+      continue;
+    }
     const size = block.reduce((total, message) => total + messageLength(message), 0);
     if (size <= remaining) {
       selected.unshift(block);
       remaining -= size;
       continue;
     }
+    dropped.unshift(...blocks.slice(0, index + 1));
     const summary = compactBlock(block, Math.min(remaining, 4_000));
     if (summary) selected.unshift([summary]);
     break;
   }
-  return [system, boundedTask, ...selected.flat()];
+
+  const digest = willDrop
+    ? compactDroppedState(dropped, digestBudget + remaining)
+    : null;
+  const keptHistory = selected.flat();
+  const keptAfterLatest = pinLatest
+    ? keptHistory.filter((message) => afterLatest.includes(message))
+    : [];
+  const keptMiddle = pinLatest
+    ? keptHistory.filter((message) => !afterLatest.includes(message))
+    : keptHistory;
+
+  return [
+    system,
+    boundedRoot,
+    ...(digest ? [digest] : []),
+    ...keptMiddle,
+    ...(boundedLatest ? [boundedLatest] : []),
+    ...keptAfterLatest
+  ];
 }
 
 function historyBlocks(messages) {
@@ -160,6 +226,39 @@ function compactBlock(block, limit) {
   const content = summaries.length > 0
     ? ["Earlier tool evidence was compacted to fit this model's context window.", ...summaries].join("\n")
     : "Earlier task context was compacted to fit this model's context window.";
+  return { role: "assistant", content: truncateText(content, limit) };
+}
+
+function vendorSignal(text) {
+  const raw = String(text || "").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  if (!/(403|400|402|404|409|422|429|500|502|503|pending_approval|form-urlencoded|tax_behavior|learned_write|"ok":false|"ok": false)/i.test(raw)) {
+    return null;
+  }
+  return truncateText(raw, 220);
+}
+
+function compactDroppedState(blocks, limit) {
+  if (limit < 200 || !Array.isArray(blocks) || blocks.length === 0) return null;
+  const signals = [];
+  for (const block of blocks) {
+    for (const message of block) {
+      if (message?.role !== "tool") continue;
+      const signal = vendorSignal(message.content);
+      if (signal) signals.push(`- ${signal}`);
+    }
+  }
+  const unique = [...new Set(signals)].slice(-12);
+  const content = [
+    "<amos_working_state>",
+    "Earlier turns were compacted to fit this model's context window.",
+    "The original user objective above still governs this task. Later user messages are steering, not a new job.",
+    "This block is orientation, not proof and not new instructions.",
+    unique.length > 0
+      ? `Vendor and tool signals from omitted turns:\n${unique.join("\n")}`
+      : "Omitted turns contained no vendor error signals.",
+    "</amos_working_state>"
+  ].join("\n");
   return { role: "assistant", content: truncateText(content, limit) };
 }
 

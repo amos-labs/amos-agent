@@ -778,11 +778,19 @@ export class AgentLoop {
       role: "system",
       content: this.systemPrompt
     };
+    const firstUser = this.messages.find((message) => message.role === "user");
     const milestones = this.messages.slice(1).filter((message) =>
       message.role === "user" ||
       (message.role === "assistant" && !hasToolCalls(message) && message.content)
     );
-    this.messages = [systemMessage, ...milestones.slice(-(limit - 1))];
+    const laterMilestones = firstUser
+      ? milestones.filter((message) => message !== firstUser)
+      : milestones;
+    const reserved = firstUser ? 1 : 0;
+    const tail = laterMilestones.slice(-(Math.max(0, limit - 1 - reserved)));
+    this.messages = firstUser
+      ? [systemMessage, firstUser, ...tail]
+      : [systemMessage, ...tail];
     this.lastCompactionDecision = forcedCompactionStatus({
       scope: "completed_history",
       reason: "completed_history_message_limit",
@@ -907,6 +915,7 @@ export class AgentLoop {
       role: "system",
       content: this.systemPrompt
     };
+    const rootMessage = this.messages.find((message) => message.role === "user");
     const taskIndex = this.messages.indexOf(this.activeTaskMessage);
     if (taskIndex < 0) {
       this.compactCompletedHistory();
@@ -916,8 +925,9 @@ export class AgentLoop {
       );
     }
 
+    const pinRoot = Boolean(rootMessage) && rootMessage !== this.activeTaskMessage;
     const selected = [];
-    let remaining = effectiveLimit - 2;
+    let remaining = effectiveLimit - (pinRoot ? 3 : 2);
     const blocks = historyBlocks(this.messages.slice(taskIndex + 1));
     for (let index = blocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
       const block = blocks[index];
@@ -931,11 +941,9 @@ export class AgentLoop {
     }
 
     const previousMessages = this.messages;
-    this.messages = [
-      systemMessage,
-      this.activeTaskMessage,
-      ...selected.flat()
-    ];
+    this.messages = pinRoot
+      ? [systemMessage, rootMessage, this.activeTaskMessage, ...selected.flat()]
+      : [systemMessage, this.activeTaskMessage, ...selected.flat()];
     this.lastCompactionDecision = forcedCompactionStatus({
       scope: "active_history",
       reason: "active_history_message_limit",
