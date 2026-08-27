@@ -72,6 +72,43 @@ test("context compiler compacts to a preferred local input budget before the har
   assert.match(compiled.messages[1].content, /current objective/);
 });
 
+test("hosted cell estimates compact a long tool session into the live 32k window", () => {
+  const task = { role: "user", content: "Load company financials and continue" };
+  const messages = [
+    { role: "system", content: "system" },
+    task,
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{ id: "one", function: { name: "amos_list_engines", arguments: "{}" } }]
+    },
+    { role: "tool", tool_call_id: "one", content: JSON.stringify({ engines: "e".repeat(40_000) }) },
+    {
+      role: "assistant",
+      content: "",
+      tool_calls: [{ id: "two", function: { name: "amos_load_engine_tools", arguments: "{\"engine\":\"finance\"}" } }]
+    },
+    { role: "tool", tool_call_id: "two", content: JSON.stringify({ tools: "t".repeat(40_000) }) },
+    { role: "user", content: "What do you see?" }
+  ];
+  const compiled = compileModelContext({
+    messages,
+    tools: [{ type: "function", function: { name: "amos_list_engines", parameters: { type: "object" } } }],
+    contextTokens: 32_768,
+    maxOutputTokens: 32_768,
+    charsPerToken: 2,
+    activeTask: task
+  });
+
+  assert.equal(compiled.plan.compacted, true);
+  assert.equal(compiled.plan.contextTokens, 32_768);
+  assert.ok(compiled.plan.compiledMessageTokens <= compiled.plan.messageTokenBudget);
+  assert.ok(
+    compiled.plan.estimatedInputTokens + compiled.plan.reservedOutputTokens + compiled.plan.safetyTokens
+      <= compiled.plan.contextTokens
+  );
+});
+
 test("hard context pressure takes precedence over the preferred local budget", () => {
   const task = { role: "user", content: "Keep this task" };
   const compiled = compileModelContext({

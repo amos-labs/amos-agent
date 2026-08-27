@@ -863,8 +863,7 @@ export class AgentLoop {
     const hardContext = compileModelContext({
       messages: this.withContinuityContext(this.messages),
       tools: this.availableToolsForModel(),
-      contextTokens: this.config.model?.contextTokens,
-      maxOutputTokens: this.config.model?.maxCompletionTokens,
+      ...this.modelContextOptions(),
       preferredInputTokens: null,
       activeTask: this.activeTaskMessage
     }).plan;
@@ -955,8 +954,7 @@ export class AgentLoop {
     let compiled = compileModelContext({
       messages,
       tools,
-      contextTokens: this.config.model?.contextTokens,
-      maxOutputTokens: this.config.model?.maxCompletionTokens,
+      ...this.modelContextOptions(),
       preferredInputTokens,
       activeTask: this.activeTaskMessage
     });
@@ -974,8 +972,7 @@ export class AgentLoop {
         const hardOnly = compileModelContext({
           messages,
           tools,
-          contextTokens: this.config.model?.contextTokens,
-          maxOutputTokens: this.config.model?.maxCompletionTokens,
+          ...this.modelContextOptions(),
           preferredInputTokens: null,
           activeTask: this.activeTaskMessage
         });
@@ -1010,6 +1007,16 @@ export class AgentLoop {
     const parsed = Number(this.config.agent?.compactionRebuildMargin);
     if (!Number.isFinite(parsed)) return 1.25;
     return Math.min(4, Math.max(1, parsed));
+  }
+
+  modelContextOptions() {
+    return {
+      contextTokens: this.config.model?.contextTokens,
+      maxOutputTokens: this.config.model?.maxCompletionTokens,
+      // Hosted JSON tool dumps tokenize closer to bytes/2 than chars/4.
+      // Using the denser estimate keeps long sessions inside the live cell.
+      charsPerToken: this.config.model?.provider === "amos-hosted" ? 2 : 4
+    };
   }
 
   preferredInputTokenBudget() {

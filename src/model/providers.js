@@ -16,6 +16,10 @@ import {
 
 const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
 const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
+// Live Hosted Qwen cell `--max-model-len`. Desktop must compile against this
+// serving budget, not Qwen's native 256k window, or long tool sessions never
+// compact and overflow the cell.
+const HOSTED_CONTEXT_TOKENS = 32_768;
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 120_000;
 // Large local models can spend more than two minutes evaluating a tool-heavy
 // continuation before emitting their first streamed token. Retrying that same
@@ -283,7 +287,9 @@ export function resolveModelConfig(env = process.env) {
     ),
     contextTokens: boundedInt(
       env.AMOS_MODEL_CONTEXT_TOKENS,
-      provider.deployment === "local" ? 32_768 : 131_072,
+      hosted
+        ? HOSTED_CONTEXT_TOKENS
+        : provider.deployment === "local" ? 32_768 : 131_072,
       4_096,
       1_048_576
     ),

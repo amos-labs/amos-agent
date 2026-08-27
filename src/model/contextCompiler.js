@@ -12,13 +12,15 @@ export function compileModelContext({
   contextTokens = DEFAULT_CONTEXT_TOKENS,
   maxOutputTokens = DEFAULT_OUTPUT_TOKENS,
   preferredInputTokens = null,
-  activeTask = null
+  activeTask = null,
+  charsPerToken = 4
 } = {}) {
   const context = boundedInteger(contextTokens, DEFAULT_CONTEXT_TOKENS, MIN_CONTEXT_TOKENS, 1_048_576);
   const requestedOutput = boundedInteger(maxOutputTokens, DEFAULT_OUTPUT_TOKENS, 256, 131_072);
+  const tokenChars = boundedInteger(charsPerToken, 4, 2, 8);
   const reservedOutputTokens = Math.min(requestedOutput, Math.max(1_024, Math.floor(context * 0.25)));
   const safetyTokens = Math.max(512, Math.floor(context * 0.05));
-  const toolTokens = estimateToolTokens(tools);
+  const toolTokens = estimateToolTokens(tools, tokenChars);
   const hardMessageTokenBudget = Math.max(
     512,
     context - reservedOutputTokens - safetyTokens - toolTokens
@@ -28,11 +30,11 @@ export function compileModelContext({
     ? hardMessageTokenBudget
     : Math.max(512, preferredInput - toolTokens);
   const messageTokenBudget = Math.min(hardMessageTokenBudget, preferredMessageTokenBudget);
-  const originalMessageTokens = estimateMessageTokens(messages);
+  const originalMessageTokens = estimateMessageTokens(messages, tokenChars);
   const compiledMessages = originalMessageTokens <= messageTokenBudget
     ? messages
-    : compactMessages(messages, messageTokenBudget * 4, activeTask);
-  const compiledMessageTokens = estimateMessageTokens(compiledMessages);
+    : compactMessages(messages, messageTokenBudget * tokenChars, activeTask);
+  const compiledMessageTokens = estimateMessageTokens(compiledMessages, tokenChars);
   return {
     messages: compiledMessages,
     plan: {
@@ -71,10 +73,11 @@ export function compileModelContext({
   };
 }
 
-export function estimateMessageTokens(messages = []) {
+export function estimateMessageTokens(messages = [], charsPerToken = 4) {
+  const divisor = boundedInteger(charsPerToken, 4, 2, 8);
   return Math.ceil(messages.reduce((total, message) =>
     total + modelContentLength(message?.content) + modelToolCallLength(message), 0
-  ) / 4);
+  ) / divisor);
 }
 
 export function modelContentLength(content) {
@@ -87,11 +90,12 @@ export function modelContentLength(content) {
   }, 0);
 }
 
-export function estimateToolTokens(tools) {
+export function estimateToolTokens(tools, charsPerToken = 4) {
+  const divisor = boundedInteger(charsPerToken, 4, 2, 8);
   return Math.ceil(Buffer.byteLength(
     canonicalJson(Array.isArray(tools) ? tools : []),
     "utf8"
-  ) / 4);
+  ) / divisor);
 }
 
 function modelToolCallLength(message) {
