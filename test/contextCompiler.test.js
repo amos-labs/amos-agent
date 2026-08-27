@@ -109,6 +109,55 @@ test("hosted cell estimates compact a long tool session into the live 32k window
   );
 });
 
+test("compaction pins recent and longest user statements, not the first chat message", () => {
+  const greeting = { role: "user", content: "hey" };
+  const tax = {
+    role: "user",
+    content: "Update tax_behavior to inclusive on these three Stripe prices"
+  };
+  const followUp = { role: "user", content: "this issue should be fixed...lets try it again" };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      greeting,
+      { role: "assistant", content: "hello" },
+      { role: "user", content: "ok" },
+      { role: "assistant", content: "ready" },
+      { role: "user", content: "thanks" },
+      { role: "assistant", content: "x".repeat(80_000) },
+      tax,
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "one", function: { name: "connection_call", arguments: "{}" } }]
+      },
+      {
+        role: "tool",
+        tool_call_id: "one",
+        content: JSON.stringify({ status: 403, body: "<html>403 Forbidden</html>", ok: false })
+      },
+      followUp
+    ],
+    contextTokens: 4_096,
+    maxOutputTokens: 1_024,
+    charsPerToken: 2,
+    activeTask: followUp,
+    workingObjective: tax.content
+  });
+
+  const userText = compiled.messages
+    .filter((message) => message.role === "user")
+    .map((message) => String(message.content))
+    .join("\n");
+  assert.match(userText, /Update tax_behavior to inclusive/);
+  assert.match(userText, /lets try it again/);
+  assert.doesNotMatch(userText, /^hey$/m);
+  assert.match(
+    compiled.messages.map((message) => String(message.content)).join("\n"),
+    /desktop_inspect_conversation/
+  );
+});
+
 test("follow-up compaction keeps the original objective and latest steering", () => {
   const root = { role: "user", content: "Update tax_behavior to inclusive on these three Stripe prices" };
   const followUp = { role: "user", content: "this issue should be fixed...lets try it again" };

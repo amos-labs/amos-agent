@@ -11,6 +11,8 @@ import {
   estimateMessageTokens,
   modelContentLength
 } from "./model/contextCompiler.js";
+import { createConversationInspectTool } from "./model/conversationInspect.js";
+import { selectWorkingObjective, userMessageText } from "./model/workingObjective.js";
 import {
   evaluateCompactionEconomics,
   evaluatePreferredCompaction,
@@ -29,6 +31,7 @@ import {
 } from "./model/protocol.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
+const MAX_LIVE_TRANSCRIPT_MESSAGES = 800;
 // Leave headroom below AMOS Hosted's 256-message boundary while allowing long
 // governed tasks to retain substantially more complete tool/result blocks.
 const DEFAULT_MODEL_MESSAGE_LIMIT = 224;
@@ -48,6 +51,7 @@ export const GATHER_TOOL_NAMES = new Set([
   "desktop_activate_toolkit",
   "desktop_focus_workspace",
   "desktop_inspect_project",
+  "desktop_inspect_conversation",
   "search_files",
   "git_status",
   "git_diff"
@@ -96,7 +100,9 @@ export class AgentLoop {
     this.lastPromptCacheState = null;
     this.lastPromptCacheUsage = null;
     this.lastCompactionDecision = null;
+    this.workingObjective = "";
     this.messages = [{ role: "system", content: this.systemPrompt }];
+    this.installConversationInspectTool();
   }
 
   clear() {
@@ -116,6 +122,7 @@ export class AgentLoop {
     this.lastPromptCacheState = null;
     this.lastPromptCacheUsage = null;
     this.lastCompactionDecision = null;
+    this.workingObjective = "";
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -182,6 +189,10 @@ export class AgentLoop {
   ) {
     throwIfAborted(signal);
     this.configurePromptSession(promptSession);
+    this.workingObjective = selectWorkingObjective(
+      this.workingObjective,
+      userMessageText(userContent)
+    );
     this.compactCompletedHistory();
     this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
     // The canvas lives in Desktop, not in the model transcript. Preserve its
@@ -767,9 +778,9 @@ export class AgentLoop {
     if (this.activeTaskMessage) return false;
     const limit = boundedInteger(
       this.config.agent?.completedHistoryMessages,
-      DEFAULT_COMPLETED_HISTORY_LIMIT,
-      8,
-      DEFAULT_MODEL_MESSAGE_LIMIT
+      MAX_LIVE_TRANSCRIPT_MESSAGES,
+      64,
+      2_000
     );
     if (this.messages.length <= limit) return false;
 
@@ -778,22 +789,10 @@ export class AgentLoop {
       role: "system",
       content: this.systemPrompt
     };
-    const firstUser = this.messages.find((message) => message.role === "user");
-    const milestones = this.messages.slice(1).filter((message) =>
-      message.role === "user" ||
-      (message.role === "assistant" && !hasToolCalls(message) && message.content)
-    );
-    const laterMilestones = firstUser
-      ? milestones.filter((message) => message !== firstUser)
-      : milestones;
-    const reserved = firstUser ? 1 : 0;
-    const tail = laterMilestones.slice(-(Math.max(0, limit - 1 - reserved)));
-    this.messages = firstUser
-      ? [systemMessage, firstUser, ...tail]
-      : [systemMessage, ...tail];
+    this.messages = [systemMessage, ...this.messages.slice(-(limit - 1))];
     this.lastCompactionDecision = forcedCompactionStatus({
       scope: "completed_history",
-      reason: "completed_history_message_limit",
+      reason: "live_transcript_memory_limit",
       beforeMessages: previousMessages,
       afterMessages: this.messages,
       rebuildMessages: this.messages.slice(1),
@@ -895,8 +894,11 @@ export class AgentLoop {
       preservedExactBlocks: 2
     };
     if (!decision.shouldCompact) return false;
-    this.messages = candidateMessages;
-    return true;
+    this.lastCompactionDecision = {
+      ...this.lastCompactionDecision,
+      liveTranscriptRetained: true
+    };
+    return false;
   }
 
   prepareMessagesForModel(tools = []) {
@@ -915,19 +917,16 @@ export class AgentLoop {
       role: "system",
       content: this.systemPrompt
     };
-    const rootMessage = this.messages.find((message) => message.role === "user");
     const taskIndex = this.messages.indexOf(this.activeTaskMessage);
     if (taskIndex < 0) {
-      this.compactCompletedHistory();
-      return this.compileContext(
-        this.withContinuityContext(this.messages.slice(0, effectiveLimit)),
-        tools
-      );
+      const rest = this.messages.filter((message) => message !== systemMessage);
+      const outbound = [systemMessage, ...rest.slice(-(effectiveLimit - 1))];
+      return this.compileContext(this.withContinuityContext(outbound), tools);
     }
 
-    const pinRoot = Boolean(rootMessage) && rootMessage !== this.activeTaskMessage;
+    const pinnedUsers = this.pinnedUserMessages();
     const selected = [];
-    let remaining = effectiveLimit - (pinRoot ? 3 : 2);
+    let remaining = Math.max(0, effectiveLimit - 1 - pinnedUsers.length);
     const blocks = historyBlocks(this.messages.slice(taskIndex + 1));
     for (let index = blocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
       const block = blocks[index];
@@ -940,19 +939,44 @@ export class AgentLoop {
       remaining -= block.length;
     }
 
-    const previousMessages = this.messages;
-    this.messages = pinRoot
-      ? [systemMessage, rootMessage, this.activeTaskMessage, ...selected.flat()]
-      : [systemMessage, this.activeTaskMessage, ...selected.flat()];
+    const include = new Set([...pinnedUsers, ...selected.flat()]);
+    const outbound = [systemMessage];
+    for (const message of this.messages) {
+      if (message === systemMessage) continue;
+      if (include.has(message)) outbound.push(message);
+    }
     this.lastCompactionDecision = forcedCompactionStatus({
       scope: "active_history",
       reason: "active_history_message_limit",
-      beforeMessages: previousMessages,
-      afterMessages: this.messages,
-      rebuildMessages: this.messages.slice(2),
+      beforeMessages: this.messages,
+      afterMessages: outbound,
+      rebuildMessages: outbound.slice(2),
       messageLimit: effectiveLimit
     });
-    return this.compileContext(this.withContinuityContext(this.messages), tools);
+    return this.compileContext(this.withContinuityContext(outbound), tools);
+  }
+
+  pinnedUserMessages() {
+    const users = this.messages.filter((message) => message.role === "user");
+    if (users.length === 0) return [];
+    const recent = users.slice(-3);
+    const longest = users.reduce((best, message) => (
+      modelContentLength(message.content) > modelContentLength(best.content) ? message : best
+    ), users[0]);
+    const unique = [];
+    for (const message of [longest, ...recent]) {
+      if (!unique.includes(message)) unique.push(message);
+    }
+    return unique;
+  }
+
+  installConversationInspectTool() {
+    if (!this.registry?.register) return;
+    try {
+      this.registry.register(createConversationInspectTool(() => this.messages));
+    } catch (error) {
+      if (!/collision/i.test(String(error?.message || ""))) throw error;
+    }
   }
 
   compileContext(messages, tools) {
@@ -964,7 +988,8 @@ export class AgentLoop {
       tools,
       ...this.modelContextOptions(),
       preferredInputTokens,
-      activeTask: this.activeTaskMessage
+      activeTask: this.activeTaskMessage,
+      workingObjective: this.workingObjective
     });
     let preferredCompaction = null;
     if (compiled.plan.compactionReason === "preferred_input_budget") {
@@ -982,7 +1007,8 @@ export class AgentLoop {
           tools,
           ...this.modelContextOptions(),
           preferredInputTokens: null,
-          activeTask: this.activeTaskMessage
+          activeTask: this.activeTaskMessage,
+          workingObjective: this.workingObjective
         });
         compiled = {
           ...hardOnly,

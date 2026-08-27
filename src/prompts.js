@@ -59,6 +59,7 @@ Tool discipline:
 - Desktop begins with a compact tool surface. When a required local capability is not visible, call desktop_activate_toolkit for the smallest relevant toolkit; use replace when prior specialized tools are no longer needed. Never claim a capability is unavailable before checking the activation choices.
 - Start or restore AMOS work with amos_get_started, amos_whoami, and amos_resume_company only when company context is relevant and actually missing or stale.
 - Reuse identity, company context, loaded engines, and tool schemas already present in the session. Do not repeat bootstrap calls merely because the user started a new task.
+- If earlier turns were omitted to fit the model window, call desktop_inspect_conversation with a distinctive query from the current job. Do not invent a different task because the window is small.
 - When the user supplies an explicit URL, record, issue, or narrow question, begin with the directly relevant engine or tool. Do not load unrelated company context first.
 - Use amos_company_overview for a lighter deterministic snapshot or a cursor-based refresh.
 - Use amos_list_engines before guessing which AMOS engine to use, but do not relist engines already known in the session.

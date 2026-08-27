@@ -63,6 +63,7 @@ const CORE_NAMES = new Set([
   "desktop_activate_toolkit",
   "desktop_request_work_surface",
   "desktop_request_decision",
+  "desktop_inspect_conversation",
   "amos_get_started",
   "amos_whoami",
   "amos_resume_company",

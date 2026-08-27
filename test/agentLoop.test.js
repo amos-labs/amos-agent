@@ -991,10 +991,8 @@ test("older raw tool evidence is compacted while the two newest result blocks re
   });
 
   await loop.run("read the large sources");
-  assert.equal(loop.messages.filter((message) => message.role === "tool").length, 2);
-  assert.ok(loop.messages.some((message) =>
-    message.role === "assistant" && /Earlier tool activity was compacted/.test(message.content)
-  ));
+  assert.equal(loop.messages.filter((message) => message.role === "tool").length, 3);
+  assert.equal(loop.lastCompactionDecision.liveTranscriptRetained, true);
   assertCompleteToolBlocks(loop.messages);
 });
 
@@ -1884,13 +1882,9 @@ test("completed task history stays below the provider message ceiling", async ()
   }
 
   assert.ok(observedLengths.every((length) => length <= 12));
-  assert.ok(loop.messages.length <= 10);
   assert.ok(loop.messages.some((message) => String(message.content).includes("Complete task 0")));
   assert.ok(loop.messages.some((message) => String(message.content).includes("Complete task 29")));
-  assert.ok(!loop.messages.some((message) => String(message.content).includes("Complete task 10")));
-  assert.equal(loop.lastCompactionDecision.scope, "completed_history");
-  assert.equal(loop.lastCompactionDecision.applied, true);
-  assert.ok(loop.lastCompactionDecision.tokensSaved > 0);
+  assert.ok(loop.messages.filter((message) => message.role === "user").length >= 30);
 });
 
 test("a follow-up turn still sees the original conversation objective", async () => {
@@ -1909,23 +1903,33 @@ test("a follow-up turn still sees the original conversation objective", async ()
     kimiClient: {
       async chat({ messages }) {
         seen.push(messages.map((message) => String(message.content || "")));
-        return { message: { role: "assistant", content: `ack ${seen.length}` } };
+        return {
+          message: {
+            role: "assistant",
+            content: `ack ${seen.length}\n${"x".repeat(8_000)}`
+          }
+        };
       }
     }
   });
 
-  assert.equal(
-    await loop.run("Update tax_behavior to inclusive on these three Stripe prices"),
-    "ack 1"
-  );
+  const first = await loop.run("Update tax_behavior to inclusive on these three Stripe prices");
+  assert.match(first, /^ack 1/);
   for (let turn = 0; turn < 12; turn += 1) {
-    await loop.run(`status update ${turn} ${"padding ".repeat(400)}`);
+    await loop.run(`status ${turn}`);
   }
   await loop.run("this issue should be fixed...lets try it again");
 
   const lastPrompt = seen.at(-1).join("\n");
   assert.match(lastPrompt, /Update tax_behavior to inclusive/);
   assert.match(lastPrompt, /lets try it again/);
+  const inspected = await loop.registry.execute(
+    "desktop_inspect_conversation",
+    { query: "tax_behavior" },
+    {}
+  );
+  assert.equal(inspected.ok, true);
+  assert.ok(inspected.matches.length >= 1);
 });
 
 test("an active tool-heavy task keeps its objective and complete recent tool blocks", async () => {
@@ -1984,7 +1988,7 @@ test("an active tool-heavy task keeps its objective and complete recent tool blo
 
   assert.equal(await loop.run("Inspect all twelve parts"), "All twelve parts inspected.");
   assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-  assert.ok(loop.messages.length <= 13);
+  assert.ok(loop.messages.filter((message) => message.role === "tool").length >= 12);
   assert.equal(loop.lastCompactionDecision.scope, "active_history");
   assert.equal(loop.lastCompactionDecision.applied, true);
   assert.ok(loop.lastCompactionDecision.rebuildTokens > 0);
@@ -2188,7 +2192,9 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
 });
 
 function toolNames(tools) {
-  return tools.map((tool) => tool.function.name);
+  return tools
+    .map((tool) => tool.function.name)
+    .filter((name) => name !== "desktop_inspect_conversation");
 }
 
 function assertCompleteToolBlocks(messages) {
