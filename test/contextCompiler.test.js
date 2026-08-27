@@ -109,6 +109,55 @@ test("hosted cell estimates compact a long tool session into the live 32k window
   );
 });
 
+test("follow-up compaction keeps the original objective and latest steering", () => {
+  const root = { role: "user", content: "Update tax_behavior to inclusive on these three Stripe prices" };
+  const followUp = { role: "user", content: "this issue should be fixed...lets try it again" };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      root,
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "one", function: { name: "connection_call", arguments: "{}" } }]
+      },
+      {
+        role: "tool",
+        tool_call_id: "one",
+        content: JSON.stringify({
+          status: 403,
+          body: "<html>403 Forbidden</html>",
+          ok: false
+        })
+      },
+      { role: "assistant", content: "x".repeat(80_000) },
+      followUp
+    ],
+    contextTokens: 4_096,
+    maxOutputTokens: 1_024,
+    charsPerToken: 2,
+    activeTask: followUp
+  });
+
+  assert.equal(compiled.plan.compacted, true);
+  const userText = compiled.messages
+    .filter((message) => message.role === "user")
+    .map((message) => String(message.content))
+    .join("\n");
+  assert.match(userText, /Update tax_behavior to inclusive/);
+  assert.match(userText, /lets try it again/);
+  assert.ok(
+    compiled.messages.some((message) =>
+      String(message.content).includes("<amos_working_state>")
+    )
+  );
+  assert.ok(
+    compiled.messages.some((message) =>
+      /403|Forbidden/.test(String(message.content))
+    )
+  );
+});
+
 test("hard context pressure takes precedence over the preferred local budget", () => {
   const task = { role: "user", content: "Keep this task" };
   const compiled = compileModelContext({

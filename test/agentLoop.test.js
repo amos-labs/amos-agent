@@ -1885,11 +1885,47 @@ test("completed task history stays below the provider message ceiling", async ()
 
   assert.ok(observedLengths.every((length) => length <= 12));
   assert.ok(loop.messages.length <= 10);
+  assert.ok(loop.messages.some((message) => String(message.content).includes("Complete task 0")));
   assert.ok(loop.messages.some((message) => String(message.content).includes("Complete task 29")));
-  assert.ok(!loop.messages.some((message) => String(message.content).includes("Complete task 0\n")));
+  assert.ok(!loop.messages.some((message) => String(message.content).includes("Complete task 10")));
   assert.equal(loop.lastCompactionDecision.scope, "completed_history");
   assert.equal(loop.lastCompactionDecision.applied, true);
   assert.ok(loop.lastCompactionDecision.tokensSaved > 0);
+});
+
+test("a follow-up turn still sees the original conversation objective", async () => {
+  const seen = [];
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        completedHistoryMessages: 8,
+        maxModelMessages: 10
+      },
+      model: { contextTokens: 4_096, maxCompletionTokens: 256 }
+    },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        seen.push(messages.map((message) => String(message.content || "")));
+        return { message: { role: "assistant", content: `ack ${seen.length}` } };
+      }
+    }
+  });
+
+  assert.equal(
+    await loop.run("Update tax_behavior to inclusive on these three Stripe prices"),
+    "ack 1"
+  );
+  for (let turn = 0; turn < 12; turn += 1) {
+    await loop.run(`status update ${turn} ${"padding ".repeat(400)}`);
+  }
+  await loop.run("this issue should be fixed...lets try it again");
+
+  const lastPrompt = seen.at(-1).join("\n");
+  assert.match(lastPrompt, /Update tax_behavior to inclusive/);
+  assert.match(lastPrompt, /lets try it again/);
 });
 
 test("an active tool-heavy task keeps its objective and complete recent tool blocks", async () => {
