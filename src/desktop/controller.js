@@ -108,6 +108,7 @@ import {
   setExplicitPreference
 } from "./relationshipProfile.js";
 import { profileOwnerScope } from "./relationshipProfileStore.js";
+import { scratchpadHasWork } from "../model/conversationScratchpad.js";
 import { taskOwnerScope } from "./taskStore.js";
 import { DesktopRunManager, DesktopRunSupervisor } from "./runManager.js";
 import {
@@ -5209,6 +5210,7 @@ export class DesktopController {
       this.runtime?.config?.model?.baseUrl === config.model.baseUrl &&
       this.runtime?.config?.model?.model === config.model.model
     ) {
+      this.bindConversationScratchpad(this.runtime, taskRecord);
       return this.runtime;
     }
     if (this.runtime) this.resetRuntime();
@@ -5426,6 +5428,7 @@ export class DesktopController {
         }
       })
     };
+    this.bindConversationScratchpad(this.runtime, taskRecord);
     await this.hydrateSessionContinuity(settings, requestedBoundary, this.runtime);
     return this.runtime;
   }
@@ -5762,6 +5765,7 @@ export class DesktopController {
       resourceRefs: remoteTask.resourceRefs,
       forkManifest: remoteTask.forkManifest || current?.forkManifest,
       canvasState: current?.canvasState,
+      scratchpad: current?.scratchpad,
       createdAt: remoteTask.createdAt || current?.createdAt,
       updatedAt: remoteTask.updatedAt || current?.updatedAt
     });
@@ -5821,10 +5825,35 @@ export class DesktopController {
           ...task.workspace,
           localPath: task.workspace?.localPath || currentSettings.workspace || ""
         };
+    const livePad = this.runtime?.runtime?.loop?.scratchpad;
     return this.taskStore.update(scope, task.id, {
       canvasState: durableCanvasState(this.canvases.state()),
-      workspace
+      workspace,
+      scratchpad: scratchpadHasWork(livePad) ? livePad : task.scratchpad
     });
+  }
+
+  bindConversationScratchpad(runtimeState, task) {
+    const loop = runtimeState?.runtime?.loop;
+    if (!loop) return;
+    const taskId = task?.id || this.activeTaskRecordId;
+    loop.onScratchpadChange = (pad) => {
+      void this.persistConversationScratchpad(pad, taskId);
+    };
+    loop.loadScratchpad(task?.scratchpad);
+  }
+
+  async persistConversationScratchpad(pad, taskRecordId = this.activeTaskRecordId) {
+    if (!this.taskStore || !taskRecordId) return null;
+    const settings = this.runManager.current()?.settings || await this.settingsStore.read();
+    const scope = this.taskScope(settings);
+    if (!scope) return null;
+    try {
+      return await this.taskStore.update(scope, taskRecordId, { scratchpad: pad });
+    } catch (error) {
+      this.record("task", `Could not persist conversation scratch pad: ${error.message}`);
+      return null;
+    }
   }
 
   async activeTaskIsContextOnly(settings = null) {

@@ -13,6 +13,14 @@ import {
 } from "./model/contextCompiler.js";
 import { createConversationInspectTool } from "./model/conversationInspect.js";
 import {
+  createScratchpadTools,
+  emptyScratchpad,
+  normalizeScratchpad,
+  scratchpadHasWork,
+  syncScratchpadWithObjective
+} from "./model/conversationScratchpad.js";
+import {
+  isThinFollowUp,
   pushRecentJob,
   selectWorkingObjective,
   userMessageText
@@ -56,6 +64,7 @@ export const GATHER_TOOL_NAMES = new Set([
   "desktop_focus_workspace",
   "desktop_inspect_project",
   "desktop_inspect_conversation",
+  "desktop_read_scratchpad",
   "search_files",
   "git_status",
   "git_diff"
@@ -77,7 +86,9 @@ export class AgentLoop {
     systemPrompt = SYSTEM_PROMPT,
     workflowSelector = selectTaskWorkflow,
     onToolResult = null,
-    now = () => Date.now()
+    now = () => Date.now(),
+    scratchpad = null,
+    onScratchpadChange = null
   }) {
     this.config = config;
     this.modelClient = modelClient || kimiClient;
@@ -106,8 +117,12 @@ export class AgentLoop {
     this.lastCompactionDecision = null;
     this.workingObjective = "";
     this.recentJobs = [];
+    this.scratchpad = emptyScratchpad();
+    this.onScratchpadChange = typeof onScratchpadChange === "function" ? onScratchpadChange : null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
     this.installConversationInspectTool();
+    this.installScratchpadTools();
+    this.loadScratchpad(scratchpad);
   }
 
   clear() {
@@ -129,6 +144,7 @@ export class AgentLoop {
     this.lastCompactionDecision = null;
     this.workingObjective = "";
     this.recentJobs = [];
+    this.scratchpad = emptyScratchpad();
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -198,6 +214,7 @@ export class AgentLoop {
     const incomingText = userMessageText(userContent);
     this.workingObjective = selectWorkingObjective(this.workingObjective, incomingText);
     this.recentJobs = pushRecentJob(this.recentJobs, incomingText);
+    this.syncScratchpadFromObjective(incomingText);
     this.compactCompletedHistory();
     this.canvasToolState = canvasToolStateFor(presentationIntent ?? userContent);
     // The canvas lives in Desktop, not in the model transcript. Preserve its
@@ -738,6 +755,9 @@ export class AgentLoop {
       .filter(Boolean);
     if (steering.length === 0) return 0;
     for (const content of steering) {
+      this.workingObjective = selectWorkingObjective(this.workingObjective, content);
+      this.recentJobs = pushRecentJob(this.recentJobs, content);
+      this.syncScratchpadFromObjective(content);
       this.messages.push({ role: "user", content });
       this.applyCanvasIntent(content);
     }
@@ -877,7 +897,10 @@ export class AgentLoop {
       tools: this.availableToolsForModel(),
       ...this.modelContextOptions(),
       preferredInputTokens: null,
-      activeTask: this.activeTaskMessage
+      activeTask: this.activeTaskMessage,
+      workingObjective: this.workingObjective,
+      recentJobs: this.recentJobs,
+      scratchpad: this.scratchpad
     }).plan;
     const decision = evaluateCompactionEconomics({
       tokensSaved,
@@ -984,6 +1007,58 @@ export class AgentLoop {
     }
   }
 
+  installScratchpadTools() {
+    if (!this.registry?.register) return;
+    for (const tool of createScratchpadTools({
+      getPad: () => this.scratchpad,
+      setPad: (pad) => this.setScratchpad(pad)
+    })) {
+      try {
+        this.registry.register(tool);
+      } catch (error) {
+        if (!/collision/i.test(String(error?.message || ""))) throw error;
+      }
+    }
+  }
+
+  loadScratchpad(value) {
+    const incoming = normalizeScratchpad(value);
+    if (scratchpadHasWork(this.scratchpad) || !scratchpadHasWork(incoming)) {
+      return this.scratchpad;
+    }
+    this.scratchpad = incoming;
+    if (!this.workingObjective) this.workingObjective = incoming.currentJob;
+    if (this.recentJobs.length === 0) {
+      this.recentJobs = incoming.jobs.map((job) => job.title).filter(Boolean);
+    }
+    return this.scratchpad;
+  }
+
+  setScratchpad(value) {
+    this.scratchpad = normalizeScratchpad(value);
+    if (this.scratchpad.currentJob) {
+      this.workingObjective = this.scratchpad.currentJob;
+    }
+    if (this.scratchpad.jobs.length > 0) {
+      this.recentJobs = this.scratchpad.jobs.map((job) => job.title).filter(Boolean);
+    }
+    this.onScratchpadChange?.(this.scratchpad);
+    return this.scratchpad;
+  }
+
+  syncScratchpadFromObjective(text) {
+    if (isThinFollowUp(text) && scratchpadHasWork(this.scratchpad)) return this.scratchpad;
+    const current = String(this.workingObjective || text || "").trim();
+    if (!current) return this.scratchpad;
+    const next = syncScratchpadWithObjective(this.scratchpad, current);
+    const same = next.currentJob === this.scratchpad.currentJob
+      && next.jobs.length === this.scratchpad.jobs.length
+      && next.jobs.every((job, index) => job.title === this.scratchpad.jobs[index]?.title
+        && job.status === this.scratchpad.jobs[index]?.status);
+    if (same && scratchpadHasWork(this.scratchpad)) return this.scratchpad;
+    return this.setScratchpad(next);
+  }
+
   compileContext(messages, tools) {
     const preferredInputTokens = this.preferredInputTokenBudget();
     const contract = this.promptContractFor(messages, tools);
@@ -995,7 +1070,8 @@ export class AgentLoop {
       preferredInputTokens,
       activeTask: this.activeTaskMessage,
       workingObjective: this.workingObjective,
-      recentJobs: this.recentJobs
+      recentJobs: this.recentJobs,
+      scratchpad: this.scratchpad
     });
     let preferredCompaction = null;
     if (compiled.plan.compactionReason === "preferred_input_budget") {
@@ -1015,7 +1091,8 @@ export class AgentLoop {
           preferredInputTokens: null,
           activeTask: this.activeTaskMessage,
           workingObjective: this.workingObjective,
-          recentJobs: this.recentJobs
+          recentJobs: this.recentJobs,
+          scratchpad: this.scratchpad
         });
         compiled = {
           ...hardOnly,

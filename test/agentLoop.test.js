@@ -1932,6 +1932,61 @@ test("a follow-up turn still sees the original conversation objective", async ()
   assert.ok(inspected.matches.length >= 1);
 });
 
+test("a conversation scratch pad tracks job hops and is always in the model window", async () => {
+  const persisted = [];
+  const seen = [];
+  const loop = new AgentLoop({
+    config: { agent: {}, model: { contextTokens: 32_768, maxCompletionTokens: 256 } },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    onScratchpadChange: (pad) => persisted.push(structuredClone(pad)),
+    kimiClient: {
+      async chat({ messages }) {
+        seen.push(messages.map((message) => String(message.content || "")).join("\n"));
+        return { message: { role: "assistant", content: `ack ${seen.length}` } };
+      }
+    }
+  });
+
+  await loop.run("Help me build a Stripe to QuickBooks integration for AMOS Labs");
+  await loop.run("We need to add these accounts to QBO");
+  await loop.run("Fix tax_behavior on the three Stripe prices");
+  await loop.run("try again");
+
+  assert.equal(loop.scratchpad.currentJob, "Fix tax_behavior on the three Stripe prices");
+  assert.equal(loop.scratchpad.jobs.length, 3);
+  assert.equal(loop.scratchpad.jobs[0].status, "parked");
+  assert.ok(persisted.length >= 3);
+  assert.match(seen.at(-1), /<amos_scratchpad>/);
+  assert.match(seen.at(-1), /Stripe to QuickBooks integration/);
+  assert.match(seen.at(-1), /add these accounts to QBO/);
+  assert.match(seen.at(-1), /try again/);
+  assert.match(seen[0], /<amos_scratchpad>/);
+
+  const restored = new AgentLoop({
+    config: { agent: {}, model: { contextTokens: 32_768 } },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    scratchpad: persisted.at(-1),
+    kimiClient: {
+      async chat({ messages }) {
+        return {
+          message: {
+            role: "assistant",
+            content: messages.map((message) => String(message.content || "")).join("\n")
+          }
+        };
+      }
+    }
+  });
+  const replayed = await restored.run("is it live");
+  assert.match(replayed, /Fix tax_behavior on the three Stripe prices/);
+  assert.match(replayed, /Stripe to QuickBooks integration/);
+  assert.equal(restored.workingObjective, "Fix tax_behavior on the three Stripe prices");
+});
+
 test("an active tool-heavy task keeps its objective and complete recent tool blocks", async () => {
   const registry = new ToolRegistry();
   const executed = [];
@@ -2194,7 +2249,11 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
 function toolNames(tools) {
   return tools
     .map((tool) => tool.function.name)
-    .filter((name) => name !== "desktop_inspect_conversation");
+    .filter((name) =>
+      name !== "desktop_inspect_conversation"
+      && name !== "desktop_read_scratchpad"
+      && name !== "desktop_update_scratchpad"
+    );
 }
 
 function assertCompleteToolBlocks(messages) {

@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { canonicalJson } from "../util/canonicalJson.js";
+import { formatScratchpadCard } from "./conversationScratchpad.js";
 
 const DEFAULT_CONTEXT_TOKENS = 131_072;
 const DEFAULT_OUTPUT_TOKENS = 8_192;
@@ -15,6 +16,7 @@ export function compileModelContext({
   activeTask = null,
   workingObjective = "",
   recentJobs = [],
+  scratchpad = null,
   charsPerToken = 4
 } = {}) {
   const context = boundedInteger(contextTokens, DEFAULT_CONTEXT_TOKENS, MIN_CONTEXT_TOKENS, 1_048_576);
@@ -33,13 +35,22 @@ export function compileModelContext({
     : Math.max(512, preferredInput - toolTokens);
   const messageTokenBudget = Math.min(hardMessageTokenBudget, preferredMessageTokenBudget);
   const originalMessageTokens = estimateMessageTokens(messages, tokenChars);
-  const compiledMessages = originalMessageTokens <= messageTokenBudget
-    ? messages
-    : compactMessages(messages, messageTokenBudget * tokenChars, {
+  const annotated = injectScratchpadCard(messages, {
+    scratchpad,
+    workingObjective,
+    recentJobs,
+    compacted: false
+  });
+  const annotatedTokens = estimateMessageTokens(annotated, tokenChars);
+  const didCompact = annotatedTokens > messageTokenBudget;
+  const compiledMessages = didCompact
+    ? compactMessages(messages, messageTokenBudget * tokenChars, {
       activeTask,
       workingObjective,
-      recentJobs
-    });
+      recentJobs,
+      scratchpad
+    })
+    : annotated;
   const compiledMessageTokens = estimateMessageTokens(compiledMessages, tokenChars);
   return {
     messages: compiledMessages,
@@ -58,13 +69,13 @@ export function compileModelContext({
       estimatedInputTokens: toolTokens + compiledMessageTokens,
       preferredBudgetExceeded: preferredInput != null &&
         originalMessageTokens + toolTokens > preferredInput,
-      compacted: compiledMessages !== messages,
+      compacted: didCompact,
       compactionEstimatedSavedTokens: Math.max(
         0,
         originalMessageTokens - compiledMessageTokens
       ),
-      compactionInvalidatesPrefix: compiledMessages !== messages,
-      compactionReason: compiledMessages === messages
+      compactionInvalidatesPrefix: didCompact,
+      compactionReason: !didCompact
         ? null
         : originalMessageTokens > hardMessageTokenBudget
           ? "context_limit"
@@ -109,12 +120,13 @@ function modelToolCallLength(message) {
 }
 
 function compactionOptions(value) {
-  if (!value) return { activeTask: null, workingObjective: "" };
-  if (value.role) return { activeTask: value, workingObjective: "" };
+  if (!value) return { activeTask: null, workingObjective: "", recentJobs: [], scratchpad: null };
+  if (value.role) return { activeTask: value, workingObjective: "", recentJobs: [], scratchpad: null };
   return {
     activeTask: value.activeTask || null,
     workingObjective: String(value.workingObjective || ""),
-    recentJobs: Array.isArray(value.recentJobs) ? value.recentJobs : []
+    recentJobs: Array.isArray(value.recentJobs) ? value.recentJobs : [],
+    scratchpad: value.scratchpad || null
   };
 }
 
@@ -153,35 +165,35 @@ function boundPinnedMessage(message, budget) {
     : message;
 }
 
-function prependWorkingState(content, {
-  workingObjective,
-  recentJobs = [],
-  compacted,
-  vendorSignals = ""
-}) {
-  const vendorText = String(vendorSignals || "").trim();
-  const jobs = [...new Set(
-    (Array.isArray(recentJobs) ? recentJobs : [])
-      .map((job) => String(job || "").trim())
-      .filter(Boolean)
-  )].slice(-8);
-  const otherJobs = jobs.filter((job) => job !== String(workingObjective || "").trim());
-  const jobLines = otherJobs.length > 0
-    ? otherJobs.map((job, index) => `${index + 1}. ${job.slice(0, 220)}`).join("\n")
-    : "";
-  const card = [
-    "<amos_working_state>",
-    "Users hop jobs in one thread (build an integration, then QBO accounts, then Stripe tax). That is expected. The first chat message is not the whole conversation.",
-    workingObjective ? `Current job:\n${String(workingObjective).slice(0, 1_500)}` : "Current job: (not yet stated)",
-    jobLines ? `Other jobs still in this thread:\n${jobLines}` : "",
-    compacted
-      ? "Older turns were omitted to fit the model window. Call desktop_inspect_conversation with a word from an earlier job (QBO, Stripe, tax, integration) to recover exact messages. Do not invent a different job."
-      : "",
-    vendorText && compacted ? vendorText : "",
-    "</amos_working_state>"
-  ].filter(Boolean).join("\n");
-  if (typeof content === "string") return `${card}\n\n${content}`;
+function injectScratchpadCard(messages, options) {
+  const card = formatScratchpadCard(options);
+  if (!card) return messages;
+  const firstUser = messages.findIndex((message) => message?.role === "user");
+  if (firstUser < 0) return messages;
+  const target = messages[firstUser];
+  if (contentHasScratchpad(target?.content)) return messages;
+  return messages.map((message, index) => (
+    index === firstUser
+      ? { ...message, content: prependCard(message.content, card) }
+      : message
+  ));
+}
+
+function contentHasScratchpad(content) {
+  if (typeof content === "string") return content.includes("<amos_scratchpad>");
+  if (!Array.isArray(content)) return String(content || "").includes("<amos_scratchpad>");
+  return content.some((item) =>
+    item?.type === "text" && String(item.text || "").includes("<amos_scratchpad>")
+  );
+}
+
+function prependCard(content, card) {
+  if (!card) return content;
+  if (typeof content === "string") {
+    return content.includes("<amos_scratchpad>") ? content : `${card}\n\n${content}`;
+  }
   if (!Array.isArray(content)) return `${card}\n\n${String(content || "")}`;
+  if (contentHasScratchpad(content)) return content;
   const textIndex = content.findIndex((item) => item?.type === "text");
   if (textIndex < 0) return [{ type: "text", text: card }, ...content];
   return content.map((item, index) => (
@@ -191,8 +203,12 @@ function prependWorkingState(content, {
   ));
 }
 
+function prependWorkingState(content, options) {
+  return prependCard(content, formatScratchpadCard(options));
+}
+
 function compactMessages(messages, charBudget, options) {
-  const { activeTask, workingObjective, recentJobs } = compactionOptions(options);
+  const { activeTask, workingObjective, recentJobs, scratchpad } = compactionOptions(options);
   const system = messages.find((message) => message?.role === "system") || messages[0];
   const latestIndex = latestUserIndex(messages, activeTask);
   if (!system || latestIndex < 0) return messages.slice(-1);
@@ -200,7 +216,8 @@ function compactMessages(messages, charBudget, options) {
   const pinIndexes = pinnedUserIndexes(messages, latestIndex);
   const pinSet = new Set(pinIndexes);
   const systemChars = messageLength(system);
-  let remaining = Math.max(0, charBudget - systemChars);
+  const cardReserve = 1_800;
+  let remaining = Math.max(0, charBudget - systemChars - cardReserve);
   const pinShare = Math.max(900, Math.floor(remaining / Math.max(2, pinIndexes.length + 1)));
   const pinned = new Map();
   for (const index of pinIndexes) {
@@ -249,6 +266,7 @@ function compactMessages(messages, charBudget, options) {
     pinned.set(firstPin, {
       ...firstPinned,
       content: prependWorkingState(firstPinned.content, {
+        scratchpad,
         workingObjective: workingObjective || userMessageText(messages[firstPin]?.content),
         recentJobs,
         compacted: willDrop,

@@ -159,8 +159,45 @@ test("compaction pins recent and longest user statements, not the first chat mes
   assert.doesNotMatch(userText, /^hey$/m);
   const compiledText = compiled.messages.map((message) => String(message.content)).join("\n");
   assert.match(compiledText, /desktop_inspect_conversation/);
+  assert.match(compiledText, /<amos_scratchpad>/);
   assert.match(compiledText, /add these accounts to QBO/);
   assert.match(compiledText, /Stripe to QuickBooks integration/);
+});
+
+test("scratch pad is injected even when the window is not compacted", () => {
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      { role: "user", content: "try again" }
+    ],
+    contextTokens: 32_768,
+    maxOutputTokens: 1_024,
+    workingObjective: "Update tax_behavior to inclusive on these three Stripe prices",
+    recentJobs: [
+      "Help me build a Stripe to QuickBooks integration",
+      "We need to add these accounts to QBO"
+    ],
+    scratchpad: {
+      currentJob: "Update tax_behavior to inclusive on these three Stripe prices",
+      jobs: [
+        { title: "Help me build a Stripe to QuickBooks integration", status: "parked" },
+        { title: "We need to add these accounts to QBO", status: "parked" },
+        { title: "Update tax_behavior to inclusive on these three Stripe prices", status: "current" }
+      ],
+      openLoops: ["Confirm inclusive tax on the three prices"],
+      notes: "Stripe writes are form-urlencoded POST."
+    }
+  });
+
+  assert.equal(compiled.plan.compacted, false);
+  const text = compiled.messages.map((message) => String(message.content)).join("\n");
+  assert.match(text, /<amos_scratchpad>/);
+  assert.match(text, /not a Project/);
+  assert.match(text, /try again/);
+  assert.match(text, /Stripe to QuickBooks integration/);
+  assert.match(text, /add these accounts to QBO/);
+  assert.match(text, /Confirm inclusive tax/);
+  assert.match(text, /form-urlencoded POST/);
 });
 
 test("follow-up compaction keeps the original objective and latest steering", () => {
@@ -202,7 +239,7 @@ test("follow-up compaction keeps the original objective and latest steering", ()
   assert.match(userText, /lets try it again/);
   assert.ok(
     compiled.messages.some((message) =>
-      String(message.content).includes("<amos_working_state>")
+      String(message.content).includes("<amos_scratchpad>")
     )
   );
   assert.ok(

@@ -476,6 +476,9 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.match(taskStore, /pendingOperationsCopied: false/);
   assert.match(taskStore, /credentialsIncluded: false/);
   assert.match(taskStore, /selectedAt: optionalTimestamp\(value\?\.selectedAt\)/);
+  assert.match(taskStore, /scratchpad: normalizeScratchpad\(value\?\.scratchpad/);
+  assert.match(controller, /bindConversationScratchpad/);
+  assert.match(controller, /persistConversationScratchpad/);
   assert.match(workspace, /"worktree",[\s\S]*?"add"[\s\S]*?"-b"/);
   assert.doesNotMatch(workspace, /"reset"|"checkout"|"clean"|"stash"/);
 });
