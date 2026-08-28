@@ -9242,7 +9242,7 @@ function addMessage(role, content, { eventId = "" } = {}) {
     paragraph.textContent = content;
     message.append(paragraph);
   }
-  const anchor = elements.chatRunStatus;
+  const anchor = elements.approvalModal;
   if (anchor?.parentNode === elements.messages) elements.messages.insertBefore(message, anchor);
   else elements.messages.append(message);
   renderConversationChrome();
@@ -9723,7 +9723,6 @@ function renderLiveEvent(event) {
     if (channel === "thinking") {
       updateChatRunStatus("Thinking…", "active");
       updateStreamingThought(event.thinking || event.delta || "");
-      updateLiveThinkingCard(event.thinking || event.delta || "");
       return;
     }
     if (channel === "tool" && event.toolName) {
@@ -9762,8 +9761,6 @@ function renderLiveEvent(event) {
   const detail = document.createElement("span");
   detail.textContent = copy.detail;
   card.append(title, detail);
-  const thinkingCard = elements.liveEvents.querySelector(".event-card.thinking-live");
-  if (thinkingCard) thinkingCard.classList.remove("thinking-live");
   elements.liveEvents.append(card);
   elements.panelActivityCount.textContent = String(
     elements.liveEvents.querySelectorAll(".event-card").length
@@ -9872,25 +9869,6 @@ function liveToolArgSummary(args) {
     if (parts.length >= 2) break;
   }
   return parts.join(" · ");
-}
-
-function updateLiveThinkingCard(text) {
-  const snippet = collapseThoughtStream(text);
-  if (!snippet) return;
-  let card = elements.liveEvents.querySelector(".event-card.thinking-live");
-  if (!card) {
-    card = document.createElement("div");
-    card.className = "event-card phase thinking-live";
-    card.append(document.createElement("strong"), document.createElement("span"));
-    elements.liveEvents.append(card);
-    elements.panelActivityCount.textContent = String(
-      elements.liveEvents.querySelectorAll(".event-card").length
-    );
-  }
-  card.querySelector("strong").textContent = "Thinking";
-  const clipped = snippet.length > 240 ? snippet.slice(-240) : snippet;
-  card.querySelector("span").textContent = clipped;
-  trimLiveEvents();
 }
 
 function chatStatusForEvent(event) {

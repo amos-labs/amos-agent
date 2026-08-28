@@ -328,12 +328,6 @@
                   </div>
                 </div>
                 <div id="starterActions" class="starter-actions"></div>
-                <div id="chatRunStatus" class="chat-run-status hidden" role="status" aria-live="polite">
-                  <span class="chat-run-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                  <span id="chatRunStatusText">Preparing the task…</span>
-                  <span id="chatRunThoughtSnippet" class="chat-run-thought hidden"></span>
-                  <button id="chatRunActivityButton" class="chat-run-activity-button" type="button">View activity</button>
-                </div>
                 <section id="approvalModal" class="approval-modal inline-approval hidden" role="region" aria-live="polite" aria-label="Local approval needed">
                   <span class="eyebrow warning">LOCAL APPROVAL NEEDED</span>
                   <h2>AMOS is paused before acting on this computer.</h2>
@@ -353,6 +347,13 @@
                     </div>
                   </details>
                 </section>
+              </div>
+
+              <div id="chatRunStatus" class="chat-run-status hidden" role="status" aria-live="polite">
+                <span class="chat-run-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span id="chatRunStatusText">Preparing the task…</span>
+                <span id="chatRunThoughtSnippet" class="chat-run-thought hidden"></span>
+                <button id="chatRunActivityButton" class="chat-run-activity-button" type="button">View activity</button>
               </div>
 
               <form id="promptForm" class="composer">

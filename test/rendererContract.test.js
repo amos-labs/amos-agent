@@ -80,7 +80,14 @@ test("the renderer paints live thinking traces during a run", async () => {
   assert.doesNotMatch(javascript, /className = "message-live-steps"/);
   assert.doesNotMatch(javascript, /function appendInlineLiveStep/);
   assert.match(javascript, /Context is ready\. Waiting for the model/);
+  assert.match(html, /id="approvalModal"[\s\S]*?<\/section>\s*<\/div>\s*<div id="chatRunStatus"/);
+  assert.match(html, /id="chatRunStatus"[\s\S]*?<form id="promptForm"/);
   assert.match(html, /id="chatRunThoughtSnippet"/);
+  assert.match(javascript, /updateStreamingThought\(event\.thinking \|\| event\.delta \|\| ""\)/);
+  assert.doesNotMatch(javascript, /updateLiveThinkingCard/);
+  assert.doesNotMatch(javascript, /thinking-live/);
+  assert.doesNotMatch(css, /thinking-live/);
+  assert.match(css, /\.conversation\.has-history \{ grid-template-rows: minmax\(0, 1fr\) auto auto; \}/);
   assert.match(css, /\.chat-run-thought/);
   assert.match(css, /\.chat-run-thought[\s\S]*?white-space:\s*pre-wrap/);
   assert.match(css, /\.chat-run-thought[\s\S]*?max-height:\s*8\.4em/);
@@ -659,12 +666,12 @@ test("Operator is chat-first with transient progress and detailed activity in th
     /function renderConversationChrome\(\)[\s\S]*?\.message\.user, \.message\.assistant, \.message\.error[\s\S]*?conversationHeading\.classList\.toggle\("hidden", hasConversation \|\| Boolean\(project\)\)[\s\S]*?welcomeMessage\.classList\.toggle\("hidden", hasConversation\)[\s\S]*?starterActions\.classList\.toggle\("hidden", hasConversation \|\| Boolean\(project\)\)/
   );
   assert.match(javascript, /function renderComposerProjectChip\(/);
-  assert.match(javascript, /elements\.messages\.append\(message\);\s+renderConversationChrome\(\)/);
+  assert.match(javascript, /approvalModal[\s\S]*?insertBefore\(message, anchor\)[\s\S]*?renderConversationChrome\(\)/);
   assert.match(javascript, /operatorView\.classList\.toggle\("has-demo-banner", demo\)/);
   assert.match(css, /\.sidebar-toggle\s*{[\s\S]*?-webkit-app-region: no-drag;[\s\S]*?z-index: 3;/);
   assert.match(css, /\.operator\s*{[\s\S]*?padding: 0;/);
   assert.match(css, /\.operator\.has-demo-banner\s*{\s*grid-template-rows: auto minmax\(0, 1fr\);/);
-  assert.match(css, /\.conversation\.has-history\s*{\s*grid-template-rows: minmax\(0, 1fr\) auto;/);
+  assert.match(css, /\.conversation\.has-history\s*{\s*grid-template-rows: minmax\(0, 1fr\) auto auto;/);
 });
 
 test("local auto-approve is an exact-folder Desktop trust ceremony, not a company approval bypass", async () => {
