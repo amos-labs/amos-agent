@@ -1,0 +1,23 @@
+{
+  "schema": "amos.swarm-development-qualification",
+  "version": 1,
+  "createdAt": "2026-08-22T22:12:27.000Z",
+  "status": "failed-recovery-gate",
+  "dataClassification": "development-visible",
+  "sourceRevision": "e18599b",
+  "controlId": "qwen-direct",
+  "completedMissions": [
+    "funnel-bottleneck-001",
+    "contradictory-target-001"
+  ],
+  "failedMission": "partner-growth-plan-001",
+  "repetition": 1,
+  "answerReserveTokens": 1536,
+  "failure": "A visible partial first-pass answer ended at the output limit and did not trigger the reserved clean-answer pass.",
+  "correctiveActions": [
+    "Treat provider length termination as a recovery condition even when visible content is nonempty.",
+    "Use the existing no-reasoning answer reserve for the complete replacement answer.",
+    "Retain the final hard truncation gate after recovery."
+  ],
+  "promotionEligible": false
+}

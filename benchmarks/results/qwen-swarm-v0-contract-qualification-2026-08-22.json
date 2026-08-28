@@ -1,0 +1,53 @@
+{
+  "schema": "amos.swarm-development-qualification",
+  "version": 1,
+  "createdAt": "2026-08-22T21:53:17.469Z",
+  "status": "failed-contract-gate",
+  "dataClassification": "development-visible",
+  "sourceRevision": "278a05f0d324ebd2f7a42c166377fed601f89150",
+  "configDigest": "d45c3936f34141fdd05d51235da5e6edc4c543e8af7ac3fbedd10adff907f132",
+  "missionManifestDigest": "6df583011b381fb4146673928dba5aa2a59c23340a63d76bcdaed50c414b2c13",
+  "controls": {
+    "qwen-direct": {
+      "reportDigest": "acc06870d092143b9cb257534cbd4271bf01925848a6987eab7d1127a590c694",
+      "runs": 9,
+      "wallSeconds": 110.974,
+      "meanRunSeconds": 12.33,
+      "inferenceCalls": 15,
+      "promptTokens": 3339,
+      "outputTokens": 5343,
+      "weightedGenerationTokensPerSecond": 48.15,
+      "medianRequestGenerationTokensPerSecond": 98.084,
+      "answerRecoveries": 6,
+      "truncatedFinalAnswers": 6
+    },
+    "qwen-swarm": {
+      "reportDigest": "1e8a06902532cdc77cf225c40b89f067706e29b74a4f11c3a9b89fc654b4e396",
+      "runs": 9,
+      "wallSeconds": 121.567,
+      "meanRunSeconds": 13.507,
+      "inferenceCalls": 69,
+      "promptTokens": 39705,
+      "outputTokens": 14486,
+      "weightedGenerationTokensPerSecond": 94.339,
+      "medianRequestGenerationTokensPerSecond": 96.241,
+      "answerRecoveries": 33,
+      "validStructuredStages": 3,
+      "totalStructuredStages": 36
+    }
+  },
+  "findings": [
+    "The private AWS Qwen FP8 endpoint completed all 18 requested development runs.",
+    "The warmed endpoint sustained a median request decode rate near 97 tokens per second.",
+    "Qwen identified the controlling evidence and requested business facts consistently.",
+    "A 128-token visible-answer reserve truncated six direct answers and most typed swarm envelopes.",
+    "The original runner accepted malformed typed output as unverified prose, so these answers are not valid evidence of a swarm quality gain."
+  ],
+  "correctiveActions": [
+    "Increase the quality-regime completion budget and visible-answer reserve.",
+    "Constrain specialist and integrator responses with JSON Schema.",
+    "Fail the research run closed on output-budget truncation or typed-contract failure.",
+    "Repeat Direct Qwen and Swarm Qwen before any blind model comparison."
+  ],
+  "promotionEligible": false
+}

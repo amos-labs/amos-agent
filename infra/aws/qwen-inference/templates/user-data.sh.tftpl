@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Terraform supplies the lower-case template variables at render time.
+# shellcheck disable=SC2034,SC2154
+set -euo pipefail
+
+exec > >(tee -a /var/log/amos-qwen-bootstrap.log | logger -t amos-qwen-bootstrap -s 2>/dev/console) 2>&1
+
+MODEL_ROOT=/opt/amos/qwen-model
+MANIFEST_PATH=/opt/amos/model-manifest.sha256
+ENVIRONMENT_PATH=/etc/amos/qwen.env
+SERVICE_PATH=/etc/systemd/system/amos-qwen.service
+
+for binary in aws docker nvidia-smi sha256sum; do
+  command -v "$binary" >/dev/null || {
+    echo "Required binary is unavailable: $binary"
+    exit 1
+  }
+done
+
+nvidia-smi
+install -d -m 0750 /opt/amos "$MODEL_ROOT" /var/cache/amos-vllm /var/cache/amos-vllm/triton
+install -d -m 0750 /etc/amos
+
+aws s3 cp \
+  "s3://${model_bucket}/${model_key_prefix}/model-manifest.sha256" \
+  "$MANIFEST_PATH" \
+  --region "${aws_region}"
+
+echo "${model_manifest_sha256}  $MANIFEST_PATH" | sha256sum --check --strict
+
+aws s3 sync \
+  "s3://${model_bucket}/${model_key_prefix}/files/" \
+  "$MODEL_ROOT/" \
+  --region "${aws_region}" \
+  --only-show-errors
+
+(cd "$MODEL_ROOT" && sha256sum --check --strict "$MANIFEST_PATH")
+
+aws ecr get-login-password --region "${aws_region}" | \
+  docker login --username AWS --password-stdin "${ecr_registry}"
+docker pull "${vllm_image_uri}"
+
+API_KEY_JSON="$(aws secretsmanager get-secret-value \
+  --region "${aws_region}" \
+  --secret-id "${api_key_secret_id}" \
+  --query SecretString \
+  --output text)"
+VLLM_API_KEY="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["api_key"])' <<<"$API_KEY_JSON")"
+test -n "$VLLM_API_KEY"
+
+umask 077
+{
+  printf 'VLLM_API_KEY=%s\n' "$VLLM_API_KEY"
+  printf 'VLLM_NO_USAGE_STATS=1\n'
+  printf 'VLLM_DO_NOT_TRACK=1\n'
+} > "$ENVIRONMENT_PATH"
+unset API_KEY_JSON VLLM_API_KEY
+
+cat > "$SERVICE_PATH" <<'UNIT'
+[Unit]
+Description=AMOS private Qwen 3.8 vLLM inference cell
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=3600
+ExecStartPre=-/usr/bin/docker rm -f amos-qwen
+ExecStart=/bin/bash -lc 'exec /usr/bin/docker run --name amos-qwen --rm --gpus all --ipc=host --network=host --env-file /etc/amos/qwen.env --read-only --tmpfs /tmp:rw,noexec,nosuid,size=8g -v /opt/amos/qwen-model:/model:ro -v /var/cache/amos-vllm:/root/.cache:rw -v /var/cache/amos-vllm/triton:/root/.triton:rw ${vllm_image_uri} --model /model --served-model-name ${served_model_name} --host 127.0.0.1 --port 8000 --trust-remote-code --max-model-len ${max_model_len} --max-num-seqs ${max_num_seqs} --max-num-batched-tokens ${max_num_batched_tokens} --gpu-memory-utilization ${gpu_memory_utilization} --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3 --enable-prefix-caching --speculative-config '\''{"method":"mtp","num_speculative_tokens":${mtp_speculative_tokens}}'\'''
+ExecStop=/usr/bin/docker stop --time 30 amos-qwen
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+chmod 0644 "$SERVICE_PATH"
+systemctl daemon-reload
+systemctl enable --now amos-qwen.service
+
+for attempt in $(seq 1 180); do
+  if {
+    printf 'header = "Authorization: Bearer %s"\n' "$(sed -n 's/^VLLM_API_KEY=//p' "$ENVIRONMENT_PATH" | head -n 1)"
+    printf 'url = "http://127.0.0.1:8000/v1/models"\n'
+  } | curl --silent --fail --config - >/dev/null; then
+    echo "AMOS Qwen inference cell is ready"
+    exit 0
+  fi
+  sleep 10
+done
+
+echo "vLLM did not become ready within 30 minutes"
+systemctl status amos-qwen.service --no-pager || true
+exit 1

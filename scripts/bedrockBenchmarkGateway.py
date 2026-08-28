@@ -146,9 +146,19 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 "messages": messages,
                 "inferenceConfig": {
                     "maxTokens": int(request.get("max_tokens") or 768),
-                    "temperature": float(request.get("temperature") or 0),
                 },
             }
+            # Claude 5 rejects Converse's deprecated temperature field. Keep
+            # the OpenAI-shaped request portable by omitting it for that model
+            # family while preserving it for older benchmark controls.
+            if not is_claude_5(arguments["modelId"]):
+                arguments["inferenceConfig"]["temperature"] = float(
+                    request.get("temperature") or 0
+                )
+            elif request.get("reasoning_effort"):
+                arguments["additionalModelRequestFields"] = claude_5_reasoning(
+                    request["reasoning_effort"]
+                )
             if system:
                 arguments["system"] = system
             tool_config = openai_tools_to_bedrock(request.get("tools"))
@@ -173,6 +183,26 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self.send_header("content-length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)
+
+
+def is_claude_5(model_id):
+    value = str(model_id or "").lower()
+    return ".anthropic.claude-" in value and value.endswith("-5")
+
+
+def claude_5_reasoning(effort):
+    value = str(effort or "").lower()
+    if value == "none":
+        return {
+            "thinking": {"type": "disabled"},
+            "output_config": {"effort": "high"},
+        }
+    if value not in {"low", "medium", "high", "max"}:
+        raise ValueError(f"Unsupported Claude 5 reasoning effort: {value}")
+    return {
+        "thinking": {"type": "adaptive"},
+        "output_config": {"effort": value},
+    }
 
 
 def main():

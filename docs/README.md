@@ -27,6 +27,9 @@
 
 ## Product direction
 
+- [Recursive intelligence program](RECURSIVE_INTELLIGENCE_PROGRAM.md)
+- [Research experiment protocol](RESEARCH_EXPERIMENT_PROTOCOL.md)
+- [Private AWS Qwen inference cell](../infra/aws/qwen-inference/README.md)
 - [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Local frontier intelligence research roadmap](LOCAL_FRONTIER_INTELLIGENCE_ROADMAP.md)
 - [Knowledge integration experimental results](KNOWLEDGE_INTEGRATION_RESULTS.md)

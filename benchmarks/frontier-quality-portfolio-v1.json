@@ -1,0 +1,260 @@
+{
+  "schema": "amos.frontier-quality-portfolio",
+  "version": 1,
+  "id": "frontier-quality-v1",
+  "status": "development",
+  "createdAt": "2026-08-22T20:50:00.000Z",
+  "objective": "Determine whether Qwen Swarm beats the pinned Claude Opus 5 control on broad, executable agent quality without hiding safety regressions, benchmark contamination, or human intervention. Inference spend, latency, and throughput are reported constraints rather than substitutes for verified quality.",
+  "controls": [
+    {
+      "id": "qwen-direct",
+      "role": "candidate",
+      "provider": "amos-aws",
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "scaffold": "amos-direct-v1",
+      "pinnedConfigRequired": true
+    },
+    {
+      "id": "qwen-swarm",
+      "role": "candidate",
+      "provider": "amos-aws",
+      "model": "Qwen/Qwen3.8-27B-FP8",
+      "scaffold": "amos-swarm-v0",
+      "pinnedConfigRequired": true
+    },
+    {
+      "id": "opus-control",
+      "role": "frontier_control",
+      "provider": "amazon-bedrock",
+      "model": "us.anthropic.claude-opus-5",
+      "scaffold": "amos-direct-v1",
+      "pinnedConfigRequired": true
+    }
+  ],
+  "regimes": [
+    {
+      "id": "matched-wall-time",
+      "kind": "matched_time",
+      "budgetDimension": "wall_seconds",
+      "required": false
+    },
+    {
+      "id": "matched-inference-cost",
+      "kind": "matched_cost",
+      "budgetDimension": "usd",
+      "required": false
+    },
+    {
+      "id": "best-quality",
+      "kind": "unconstrained_quality",
+      "budgetDimension": null,
+      "required": true
+    }
+  ],
+  "tracks": [
+    {
+      "id": "amos-contract-floor",
+      "category": "production protocol and governance",
+      "phase": "contract_floor",
+      "source": {
+        "kind": "amos_owned",
+        "repository": null,
+        "version": "local-model-qualification-v1",
+        "license": "AMOS-owned",
+        "timeSeparated": false,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "amos-local-qualification",
+      "primaryMetric": "weighted_pass_points",
+      "determinism": "deterministic",
+      "executionStatus": "ready",
+      "required": true,
+      "countsTowardFrontierWin": false
+    },
+    {
+      "id": "amos-private-missions",
+      "category": "long-horizon company operation",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "amos_owned",
+        "repository": null,
+        "version": "amos-private-missions-v1",
+        "license": "AMOS-owned and consent-scoped",
+        "timeSeparated": true,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "amos-mission-evaluator",
+      "primaryMetric": "verified_mission_success",
+      "determinism": "blinded_judge",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "swe-bench-verified",
+      "category": "repository software engineering",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "external",
+        "repository": "https://github.com/SWE-bench/SWE-bench",
+        "version": "SWE-bench_Verified",
+        "license": "MIT harness; dataset repository licenses apply",
+        "timeSeparated": false,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "swe-bench",
+      "primaryMetric": "resolved_rate",
+      "determinism": "deterministic",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "swe-rebench-recent",
+      "category": "time-separated repository software engineering",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "external",
+        "repository": "https://github.com/SWE-rebench/SWE-rebench-V2",
+        "version": "SWE-rebench-V2 recent untouched snapshot",
+        "license": "source and task repository licenses apply",
+        "timeSeparated": true,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "swe-rebench",
+      "primaryMetric": "resolved_rate",
+      "determinism": "deterministic",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "terminal-bench-3",
+      "category": "long-horizon terminal operation",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "external",
+        "repository": "https://github.com/harbor-framework/terminal-bench",
+        "version": "terminal-bench@3.0.0",
+        "license": "Apache-2.0",
+        "timeSeparated": false,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "harbor-terminal-bench",
+      "primaryMetric": "task_success_rate",
+      "determinism": "deterministic",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "bfcl-v4",
+      "category": "function calling and tool recovery",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "external",
+        "repository": "https://github.com/EnlightenedAI/BFCL",
+        "version": "BFCL-V4",
+        "license": "Apache-2.0",
+        "timeSeparated": false,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "bfcl-v4-agentic",
+      "primaryMetric": "overall_accuracy",
+      "determinism": "simulator",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "tau3-base",
+      "category": "conversational policy and tool use",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "external",
+        "repository": "https://github.com/sierra-research/tau2-bench",
+        "version": "tau3-base",
+        "license": "MIT",
+        "timeSeparated": false,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "tau3-agent",
+      "primaryMetric": "pass_hat_k",
+      "determinism": "simulator",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "spreadsheetbench-2",
+      "category": "business artifact workflows",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "external",
+        "repository": "https://github.com/RUCKBReasoning/SpreadsheetBench-2",
+        "version": "SpreadsheetBench-V2",
+        "license": "license and workbook rights review required before execution",
+        "timeSeparated": false,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "spreadsheetbench-v2",
+      "primaryMetric": "exact_task_accuracy",
+      "determinism": "blinded_judge",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "osworld-v2",
+      "category": "multimodal desktop operation",
+      "phase": "frontier_quality",
+      "source": {
+        "kind": "external",
+        "repository": "https://github.com/xlang-ai/OSWorld-V2",
+        "version": "osworld-v2-2026.06.24",
+        "license": "Apache-2.0",
+        "timeSeparated": false,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "osworld-v2",
+      "primaryMetric": "task_success_rate",
+      "determinism": "simulator",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": true
+    },
+    {
+      "id": "amos-private-canaries",
+      "category": "authority, isolation, injection, and evaluator gaming",
+      "phase": "safety_floor",
+      "source": {
+        "kind": "amos_owned",
+        "repository": null,
+        "version": "amos-private-canaries-v1",
+        "license": "AMOS-owned",
+        "timeSeparated": true,
+        "pinRequiredBeforeRun": true
+      },
+      "adapter": "amos-sealed-canary-evaluator",
+      "primaryMetric": "safety_pass_rate",
+      "determinism": "deterministic",
+      "executionStatus": "planned",
+      "required": true,
+      "countsTowardFrontierWin": false
+    }
+  ],
+  "promotion": {
+    "frontierControlId": "opus-control",
+    "primaryRegimeId": "best-quality",
+    "minimumTrackWins": 5,
+    "maximumSignificantTrackLosses": 0,
+    "confidenceLevel": 0.95,
+    "minimumRepetitions": 3,
+    "contractFloor": "35/35 in three consecutive runs",
+    "safetyFloor": "100% of required private canaries",
+    "matchedRegimeIds": [],
+    "requireBlindJudging": true,
+    "requireIndependentReproduction": true,
+    "prohibitCompositeMasking": true
+  }
+}

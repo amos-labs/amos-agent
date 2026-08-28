@@ -8,12 +8,19 @@ import {
   createQualificationRegistry,
   currentProductionToolSchemaVersion
 } from "../src/model/toolSurfaceQualification.js";
+import {
+  completionBudget,
+  requiresVisibleAnswerRecovery,
+  visibleAnswerRecoveryMessages,
+  withSequentialToolPolicy
+} from "../src/research/modelScaffold.js";
 
 const args = process.argv.slice(2);
 const models = readModels(args);
 const baseUrl = readOption(args, "--url") ||
   process.env.AMOS_LOCAL_BENCHMARK_URL ||
   "http://127.0.0.1:11435";
+const apiKey = process.env.AMOS_LOCAL_BENCHMARK_API_KEY || "";
 const suite = normalizeSuite(
   readOption(args, "--suite") || process.env.AMOS_LOCAL_BENCHMARK_SUITE || "all"
 );
@@ -46,6 +53,13 @@ const reasoningEffort = normalizeReasoningEffort(
   readOption(args, "--reasoning-effort") ||
     process.env.AMOS_LOCAL_BENCHMARK_REASONING_EFFORT
 );
+const answerReserveTokens = boundedInteger(
+  readOption(args, "--answer-reserve-tokens") ||
+    process.env.AMOS_LOCAL_BENCHMARK_ANSWER_RESERVE_TOKENS,
+  0,
+  Math.max(0, maxTokens - 1),
+  reasoningEffort && reasoningEffort !== "none" ? Math.min(256, maxTokens - 1) : 0
+);
 const onlyScenarios = new Set(
   (readOption(args, "--only") || process.env.AMOS_LOCAL_BENCHMARK_ONLY || "")
     .split(",")
@@ -58,6 +72,7 @@ if (models.length === 0) {
     "Usage: npm run benchmark:local -- <model> [model...] " +
     "[--suite smoke|qualification|production|all] [--url URL] [--context TOKENS] " +
     "[--request-timeout-seconds SECONDS] [--max-tokens TOKENS] " +
+    "[--answer-reserve-tokens TOKENS] " +
     "[--reasoning-effort none|low|medium|high|xhigh] " +
     "[--protocol ollama|openai] [--only SCENARIO,...] [--output REPORT.json]"
   );
@@ -95,6 +110,8 @@ if (output) {
     context_length: contextLength,
     tool_schema_version: currentProductionToolSchemaVersion(),
     max_tokens: maxTokens,
+    answer_reserve_tokens: answerReserveTokens,
+    sequential_tool_policy: true,
     reasoning_effort: reasoningEffort,
     only_scenarios: onlyScenarios.size > 0 ? [...onlyScenarios] : null,
     results
@@ -821,35 +838,78 @@ async function qualificationCoding(model, stats) {
 async function chat(model, messages, tools = []) {
   const started = performance.now();
   const endpoint = `${baseUrl.replace(/\/$/, "")}${protocol === "openai" ? "/v1/chat/completions" : "/api/chat"}`;
-  const payload = await postJson(endpoint, protocol === "openai" ? {
+  const governedMessages = withSequentialToolPolicy(messages, tools);
+  if (protocol === "ollama") {
+    return postJson(endpoint, {
+      model,
+      messages: governedMessages,
+      tools: tools.length > 0 ? tools : undefined,
+      stream: false,
+      think: false,
+      options: {
+        temperature: 0,
+        num_ctx: contextLength,
+        num_predict: maxTokens
+      }
+    }, requestTimeoutSeconds * 1_000);
+  }
+
+  const budget = completionBudget({ maxOutputTokens: maxTokens, answerReserveTokens });
+  const firstPayload = await postJson(
+    endpoint,
+    openAiPayload({
+      model,
+      messages: governedMessages,
+      tools,
+      maxOutputTokens: budget.reasoningPhaseTokens,
+      reasoningEffort
+    }),
+    requestTimeoutSeconds * 1_000
+  );
+  const first = normalizeOpenAiBenchmarkResponse(firstPayload, started);
+  if (
+    budget.answerReserveTokens === 0 ||
+    !requiresVisibleAnswerRecovery(first.message)
+  ) {
+    return { ...first, recovery: { triggered: false, budget } };
+  }
+
+  const recoveryStarted = performance.now();
+  const recoveryPayload = await postJson(
+    endpoint,
+    openAiPayload({
+      model,
+      messages: visibleAnswerRecoveryMessages(governedMessages, first.message),
+      tools,
+      maxOutputTokens: budget.answerReserveTokens,
+      reasoningEffort: "none"
+    }),
+    requestTimeoutSeconds * 1_000
+  );
+  const recovered = normalizeOpenAiBenchmarkResponse(recoveryPayload, recoveryStarted);
+  return combineBenchmarkResponses(first, recovered, budget);
+}
+
+function openAiPayload({ model, messages, tools, maxOutputTokens, reasoningEffort: effort }) {
+  return {
     model,
     messages,
     tools: tools.length > 0 ? tools : undefined,
+    parallel_tool_calls: tools.length > 1 ? false : undefined,
     stream: false,
     temperature: 0,
-    max_tokens: maxTokens,
-    enable_thinking: reasoningEffort === "none" ? false : undefined,
-    reasoning_effort: reasoningEffort && reasoningEffort !== "none"
-      ? reasoningEffort
-      : undefined,
-    chat_template_kwargs: reasoningEffort
-      ? reasoningEffort === "none"
+    max_tokens: maxOutputTokens,
+    enable_thinking: effort === "none" ? false : undefined,
+    reasoning_effort: effort && effort !== "none" ? effort : undefined,
+    chat_template_kwargs: effort
+      ? effort === "none"
         ? { enable_thinking: false }
-        : { reasoning_effort: reasoningEffort }
+        : { reasoning_effort: effort }
       : undefined
-  } : {
-    model,
-    messages,
-    tools: tools.length > 0 ? tools : undefined,
-    stream: false,
-    think: false,
-    options: {
-      temperature: 0,
-      num_ctx: contextLength,
-      num_predict: maxTokens
-    }
-  }, requestTimeoutSeconds * 1_000);
-  if (protocol === "ollama") return payload;
+  };
+}
+
+function normalizeOpenAiBenchmarkResponse(payload, started) {
   const elapsedNanoseconds = (performance.now() - started) * 1_000_000;
   const completionTokens = payload?.timings?.predicted_n ||
     payload?.usage?.completion_tokens ||
@@ -875,6 +935,33 @@ async function chat(model, messages, tools = []) {
   };
 }
 
+function combineBenchmarkResponses(first, recovered, budget) {
+  const promptEvalDuration = Number(first.prompt_eval_duration || 0) +
+    Number(recovered.prompt_eval_duration || 0);
+  const evalDuration = Number(first.eval_duration || 0) + Number(recovered.eval_duration || 0);
+  const totalDuration = Number(first.total_duration || 0) + Number(recovered.total_duration || 0);
+  const promptTokens = Number(first.prompt_eval_count || 0) + Number(recovered.prompt_eval_count || 0);
+  const outputTokens = Number(first.eval_count || 0) + Number(recovered.eval_count || 0);
+  return {
+    ...recovered,
+    prompt_eval_count: promptTokens,
+    prompt_eval_duration: promptEvalDuration,
+    eval_count: outputTokens,
+    eval_duration: evalDuration,
+    total_duration: totalDuration,
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: outputTokens,
+      total_tokens: promptTokens + outputTokens
+    },
+    recovery: {
+      triggered: true,
+      budget,
+      reasoningCharacters: String(first.message?.reasoning_content || "").length
+    }
+  };
+}
+
 async function postJson(url, body, timeoutMs) {
   const target = new URL(url);
   const serialized = JSON.stringify(body);
@@ -884,7 +971,8 @@ async function postJson(url, body, timeoutMs) {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "content-length": Buffer.byteLength(serialized)
+        "content-length": Buffer.byteLength(serialized),
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
       }
     }, (response) => {
       const chunks = [];
@@ -928,6 +1016,7 @@ function isOptionWithValue(value) {
     "--protocol",
     "--only",
     "--max-tokens",
+    "--answer-reserve-tokens",
     "--reasoning-effort",
     "--request-timeout-seconds",
     "--output"
