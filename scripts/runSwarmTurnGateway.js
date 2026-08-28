@@ -10,6 +10,8 @@ const host = option("--host") || "127.0.0.1";
 const port = integerOption("--port", 18_081, 1, 65_535);
 const backendBaseUrl = option("--backend-url") || process.env.AMOS_QWEN_RESEARCH_URL;
 const backendModel = option("--backend-model") || "amos-qwen38-27b-fp8";
+const backendContextTokens = integerOption("--backend-context-tokens", 32_768, 4_096, 1_048_576);
+const contextSafetyTokens = integerOption("--context-safety-tokens", 1_024, 128, 131_072);
 const backendApiKey = process.env.AMOS_LOCAL_BENCHMARK_API_KEY || null;
 const gatewayApiKey = process.env.AMOS_SWARM_GATEWAY_API_KEY || null;
 const tracePath = option("--trace") ? resolve(option("--trace")) : null;
@@ -23,6 +25,8 @@ const orchestrator = new SwarmTurnOrchestrator({
   backendBaseUrl,
   backendModel,
   backendApiKey,
+  backendContextTokens,
+  contextSafetyTokens,
   onTrace: tracePath ? appendTrace : null
 });
 const server = createServer(async (request, response) => {
@@ -40,6 +44,10 @@ const server = createServer(async (request, response) => {
           planner: "swarm",
           executor: "amos-platform",
           verifier: "amos-platform-checker-waist"
+        },
+        context: {
+          backendTokens: backendContextTokens,
+          safetyTokens: contextSafetyTokens
         }
       });
     }
@@ -145,7 +153,9 @@ function fail(message) {
   console.error(
     `${message}\n\n` +
     "Usage: node scripts/runSwarmTurnGateway.js --backend-url URL " +
-    "[--backend-model MODEL] [--host 127.0.0.1] [--port 18081] [--trace FILE.jsonl]"
+    "[--backend-model MODEL] [--backend-context-tokens 32768] " +
+    "[--context-safety-tokens 1024] [--host 127.0.0.1] [--port 18081] " +
+    "[--trace FILE.jsonl]"
   );
   process.exit(2);
 }

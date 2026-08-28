@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Terraform supplies the lower-case template variables at render time.
+# shellcheck disable=SC2034,SC2154
+set -euo pipefail
+
+exec > >(tee -a /var/log/amos-swarm-gateway-install.log | logger -t amos-swarm-gateway -s 2>/dev/console) 2>&1
+
+ENVIRONMENT_PATH=/etc/amos/swarm-gateway.env
+SERVICE_PATH=/etc/systemd/system/amos-swarm-gateway.service
+TRACE_ROOT=/var/lib/amos-swarm-gateway
+QWEN_PID_BEFORE="$(systemctl show amos-qwen.service --property MainPID --value)"
+
+for binary in aws curl docker python3 systemctl; do
+  command -v "$binary" >/dev/null || {
+    echo "Required binary is unavailable: $binary"
+    exit 1
+  }
+done
+
+systemctl is-active --quiet amos-qwen.service || {
+  echo "Refusing to install the gateway while amos-qwen.service is not healthy"
+  exit 1
+}
+test "$QWEN_PID_BEFORE" != "0"
+
+aws ecr get-login-password --region "${aws_region}" | \
+  docker login --username AWS --password-stdin "${ecr_registry}" >/dev/null
+docker pull "${swarm_gateway_image_uri}"
+
+API_KEY_JSON="$(aws secretsmanager get-secret-value \
+  --region "${aws_region}" \
+  --secret-id "${api_key_secret_id}" \
+  --query SecretString \
+  --output text)"
+GATEWAY_API_KEY="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["api_key"])' <<<"$API_KEY_JSON")"
+test -n "$GATEWAY_API_KEY"
+
+install -d -m 0750 /etc/amos
+install -d -o 1000 -g 1000 -m 0750 "$TRACE_ROOT"
+umask 077
+{
+  printf 'AMOS_LOCAL_BENCHMARK_API_KEY=%s\n' "$GATEWAY_API_KEY"
+  printf 'AMOS_SWARM_GATEWAY_API_KEY=%s\n' "$GATEWAY_API_KEY"
+} > "$ENVIRONMENT_PATH"
+unset API_KEY_JSON GATEWAY_API_KEY
+
+cat > "$SERVICE_PATH" <<'UNIT'
+[Unit]
+Description=AMOS private Swarm Mission gateway
+After=docker.service network-online.target amos-qwen.service
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=120
+ExecStartPre=-/usr/bin/docker rm -f amos-swarm-gateway
+ExecStart=/usr/bin/docker run --name amos-swarm-gateway --rm --network=host --env-file /etc/amos/swarm-gateway.env --read-only --cap-drop=ALL --security-opt=no-new-privileges --user=1000:1000 --tmpfs /tmp:rw,noexec,nosuid,size=64m -v /var/lib/amos-swarm-gateway:/var/lib/amos-swarm-gateway:rw ${swarm_gateway_image_uri} --backend-url http://127.0.0.1:8000/v1 --backend-model ${served_model_name} --backend-context-tokens ${swarm_gateway_backend_context} --context-safety-tokens ${swarm_gateway_context_safety} --host 0.0.0.0 --port ${swarm_gateway_port} --trace /var/lib/amos-swarm-gateway/traces.jsonl
+ExecStop=/usr/bin/docker stop --time 30 amos-swarm-gateway
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+chmod 0644 "$SERVICE_PATH"
+systemctl daemon-reload
+systemctl enable amos-swarm-gateway.service
+systemctl restart amos-swarm-gateway.service
+
+for attempt in $(seq 1 30); do
+  if curl --silent --fail "http://127.0.0.1:${swarm_gateway_port}/health" >/dev/null; then
+    QWEN_PID_AFTER="$(systemctl show amos-qwen.service --property MainPID --value)"
+    if [[ "$QWEN_PID_AFTER" != "$QWEN_PID_BEFORE" ]]; then
+      echo "Qwen changed processes during gateway installation; failing the canary closed"
+      systemctl disable --now amos-swarm-gateway.service || true
+      exit 1
+    fi
+    echo "AMOS Swarm Mission gateway is ready; Qwen remained uninterrupted"
+    exit 0
+  fi
+  sleep 2
+done
+
+echo "Swarm gateway did not become healthy"
+systemctl status amos-swarm-gateway.service --no-pager || true
+systemctl disable --now amos-swarm-gateway.service || true
+exit 1

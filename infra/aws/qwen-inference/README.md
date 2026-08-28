@@ -26,12 +26,40 @@ It is deliberately not a public model API:
 | Model | `Qwen/Qwen3.8-27B-FP8` |
 | Model revision | `017b9c7af6b5689d5dd426a76e0bc077eb5ca20a` |
 | Runtime | `vllm/vllm-openai:v0.27.1`, mirrored and addressed by digest |
-| Context | 32,768 tokens initially |
-| Scheduling | 8 sequences, 16,384 batched tokens, prefix cache enabled |
+| Context | 65,536-token Hosted product window |
+| Scheduling | 8 sequences, 32,768 batched tokens, prefix cache enabled |
 | Speculation | native `mtp`, three draft tokens |
 | Protocol parsing | native `qwen3_xml` tool calls and `qwen3` reasoning separation |
-| Endpoint | OpenAI-compatible API on instance loopback port 8000 |
+| Endpoint | Private OpenAI-compatible API on port 8000, restricted to Platform ECS |
 | Local tunnel | `http://127.0.0.1:18080` |
+
+## Private Swarm Mission gateway
+
+The optional gateway is a second, CPU-only container on the inference host. It
+listens on private port 18081, calls Qwen through instance loopback, and exposes
+the exact OpenAI-compatible contract consumed by the Platform Mission worker.
+It does not own execution or verification; those remain in AMOS Platform.
+
+The gateway is isolated from normal Hosted traffic:
+
+- Terraform installs it with an SSM association rather than EC2 user data, so
+  enabling or rolling it back does not replace the instance or restart vLLM.
+- Its security-group rule admits only the Platform ECS security group.
+- Its image is immutable and digest-pinned in the private gateway ECR repo.
+- It reuses the existing vaulted Qwen bearer token for both inbound and
+  loopback requests; the token is never written to Terraform state.
+- Its trace is append-only on the inference host and contains digests and
+  bounded observations rather than credentials.
+
+Prepare the image locally without touching AWS or the live Qwen process:
+
+```bash
+./scripts/build-swarm-gateway-image.sh --load
+```
+
+The guarded activation and rollback sequence is documented in
+`docs/SWARM_MISSION_CANARY_RUNBOOK.md`. `plan-swarm-canary.sh` rejects any plan
+that would delete or replace the GPU instance.
 
 The official FP8 Transformers checkpoint is a distinct artifact from the Mac
 GGUF and MLX builds. It must pass the same qualification suite before any
