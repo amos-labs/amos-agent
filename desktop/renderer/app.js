@@ -98,6 +98,8 @@ const decisionInputDrafts = new Map();
 const missionDecisionDrafts = new Map();
 const surfacedMissionDecisionIds = new Set();
 const surfacedCompanyApprovalIds = new Set();
+let companyApprovalChatScope = "";
+let companyApprovalChatBaseline = null;
 let forkTaskSource = null;
 let automationSetupDraft = null;
 let automationSetupOperations = null;
@@ -6798,13 +6800,28 @@ function renderDecisions() {
   }
   for (const decision of missionDecisions) renderInlineMissionDecision(decision);
   const pendingApprovalIds = new Set(pending.map((approval) => approval.id));
+  const approvalScope = `${state.identity?.tenant_id || ""}:${state.identity?.sub || ""}`;
+  if (companyApprovalChatScope !== approvalScope) {
+    companyApprovalChatScope = approvalScope;
+    companyApprovalChatBaseline = null;
+    surfacedCompanyApprovalIds.clear();
+  }
+  const catalogSynced = Boolean(state.remoteStatus?.lastSyncedAt);
+  if (catalogSynced && companyApprovalChatBaseline == null) {
+    companyApprovalChatBaseline = new Set(pendingApprovalIds);
+  }
   for (const card of elements.messages.querySelectorAll(".decision-card.company-approval.inline-decision")) {
     if (!pendingApprovalIds.has(card.dataset.approvalId)) {
       surfacedCompanyApprovalIds.delete(card.dataset.approvalId);
       card.remove();
     }
   }
-  for (const approval of pending) renderInlineCompanyApproval(approval);
+  if (companyApprovalChatBaseline) {
+    for (const approval of pending) {
+      if (companyApprovalChatBaseline.has(approval.id)) continue;
+      renderInlineCompanyApproval(approval);
+    }
+  }
 }
 
 function taskCheckpointCard(checkpoint) {
