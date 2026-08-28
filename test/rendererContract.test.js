@@ -525,6 +525,10 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.doesNotMatch(html, /id="projectTokenInput"/);
   assert.doesNotMatch(html, /Token ceiling/);
   assert.match(javascript, /function renderProjects\(\)/);
+  assert.match(javascript, /function liveProjectAttention\(/);
+  assert.match(javascript, /function isProjectDecisionVerb\(/);
+  assert.match(javascript, /attentionRuns\.length \+ waitingDecisions/);
+  assert.doesNotMatch(javascript, /attentionRuns\.length \|\| waitingDecisions/);
   assert.match(javascript, /function projectConversationList\(projectId, conversations\)/);
   assert.match(javascript, /function projectActivityList\(projectId, runs\)/);
   assert.match(javascript, /function projectDecisionList\(/);

@@ -3057,10 +3057,7 @@ function renderProjects() {
   if (selectedProjectId && !projects.some((project) => project.id === selectedProjectId)) {
     selectedProjectId = "";
   }
-  const attentionStatuses = new Set(["waiting", "blocked", "cancel_requested", "failed"]);
-  const activeStatuses = new Set(["scheduled", "running", "waiting", "blocked", "cancel_requested"]);
-  const activeRuns = inbox.filter((run) => activeStatuses.has(run.status));
-  const attentionRuns = inbox.filter((run) => run.stalled || attentionStatuses.has(run.status));
+  const attentionRuns = liveProjectAttention(inbox);
   const waitingDecisions = projectDecisionItems().length;
 
   const connectedUser = state.connectionMode === "user";
@@ -3082,12 +3079,9 @@ function renderProjects() {
   elements.projectUnavailable.classList.toggle("hidden", !notice);
   elements.newProjectButton.disabled = library.supported !== true || !connectedUser;
   elements.refreshProjectsButton.disabled = !connectedUser || syncing;
-  const badgeCount = attentionRuns.length || waitingDecisions || activeRuns.length;
+  const badgeCount = attentionRuns.length + waitingDecisions;
   elements.projectBadge.textContent = String(badgeCount);
-  elements.projectBadge.classList.toggle(
-    "hidden",
-    attentionRuns.length + waitingDecisions + activeRuns.length === 0
-  );
+  elements.projectBadge.classList.toggle("hidden", badgeCount === 0);
   elements.projectEmpty.classList.toggle("hidden", page.total > 0 || Boolean(notice));
 
   elements.projectList.replaceChildren();
@@ -3102,6 +3096,23 @@ function renderProjects() {
     listPages.projects = next;
     renderProjects();
   });
+}
+
+function liveProjectAttention(runs = []) {
+  return (Array.isArray(runs) ? runs : []).filter((run) =>
+    run.stalled || ["waiting", "blocked", "cancel_requested"].includes(run.status)
+  );
+}
+
+function isProjectDecisionVerb(verb) {
+  return [
+    "create_project",
+    "update_project",
+    "assign_task_to_project",
+    "start_task_run",
+    "report_task_run",
+    "request_task_run_cancel"
+  ].includes(String(verb || ""));
 }
 
 function projectDecisionItems(project = null) {
@@ -3132,6 +3143,7 @@ function projectDecisionItems(project = null) {
     }));
   const approvals = (Array.isArray(state?.approvals) ? state.approvals : [])
     .filter((approval) => approval.status === "pending")
+    .filter((approval) => isProjectDecisionVerb(approval.verb))
     .filter((approval) => {
       const args = approval.args && typeof approval.args === "object" ? approval.args : {};
       return belongsHere(
@@ -3191,9 +3203,7 @@ function projectCard(project, conversations, runs) {
     pinned.textContent = "PINNED";
     kicker.append(pinned);
   }
-  const attentionCount = runs.filter((run) =>
-    run.stalled || ["waiting", "blocked", "cancel_requested", "failed"].includes(run.status)
-  ).length;
+  const attentionCount = liveProjectAttention(runs).length;
   const decisionItems = projectDecisionItems(project);
   if (attentionCount > 0) {
     const attention = document.createElement("span");
