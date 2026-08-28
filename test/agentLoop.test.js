@@ -1901,6 +1901,46 @@ test("a long reframe-the-plan recap is not a completed answer", async () => {
   ));
 });
 
+test("a denied company decision is injected into an active turn without hopping the job", async () => {
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    scratchpad: {
+      currentJob: "Fix tax_behavior on the three Stripe prices",
+      jobs: [{ title: "Fix tax_behavior on the three Stripe prices", status: "current" }]
+    },
+    kimiClient: {
+      async chat() {
+        return { message: { role: "assistant", content: "waiting" } };
+      }
+    }
+  });
+  loop.workingObjective = "Fix tax_behavior on the three Stripe prices";
+  loop.activeTaskMessage = { role: "user", content: "apply exclusive tax" };
+  const injected = await loop.notifyDecisionOutcome({
+    id: "33333333-3333-3333-3333-333333333333",
+    status: "denied",
+    verb: "connection_call",
+    review_summary: "Create AMS Subscriptions - Core 99",
+    args: {
+      connection: "quickbooks",
+      method: "POST",
+      path: "/v3/company/{realm_id}/account"
+    }
+  });
+  assert.equal(injected, "active_turn");
+  assert.equal(loop.workingObjective, "Fix tax_behavior on the three Stripe prices");
+  assert.match(loop.scratchpad.notes, /DENIED POST \/v3\/company\/\{realm_id\}\/account/);
+  assert.equal(loop.flushPendingDecisionEvidence(), 1);
+  const evidence = loop.messages.at(-1);
+  assert.equal(evidence.role, "user");
+  assert.match(evidence.content, /DENIED by a human/);
+  assert.match(evidence.content, /was not executed/);
+  assert.equal(loop.workingObjective, "Fix tax_behavior on the three Stripe prices");
+});
+
 test("a successful Stripe write is remembered and the identical call is not sent again", async () => {
   const registry = new ToolRegistry();
   let sent = 0;

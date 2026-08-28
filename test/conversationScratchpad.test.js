@@ -16,6 +16,7 @@ import {
   alreadyLandedResult,
   connectorWriteFingerprint,
   recordConnectorCallOnScratchpad,
+  recordDecisionOnScratchpad,
   scratchpadHasLandedWrite,
   summarizeConnectorCall
 } from "../src/model/landedConnectorWork.js";
@@ -149,6 +150,36 @@ test("successful Stripe price writes are recorded as LANDED and later identical 
   assert.match(pad.notes, /LANDED POST \/v1\/prices\/price_1Tn0fPGlkubafVtvDNckoZPh/);
   assert.equal(scratchpadHasLandedWrite(pad, "connection_call", args), true);
   assert.equal(alreadyLandedResult(summary.fingerprint).already_landed, true);
+});
+
+test("parked pending_approval writes are not recorded as FAILED", () => {
+  const pad = recordConnectorCallOnScratchpad(emptyScratchpad(), {
+    name: "connection_call",
+    args: {
+      connection: "stripe",
+      method: "POST",
+      path: "/v1/prices/price_1Tn0fPGlkubafVtvDNckoZPh",
+      body: { tax_behavior: "exclusive" }
+    },
+    result: { status: "pending_approval", pending_id: "pending-1" }
+  });
+  assert.equal(pad.notes, "");
+});
+
+test("denied company decisions are recorded on the pad without counting as landed", () => {
+  const args = {
+    connection: "quickbooks",
+    method: "POST",
+    path: "/v3/company/{realm_id}/account"
+  };
+  const pad = recordDecisionOnScratchpad(emptyScratchpad(), {
+    status: "denied",
+    verb: "connection_call",
+    args,
+    review_summary: "Create AMS Subscriptions - Core 99"
+  });
+  assert.match(pad.notes, /DENIED POST \/v3\/company\/\{realm_id\}\/account/);
+  assert.equal(scratchpadHasLandedWrite(pad, "connection_call", args), false);
 });
 
 test("failed connector writes stay FAILED and are not treated as landed", () => {

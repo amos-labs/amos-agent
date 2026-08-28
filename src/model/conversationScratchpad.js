@@ -180,7 +180,7 @@ export function formatScratchpadCard({
   const vendorText = compacted ? String(vendorSignals || "").trim() : "";
   return [
     "<amos_scratchpad>",
-    "Job list for this conversation only. Act on unfinished work now. Do not restart, reframe already-landed facts, recover the thread, or re-check live systems from scratch. Do not recreate a write marked LANDED.",
+    "Job list for this conversation only. Act on unfinished work now. Do not restart, reframe already-landed facts, recover the thread, or re-check live systems from scratch. Do not recreate a write marked LANDED. If a write is DENIED, do not recreate it unless the user explicitly asks to try it again.",
     view.currentJob ? `Current job:\n${view.currentJob.slice(0, 1_200)}` : "Current job: (not yet stated)",
     jobLines ? `Jobs:\n${jobLines}` : "",
     loops ? `Open loops:\n${loops}` : "",

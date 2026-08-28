@@ -349,7 +349,7 @@ function compactBlock(block, limit) {
 function vendorSignal(text) {
   const raw = String(text || "").replace(/\s+/g, " ").trim();
   if (!raw) return null;
-  if (!/(403|400|402|404|409|422|429|500|502|503|pending_approval|form-urlencoded|tax_behavior|learned_write|already_landed|"ok":\s*(?:true|false)|LANDED |FAILED )/i.test(raw)) {
+  if (!/(403|400|402|404|409|422|429|500|502|503|pending_approval|form-urlencoded|tax_behavior|learned_write|already_landed|"ok":\s*(?:true|false)|LANDED |FAILED |DENIED )/i.test(raw)) {
     return null;
   }
   return truncateText(raw, 220);

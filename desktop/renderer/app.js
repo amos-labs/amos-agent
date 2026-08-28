@@ -709,6 +709,24 @@ function bindEvents() {
     );
     toast("Approved work completed. The original result is now in this task.");
   });
+  api.on("approval:denied", (outcome) => {
+    const status = String(outcome?.status || "denied").replaceAll("_", " ");
+    addMessage(
+      "assistant",
+      [
+        "### Decision recorded",
+        "",
+        `**${outcome?.title || humanizeTool(outcome?.verb || "governed operation")}** was **${status}** and was not executed.`,
+        "",
+        "AMOS has this decision. It should not recreate that write unless you explicitly ask to try it again."
+      ].join("\n")
+    );
+    toast(
+      status === "denied"
+        ? "Denied. AMOS has the decision and will not treat that write as still pending."
+        : `Company request ${status}. AMOS has the decision.`
+    );
+  });
 }
 
 function render() {
@@ -7426,11 +7444,18 @@ async function reviewGovernedApproval(id, button) {
     }
 
     const review = await api.reviewApproval(id);
+    if (review?.canceled) return;
     if (review?.mode === "hosted") {
       const openHosted = window.confirm(
         "This AMOS server requires its hosted approval ceremony. Open it in your browser?"
       );
       if (openHosted) await api.openApproval(id);
+      return;
+    }
+    if (review?.decision === "deny") {
+      toast("Denied. AMOS has the decision and will not treat that write as still pending.");
+    } else if (review?.decision === "approve") {
+      toast("Approved. The original operation is running once.");
     }
   } catch (error) {
     toast(error.message, true);

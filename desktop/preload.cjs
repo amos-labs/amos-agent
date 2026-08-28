@@ -6,6 +6,7 @@ const eventChannels = new Set([
   "desktop-runs:changed",
   "approval:requested",
   "approval:completed",
+  "approval:denied",
   "activity:changed",
   "canvas:changed",
   "automation-setup:requested",
