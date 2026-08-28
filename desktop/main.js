@@ -489,7 +489,6 @@ function registerIpc() {
     controller.steerTask(input?.id, input?.content)
   );
   ipcMain.handle("desktop:cancel-task", (_event, id) => controller.cancelTask(id));
-  ipcMain.handle("desktop:clear", () => controller.clear());
   ipcMain.handle("desktop:remove-canvas", (_event, id) => controller.removeCanvas(id));
   ipcMain.handle("desktop:save-canvas-view", (_event, id) => controller.saveCanvasView(id));
   ipcMain.handle("desktop:run-briefing", (_event, input) => controller.runBriefing(input));

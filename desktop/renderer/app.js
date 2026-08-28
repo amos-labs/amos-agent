@@ -132,7 +132,7 @@ const elements = Object.fromEntries(
     "telemetryConsent", "telemetryConsentText", "telemetryAllowButton", "telemetryDeclineButton", "telemetryInput",
     "conversation", "conversationHeading", "welcomeMessage",
     "connectSystemsPush", "connectSystemsPushButton", "savingsAuditButton",
-    "messages", "promptForm", "promptInput", "runButton", "cancelButton", "clearButton", "liveEvents",
+    "messages", "promptForm", "promptInput", "runButton", "cancelButton", "liveEvents",
     "chatRunStatus", "chatRunStatusText", "chatRunThoughtSnippet", "chatRunActivityButton",
     "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
@@ -328,7 +328,6 @@ function bindActions() {
     if (dragDepth === 0) elements.promptForm.classList.remove("drop-active");
   });
   elements.promptForm.addEventListener("drop", handleDrop);
-  elements.clearButton.addEventListener("click", clearSession);
   elements.settingsForm.addEventListener("submit", saveSettings);
   elements.resetCollaborationProfileButton.addEventListener("click", async () => {
     try {
@@ -6652,7 +6651,6 @@ function renderConversationChrome() {
   elements.welcomeMessage.classList.toggle("hidden", hasConversation);
   renderConnectSystemsPush({ hasConversation });
   elements.starterActions.classList.toggle("hidden", hasConversation || Boolean(project));
-  elements.clearButton.classList.toggle("hidden", !hasConversation);
   if (project) {
     elements.readyTitle.textContent = `Talking in ${project.name}.`;
     elements.readyDescription.textContent = project.instructions
@@ -9170,33 +9168,6 @@ function finishCanceledRunInUi(canceledRunId = "") {
   );
   renderDecisions();
   setRunning(false);
-}
-
-async function clearSession() {
-  elements.clearButton.disabled = true;
-  try {
-    const result = await api.clear();
-    resetSessionView();
-    if (result?.sharedContinuity?.error) {
-      toast(
-        "This computer was cleared, but AMOS could not clear the shared checkpoint. Reconnect and clear again before switching clients.",
-        true
-      );
-    } else if (
-      result?.sharedContinuity?.attempted &&
-      result.sharedContinuity.supported === false
-    ) {
-      toast(
-        "This computer was cleared. The platform needs its continuity update before shared checkpoints can also be cleared.",
-        true
-      );
-    }
-    elements.promptInput.focus();
-  } catch (error) {
-    toast(error.message || "AMOS could not clear this session.", true);
-  } finally {
-    elements.clearButton.disabled = false;
-  }
 }
 
 function resetSessionView() {
