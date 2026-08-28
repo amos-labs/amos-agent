@@ -109,6 +109,101 @@ test("hosted cell estimates compact a long tool session into the live 32k window
   );
 });
 
+test("hosted 64k reserves conversation room instead of a quarter of the window for output", () => {
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      { role: "user", content: "Update tax_behavior to inclusive on these three Stripe prices" }
+    ],
+    contextTokens: 65_536,
+    maxOutputTokens: 32_768,
+    charsPerToken: 2
+  });
+
+  assert.equal(compiled.plan.contextTokens, 65_536);
+  assert.equal(compiled.plan.reservedOutputTokens, 8_192);
+  assert.ok(compiled.plan.messageTokenBudget > 40_000);
+  assert.equal(compiled.plan.compacted, false);
+});
+
+test("hosted 64k keeps a multi-job operator thread without compacting", () => {
+  const tax = {
+    role: "user",
+    content: "Update tax_behavior to inclusive on price_1ABC, price_1DEF, and price_1GHI"
+  };
+  const followUp = { role: "user", content: "this issue should be fixed...lets try it again" };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      { role: "user", content: "Help me build a Stripe to QuickBooks integration" },
+      { role: "assistant", content: "I will inspect the live Stripe and QBO connections." },
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "list", function: { name: "list_connections", arguments: "{}" } }]
+      },
+      {
+        role: "tool",
+        tool_call_id: "list",
+        content: JSON.stringify({ connections: ["stripe", "quickbooks"], ok: true })
+      },
+      { role: "user", content: "We need to add these accounts to QBO" },
+      { role: "assistant", content: "Adding the QBO accounts next." },
+      tax,
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "price-1",
+          function: {
+            name: "connection_call",
+            arguments: JSON.stringify({
+              connection: "stripe",
+              method: "POST",
+              path: "/v1/prices/price_1ABC"
+            })
+          }
+        }]
+      },
+      {
+        role: "tool",
+        tool_call_id: "price-1",
+        content: JSON.stringify({
+          status: 403,
+          ok: false,
+          path: "/v1/prices/price_1ABC",
+          error: "form-urlencoded required",
+          body: "<html>403 Forbidden</html>"
+        })
+      },
+      followUp
+    ],
+    contextTokens: 65_536,
+    maxOutputTokens: 8_192,
+    charsPerToken: 2,
+    activeTask: followUp,
+    scratchpad: {
+      currentJob: tax.content,
+      jobs: [
+        { title: "Help me build a Stripe to QuickBooks integration", status: "parked" },
+        { title: "We need to add these accounts to QBO", status: "parked" },
+        { title: tax.content, status: "current" }
+      ]
+    }
+  });
+
+  assert.equal(compiled.plan.compacted, false);
+  assert.ok(
+    compiled.messages.some((message) =>
+      message.role === "tool" && /403/.test(String(message.content)) && /price_1ABC/.test(String(message.content))
+    )
+  );
+  const text = compiled.messages.map((message) => String(message.content)).join("\n");
+  assert.match(text, /<amos_scratchpad>/);
+  assert.match(text, /Stripe to QuickBooks integration/);
+  assert.match(text, /lets try it again/);
+});
+
 test("compaction pins recent user statements, not the first chat message", () => {
   const greeting = { role: "user", content: "hey" };
   const tax = {

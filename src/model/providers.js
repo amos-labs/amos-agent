@@ -17,9 +17,9 @@ import {
 const DEFAULT_MAX_COMPLETION_TOKENS = 8_192;
 const HOSTED_MAX_COMPLETION_TOKENS = 32_768;
 // Live Hosted Qwen cell `--max-model-len`. Desktop must compile against this
-// serving budget, not Qwen's native 256k window, or long tool sessions never
-// compact and overflow the cell.
-const HOSTED_CONTEXT_TOKENS = 32_768;
+// serving budget, not Qwen's native 256k window. 64k is the current g7e
+// product window; compaction remains a backstop, not the default experience.
+const HOSTED_CONTEXT_TOKENS = 65_536;
 const DEFAULT_MODEL_REQUEST_TIMEOUT_MS = 120_000;
 // Large local models can spend more than two minutes evaluating a tool-heavy
 // continuation before emitting their first streamed token. Retrying that same
