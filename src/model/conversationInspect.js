@@ -54,7 +54,7 @@ export function createConversationInspectTool(getMessages) {
     readOnly: true,
     parallelSafe: true,
     description:
-      "Search the full live conversation log, including turns omitted from the current model window. Use this when compacted context is missing an earlier decision, vendor error, or user request. Returns exact excerpts. Does not invent jobs or grant replay authority.",
+      "Search the live conversation log for one exact quote. Use only when a specific earlier sentence is missing from the current window. Do not use this to recover the whole thread, restart the job, or re-survey connections.",
     parameters: {
       type: "object",
       additionalProperties: false,

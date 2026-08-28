@@ -63,8 +63,6 @@ export const GATHER_TOOL_NAMES = new Set([
   "desktop_activate_toolkit",
   "desktop_focus_workspace",
   "desktop_inspect_project",
-  "desktop_inspect_conversation",
-  "desktop_read_scratchpad",
   "search_files",
   "git_status",
   "git_diff"
