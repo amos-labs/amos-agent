@@ -6,6 +6,7 @@ const eventChannels = new Set([
   "desktop-runs:changed",
   "approval:requested",
   "approval:completed",
+  "approval:denied",
   "activity:changed",
   "canvas:changed",
   "automation-setup:requested",
@@ -45,6 +46,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   answerMissionDecision: (id, answer) =>
     ipcRenderer.invoke("desktop:answer-mission-decision", { id, answer }),
   reviewApproval: (id) => ipcRenderer.invoke("desktop:review-company-approval", id),
+  decideCompanyApproval: (id, decision) =>
+    ipcRenderer.invoke("desktop:decide-company-approval", { id, decision }),
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
   refreshOffline: () => ipcRenderer.invoke("desktop:refresh-offline"),
   refreshCompanyCache: (ttlSeconds) =>

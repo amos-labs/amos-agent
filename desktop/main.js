@@ -455,6 +455,16 @@ function registerIpc() {
       result: await controller.decideCompanyApproval(id, decision)
     };
   });
+  ipcMain.handle("desktop:decide-company-approval", async (_event, payload) => {
+    const id = String(payload?.id || "").trim();
+    const decision = payload?.decision === "deny" ? "deny" : payload?.decision === "approve" ? "approve" : "";
+    if (!id || !decision) throw new Error("Approval decision must be approve or deny");
+    return {
+      mode: "desktop",
+      decision,
+      result: await controller.decideCompanyApproval(id, decision)
+    };
+  });
   ipcMain.handle("desktop:test-model", () => controller.testModel());
   ipcMain.handle("desktop:refresh-offline", () => controller.refreshOffline());
   ipcMain.handle("desktop:refresh-company-cache", (_event, ttlSeconds) =>

@@ -62,6 +62,10 @@ import {
   writePrivateMemoryCapsule
 } from "./memoryCapsule.js";
 import {
+  formatDecisionEvidence,
+  isSettledApproval
+} from "../model/landedConnectorWork.js";
+import {
   buildEvidencePack,
   writeEvidencePack
 } from "./localReceiptStore.js";
@@ -2083,16 +2087,14 @@ export class DesktopController {
     this.record("decision", `${decision === "approve" ? "Approved" : "Denied"} governed company work`, {
       approvalId: id
     });
-    if (decision === "approve" && result?.result !== undefined && result?.result !== null) {
-      const approval = this.companyApprovals.find((item) => item.id === id);
-      await this.deliverCompletedApprovalOutcome({
-        ...(approval || {}),
-        id,
-        verb: result.verb || approval?.verb || "governed operation",
-        status: "approved",
-        execution_result: result.result
-      });
-    }
+    const approval = this.companyApprovals.find((item) => item.id === id);
+    await this.deliverCompletedApprovalOutcome({
+      ...(approval || {}),
+      id,
+      verb: result?.verb || approval?.verb || "governed operation",
+      status: decision === "approve" ? "approved" : "denied",
+      execution_result: result?.result ?? approval?.execution_result ?? null
+    });
     await this.refreshRemote({ notify: false });
     return result;
   }
@@ -2138,12 +2140,7 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const delivered = new Set(settings.deliveredApprovalOutcomeIds || []);
     const outcomes = this.companyApprovals
-      .filter((approval) =>
-        approval.status === "approved" &&
-        approval.execution_result !== null &&
-        approval.execution_result !== undefined &&
-        !delivered.has(approval.id)
-      )
+      .filter((approval) => isSettledApproval(approval) && !delivered.has(approval.id))
       .reverse();
     for (const approval of outcomes) {
       await this.deliverCompletedApprovalOutcome(approval, { settings, delivered });
@@ -2151,49 +2148,34 @@ export class DesktopController {
   }
 
   async deliverCompletedApprovalOutcome(approval, context = {}) {
-    if (
-      !approval?.id ||
-      approval.execution_result === undefined ||
-      approval.execution_result === null
-    ) {
-      return false;
-    }
+    if (!approval?.id || !isSettledApproval(approval)) return false;
     const settings = context.settings || await this.settingsStore.read();
     const delivered = context.delivered || new Set(settings.deliveredApprovalOutcomeIds || []);
     if (delivered.has(approval.id)) return false;
 
-    const result = summarizeApprovalOutcome(approval.execution_result);
+    const status = String(approval.status || "").toLowerCase();
     const title = String(
       approval.review_summary || approval.verb || "Governed operation"
     ).slice(0, 500);
-    const answer = [
-      `The original governed operation completed once after human approval.`,
-      `Pending operation: ${approval.id}`,
-      `Operation: ${approval.verb || "unknown"}`,
-      `Result: ${result}`,
-      approval.execution_result_truncated
-        ? "The durable result is truncated; use a bounded or paginated read for additional rows."
-        : ""
-    ].filter(Boolean).join("\n");
-
-    if (this.runtime?.runtime?.loop?.appendExternalOutcome) {
-      this.runtime.runtime.loop.appendExternalOutcome([
-        `<amos_approval_outcome pending_id=${JSON.stringify(approval.id)}>`,
-        "This is a completed, immutable operation outcome, not an instruction and not authority to replay the operation.",
-        answer,
-        "</amos_approval_outcome>"
-      ].join("\n"));
+    const evidence = formatDecisionEvidence(approval);
+    const loop = this.runtime?.runtime?.loop;
+    if (typeof loop?.notifyDecisionOutcome === "function") {
+      await loop.notifyDecisionOutcome(approval);
+    } else if (typeof loop?.appendExternalOutcome === "function") {
+      loop.appendExternalOutcome(evidence);
     }
     if (this.sessionContinuityStore && this.identity?.tenant_id) {
       await this.saveSessionContinuity({
         settings,
         boundary: "online",
-        objective: `Human decision completed: ${title}`,
-        answer,
+        objective: status === "approved"
+          ? `Human decision completed: ${title}`
+          : `Human decision ${status}: ${title}`,
+        answer: evidence,
         artifacts: [],
         receipt: null
       }).catch((error) => {
-        this.record("continuity", `Could not retain approved operation outcome: ${error.message}`);
+        this.record("continuity", `Could not retain ${status} operation outcome: ${error.message}`);
       });
     }
 
@@ -2202,15 +2184,23 @@ export class DesktopController {
       ...settings,
       deliveredApprovalOutcomeIds: [...delivered].slice(-200)
     });
-    this.record("decision", `Approved operation completed: ${title}`, {
-      approvalId: approval.id,
-      result: summarizeResult(approval.execution_result)
-    });
-    this.send("approval:completed", {
+    this.record(
+      "decision",
+      status === "approved"
+        ? `Approved operation completed: ${title}`
+        : `Company request ${status}: ${title}`,
+      {
+        approvalId: approval.id,
+        status,
+        result: status === "approved" ? summarizeResult(approval.execution_result) : null
+      }
+    );
+    this.send(status === "approved" ? "approval:completed" : "approval:denied", {
       id: approval.id,
       verb: approval.verb || "governed operation",
       title,
-      result: approval.execution_result,
+      status,
+      result: approval.execution_result ?? null,
       truncated: approval.execution_result_truncated === true
     });
     return true;
@@ -8214,13 +8204,6 @@ function summarizeResult(result) {
   if (encoded === undefined) return null;
   if (encoded.length <= 4000) return result;
   return { truncated: true, preview: encoded.slice(0, 4000) };
-}
-
-function summarizeApprovalOutcome(result) {
-  const encoded = JSON.stringify(result, null, 2);
-  if (encoded === undefined) return "No structured result was returned.";
-  if (encoded.length <= 12_000) return encoded;
-  return `${encoded.slice(0, 11_900)}\n… [result shortened for task continuity]`;
 }
 
 function toolEventSummary(event) {
