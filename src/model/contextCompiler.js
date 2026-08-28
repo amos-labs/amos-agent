@@ -6,6 +6,9 @@ const DEFAULT_CONTEXT_TOKENS = 131_072;
 const DEFAULT_OUTPUT_TOKENS = 8_192;
 const MIN_CONTEXT_TOKENS = 4_096;
 const IMAGE_TOKEN_ESTIMATE = 1_024;
+// Do not let reserved generation steal a quarter of a 64k+ window. Hosted
+// still needs a reply, but the product window is for the conversation.
+const MAX_RESERVED_OUTPUT_TOKENS = 8_192;
 
 export function compileModelContext({
   messages = [],
@@ -22,7 +25,10 @@ export function compileModelContext({
   const context = boundedInteger(contextTokens, DEFAULT_CONTEXT_TOKENS, MIN_CONTEXT_TOKENS, 1_048_576);
   const requestedOutput = boundedInteger(maxOutputTokens, DEFAULT_OUTPUT_TOKENS, 256, 131_072);
   const tokenChars = boundedInteger(charsPerToken, 4, 2, 8);
-  const reservedOutputTokens = Math.min(requestedOutput, Math.max(1_024, Math.floor(context * 0.25)));
+  const reservedOutputTokens = Math.min(
+    requestedOutput,
+    Math.max(1_024, Math.min(MAX_RESERVED_OUTPUT_TOKENS, Math.floor(context * 0.25)))
+  );
   const safetyTokens = Math.max(512, Math.floor(context * 0.05));
   const toolTokens = estimateToolTokens(tools, tokenChars);
   const hardMessageTokenBudget = Math.max(
