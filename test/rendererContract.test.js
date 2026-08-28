@@ -525,6 +525,10 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.doesNotMatch(html, /id="projectTokenInput"/);
   assert.doesNotMatch(html, /Token ceiling/);
   assert.match(javascript, /function renderProjects\(\)/);
+  assert.match(javascript, /function liveProjectAttention\(/);
+  assert.match(javascript, /function isProjectDecisionVerb\(/);
+  assert.match(javascript, /attentionRuns\.length \+ waitingDecisions/);
+  assert.doesNotMatch(javascript, /attentionRuns\.length \|\| waitingDecisions/);
   assert.match(javascript, /function projectConversationList\(projectId, conversations\)/);
   assert.match(javascript, /function projectActivityList\(projectId, runs\)/);
   assert.match(javascript, /function projectDecisionList\(/);
@@ -563,8 +567,10 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(controller, /execution_authority: false/);
   assert.match(controller, /AMOS_MODEL_TRANSIENT_AFTER_PROGRESS/);
   assert.match(controller, /desktopResearchCheckpointPolicy/);
-  assert.match(remoteState, /this\.mcp\.callTool\("list_projects"/);
-  assert.match(remoteState, /this\.mcp\.callTool\("list_task_inbox"/);
+  assert.match(remoteState, /this\.callCompanyTool\("list_projects"/);
+  assert.match(remoteState, /this\.callCompanyTool\("list_task_inbox"/);
+  assert.match(javascript, /AMOS could not load Projects from the connected company/);
+  assert.doesNotMatch(html, /supervised-run contract/);
   assert.match(remoteState, /this\.mcp\.callTool\("start_task_run"/);
   assert.match(remoteState, /this\.mcp\.callTool\("report_task_run"/);
   assert.match(css, /\.project-list\s*\{[\s\S]*?max-width:\s*none/);

@@ -1026,6 +1026,104 @@ test("Desktop projects user-private Projects and supervised task runs without au
   assert.equal(calls[7].arguments.reason, "Stopped by the operator");
 });
 
+test("Desktop still loads Projects when the supervised-run inbox tool is missing", async () => {
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "projects-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      if (request.params.name === "list_task_inbox") {
+        return response(200, {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: "unknown tool 'list_task_inbox'" }
+        });
+      }
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              projects: [{
+                id: "11111111-1111-4111-8111-111111111111",
+                name: "Neighborly rollout",
+                status: "active",
+                max_parallel_runs: 2,
+                default_budget: {},
+                created_at: "2026-08-12T00:00:00.000Z",
+                updated_at: "2026-08-12T00:05:00.000Z"
+              }],
+              contract: { execution_authority: false }
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const library = await client.projectsLibrary();
+  assert.equal(library.supported, true);
+  assert.equal(library.projects[0].name, "Neighborly rollout");
+  assert.deepEqual(library.inbox, []);
+});
+
+test("Desktop loads Projects through the company engine when the direct verb is unadvertised", async () => {
+  const tools = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "projects-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      const name = request.params.name;
+      tools.push(name);
+      if (name === "list_projects" || name === "list_task_inbox") {
+        return response(200, {
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601, message: `unknown tool '${name}'` }
+        });
+      }
+      assert.equal(name, "call_engine_tool");
+      const tool = request.params.arguments.tool;
+      const payload = tool === "list_projects"
+        ? {
+            projects: [{
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Neighborly rollout",
+              status: "active",
+              max_parallel_runs: 2,
+              default_budget: {},
+              created_at: "2026-08-12T00:00:00.000Z",
+              updated_at: "2026-08-12T00:05:00.000Z"
+            }],
+            contract: { execution_authority: false }
+          }
+        : { items: [], stalled_count: 0, contract: { execution_proof: false } };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+
+  const library = await client.projectsLibrary();
+  assert.equal(library.supported, true);
+  assert.equal(library.projects[0].name, "Neighborly rollout");
+  assert.deepEqual(tools, [
+    "list_projects",
+    "call_engine_tool",
+    "list_task_inbox",
+    "call_engine_tool"
+  ]);
+});
+
 test("Desktop falls back only to the older platform catalog, never a bundled provider list", async () => {
   const tools = [];
   const client = new DesktopRemoteStateClient(
