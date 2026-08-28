@@ -66,7 +66,6 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   steerTask: (id, content) =>
     ipcRenderer.invoke("desktop:steer-task", { id, content }),
   cancelTask: (id) => ipcRenderer.invoke("desktop:cancel-task", id),
-  clear: () => ipcRenderer.invoke("desktop:clear"),
   removeCanvas: (id) => ipcRenderer.invoke("desktop:remove-canvas", id),
   saveCanvasView: (id) => ipcRenderer.invoke("desktop:save-canvas-view", id),
   runBriefing: (input) => ipcRenderer.invoke("desktop:run-briefing", input),

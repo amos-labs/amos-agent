@@ -602,18 +602,26 @@ test("Briefings are a single-column saved-view library with typed platform actio
 });
 
 test("Operator is chat-first with transient progress and detailed activity in the Panel", async () => {
-  const [javascript, html, css] = await Promise.all([
+  const [javascript, html, css, preload, main] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
-    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8")
   ]);
 
   assert.match(html, /id="sidebarToggle"/);
   assert.match(html, /id="conversationHeading"/);
   assert.match(
     html,
-    /class="composer-tools"[\s\S]*?id="clearButton"[\s\S]*?>Clear context<\/button>/
+    /class="composer-tools"[\s\S]*?id="newConversationButton"[\s\S]*?>[\s\S]*?New conversation/
   );
+  assert.doesNotMatch(html, />Clear context<\/button>/);
+  assert.doesNotMatch(html, /id="clearButton"/);
+  assert.doesNotMatch(javascript, /function clearSession/);
+  assert.doesNotMatch(javascript, /api\.clear\(/);
+  assert.doesNotMatch(preload, /invoke\("desktop:clear"\)/);
+  assert.doesNotMatch(main, /"desktop:clear"/);
   assert.match(html, /id="activityStream"/);
   assert.match(html, /Routing, tools, governed actions, timing, and recorded outcomes/);
   assert.match(html, /id="chatRunStatus"/);
