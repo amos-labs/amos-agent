@@ -1847,6 +1847,143 @@ test("a recover-the-thread announcement is not a completed answer", async () => 
   ));
 });
 
+test("a long reframe-the-plan recap is not a completed answer", async () => {
+  const events = [];
+  let turn = 0;
+  const recap = [
+    "You're right — let me reframe around the actual live plans and separate what I've verified from what I haven't.",
+    "",
+    "What's verified (live Stripe account, AMOS Labs)",
+    "Starter $99 unspecified — not taxed. Pro $349 unspecified — not taxed.",
+    "The fix for task 1 (proposed, not yet applied)",
+    "Set tax_behavior to exclusive on the two live prices.",
+    "x".repeat(1_500)
+  ].join("\n");
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    scratchpad: {
+      currentJob: "Fix tax_behavior on the three Stripe prices",
+      jobs: [{ title: "Fix tax_behavior on the three Stripe prices", status: "current" }],
+      notes: "LANDED POST /v1/prices/price_1Tn0fPGlkubafVtvDNckoZPh → 200 tax_behavior=exclusive"
+    },
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        if (turn === 1) {
+          return { message: { role: "assistant", content: recap } };
+        }
+        assert.ok(messages.some((message) =>
+          String(message.content || "").includes("amos_user_facing_result_required")
+        ));
+        assert.ok(messages.some((message) =>
+          /Do not recover, reframe/.test(String(message.content || ""))
+        ));
+        return {
+          message: {
+            role: "assistant",
+            content: "Starter and Pro already landed exclusive tax. Next is the QBO accounts."
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("ok...yes...lets do the tax calls", {
+    onEvent: (event) => events.push(event)
+  });
+  assert.equal(turn, 2);
+  assert.match(answer, /already landed exclusive tax/);
+  assert.ok(events.some((event) =>
+    event.type === "phase" && event.phase === "retrying" && /recovery instead of acting/i.test(event.summary)
+  ));
+});
+
+test("a successful Stripe write is remembered and the identical call is not sent again", async () => {
+  const registry = new ToolRegistry();
+  let sent = 0;
+  registry.register({
+    name: "connection_call",
+    async handler() {
+      sent += 1;
+      return {
+        ok: true,
+        status: 200,
+        body: {
+          id: "price_1Tn0fPGlkubafVtvDNckoZPh",
+          tax_behavior: "exclusive"
+        }
+      };
+    }
+  });
+  let phase = "first";
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        if (phase === "first") {
+          phase = "replay";
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "tax-1",
+                function: {
+                  name: "connection_call",
+                  arguments: JSON.stringify({
+                    connection: "stripe",
+                    method: "POST",
+                    path: "/v1/prices/price1Tn0fPGlkubafVtvDNckoZPh",
+                    body: { taxbehavior: "exclusive" }
+                  })
+                }
+              }]
+            }
+          };
+        }
+        if (phase === "replay") {
+          phase = "done";
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "tax-2",
+                function: {
+                  name: "connection_call",
+                  arguments: JSON.stringify({
+                    connection: "stripe",
+                    method: "POST",
+                    path: "/v1/prices/price_1Tn0fPGlkubafVtvDNckoZPh",
+                    body: { tax_behavior: "exclusive" }
+                  })
+                }
+              }]
+            }
+          };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "Exclusive tax already landed on Starter. Next is QuickBooks accounts."
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("apply exclusive tax to the $99 plan");
+  assert.equal(sent, 1);
+  assert.match(loop.scratchpad.notes, /LANDED POST \/v1\/prices\/price_1Tn0fPGlkubafVtvDNckoZPh → 200/);
+  assert.match(answer, /already landed/);
+});
+
 test("message-limit compaction keeps tool evidence from before the latest follow-up", async () => {
   const registry = new ToolRegistry();
   registry.register({

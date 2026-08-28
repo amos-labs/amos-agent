@@ -180,13 +180,13 @@ export function formatScratchpadCard({
   const vendorText = compacted ? String(vendorSignals || "").trim() : "";
   return [
     "<amos_scratchpad>",
-    "Job list for this conversation only. Act on the current job now. Do not restart, recover the thread, or re-check live systems from scratch.",
+    "Job list for this conversation only. Act on unfinished work now. Do not restart, reframe already-landed facts, recover the thread, or re-check live systems from scratch. Do not recreate a write marked LANDED.",
     view.currentJob ? `Current job:\n${view.currentJob.slice(0, 1_200)}` : "Current job: (not yet stated)",
     jobLines ? `Jobs:\n${jobLines}` : "",
     loops ? `Open loops:\n${loops}` : "",
     view.notes ? `Notes:\n${view.notes}` : "",
     compacted
-      ? "Some older turns were omitted to fit the window. Continue with this pad, the latest user message, and remaining tool evidence. Do not recover the thread or re-check live systems. Call desktop_inspect_conversation only for one missing quote."
+      ? "Some older turns were omitted to fit the window. Continue with this pad, LANDED writes, the latest user message, and remaining tool evidence. Do not recover the thread, reframe landed facts, or re-check live systems. Do not recreate a write marked LANDED. Call desktop_inspect_conversation only for one missing quote."
       : "",
     vendorText,
     "</amos_scratchpad>"
@@ -220,7 +220,7 @@ export function createScratchpadTools({ getPad, setPad }) {
       source: "desktop",
       toolkit: "core",
       description:
-        "Update this conversation's durable job pad without waiting for approval. Use when the user hops jobs (integration → QBO → Stripe tax), parks unfinished work, or leaves an open loop. Do not store secrets, credentials, or replayable tool arguments.",
+        "Update this conversation's durable job pad without waiting for approval. Use when a job completes, parks, or hops (integration → QBO → Stripe tax), or when an open loop remains. Do not store secrets, credentials, or replayable tool arguments.",
       parameters: {
         type: "object",
         additionalProperties: false,

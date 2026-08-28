@@ -291,7 +291,7 @@ test("scratch pad is injected even when the window is not compacted", () => {
   assert.equal(compiled.plan.compacted, false);
   const text = compiled.messages.map((message) => String(message.content)).join("\n");
   assert.match(text, /<amos_scratchpad>/);
-  assert.match(text, /Act on the current job/);
+  assert.match(text, /Act on unfinished work now/);
   assert.doesNotMatch(text, /desktop_inspect_conversation/);
   assert.match(text, /try again/);
   assert.match(text, /Stripe to QuickBooks integration/);

@@ -12,6 +12,13 @@ import {
   scratchpadHasWork,
   syncScratchpadWithObjective
 } from "../src/model/conversationScratchpad.js";
+import {
+  alreadyLandedResult,
+  connectorWriteFingerprint,
+  recordConnectorCallOnScratchpad,
+  scratchpadHasLandedWrite,
+  summarizeConnectorCall
+} from "../src/model/landedConnectorWork.js";
 
 test("scratch pad hops jobs in one conversation and parks the previous current job", () => {
   let pad = emptyScratchpad();
@@ -44,8 +51,8 @@ test("thin follow-ups do not replace the current job when sync is skipped by the
     compacted: false
   });
   assert.match(card, /<amos_scratchpad>/);
-  assert.match(card, /Act on the current job now/);
-  assert.match(card, /Do not restart, recover the thread/);
+  assert.match(card, /Act on unfinished work now/);
+  assert.match(card, /Do not restart, reframe already-landed facts, recover the thread/);
   assert.match(card, /tax_behavior/);
   assert.doesNotMatch(card, /desktop_inspect_conversation/);
 });
@@ -104,4 +111,58 @@ test("scratch pad tools are core and the update path does not ask for approval",
   assert.equal(stored.currentJob, "Fix tax_behavior on the three Stripe prices");
   const read = await registry.execute("desktop_read_scratchpad", {}, {});
   assert.equal(read.scratchpad.notes, "Do not invent refunds");
+});
+
+test("successful Stripe price writes are recorded as LANDED and later identical calls are recognized", () => {
+  const args = {
+    connection: "stripe",
+    method: "POST",
+    path: "/v1/prices/price1Tn0fPGlkubafVtvDNckoZPh",
+    body: { taxbehavior: "exclusive" }
+  };
+  const result = {
+    ok: true,
+    status: 200,
+    body: {
+      id: "price_1Tn0fPGlkubafVtvDNckoZPh",
+      tax_behavior: "exclusive"
+    }
+  };
+  const summary = summarizeConnectorCall({ name: "connection_call", args, result });
+  assert.match(summary.line, /LANDED POST \/v1\/prices\/price_1Tn0fPGlkubafVtvDNckoZPh → 200/);
+  assert.match(summary.line, /tax_behavior=exclusive/);
+  assert.equal(
+    connectorWriteFingerprint("connection_call", args),
+    connectorWriteFingerprint("connection_call", {
+      connection: "stripe",
+      method: "POST",
+      path: "/v1/prices/price_1Tn0fPGlkubafVtvDNckoZPh",
+      body: { tax_behavior: "exclusive" }
+    })
+  );
+
+  const pad = recordConnectorCallOnScratchpad(emptyScratchpad(), {
+    name: "connection_call",
+    args,
+    result
+  });
+  assert.match(pad.notes, /LANDED POST \/v1\/prices\/price_1Tn0fPGlkubafVtvDNckoZPh/);
+  assert.equal(scratchpadHasLandedWrite(pad, "connection_call", args), true);
+  assert.equal(alreadyLandedResult(summary.fingerprint).already_landed, true);
+});
+
+test("failed connector writes stay FAILED and are not treated as landed", () => {
+  const args = {
+    connection: "quickbooks",
+    method: "POST",
+    path: "/v3/company/{realm_id}/account",
+    body: { Account: { Name: "AMS Subscriptions - Core 99" } }
+  };
+  const pad = recordConnectorCallOnScratchpad(emptyScratchpad(), {
+    name: "connection_call",
+    args,
+    result: { ok: false, status: 400, body: "" }
+  });
+  assert.match(pad.notes, /FAILED POST \/v3\/company\/\{realm_id\}\/account → 400/);
+  assert.equal(scratchpadHasLandedWrite(pad, "connection_call", args), false);
 });

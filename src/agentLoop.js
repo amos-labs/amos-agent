@@ -20,6 +20,12 @@ import {
   syncScratchpadWithObjective
 } from "./model/conversationScratchpad.js";
 import {
+  alreadyLandedResult,
+  connectorWriteFingerprint,
+  recordConnectorCallOnScratchpad,
+  scratchpadHasLandedWrite
+} from "./model/landedConnectorWork.js";
+import {
   isThinFollowUp,
   pushRecentJob,
   selectWorkingObjective,
@@ -116,6 +122,7 @@ export class AgentLoop {
     this.workingObjective = "";
     this.recentJobs = [];
     this.scratchpad = emptyScratchpad();
+    this.landedWriteFingerprints = new Set();
     this.onScratchpadChange = typeof onScratchpadChange === "function" ? onScratchpadChange : null;
     this.messages = [{ role: "system", content: this.systemPrompt }];
     this.installConversationInspectTool();
@@ -143,6 +150,7 @@ export class AgentLoop {
     this.workingObjective = "";
     this.recentJobs = [];
     this.scratchpad = emptyScratchpad();
+    this.landedWriteFingerprints = new Set();
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
@@ -513,8 +521,8 @@ export class AgentLoop {
               content: recoverRitual
                 ? [
                     "<amos_user_facing_result_required>",
-                    "The previous response announced recovering the thread or re-checking live systems. That is not a completed answer.",
-                    "Act on the current job now with evidence already in this window. If the next step is a tool, call it. If a write is next, do it. Call desktop_inspect_conversation only for one missing quote. Do not recover, pick up where you left off, or re-survey connections.",
+                    "The previous response announced recovering the thread, reframing already-known facts, or re-checking live systems. That is not a completed answer.",
+                    "Act on unfinished work with evidence already in this window. If a write already returned ok:true or is marked LANDED on the scratch pad, do not recreate it. If the next unfinished step is a tool, call it. Call desktop_inspect_conversation only for one missing quote. Do not recover, reframe, pick up where you left off, or re-survey connections.",
                     "</amos_user_facing_result_required>"
                   ].join("\n")
                 : [
@@ -585,6 +593,30 @@ export class AgentLoop {
         const executeCall = async (call) => {
           throwIfAborted(signal);
           const startedAt = Date.now();
+          const landedFingerprint = connectorWriteFingerprint(call.name, call.args);
+          if (
+            landedFingerprint
+            && (
+              this.landedWriteFingerprints.has(landedFingerprint)
+              || scratchpadHasLandedWrite(this.scratchpad, call.name, call.args)
+            )
+          ) {
+            const result = alreadyLandedResult(landedFingerprint);
+            onEvent({
+              type: "phase",
+              phase: "acting",
+              turn,
+              summary: `Skipping already-landed ${humanizeToolName(call.name)}`
+            });
+            onEvent({
+              type: "tool_end",
+              name: call.name,
+              result,
+              durationMs: Date.now() - startedAt,
+              executionMode: "already_landed"
+            });
+            return { ...call, result, failed: false };
+          }
           onEvent({
             type: "phase",
             phase: "acting",
@@ -658,6 +690,7 @@ export class AgentLoop {
           }
 
           this.observeCanvasToolOutcome({ name, result, failed });
+          await this.recordLandedConnectorCall({ name, args, result, failed });
           this.messages.push({
             role: "tool",
             tool_call_id: call.id,
@@ -1082,6 +1115,20 @@ export class AgentLoop {
     }
     await this.onScratchpadChange?.(this.scratchpad);
     return this.scratchpad;
+  }
+
+  async recordLandedConnectorCall({ name, args, result, failed }) {
+    const fingerprint = connectorWriteFingerprint(name, args);
+    const status = Number(result?.status);
+    const landed = fingerprint
+      && !failed
+      && result?.already_landed !== true
+      && result?.ok !== false
+      && (!Number.isFinite(status) || (status >= 200 && status < 300) || result?.ok === true);
+    if (landed) this.landedWriteFingerprints.add(fingerprint);
+    const next = recordConnectorCallOnScratchpad(this.scratchpad, { name, args, result });
+    if (next.notes === this.scratchpad.notes) return this.scratchpad;
+    return this.setScratchpad(next);
   }
 
   async syncScratchpadFromObjective(text) {
@@ -2037,8 +2084,9 @@ function invalidTaskCompletion(content, completedToolActions) {
 
 function isRecoverRitualAnswer(content) {
   const answer = String(content || "").replace(/\s+/g, " ").trim();
-  if (!answer || answer.length > 1_200) return false;
-  return /(?:i(?:['’]ll| will)|let me)\s+(?:recover(?: the exact state)?|pick up where we left off|start by checking|check the current state)|recover the exact state from the earlier turns|before (?:i propose anything|touching tax settings)|re-?check(?:ing)? live systems/i.test(answer);
+  if (!answer) return false;
+  const opening = answer.slice(0, 800);
+  return /(?:i(?:['’]ll| will)|let me)\s+(?:recover(?: the exact state)?|pick up where we left off|start by checking|check the current state|reframe)|recover the exact state from the earlier turns|before (?:i propose anything|touching tax settings)|re-?check(?:ing)? live systems|let me reframe around|separate what i(?:['’]| ha)ve verified from what i haven/i.test(opening);
 }
 
 function isBulkyAssistantProse(block) {
