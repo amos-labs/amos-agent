@@ -15,6 +15,7 @@ test("remote state events project every refreshed platform surface into Desktop"
       workspaceActive: true
     },
     companyApprovals: [{ id: "approval-1", status: "pending" }],
+    missionDecisions: [{ id: "mission-decision-1", mission_id: "mission-1" }],
     companyReceipts: [{ id: "receipt-1", operation: "create_ad" }],
     approvalsAvailable: true,
     approvalDecisionMode: "desktop",
@@ -69,6 +70,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     identity: controller.identity,
     accountStatus: controller.accountStatus,
     approvals: controller.companyApprovals,
+    missionDecisions: controller.missionDecisions,
     approvalsAvailable: true,
     approvalDecisionMode: "desktop",
     pendingInputs: [],

@@ -474,6 +474,23 @@ test("desktop settings retain only a bounded approval-notification history", () 
   assert.equal(sanitized.notifiedApprovalIds.at(-1), notifiedApprovalIds.at(-1));
 });
 
+test("desktop settings retain only a bounded Mission-decision notification history", () => {
+  const notifiedMissionDecisionIds = Array.from({ length: 205 }, (_, index) =>
+    `mission-${index}`
+  );
+  const sanitized = sanitizeSettings({
+    ...DEFAULT_DESKTOP_SETTINGS,
+    notifiedMissionDecisionIds
+  });
+
+  assert.equal(sanitized.notifiedMissionDecisionIds.length, 200);
+  assert.equal(sanitized.notifiedMissionDecisionIds[0], notifiedMissionDecisionIds[5]);
+  assert.equal(
+    sanitized.notifiedMissionDecisionIds.at(-1),
+    notifiedMissionDecisionIds.at(-1)
+  );
+});
+
 test("desktop settings retain only a bounded delivered approval-outcome history", () => {
   const deliveredApprovalOutcomeIds = Array.from({ length: 205 }, (_, index) =>
     `outcome-${index}`

@@ -421,6 +421,10 @@ function registerIpc() {
     controller.connectSecretProvider(payload?.provider, payload?.input)
   );
   ipcMain.handle("desktop:open-approval", (_event, id) => controller.openApproval(id));
+  ipcMain.handle("desktop:open-mission-decision", (_event, id) =>
+    controller.openMissionDecision(id));
+  ipcMain.handle("desktop:answer-mission-decision", (_event, input) =>
+    controller.answerMissionDecision(input?.id, input?.answer));
   ipcMain.handle("desktop:review-company-approval", async (_event, id) => {
     const review = await controller.reviewCompanyApproval(id);
     if (review.mode !== "desktop") return review;

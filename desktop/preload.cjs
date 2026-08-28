@@ -41,6 +41,9 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   connectSecretProvider: (provider, input) =>
     ipcRenderer.invoke("desktop:connect-secret-provider", { provider, input }),
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),
+  openMissionDecision: (id) => ipcRenderer.invoke("desktop:open-mission-decision", id),
+  answerMissionDecision: (id, answer) =>
+    ipcRenderer.invoke("desktop:answer-mission-decision", { id, answer }),
   reviewApproval: (id) => ipcRenderer.invoke("desktop:review-company-approval", id),
   testModel: () => ipcRenderer.invoke("desktop:test-model"),
   refreshOffline: () => ipcRenderer.invoke("desktop:refresh-offline"),

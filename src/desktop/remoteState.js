@@ -861,7 +861,8 @@ export class DesktopRemoteStateClient {
         available: false,
         reason: payload.error || "Only an owner or admin can review company approvals.",
         decision_mode: "hosted",
-        pending_operations: []
+        pending_operations: [],
+        mission_decisions: []
       };
     }
     if (!response.ok) {
@@ -873,6 +874,9 @@ export class DesktopRemoteStateClient {
       decision_mode: payload.decision_mode === "desktop" ? "desktop" : "hosted",
       pending_operations: Array.isArray(payload.pending_operations)
         ? payload.pending_operations.map(normalizeApproval).filter(Boolean)
+        : [],
+      mission_decisions: Array.isArray(payload.mission_decisions)
+        ? payload.mission_decisions.map(normalizeMissionDecision).filter(Boolean)
         : []
     };
   }
@@ -918,6 +922,62 @@ export class DesktopRemoteStateClient {
     const payload = await parseJsonResponse(response, `AMOS approval ${action}`);
     if (!response.ok) {
       throw new Error(payload.error || `AMOS approval ${action} failed with ${response.status}`);
+    }
+    return payload;
+  }
+
+  async answerMissionDecision(id, answer, { signal = null, sign = null } = {}) {
+    const decisionId = String(id || "").trim();
+    if (!/^[0-9a-f-]{36}$/i.test(decisionId)) throw new Error("Invalid AMOS Mission decision id");
+    const exactAnswer = String(answer || "").trim();
+    if (!exactAnswer || exactAnswer.length > 4_000) {
+      throw new Error("Mission answer must be between 1 and 4,000 characters");
+    }
+    if (typeof sign !== "function") throw new Error("Desktop decision signing is unavailable");
+    let token = await this.oauth.getAccessToken();
+    let challengeResponse = await this.fetchMissionDecisionChallenge(
+      token,
+      decisionId,
+      exactAnswer,
+      { signal }
+    );
+    if (challengeResponse.status === 401) {
+      token = await this.oauth.getAccessToken({ forceRefresh: true });
+      challengeResponse = await this.fetchMissionDecisionChallenge(
+        token,
+        decisionId,
+        exactAnswer,
+        { signal }
+      );
+    }
+    const challenge = await parseJsonResponse(challengeResponse, "AMOS Mission decision challenge");
+    if (!challengeResponse.ok) {
+      throw new Error(
+        challenge.error || `AMOS Mission decision challenge failed with ${challengeResponse.status}`
+      );
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(challenge.challenge_id || "") || typeof challenge.message !== "string") {
+      throw new Error("AMOS returned an invalid Mission decision challenge");
+    }
+    const signature = await sign(challenge.message);
+    let response = await this.fetchMissionDecisionAnswer(token, decisionId, {
+      answer: exactAnswer,
+      challengeId: challenge.challenge_id,
+      signature,
+      signal
+    });
+    if (response.status === 401) {
+      token = await this.oauth.getAccessToken({ forceRefresh: true });
+      response = await this.fetchMissionDecisionAnswer(token, decisionId, {
+        answer: exactAnswer,
+        challengeId: challenge.challenge_id,
+        signature,
+        signal
+      });
+    }
+    const payload = await parseJsonResponse(response, "AMOS Mission decision answer");
+    if (!response.ok) {
+      throw new Error(payload.error || `AMOS Mission decision answer failed with ${response.status}`);
     }
     return payload;
   }
@@ -1126,6 +1186,70 @@ export class DesktopRemoteStateClient {
     }
   }
 
+  async fetchMissionDecisionChallenge(token, id, answer, { signal = null } = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const unlink = linkAbortSignal(signal, controller);
+    try {
+      return await this.fetch(
+        `${amosOrigin(this.mcpUrl)}/api/v1/mission-decisions/${encodeURIComponent(id)}/challenge`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ answer }),
+          signal: controller.signal
+        }
+      );
+    } catch (error) {
+      if (signal?.aborted) throw createAbortError();
+      if (error.name === "AbortError") throw new Error("AMOS Mission decision challenge timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      unlink();
+    }
+  }
+
+  async fetchMissionDecisionAnswer(
+    token,
+    id,
+    { answer, challengeId, signature, signal = null } = {}
+  ) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    const unlink = linkAbortSignal(signal, controller);
+    try {
+      return await this.fetch(
+        `${amosOrigin(this.mcpUrl)}/api/v1/mission-decisions/${encodeURIComponent(id)}/answer`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            answer,
+            challenge_id: challengeId,
+            signature
+          }),
+          signal: controller.signal
+        }
+      );
+    } catch (error) {
+      if (signal?.aborted) throw createAbortError();
+      if (error.name === "AbortError") throw new Error("AMOS Mission decision answer timed out");
+      throw error;
+    } finally {
+      clearTimeout(timer);
+      unlink();
+    }
+  }
+
   async fetchIntelligenceStatus(token, { signal = null } = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
@@ -1184,6 +1308,19 @@ export function approvalReviewUrl(mcpUrl, approval) {
   return `${amosOrigin(mcpUrl)}/approvals/${encodeURIComponent(id)}`;
 }
 
+export function missionDecisionReviewUrl(mcpUrl, decision) {
+  if (decision?.decision_url) {
+    const supplied = new URL(decision.decision_url);
+    if (supplied.origin !== amosOrigin(mcpUrl)) {
+      throw new Error("AMOS Mission decision URL does not match the connected server");
+    }
+    return supplied.toString();
+  }
+  const id = String(decision?.id || "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Invalid AMOS Mission decision id");
+  return `${amosOrigin(mcpUrl)}/mission-decisions/${encodeURIComponent(id)}`;
+}
+
 function normalizeApproval(value) {
   if (!value || typeof value !== "object" || !value.id || !value.verb) return null;
   return {
@@ -1208,6 +1345,31 @@ function normalizeApproval(value) {
       ? String(value.execution_result_sha256)
       : "",
     execution_result_truncated: value.execution_result_truncated === true
+  };
+}
+
+function normalizeMissionDecision(value) {
+  if (!value || typeof value !== "object") return null;
+  const id = String(value.id || "").trim();
+  const missionId = String(value.mission_id || "").trim();
+  const question = String(value.question || "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(id) || !/^[0-9a-f-]{36}$/i.test(missionId) || !question) {
+    return null;
+  }
+  return {
+    id,
+    mission_id: missionId,
+    contract_id: String(value.contract_id || ""),
+    mission_name: String(value.mission_name || "Mission").slice(0, 200),
+    objective: String(value.objective || "").slice(0, 2_000),
+    question: question.slice(0, 4_000),
+    context: value.context && typeof value.context === "object" ? boundedJsonValue(value.context) : {},
+    options: Array.isArray(value.options)
+      ? value.options.map((option) => String(option).trim().slice(0, 500)).filter(Boolean).slice(0, 12)
+      : [],
+    authority_expansion: value.authority_expansion === true,
+    created_at: String(value.created_at || ""),
+    decision_url: value.decision_url ? String(value.decision_url) : ""
   };
 }
 

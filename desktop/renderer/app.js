@@ -84,6 +84,8 @@ let pendingGenericConnectCalls = 0;
 let continuityConversationRestored = false;
 const transientTaskMessages = new Set();
 const decisionInputDrafts = new Map();
+const missionDecisionDrafts = new Map();
+const surfacedMissionDecisionIds = new Set();
 let forkTaskSource = null;
 let automationSetupDraft = null;
 let automationSetupOperations = null;
@@ -6524,11 +6526,12 @@ function renderComposerProjectChip() {
 function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
+  const missionDecisions = Array.isArray(state.missionDecisions) ? state.missionDecisions : [];
   const proposals = Array.isArray(state.offlineProposals) ? state.offlineProposals : [];
   const pendingInputs = Array.isArray(state.pendingInputs) ? state.pendingInputs : [];
   const pending = approvals.filter((approval) => approval.status === "pending");
   const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  const waitingCount = pending.length + proposals.length + pendingInputs.length;
+  const waitingCount = pending.length + missionDecisions.length + proposals.length + pendingInputs.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
   elements.workDecisionTabCount.textContent = String(waitingCount);
@@ -6572,13 +6575,16 @@ function renderDecisions() {
   }
 
   elements.pendingDecisions.replaceChildren();
-  if (pending.length === 0 && pendingInputs.length === 0) {
+  if (pending.length === 0 && pendingInputs.length === 0 && missionDecisions.length === 0) {
     elements.pendingDecisions.append(
       decisionEmpty(
         sync.syncing ? "Checking for decisions…" : "Nothing is waiting for your decision."
       )
     );
   } else {
+    for (const decision of missionDecisions) {
+      elements.pendingDecisions.append(missionDecisionCard(decision));
+    }
     for (const request of pendingInputs) {
       elements.pendingDecisions.append(decisionInputCard(request));
     }
@@ -6597,11 +6603,19 @@ function renderDecisions() {
   }
   const pendingIds = new Set(pendingInputs.map((request) => request.id));
   for (const card of elements.messages.querySelectorAll(".decision-card.inline-decision")) {
-    if (!pendingIds.has(card.dataset.inputId)) card.remove();
+    if (card.dataset.inputId && !pendingIds.has(card.dataset.inputId)) card.remove();
+  }
+  const openMissionDecisionIds = new Set(missionDecisions.map((decision) => decision.id));
+  for (const card of elements.messages.querySelectorAll(".mission-decision.inline-decision")) {
+    if (!openMissionDecisionIds.has(card.dataset.missionDecisionId)) {
+      missionDecisionDrafts.delete(card.dataset.missionDecisionId);
+      card.remove();
+    }
   }
   if (running) {
     for (const request of pendingInputs) renderInlineDecisionRequest(request);
   }
+  for (const decision of missionDecisions) renderInlineMissionDecision(decision);
 }
 
 function taskCheckpointCard(checkpoint) {
@@ -6946,6 +6960,153 @@ function decisionInputCard(request) {
   actions.append(form);
   card.append(content, actions);
   return card;
+}
+
+function missionDecisionCard(decision, { inline = false } = {}) {
+  const card = document.createElement("article");
+  card.className = `decision-card pending mission-decision${inline ? " inline-decision" : ""}`;
+  card.dataset.missionDecisionId = decision.id;
+  const content = document.createElement("div");
+  content.className = "decision-content";
+  const meta = document.createElement("div");
+  meta.className = "decision-meta";
+  const status = document.createElement("span");
+  status.className = "decision-status pending";
+  status.textContent = decision.authority_expansion ? "new authority needed" : "mission needs direction";
+  const time = document.createElement("time");
+  time.dateTime = decision.created_at || "";
+  time.textContent = decision.created_at ? new Date(decision.created_at).toLocaleString() : "";
+  meta.append(status, time);
+  const title = document.createElement("h2");
+  title.textContent = decision.mission_name || "Autonomous Mission";
+  const question = document.createElement("p");
+  question.textContent = decision.question;
+  const objective = document.createElement("small");
+  objective.textContent = decision.objective ? `Mission: ${decision.objective}` : "";
+  content.append(meta, title, question, objective);
+
+  const actions = document.createElement("div");
+  actions.className = "decision-card-actions";
+  if (decision.authority_expansion || state.approvalDecisionMode !== "desktop") {
+    const review = actionButton(
+      decision.authority_expansion ? "Review new authority →" : "Open secure review →",
+      "primary"
+    );
+    review.addEventListener("click", () => openMissionDecision(decision, review));
+    actions.append(review);
+  } else {
+    const form = document.createElement("form");
+    form.className = "decision-input-form";
+    const field = document.createElement("label");
+    field.className = "decision-input-field";
+    const fieldLabel = document.createElement("span");
+    fieldLabel.textContent = "Your direction";
+    const textarea = document.createElement("textarea");
+    textarea.rows = 3;
+    textarea.maxLength = 4000;
+    textarea.required = true;
+    textarea.placeholder = "Answer in plain English. AMOS will continue inside the unchanged Run Contract…";
+    textarea.value = missionDecisionDrafts.get(decision.id) || "";
+    textarea.addEventListener("input", () => {
+      missionDecisionDrafts.set(decision.id, textarea.value);
+    });
+    field.append(fieldLabel, textarea);
+    form.append(field);
+    if (Array.isArray(decision.options) && decision.options.length > 0) {
+      const chips = document.createElement("div");
+      chips.className = "decision-input-options";
+      for (const option of decision.options) {
+        const chip = actionButton(option, "ghost compact-button");
+        chip.type = "button";
+        chip.addEventListener("click", () => {
+          textarea.value = option;
+          missionDecisionDrafts.set(decision.id, option);
+          textarea.focus();
+        });
+        chips.append(chip);
+      }
+      form.append(chips);
+    }
+    const buttons = document.createElement("div");
+    buttons.className = "decision-input-actions";
+    const submit = actionButton("Send answer & resume", "primary");
+    submit.type = "submit";
+    buttons.append(submit);
+    form.append(buttons);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      answerMissionDecision(decision, textarea.value, submit);
+    });
+    actions.append(form);
+  }
+  card.append(content, actions);
+  return card;
+}
+
+function renderInlineMissionDecision(decision) {
+  if (!decision?.id) return null;
+  const existing = Array.from(
+    elements.messages.querySelectorAll(".decision-card.mission-decision.inline-decision")
+  ).find((card) => card.dataset.missionDecisionId === decision.id);
+  if (existing) return existing;
+  if (surfacedMissionDecisionIds.has(decision.id)) return null;
+  surfacedMissionDecisionIds.add(decision.id);
+  const card = missionDecisionCard(decision, { inline: true });
+  elements.messages.append(card);
+  showView("operator");
+  renderConversationChrome();
+  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  window.setTimeout(() => card.querySelector("textarea")?.focus(), 0);
+  return card;
+}
+
+function removeMissionDecisionCards(id) {
+  for (const card of document.querySelectorAll(".decision-card.mission-decision")) {
+    if (card.dataset.missionDecisionId === id) card.remove();
+  }
+}
+
+async function openMissionDecision(decision, button) {
+  const label = button?.textContent || "Open secure review →";
+  if (button) setButtonBusy(button, true, "Opening…");
+  try {
+    await api.openMissionDecision(decision.id);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button?.isConnected) setButtonBusy(button, false, label);
+  }
+}
+
+async function answerMissionDecision(decision, answer, button) {
+  const exactAnswer = String(answer || "").trim();
+  if (!exactAnswer) {
+    toast("Answer the Mission question before resuming.", true);
+    return;
+  }
+  const label = button?.textContent || "Send answer & resume";
+  if (button) setButtonBusy(button, true, "Resuming…");
+  try {
+    const response = await api.answerMissionDecision(decision.id, exactAnswer);
+    if (response?.mode === "hosted") {
+      await api.openMissionDecision(decision.id);
+      return;
+    }
+    state.missionDecisions = (Array.isArray(state.missionDecisions) ? state.missionDecisions : [])
+      .filter((item) => item.id !== decision.id);
+    missionDecisionDrafts.delete(decision.id);
+    removeMissionDecisionCards(decision.id);
+    addMessage(
+      "assistant",
+      `Got it — the ${decision.mission_name || "Mission"} Mission is resuming inside its existing authority. Completed actions will not be replayed.`
+    );
+    renderDecisions();
+    toast("Direction sent. The Mission has resumed.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button?.isConnected) setButtonBusy(button, false, label);
+  }
 }
 
 function renderInlineDecisionRequest(request, { focus = false } = {}) {
