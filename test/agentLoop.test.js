@@ -876,6 +876,13 @@ test("gather hops request lower reasoning effort than the configured synthesis d
     lastToolNames: [],
     gatherTurns: 0
   }), true);
+  assert.equal(shouldUseGatherReasoning({
+    turn: 0,
+    completedToolActions: 0,
+    lastToolNames: [],
+    gatherTurns: 0,
+    hasActiveJob: true
+  }), false);
   assert.equal(efforts[0], "low");
 });
 
@@ -1789,6 +1796,112 @@ test("internal compaction evidence cannot masquerade as the completed user resul
   assert.ok(events.some((event) =>
     event.type === "phase" && event.phase === "retrying" && /internal context/i.test(event.summary)
   ));
+});
+
+test("a recover-the-thread announcement is not a completed answer", async () => {
+  const events = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry: new ToolRegistry(),
+    approvals: {},
+    amosClient: {},
+    scratchpad: {
+      currentJob: "Update tax_behavior to inclusive on these three Stripe prices",
+      jobs: [{ title: "Update tax_behavior to inclusive on these three Stripe prices", status: "current" }]
+    },
+    kimiClient: {
+      async chat({ messages }) {
+        turn += 1;
+        if (turn === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "I'll pick up where we left off. Let me check the current state of your Stripe merchant account and your QuickBooks connection before touching tax settings or the integration."
+            }
+          };
+        }
+        assert.ok(messages.some((message) =>
+          String(message.content || "").includes("amos_user_facing_result_required")
+        ));
+        assert.ok(messages.some((message) =>
+          /Continuing the current job without restarting/.test(String(message.content || ""))
+        ));
+        return {
+          message: {
+            role: "assistant",
+            content: "Updating inclusive tax_behavior on the three Stripe prices now."
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("this issue should be fixed...lets try it again", {
+    onEvent: (event) => events.push(event)
+  });
+  assert.equal(turn, 2);
+  assert.match(answer, /Updating inclusive tax_behavior/);
+  assert.ok(events.some((event) =>
+    event.type === "phase" && event.phase === "retrying" && /recovery instead of acting/i.test(event.summary)
+  ));
+});
+
+test("message-limit compaction keeps tool evidence from before the latest follow-up", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "connection_call",
+    async handler() {
+      return { status: 403, ok: false, path: "/v1/prices/price_1ABC", body: "403 Forbidden" };
+    }
+  });
+  let phase = "seed";
+  const loop = new AgentLoop({
+    config: {
+      agent: { maxModelMessages: 18, completedHistoryMessages: 400 },
+      model: { contextTokens: 32_768, maxCompletionTokens: 256, provider: "amos-hosted" }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ messages }) {
+        if (phase === "seed") {
+          return { message: { role: "assistant", content: "ack" } };
+        }
+        if (phase === "tax") {
+          phase = "tax-result";
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "price-1",
+                function: { name: "connection_call", arguments: "{\"path\":\"/v1/prices/price_1ABC\"}" }
+              }]
+            }
+          };
+        }
+        if (phase === "tax-result") {
+          phase = "follow";
+          return { message: { role: "assistant", content: "Stripe returned 403 on price_1ABC." } };
+        }
+        const text = messages.map((message) => String(message.content || "")).join("\n");
+        assert.match(text, /403/);
+        assert.match(text, /price_1ABC/);
+        assert.ok(messages.some((message) => message.role === "tool"));
+        return { message: { role: "assistant", content: "Retrying the inclusive tax write." } };
+      }
+    }
+  });
+
+  for (let index = 0; index < 16; index += 1) {
+    await loop.run(`seed ${index} ${"n".repeat(80)}`);
+  }
+  phase = "tax";
+  await loop.run("Update tax_behavior to inclusive on price_1ABC");
+  const answer = await loop.run("this issue should be fixed...lets try it again");
+  assert.match(answer, /Retrying the inclusive tax write/);
 });
 
 test("exhausted transient retries after progress surface recoverable progress", async () => {

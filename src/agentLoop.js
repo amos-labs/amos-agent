@@ -326,7 +326,8 @@ export class AgentLoop {
           turn,
           completedToolActions,
           lastToolNames,
-          gatherTurns
+          gatherTurns,
+          hasActiveJob: this.messages.filter((message) => message.role === "user").length > 1
         });
         if (useGatherReasoning) gatherTurns += 1;
         try {
@@ -486,26 +487,42 @@ export class AgentLoop {
             rejectedInternalCompletions += 1;
             if (rejectedInternalCompletions >= 2) {
               const error = new Error(
-                "The model ended twice without a user-facing result after completing tool work"
+                "The model ended twice without a user-facing result"
               );
               error.code = "AMOS_MODEL_INVALID_COMPLETION";
               error.completedToolActions = completedToolActions;
               throw error;
             }
+            const recoverRitual = isRecoverRitualAnswer(assistantMessage.content);
+            this.messages[this.messages.length - 1] = {
+              role: "assistant",
+              content: recoverRitual
+                ? "Continuing the current job without restarting."
+                : assistantMessage.content
+            };
             onEvent({
               type: "phase",
               phase: "retrying",
               turn,
-              summary: "The model returned internal context instead of a user-facing result; requesting the actual outcome"
+              summary: recoverRitual
+                ? "The model announced a recovery instead of acting; requesting the current job"
+                : "The model returned internal context instead of a user-facing result; requesting the actual outcome"
             });
             this.messages.push({
               role: "user",
-              content: [
-                "<amos_user_facing_result_required>",
-                "The previous response repeated internal continuity or compaction context and is not a completed answer.",
-                "Return the actual result for the user's current objective. Summarize what was established, what remains, and the next concrete action. Do not repeat internal context markers or raw tool payloads.",
-                "</amos_user_facing_result_required>"
-              ].join("\n")
+              content: recoverRitual
+                ? [
+                    "<amos_user_facing_result_required>",
+                    "The previous response announced recovering the thread or re-checking live systems. That is not a completed answer.",
+                    "Act on the current job now with evidence already in this window. If the next step is a tool, call it. If a write is next, do it. Call desktop_inspect_conversation only for one missing quote. Do not recover, pick up where you left off, or re-survey connections.",
+                    "</amos_user_facing_result_required>"
+                  ].join("\n")
+                : [
+                    "<amos_user_facing_result_required>",
+                    "The previous response repeated internal continuity or compaction context and is not a completed answer.",
+                    "Return the actual result for the user's current objective. Summarize what was established, what remains, and the next concrete action. Do not repeat internal context markers or raw tool payloads.",
+                    "</amos_user_facing_result_required>"
+                  ].join("\n")
             });
             turn += 1;
             continue;
@@ -953,13 +970,32 @@ export class AgentLoop {
     const pinnedUsers = this.pinnedUserMessages();
     const selected = [];
     let remaining = Math.max(0, effectiveLimit - 1 - pinnedUsers.length);
-    const blocks = historyBlocks(this.messages.slice(taskIndex + 1));
-    for (let index = blocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
-      const block = blocks[index];
-      if (!isCompleteHistoryBlock(block) || block.length > remaining) {
+    const rest = this.messages.filter((message) =>
+      message !== systemMessage && !pinnedUsers.includes(message)
+    );
+    const blocks = historyBlocks(rest);
+    const toolBlocks = [];
+    const otherBlocks = [];
+    for (const block of blocks) {
+      if (hasToolCalls(block[0]) && isCompleteHistoryBlock(block)) toolBlocks.push(block);
+      else otherBlocks.push(block);
+    }
+    for (let index = toolBlocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
+      const block = toolBlocks[index];
+      if (block.length > remaining) {
         selected.unshift([compactHistoryBlock(block)]);
         remaining -= 1;
-        break;
+        continue;
+      }
+      selected.unshift(block);
+      remaining -= block.length;
+    }
+    for (let index = otherBlocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
+      const block = otherBlocks[index];
+      if (!isCompleteHistoryBlock(block) || block.length > remaining || isBulkyAssistantProse(block)) {
+        selected.unshift([compactHistoryBlock(block)]);
+        remaining -= 1;
+        continue;
       }
       selected.unshift(block);
       remaining -= block.length;
@@ -986,12 +1022,16 @@ export class AgentLoop {
     const users = this.messages.filter((message) => message.role === "user");
     if (users.length === 0) return [];
     const recent = users.slice(-3);
-    const longest = users.reduce((best, message) => (
-      modelContentLength(message.content) > modelContentLength(best.content) ? message : best
-    ), users[0]);
+    const currentJob = String(this.workingObjective || this.scratchpad?.currentJob || "").trim();
+    const jobUser = currentJob
+      ? [...users].reverse().find((message) => {
+        const text = String(userMessageText(message.content) || "");
+        return text.includes(currentJob.slice(0, 80)) || currentJob.includes(text.slice(0, 80));
+      })
+      : null;
     const unique = [];
-    for (const message of [longest, ...recent]) {
-      if (!unique.includes(message)) unique.push(message);
+    for (const message of [jobUser, ...recent]) {
+      if (message && !unique.includes(message)) unique.push(message);
     }
     return unique;
   }
@@ -1888,13 +1928,16 @@ export function shouldUseGatherReasoning({
   turn = 0,
   completedToolActions = 0,
   lastToolNames = [],
-  gatherTurns = 0
+  gatherTurns = 0,
+  hasActiveJob = false
 } = {}) {
   if (gatherTurns >= MAX_GATHER_REASONING_TURNS) return false;
-  if (completedToolActions === 0 && turn <= 2) return true;
-  return Array.isArray(lastToolNames) &&
+  const continuingGather = Array.isArray(lastToolNames) &&
     lastToolNames.length > 0 &&
     lastToolNames.every((name) => GATHER_TOOL_NAMES.has(name));
+  if (hasActiveJob) return continuingGather;
+  if (completedToolActions === 0 && turn <= 2) return true;
+  return continuingGather;
 }
 
 function usageEventFromResponse(usage, turn) {
@@ -1987,8 +2030,22 @@ function usageEventFromResponse(usage, turn) {
 function invalidTaskCompletion(content, completedToolActions) {
   const answer = String(content || "").trim();
   if (!answer) return true;
+  if (isRecoverRitualAnswer(answer)) return true;
   if (completedToolActions <= 0) return false;
   return /^(?:Earlier tool evidence was compacted to fit this model's context window\.|Earlier task context was compacted to fit this model's context window\.|Earlier tool activity was compacted to keep this task within the model message limit\.|Earlier task activity was compacted to keep this task within the model message limit\.)/i.test(answer);
+}
+
+function isRecoverRitualAnswer(content) {
+  const answer = String(content || "").replace(/\s+/g, " ").trim();
+  if (!answer || answer.length > 1_200) return false;
+  return /(?:i(?:['’]ll| will)|let me)\s+(?:recover(?: the exact state)?|pick up where we left off|start by checking|check the current state)|recover the exact state from the earlier turns|before (?:i propose anything|touching tax settings)|re-?check(?:ing)? live systems/i.test(answer);
+}
+
+function isBulkyAssistantProse(block) {
+  const first = block?.[0];
+  return first?.role === "assistant"
+    && !hasToolCalls(first)
+    && modelContentLength(first.content) > 4_000;
 }
 
 function boundedInteger(value, fallback, minimum, maximum) {

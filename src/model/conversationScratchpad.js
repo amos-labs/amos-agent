@@ -186,7 +186,7 @@ export function formatScratchpadCard({
     loops ? `Open loops:\n${loops}` : "",
     view.notes ? `Notes:\n${view.notes}` : "",
     compacted
-      ? "Some older turns were omitted to fit the window. Continue with this pad and the latest user message. Call desktop_inspect_conversation only for one missing quote, then resume the current job."
+      ? "Some older turns were omitted to fit the window. Continue with this pad, the latest user message, and remaining tool evidence. Do not recover the thread or re-check live systems. Call desktop_inspect_conversation only for one missing quote."
       : "",
     vendorText,
     "</amos_scratchpad>"

@@ -139,29 +139,10 @@ function latestUserIndex(messages, activeTask) {
   return -1;
 }
 
-function userIndexesThrough(messages, latestIndex) {
-  const indexes = [];
-  for (let index = 0; index <= latestIndex; index += 1) {
-    if (messages[index]?.role === "user") indexes.push(index);
-  }
-  return indexes;
-}
-
-function pinnedUserIndexes(messages, latestIndex, recentCount = 3) {
-  const users = userIndexesThrough(messages, latestIndex);
-  if (users.length === 0) return [];
-  const recent = users.slice(-recentCount);
-  let longest = users[0];
-  for (const index of users) {
-    if (messageLength(messages[index]) > messageLength(messages[longest])) longest = index;
-  }
-  return [...new Set([longest, ...recent])].sort((left, right) => left - right);
-}
-
 function boundPinnedMessage(message, budget) {
-  const floor = Math.max(400, budget);
-  return messageLength(message) > floor
-    ? { ...message, content: truncateContent(message.content, floor) }
+  const cap = Math.max(0, budget);
+  return messageLength(message) > cap
+    ? { ...message, content: truncateContent(message.content, cap) }
     : message;
 }
 
@@ -203,85 +184,124 @@ function prependCard(content, card) {
   ));
 }
 
-function prependWorkingState(content, options) {
-  return prependCard(content, formatScratchpadCard(options));
-}
-
 function compactMessages(messages, charBudget, options) {
   const { activeTask, workingObjective, recentJobs, scratchpad } = compactionOptions(options);
   const system = messages.find((message) => message?.role === "system") || messages[0];
   const latestIndex = latestUserIndex(messages, activeTask);
   if (!system || latestIndex < 0) return messages.slice(-1);
 
-  const pinIndexes = pinnedUserIndexes(messages, latestIndex);
-  const pinSet = new Set(pinIndexes);
-  const systemChars = messageLength(system);
+  const systemIndex = messages.indexOf(system);
+  const turns = conversationTurns(messages, systemIndex, latestIndex);
   const cardReserve = 1_800;
-  let remaining = Math.max(0, charBudget - systemChars - cardReserve);
-  const pinShare = Math.max(900, Math.floor(remaining / Math.max(2, pinIndexes.length + 1)));
-  const pinned = new Map();
-  for (const index of pinIndexes) {
-    const bounded = boundPinnedMessage(messages[index], Math.min(remaining, pinShare));
-    pinned.set(index, bounded);
-    remaining = Math.max(0, remaining - messageLength(bounded));
-  }
-
-  const history = messages.filter((message, index) =>
-    index !== messages.indexOf(system) && !pinSet.has(index)
-  );
-  const historyChars = history.reduce((total, message) => total + messageLength(message), 0);
-  const willDrop = historyChars > remaining;
-  let digestBudget = 0;
-  if (willDrop) {
-    digestBudget = Math.min(1_500, Math.max(280, Math.floor(charBudget * 0.08)));
-    remaining = Math.max(0, remaining - digestBudget);
-  }
-
+  const digestReserve = 400;
+  let remaining = Math.max(0, charBudget - messageLength(system) - cardReserve - digestReserve);
   const selected = [];
   const dropped = [];
-  const blocks = historyBlocks(history);
-  for (let index = blocks.length - 1; index >= 0; index -= 1) {
-    const block = blocks[index];
-    if (remaining <= 0) {
-      dropped.unshift(block);
-      continue;
-    }
-    const size = block.reduce((total, message) => total + messageLength(message), 0);
+
+  for (let index = turns.length - 1; index >= 0; index -= 1) {
+    const turn = turns[index];
+    const isLatest = index === turns.length - 1;
+    const size = turnSize(turn);
     if (size <= remaining) {
-      selected.unshift(block);
+      selected.unshift(turn);
       remaining -= size;
       continue;
     }
-    dropped.unshift(...blocks.slice(0, index + 1));
-    const summary = compactBlock(block, Math.min(remaining, 4_000));
-    if (summary) selected.unshift([summary]);
-    break;
+    const shrunk = shrinkTurn(turn, remaining, { isLatest });
+    if (shrunk.length > 0 && turnSize(shrunk) <= remaining) {
+      const kept = new Set(shrunk);
+      dropped.unshift(turn.filter((message) => !kept.has(message)));
+      selected.unshift(shrunk);
+      remaining -= turnSize(shrunk);
+      continue;
+    }
+    if (isLatest) {
+      const user = turn.find((message) => message?.role === "user") || turn[0];
+      const bounded = boundPinnedMessage(user, remaining);
+      selected.unshift([bounded]);
+      remaining = Math.max(0, remaining - messageLength(bounded));
+      dropped.unshift(turn.filter((message) => message !== user));
+      continue;
+    }
+    dropped.unshift(turn);
   }
 
+  const willDrop = dropped.flat().length > 0 || turnSize(selected.flat()) < turnSize(turns.flat());
   const vendorSignals = willDrop ? droppedVendorSignals(dropped) : "";
-  const kept = new Set(selected.flat());
-  const firstPin = pinIndexes[0];
-  const firstPinned = pinned.get(firstPin);
-  if (firstPinned) {
-    pinned.set(firstPin, {
-      ...firstPinned,
-      content: prependWorkingState(firstPinned.content, {
-        scratchpad,
-        workingObjective: workingObjective || userMessageText(messages[firstPin]?.content),
-        recentJobs,
-        compacted: willDrop,
-        vendorSignals
-      })
-    });
-  }
-
-  const ordered = [system];
-  for (let index = 0; index < messages.length; index += 1) {
-    if (index === messages.indexOf(system)) continue;
-    if (pinSet.has(index)) ordered.push(pinned.get(index));
-    else if (kept.has(messages[index])) ordered.push(messages[index]);
-  }
+  const ordered = injectScratchpadCard([system, ...selected.flat()], {
+    scratchpad,
+    workingObjective: workingObjective || userMessageText(messages[latestIndex]?.content),
+    recentJobs,
+    compacted: willDrop,
+    vendorSignals
+  });
   return ordered;
+}
+
+function conversationTurns(messages, systemIndex, latestIndex) {
+  const turns = [];
+  let current = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    if (index === systemIndex || index > latestIndex) continue;
+    const message = messages[index];
+    if (message?.role === "user" && current.length > 0) {
+      turns.push(current);
+      current = [message];
+    } else {
+      current.push(message);
+    }
+  }
+  if (current.length > 0) turns.push(current);
+  return turns;
+}
+
+function turnSize(turn) {
+  return (Array.isArray(turn) ? turn : []).reduce((total, message) => total + messageLength(message), 0);
+}
+
+function shrinkTurn(turn, budget, { isLatest = false } = {}) {
+  if (budget < 120 || !Array.isArray(turn) || turn.length === 0) return [];
+  const user = turn.find((message) => message?.role === "user");
+  const userCap = Math.min(budget, isLatest ? 6_000 : 1_800);
+  const parts = [];
+  let remaining = budget;
+  if (user) {
+    const bounded = boundPinnedMessage(user, userCap);
+    parts.push(bounded);
+    remaining -= messageLength(bounded);
+  }
+  if (remaining < 120) return parts;
+
+  const rest = turn.filter((message) => message !== user);
+  const blocks = historyBlocks(rest);
+  const kept = [];
+  for (let index = blocks.length - 1; index >= 0 && remaining > 0; index -= 1) {
+    const block = blocks[index];
+    const first = block[0] || {};
+    if (hasToolCalls(first)) {
+      const size = turnSize(block);
+      if (size <= remaining) {
+        kept.unshift(block);
+        remaining -= size;
+        continue;
+      }
+      const summary = compactBlock(block, Math.min(remaining, 4_000));
+      if (summary) {
+        kept.unshift([summary]);
+        remaining -= messageLength(summary);
+      }
+      continue;
+    }
+    if (first?.role === "assistant") {
+      const truncated = boundPinnedMessage(first, Math.min(remaining, 900));
+      const size = messageLength(truncated);
+      if (size > 0 && size <= remaining) {
+        kept.unshift([truncated]);
+        remaining -= size;
+      }
+    }
+  }
+  return [...parts, ...kept.flat()];
 }
 
 function userMessageText(content) {
