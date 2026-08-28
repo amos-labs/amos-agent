@@ -97,6 +97,7 @@ const transientTaskMessages = new Set();
 const decisionInputDrafts = new Map();
 const missionDecisionDrafts = new Map();
 const surfacedMissionDecisionIds = new Set();
+const surfacedCompanyApprovalIds = new Set();
 let forkTaskSource = null;
 let automationSetupDraft = null;
 let automationSetupOperations = null;
@@ -6796,6 +6797,14 @@ function renderDecisions() {
     }
   }
   for (const decision of missionDecisions) renderInlineMissionDecision(decision);
+  const pendingApprovalIds = new Set(pending.map((approval) => approval.id));
+  for (const card of elements.messages.querySelectorAll(".decision-card.company-approval.inline-decision")) {
+    if (!pendingApprovalIds.has(card.dataset.approvalId)) {
+      surfacedCompanyApprovalIds.delete(card.dataset.approvalId);
+      card.remove();
+    }
+  }
+  for (const approval of pending) renderInlineCompanyApproval(approval);
 }
 
 function taskCheckpointCard(checkpoint) {
@@ -7387,11 +7396,29 @@ function decisionCard(approval, actionable) {
   const actions = document.createElement("div");
   actions.className = "decision-card-actions";
   if (actionable) {
-    const review = document.createElement("button");
-    review.className = "button primary";
-    review.textContent = approvalActionLabel();
-    review.addEventListener("click", () => reviewGovernedApproval(approval.id, review));
-    actions.append(review);
+    if (canDecideCompanyApprovalsInDesktop()) {
+      const row = document.createElement("div");
+      row.className = "decision-input-actions";
+      const approve = document.createElement("button");
+      approve.className = "button primary";
+      approve.type = "button";
+      approve.textContent = "Approve once";
+      approve.addEventListener("click", () => decideGovernedApproval(approval.id, "approve", approve));
+      const deny = document.createElement("button");
+      deny.className = "button danger";
+      deny.type = "button";
+      deny.textContent = "Deny";
+      deny.addEventListener("click", () => decideGovernedApproval(approval.id, "deny", deny));
+      row.append(approve, deny);
+      actions.append(row);
+    } else {
+      const review = document.createElement("button");
+      review.className = "button primary";
+      review.type = "button";
+      review.textContent = approvalActionLabel();
+      review.addEventListener("click", () => reviewGovernedApproval(approval.id, review));
+      actions.append(review);
+    }
   }
   const details = document.createElement("details");
   const detailsLabel = document.createElement("summary");
@@ -7415,10 +7442,67 @@ function decisionSummary(approval, actionable) {
   return `This request was ${String(approval.status || "recorded").replaceAll("_", " ")}.`;
 }
 
+function canDecideCompanyApprovalsInDesktop() {
+  return state?.connectionMode === "user" && state?.approvalDecisionMode === "desktop";
+}
+
 function approvalActionLabel() {
   return state?.connectionMode === "user" && state?.approvalDecisionMode !== "desktop"
     ? "Enable native approval"
     : "Review securely →";
+}
+
+function renderInlineCompanyApproval(approval) {
+  if (!approval?.id || approval.status !== "pending") return null;
+  const existing = Array.from(
+    elements.messages.querySelectorAll(".decision-card.company-approval.inline-decision")
+  ).find((card) => card.dataset.approvalId === approval.id);
+  if (existing) return existing;
+  if (surfacedCompanyApprovalIds.has(approval.id)) return null;
+  surfacedCompanyApprovalIds.add(approval.id);
+  const card = decisionCard(approval, true);
+  card.classList.add("inline-decision", "company-approval");
+  showView("operator");
+  elements.messages.append(card);
+  renderConversationChrome();
+  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  return card;
+}
+
+async function decideGovernedApproval(id, decision, button) {
+  if (!canDecideCompanyApprovalsInDesktop()) {
+    return reviewGovernedApproval(id, button);
+  }
+  const approved = decision === "approve";
+  const confirmed = window.confirm(
+    approved
+      ? "Approve this once? AMOS will execute the exact request shown."
+      : "Deny this request? It will not execute."
+  );
+  if (!confirmed) return;
+  const label = button?.textContent || (approved ? "Approve once" : "Deny");
+  if (button) setButtonBusy(button, true, approved ? "Approving…" : "Denying…");
+  try {
+    const review = await api.decideCompanyApproval(id, approved ? "approve" : "deny");
+    if (review?.mode === "hosted") {
+      const openHosted = window.confirm(
+        "This AMOS server requires its hosted approval ceremony. Open it in your browser?"
+      );
+      if (openHosted) await api.openApproval(id);
+      return;
+    }
+    state = await api.refreshRemote();
+    render();
+    if (review?.decision === "deny") {
+      toast("Denied. AMOS has the decision and will not treat that write as still pending.");
+    } else {
+      toast("Approved. The original operation is running once.");
+    }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button?.isConnected) setButtonBusy(button, false, label);
+  }
 }
 
 async function reviewGovernedApproval(id, button) {

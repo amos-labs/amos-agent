@@ -3786,6 +3786,8 @@ html[data-platform="win32"] .sidebar-toggle {
   color: var(--warning);
 }
 .decision-card-actions { display: grid; justify-items: stretch; gap: 10px; }
+.decision-card-actions .decision-input-actions { justify-content: stretch; }
+.decision-card-actions .decision-input-actions .button { flex: 1 1 0; }
 .decision-card.decision-input {
   grid-template-columns: minmax(0, 1fr);
   align-items: start;

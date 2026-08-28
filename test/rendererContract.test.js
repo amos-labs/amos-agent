@@ -264,6 +264,11 @@ test("routine approval review stays inside Desktop", async () => {
     javascript,
     /const openHosted = window\.confirm\([\s\S]*?if \(openHosted\) await api\.openApproval\(id\)/
   );
+  assert.match(javascript, /canDecideCompanyApprovalsInDesktop\(\)/);
+  assert.match(javascript, /textContent = "Approve once"/);
+  assert.match(javascript, /textContent = "Deny"/);
+  assert.match(javascript, /api\.decideCompanyApproval\(id, approved \? "approve" : "deny"\)/);
+  assert.match(javascript, /function renderInlineCompanyApproval\(/);
 });
 
 test("background remote refresh projects live Connections into the renderer", async () => {
