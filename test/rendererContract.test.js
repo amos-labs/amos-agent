@@ -269,6 +269,8 @@ test("routine approval review stays inside Desktop", async () => {
   assert.match(javascript, /textContent = "Deny"/);
   assert.match(javascript, /api\.decideCompanyApproval\(id, approved \? "approve" : "deny"\)/);
   assert.match(javascript, /function renderInlineCompanyApproval\(/);
+  assert.match(javascript, /companyApprovalChatBaseline == null/);
+  assert.match(javascript, /if \(companyApprovalChatBaseline.has\(approval.id\)\) continue/);
 });
 
 test("background remote refresh projects live Connections into the renderer", async () => {

@@ -283,6 +283,7 @@ export class DesktopController {
       onRequest: (request) => this.send("approval:requested", request)
     });
     this.companyApprovals = [];
+    this.resetApprovalOutcomeCatalog();
   }
 
   taskLocalLane() {
@@ -1563,6 +1564,7 @@ export class DesktopController {
       this.identity = null;
       this.accountStatus = null;
       this.companyApprovals = [];
+      this.resetApprovalOutcomeCatalog();
       this.missionDecisions = [];
       this.companyReceipts = [];
       this.companyReceiptRows = [];
@@ -2136,13 +2138,34 @@ export class DesktopController {
     return { mode: "desktop", result };
   }
 
+  resetApprovalOutcomeCatalog() {
+    this.approvalsCatalogReady = false;
+    this.knownApprovalStatuses = new Map();
+  }
+
   async deliverCompletedApprovalOutcomes() {
     const settings = await this.settingsStore.read();
     const delivered = new Set(settings.deliveredApprovalOutcomeIds || []);
-    const outcomes = this.companyApprovals
-      .filter((approval) => isSettledApproval(approval) && !delivered.has(approval.id))
-      .reverse();
-    for (const approval of outcomes) {
+    const current = Array.isArray(this.companyApprovals) ? this.companyApprovals : [];
+
+    if (!this.approvalsCatalogReady) {
+      for (const approval of current) {
+        if (!approval?.id) continue;
+        this.knownApprovalStatuses.set(approval.id, String(approval.status || ""));
+        if (isSettledApproval(approval)) delivered.add(approval.id);
+      }
+      this.approvalsCatalogReady = true;
+      await this.settingsStore.write({
+        ...settings,
+        deliveredApprovalOutcomeIds: [...delivered].slice(-200)
+      });
+      return;
+    }
+
+    for (const approval of [...current].reverse()) {
+      if (!approval?.id) continue;
+      this.knownApprovalStatuses.set(approval.id, String(approval.status || ""));
+      if (!isSettledApproval(approval) || delivered.has(approval.id)) continue;
       await this.deliverCompletedApprovalOutcome(approval, { settings, delivered });
     }
   }
@@ -7003,6 +7026,7 @@ export class DesktopController {
     this.identity = null;
     this.accountStatus = null;
     this.companyApprovals = [];
+    this.resetApprovalOutcomeCatalog();
     this.missionDecisions = [];
     this.companyReceipts = [];
     this.companyReceiptRows = [];
