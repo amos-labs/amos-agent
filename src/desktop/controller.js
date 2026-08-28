@@ -123,6 +123,7 @@ import {
 import {
   amosOrigin,
   approvalReviewUrl,
+  missionDecisionReviewUrl,
   DesktopRemoteStateClient
 } from "./remoteState.js";
 import {
@@ -229,6 +230,7 @@ export class DesktopController {
     this.companyReceiptRows = [];
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
+    this.missionDecisions = [];
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
@@ -403,6 +405,7 @@ export class DesktopController {
       identity: this.identity,
       accountStatus: this.accountStatus,
       approvals: this.companyApprovals,
+      missionDecisions: this.missionDecisions,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
       pendingInputs: this.pendingDecisionInputs(),
@@ -1431,6 +1434,7 @@ export class DesktopController {
         ? settings.onboardingBoundary
         : "",
       notifiedApprovalIds: [],
+      notifiedMissionDecisionIds: [],
       deliveredApprovalOutcomeIds: []
     });
     this.clearEphemeralCompanyBoundary();
@@ -1463,6 +1467,7 @@ export class DesktopController {
       ...settings,
       operatingMode: "online",
       notifiedApprovalIds: [],
+      notifiedMissionDecisionIds: [],
       deliveredApprovalOutcomeIds: []
     });
     this.clearEphemeralCompanyBoundary();
@@ -1502,6 +1507,7 @@ export class DesktopController {
     await this.settingsStore.write({
       ...settings,
       notifiedApprovalIds: [],
+      notifiedMissionDecisionIds: [],
       deliveredApprovalOutcomeIds: []
     });
 
@@ -1553,6 +1559,7 @@ export class DesktopController {
       this.identity = null;
       this.accountStatus = null;
       this.companyApprovals = [];
+      this.missionDecisions = [];
       this.companyReceipts = [];
       this.companyReceiptRows = [];
       this.approvalsAvailable = true;
@@ -1638,6 +1645,7 @@ export class DesktopController {
       this.approvalsAvailable = approvalsResult.value.available;
       this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
       this.companyApprovals = approvalsResult.value.pending_operations;
+      this.missionDecisions = approvalsResult.value.mission_decisions || [];
       if (notify && approvalsResult.value.available) {
         await this.notifyNewCompanyApprovals(settings);
       }
@@ -1866,6 +1874,7 @@ export class DesktopController {
       this.approvalsAvailable = approvalsResult.value.available;
       this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
       this.companyApprovals = approvalsResult.value.pending_operations;
+      this.missionDecisions = approvalsResult.value.mission_decisions || [];
     }
     const pendingApprovalId = result?.pending_id || result?.pendingId ||
       result?.pending_operation?.id || result?.pendingOperation?.id || null;
@@ -1990,25 +1999,41 @@ export class DesktopController {
 
   async notifyNewCompanyApprovals(settings) {
     const known = new Set(settings.notifiedApprovalIds || []);
+    const knownMissionDecisions = new Set(settings.notifiedMissionDecisionIds || []);
     const pending = this.companyApprovals.filter((approval) => approval.status === "pending");
     const fresh = pending.filter((approval) => !known.has(approval.id));
-    if (fresh.length === 0) return;
+    const freshMissionDecisions = this.missionDecisions.filter(
+      (decision) => !knownMissionDecisions.has(decision.id)
+    );
+    if (fresh.length === 0 && freshMissionDecisions.length === 0) return;
 
-    const first = fresh[0];
+    const firstMissionDecision = freshMissionDecisions[0];
+    const first = firstMissionDecision || fresh[0];
+    const count = fresh.length + freshMissionDecisions.length;
     this.notify({
-      count: fresh.length,
-      title: fresh.length === 1 ? "AMOS approval needed" : `${fresh.length} AMOS approvals need you`,
+      count,
+      title: count === 1 ? "AMOS needs your decision" : `${count} AMOS decisions need you`,
       // Keep lock-screen notifications useful without exposing company data.
       // The signed-in decision view carries the full business summary.
-      body: fresh.length === 1
-        ? "A governed company decision is waiting for your review."
-        : `${fresh.length} governed company decisions are waiting for your review.`,
+      body: count === 1
+        ? "Autonomous company work is waiting for your direction."
+        : `${count} governed company decisions are waiting for your review.`,
       approval: first,
-      reviewUrl: approvalReviewUrl(settings.amosMcpUrl, first)
+      reviewUrl: firstMissionDecision
+        ? missionDecisionReviewUrl(settings.amosMcpUrl, firstMissionDecision)
+        : approvalReviewUrl(settings.amosMcpUrl, first)
     });
 
     const notifiedApprovalIds = [...known, ...fresh.map((approval) => approval.id)].slice(-200);
-    await this.settingsStore.write({ ...settings, notifiedApprovalIds });
+    const notifiedMissionDecisionIds = [
+      ...knownMissionDecisions,
+      ...freshMissionDecisions.map((decision) => decision.id)
+    ].slice(-200);
+    await this.settingsStore.write({
+      ...settings,
+      notifiedApprovalIds,
+      notifiedMissionDecisionIds
+    });
   }
 
   async openApproval(id) {
@@ -2070,6 +2095,43 @@ export class DesktopController {
     }
     await this.refreshRemote({ notify: false });
     return result;
+  }
+
+  async openMissionDecision(id) {
+    const decision = this.missionDecisions.find((item) => item.id === id);
+    if (!decision) throw new Error("That Mission question is no longer available");
+    const settings = await this.settingsStore.read();
+    await this.openBrowser(missionDecisionReviewUrl(settings.amosMcpUrl, decision));
+    return { opened: true };
+  }
+
+  async answerMissionDecision(id, answer) {
+    const decision = this.missionDecisions.find((item) => item.id === id);
+    if (!decision) throw new Error("That Mission question is no longer available");
+    if (decision.authority_expansion) {
+      throw new Error("This answer would expand Mission authority and needs a replacement Run Contract");
+    }
+    if (this.approvalDecisionMode !== "desktop") {
+      return { mode: "hosted", opened: false };
+    }
+    if (!this.decisionKeyStore) throw new Error("Desktop decision signing is unavailable");
+    const settings = await this.settingsStore.read();
+    const config = this.configFrom(settings);
+    const remote = new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth: this.oauthFor(settings),
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+    const result = await remote.answerMissionDecision(id, answer, {
+      sign: (message) => this.decisionKeyStore.sign(message)
+    });
+    this.record("decision", `Answered Mission question for ${decision.mission_name}`, {
+      decision_id: id,
+      mission_id: decision.mission_id,
+      contract_unchanged: true
+    });
+    await this.refreshRemote({ notify: false });
+    return { mode: "desktop", result };
   }
 
   async deliverCompletedApprovalOutcomes() {
@@ -3542,6 +3604,7 @@ export class DesktopController {
       this.approvalsAvailable = approvalsResult.value.available;
       this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
       this.companyApprovals = approvalsResult.value.pending_operations;
+      this.missionDecisions = approvalsResult.value.mission_decisions || [];
     }
     this.record("automation", "Submitted an exact Automation failure resolution", {
       incident_id: String(incidentId || ""),
@@ -3710,6 +3773,7 @@ export class DesktopController {
       this.approvalsAvailable = approvalsResult.value.available;
       this.approvalDecisionMode = approvalsResult.value.decision_mode || "hosted";
       this.companyApprovals = approvalsResult.value.pending_operations;
+      this.missionDecisions = approvalsResult.value.mission_decisions || [];
     }
     this.record("automation", `Submitted ${pending.automationName} for governed activation`, {
       setup_id: setup.id,
@@ -6949,6 +7013,7 @@ export class DesktopController {
     this.identity = null;
     this.accountStatus = null;
     this.companyApprovals = [];
+    this.missionDecisions = [];
     this.companyReceipts = [];
     this.companyReceiptRows = [];
     this.approvalsAvailable = true;
@@ -7027,6 +7092,7 @@ export class DesktopController {
       identity: this.identity,
       accountStatus: this.accountStatus,
       approvals: this.companyApprovals,
+      missionDecisions: this.missionDecisions,
       approvalsAvailable: this.approvalsAvailable,
       approvalDecisionMode: this.approvalDecisionMode,
       pendingInputs: typeof this.pendingDecisionInputs === "function"
@@ -7410,6 +7476,7 @@ function redactSettings(settings) {
     intelligenceRoles: sanitizeIntelligenceRoles(settings.intelligenceRoles)
   };
   delete redacted.notifiedApprovalIds;
+  delete redacted.notifiedMissionDecisionIds;
   delete redacted.deliveredApprovalOutcomeIds;
   return redacted;
 }

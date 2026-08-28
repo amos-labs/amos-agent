@@ -16,6 +16,7 @@ function settingsStore() {
     reasoningEffort: "medium",
     workspace: "/tmp",
     notifiedApprovalIds: ["approval-from-source"],
+    notifiedMissionDecisionIds: ["mission-decision-from-source"],
     deliveredApprovalOutcomeIds: ["outcome-from-source"]
   };
   return {
@@ -114,6 +115,7 @@ test("Desktop switches only to advertised memberships and clears ephemeral compa
   assert.deepEqual(state.canvases, []);
   assert.equal(state.activity.some((item) => item.summary === "Switched to Smile Wise"), true);
   assert.deepEqual((await fixture.store.read()).notifiedApprovalIds, []);
+  assert.deepEqual((await fixture.store.read()).notifiedMissionDecisionIds, []);
   assert.deepEqual((await fixture.store.read()).deliveredApprovalOutcomeIds, []);
 });
 

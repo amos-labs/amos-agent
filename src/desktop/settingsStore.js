@@ -56,6 +56,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   onboardingCompletedAt: "",
   onboardingBoundary: "",
   notifiedApprovalIds: [],
+  notifiedMissionDecisionIds: [],
   deliveredApprovalOutcomeIds: [],
   intelligenceRoles: DEFAULT_INTELLIGENCE_ROLES,
   hybridRouting: DEFAULT_HYBRID_ROUTING,
@@ -233,6 +234,12 @@ export function sanitizeSettings(input = {}) {
       : "",
     notifiedApprovalIds: Array.isArray(input.notifiedApprovalIds)
       ? input.notifiedApprovalIds
+          .map((value) => clean(value, 64))
+          .filter(Boolean)
+          .slice(-200)
+      : [],
+    notifiedMissionDecisionIds: Array.isArray(input.notifiedMissionDecisionIds)
+      ? input.notifiedMissionDecisionIds
           .map((value) => clean(value, 64))
           .filter(Boolean)
           .slice(-200)
