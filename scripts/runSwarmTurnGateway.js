@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { SwarmTurnOrchestrator } from "../src/research/swarmTurnGateway.js";
+import { AMOS_MISSION_WORKER_CONTRACT } from "../src/research/missionWorkerProtocol.js";
 
 const args = process.argv.slice(2);
 const host = option("--host") || "127.0.0.1";
@@ -30,7 +31,16 @@ const server = createServer(async (request, response) => {
       return json(response, 200, {
         ok: true,
         service: "amos-swarm-turn-gateway",
-        model: backendModel
+        model: backendModel,
+        protocols: {
+          openAiChatCompletions: true,
+          platformMissionWorker: AMOS_MISSION_WORKER_CONTRACT
+        },
+        authority: {
+          planner: "swarm",
+          executor: "amos-platform",
+          verifier: "amos-platform-checker-waist"
+        }
       });
     }
     if (request.method !== "POST" || !new Set([
