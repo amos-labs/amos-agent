@@ -36,6 +36,29 @@ export class DesktopRemoteStateClient {
     );
   }
 
+  async callCompanyTool(name, args = {}, options = {}) {
+    try {
+      return await this.mcp.callTool(name, args, options);
+    } catch (error) {
+      if (!isUnknownTool(error, name)) throw error;
+      try {
+        return await this.mcp.callTool("call_engine_tool", {
+          engine: "company",
+          tool: name,
+          arguments: args
+        }, options);
+      } catch (fallbackError) {
+        if (
+          isUnknownTool(fallbackError, "call_engine_tool") ||
+          isUnknownTool(fallbackError, name)
+        ) {
+          throw error;
+        }
+        throw fallbackError;
+      }
+    }
+  }
+
   async identity({ signal = null } = {}) {
     const result = await this.mcp.callTool("whoami", {}, { signal });
     return parseMcpJson(result, "AMOS identity");
@@ -464,37 +487,46 @@ export class DesktopRemoteStateClient {
   }
 
   async projectsLibrary({ includeArchived = true, includeTerminal = true, signal = null } = {}) {
+    let projectsResult;
     try {
-      const [projectsResult, inboxResult] = await Promise.all([
-        this.mcp.callTool("list_projects", {
-          include_archived: includeArchived === true,
-          limit: 100
-        }, { signal }),
-        this.mcp.callTool("list_task_inbox", {
-          include_terminal: includeTerminal === true,
-          limit: 200
-        }, { signal })
-      ]);
-      const projectsPayload = parseMcpJson(projectsResult, "AMOS Projects");
-      const inboxPayload = parseMcpJson(inboxResult, "AMOS task inbox");
-      return {
-        supported: true,
-        projects: (Array.isArray(projectsPayload?.projects) ? projectsPayload.projects : [])
-          .map(normalizeProject)
-          .filter(Boolean),
-        inbox: (Array.isArray(inboxPayload?.items) ? inboxPayload.items : [])
-          .map(normalizeTaskRun)
-          .filter(Boolean),
-        stalledCount: boundedCount(inboxPayload?.stalled_count),
-        projectContract: boundedContract(projectsPayload?.contract),
-        runContract: boundedContract(inboxPayload?.contract)
-      };
+      projectsResult = await this.callCompanyTool("list_projects", {
+        include_archived: includeArchived === true,
+        limit: 100
+      }, { signal });
     } catch (error) {
-      if (isUnknownTool(error, "list_projects") || isUnknownTool(error, "list_task_inbox")) {
+      if (isUnknownTool(error, "list_projects")) {
         return emptyProjectsLibrary();
       }
       throw error;
     }
+    const projectsPayload = parseMcpJson(projectsResult, "AMOS Projects");
+    let inbox = [];
+    let stalledCount = 0;
+    let runContract = null;
+    try {
+      const inboxResult = await this.callCompanyTool("list_task_inbox", {
+        include_terminal: includeTerminal === true,
+        limit: 200
+      }, { signal });
+      const inboxPayload = parseMcpJson(inboxResult, "AMOS task inbox");
+      inbox = (Array.isArray(inboxPayload?.items) ? inboxPayload.items : [])
+        .map(normalizeTaskRun)
+        .filter(Boolean);
+      stalledCount = boundedCount(inboxPayload?.stalled_count);
+      runContract = boundedContract(inboxPayload?.contract);
+    } catch (error) {
+      if (!isUnknownTool(error, "list_task_inbox")) throw error;
+    }
+    return {
+      supported: true,
+      projects: (Array.isArray(projectsPayload?.projects) ? projectsPayload.projects : [])
+        .map(normalizeProject)
+        .filter(Boolean),
+      inbox,
+      stalledCount,
+      projectContract: boundedContract(projectsPayload?.contract),
+      runContract
+    };
   }
 
   async project(id, { signal = null } = {}) {

@@ -3063,16 +3063,32 @@ function renderProjects() {
   const attentionRuns = inbox.filter((run) => run.stalled || attentionStatuses.has(run.status));
   const waitingDecisions = projectDecisionItems().length;
 
-  elements.projectUnavailable.classList.toggle("hidden", library.supported === true);
-  elements.newProjectButton.disabled = library.supported !== true || state.connectionMode !== "user";
-  elements.refreshProjectsButton.disabled = state.connectionMode !== "user";
+  const connectedUser = state.connectionMode === "user";
+  const syncing = Boolean(state.remoteStatus?.syncing);
+  const syncError = String(state.remoteStatus?.error || "").trim();
+  let notice = "";
+  if (!syncing && library.supported !== true) {
+    if (connectedUser) {
+      notice = syncError
+        ? `AMOS could not load Projects: ${syncError}`
+        : "AMOS could not load Projects from the connected company. Refresh to try again.";
+    } else if (state.connected) {
+      notice = "Reconnect with your personal AMOS sign-in to use Projects.";
+    } else {
+      notice = "Connect your AMOS company account to use Projects.";
+    }
+  }
+  elements.projectUnavailable.textContent = notice;
+  elements.projectUnavailable.classList.toggle("hidden", !notice);
+  elements.newProjectButton.disabled = library.supported !== true || !connectedUser;
+  elements.refreshProjectsButton.disabled = !connectedUser || syncing;
   const badgeCount = attentionRuns.length || waitingDecisions || activeRuns.length;
   elements.projectBadge.textContent = String(badgeCount);
   elements.projectBadge.classList.toggle(
     "hidden",
     attentionRuns.length + waitingDecisions + activeRuns.length === 0
   );
-  elements.projectEmpty.classList.toggle("hidden", page.total > 0);
+  elements.projectEmpty.classList.toggle("hidden", page.total > 0 || Boolean(notice));
 
   elements.projectList.replaceChildren();
   for (const project of visibleProjects) {
