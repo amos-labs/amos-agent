@@ -17,6 +17,36 @@ resource "terraform_data" "validated_inputs" {
       error_message = "model_manifest_sha256 must be pinned before inference_enabled is true."
     }
     precondition {
+      condition     = !var.swarm_gateway_enabled || var.inference_enabled
+      error_message = "inference_enabled must be true before swarm_gateway_enabled is true."
+    }
+    precondition {
+      condition     = !var.swarm_gateway_enabled || var.swarm_gateway_image_uri != ""
+      error_message = "swarm_gateway_image_uri must be pinned before swarm_gateway_enabled is true."
+    }
+    precondition {
+      condition     = var.swarm_gateway_backend_context_tokens <= var.max_model_len
+      error_message = "swarm_gateway_backend_context_tokens must fit inside max_model_len."
+    }
+    precondition {
+      condition     = var.swarm_gateway_context_safety_tokens + 512 < var.swarm_gateway_backend_context_tokens
+      error_message = "The Swarm gateway context reserve must leave room for evidence and stage output."
+    }
+    precondition {
+      condition = (
+        var.platform_vpc_id == "" &&
+        var.platform_vpc_cidr == "" &&
+        length(var.platform_route_table_ids) == 0 &&
+        var.platform_ecs_security_group_id == ""
+        ) || (
+        var.platform_vpc_id != "" &&
+        var.platform_vpc_cidr != "" &&
+        length(var.platform_route_table_ids) > 0 &&
+        var.platform_ecs_security_group_id != ""
+      )
+      error_message = "Platform peering inputs must either all be empty or all be populated."
+    }
+    precondition {
       condition     = var.monthly_budget_usd == 0 || var.budget_email != ""
       error_message = "budget_email is required when monthly_budget_usd is non-zero."
     }
@@ -86,6 +116,11 @@ resource "aws_security_group" "inference" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  lifecycle {
+    # Ingress is governed by standalone, narrowly scoped rules below.
+    ignore_changes = [ingress]
+  }
 }
 
 resource "aws_security_group" "endpoints" {
@@ -99,6 +134,10 @@ resource "aws_security_group" "endpoints" {
     to_port         = 443
     protocol        = "tcp"
     security_groups = [aws_security_group.inference.id]
+  }
+
+  lifecycle {
+    ignore_changes = [ingress]
   }
 }
 
@@ -181,6 +220,34 @@ resource "aws_ecr_lifecycle_policy" "vllm" {
   })
 }
 
+resource "aws_ecr_repository" "swarm_gateway" {
+  name                 = "${local.name}/swarm-mission-gateway"
+  image_tag_mutability = "IMMUTABLE"
+
+  encryption_configuration {
+    encryption_type = "KMS"
+    kms_key         = aws_kms_key.inference.arn
+  }
+
+  image_scanning_configuration { scan_on_push = true }
+}
+
+resource "aws_ecr_lifecycle_policy" "swarm_gateway" {
+  repository = aws_ecr_repository.swarm_gateway.name
+  policy = jsonencode({
+    rules = [{
+      rulePriority = 1
+      description  = "Keep the newest ten immutable gateway images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 10
+      }
+      action = { type = "expire" }
+    }]
+  })
+}
+
 resource "aws_secretsmanager_secret" "api_key" {
   name                    = "${local.name}/vllm-api-key"
   description             = "Bearer token for the private AMOS Qwen endpoint"
@@ -239,7 +306,7 @@ resource "aws_iam_role_policy" "inference" {
         Sid      = "PullPinnedRuntime"
         Effect   = "Allow"
         Action   = ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
-        Resource = [aws_ecr_repository.vllm.arn]
+        Resource = [aws_ecr_repository.vllm.arn, aws_ecr_repository.swarm_gateway.arn]
       }
     ]
   })
@@ -305,6 +372,11 @@ resource "aws_instance" "inference" {
   tags = { Name = local.name }
 
   lifecycle {
+    prevent_destroy = true
+    # Live service changes use SSM so adding the gateway can never recycle the
+    # shared GPU instance. The template remains authoritative for a new cell.
+    ignore_changes = [user_data]
+
     precondition {
       condition     = var.availability_zone == "${var.aws_region}b" || var.aws_region != "us-east-1"
       error_message = "The qualified us-east-1 G7e cell currently targets us-east-1b."
@@ -365,4 +437,104 @@ resource "aws_budgets_budget" "research" {
     notification_type          = "ACTUAL"
     subscriber_email_addresses = [var.budget_email]
   }
+}
+
+resource "aws_vpc_peering_connection" "platform" {
+  count = var.platform_vpc_id == "" ? 0 : 1
+
+  vpc_id      = aws_vpc.inference.id
+  peer_vpc_id = var.platform_vpc_id
+  auto_accept = true
+
+  tags = { Name = "${local.name}-platform" }
+}
+
+resource "aws_route" "to_platform" {
+  count = var.platform_vpc_id == "" ? 0 : 1
+
+  route_table_id            = aws_route_table.private.id
+  destination_cidr_block    = var.platform_vpc_cidr
+  vpc_peering_connection_id = aws_vpc_peering_connection.platform[0].id
+}
+
+resource "aws_route" "from_platform" {
+  count = var.platform_vpc_id == "" ? 0 : length(var.platform_route_table_ids)
+
+  route_table_id            = var.platform_route_table_ids[count.index]
+  destination_cidr_block    = aws_vpc.inference.cidr_block
+  vpc_peering_connection_id = aws_vpc_peering_connection.platform[0].id
+}
+
+resource "aws_security_group_rule" "platform_vllm" {
+  count = var.platform_ecs_security_group_id == "" ? 0 : 1
+
+  type                     = "ingress"
+  description              = "Hosted AMOS platform ECS to private Qwen vLLM"
+  from_port                = 8000
+  to_port                  = 8000
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.inference.id
+  source_security_group_id = var.platform_ecs_security_group_id
+
+  depends_on = [aws_vpc_peering_connection.platform]
+}
+
+resource "aws_security_group_rule" "platform_swarm_gateway" {
+  count = var.swarm_gateway_enabled ? 1 : 0
+
+  type                     = "ingress"
+  description              = "AMOS Platform Mission worker to private Swarm gateway"
+  from_port                = var.swarm_gateway_port
+  to_port                  = var.swarm_gateway_port
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.inference.id
+  source_security_group_id = var.platform_ecs_security_group_id
+
+  depends_on = [aws_vpc_peering_connection.platform]
+}
+
+resource "aws_ssm_document" "swarm_gateway" {
+  count = var.swarm_gateway_enabled ? 1 : 0
+
+  name            = "${local.name}-install-swarm-mission-gateway"
+  document_type   = "Command"
+  document_format = "JSON"
+  content = jsonencode({
+    schemaVersion = "2.2"
+    description   = "Install the AMOS Swarm Mission gateway without restarting vLLM"
+    mainSteps = [{
+      action = "aws:runShellScript"
+      name   = "installSwarmGateway"
+      inputs = {
+        timeoutSeconds = "900"
+        runCommand = [templatefile("${path.module}/templates/install-swarm-gateway.sh.tftpl", {
+          api_key_secret_id             = aws_secretsmanager_secret.api_key.id
+          aws_region                    = var.aws_region
+          ecr_registry                  = split("/", aws_ecr_repository.swarm_gateway.repository_url)[0]
+          served_model_name             = var.served_model_name
+          swarm_gateway_backend_context = var.swarm_gateway_backend_context_tokens
+          swarm_gateway_context_safety  = var.swarm_gateway_context_safety_tokens
+          swarm_gateway_image_uri       = var.swarm_gateway_image_uri
+          swarm_gateway_port            = var.swarm_gateway_port
+        })]
+      }
+    }]
+  })
+
+  tags = { Name = "${local.name}-swarm-mission-gateway" }
+}
+
+resource "aws_ssm_association" "swarm_gateway" {
+  count = var.swarm_gateway_enabled ? 1 : 0
+
+  name                        = aws_ssm_document.swarm_gateway[0].name
+  association_name            = "${local.name}-swarm-mission-gateway"
+  apply_only_at_cron_interval = false
+
+  targets {
+    key    = "InstanceIds"
+    values = [aws_instance.inference[0].id]
+  }
+
+  depends_on = [aws_iam_role_policy.inference]
 }

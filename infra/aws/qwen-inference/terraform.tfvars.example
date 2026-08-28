@@ -14,6 +14,21 @@ inference_enabled = false
 vllm_image_uri          = ""
 model_manifest_sha256   = ""
 
+# Existing Platform VPC peering. Populate these as a set; leaving all four
+# empty keeps the inference cell isolated from ECS.
+platform_vpc_id                    = ""
+platform_vpc_cidr                  = ""
+platform_route_table_ids           = []
+platform_ecs_security_group_id     = ""
+
+# The Swarm gateway is installed through SSM as a separate service. Keep it
+# disabled until its image is pushed and the evening canary plan is reviewed.
+swarm_gateway_enabled                  = false
+swarm_gateway_image_uri                = ""
+swarm_gateway_port                     = 18081
+swarm_gateway_backend_context_tokens   = 65536
+swarm_gateway_context_safety_tokens    = 1024
+
 # Optional hard-to-miss cost notifications. This does not automatically stop
 # an instance; scripts/stop.sh is the intentional on-demand control.
 monthly_budget_usd = 0

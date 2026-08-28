@@ -96,9 +96,9 @@ variable "served_model_name" {
 }
 
 variable "max_model_len" {
-  description = "Initial context ceiling; increase only after memory qualification."
+  description = "vLLM serving window on this GPU. Qwen 3.8-27B natively supports 262k; 65536 is the current Hosted product window on g7e.2xlarge."
   type        = number
-  default     = 32768
+  default     = 65536
 }
 
 variable "max_num_seqs" {
@@ -108,9 +108,9 @@ variable "max_num_seqs" {
 }
 
 variable "max_num_batched_tokens" {
-  description = "Continuous-batching token budget."
+  description = "Continuous-batching token budget. Keep this at least half of max_model_len so a 64k prompt is not crawled through 16k chunks."
   type        = number
-  default     = 16384
+  default     = 32768
 }
 
 variable "gpu_memory_utilization" {
@@ -129,6 +129,90 @@ variable "monthly_budget_usd" {
   description = "Optional AWS Budget threshold. Zero disables budget creation."
   type        = number
   default     = 0
+}
+
+variable "platform_vpc_id" {
+  description = "AMOS platform ECS VPC to peer for Hosted Qwen. Empty skips peering."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.platform_vpc_id == "" || can(regex("^vpc-[a-f0-9]+$", var.platform_vpc_id))
+    error_message = "platform_vpc_id must be empty or a vpc- id."
+  }
+}
+
+variable "platform_vpc_cidr" {
+  description = "CIDR of the platform VPC, used for the return route from the Qwen cell."
+  type        = string
+  default     = ""
+}
+
+variable "platform_route_table_ids" {
+  description = "Platform private route tables that must reach the Qwen cell."
+  type        = list(string)
+  default     = []
+}
+
+variable "platform_ecs_security_group_id" {
+  description = "ECS security group allowed to call vLLM and the Mission gateway. Empty skips both rules."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.platform_ecs_security_group_id == "" || can(regex("^sg-[a-f0-9]+$", var.platform_ecs_security_group_id))
+    error_message = "platform_ecs_security_group_id must be empty or an sg- id."
+  }
+}
+
+variable "swarm_gateway_enabled" {
+  description = "Install the private Swarm Mission gateway through SSM. This never changes the vLLM service."
+  type        = bool
+  default     = false
+}
+
+variable "swarm_gateway_image_uri" {
+  description = "Private ECR Swarm gateway image URI pinned with @sha256:..."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.swarm_gateway_image_uri == "" || can(regex("@sha256:[a-f0-9]{64}$", var.swarm_gateway_image_uri))
+    error_message = "swarm_gateway_image_uri must be empty or an immutable ECR digest."
+  }
+}
+
+variable "swarm_gateway_port" {
+  description = "Private port exposed only to the Platform ECS security group."
+  type        = number
+  default     = 18081
+
+  validation {
+    condition     = var.swarm_gateway_port >= 1024 && var.swarm_gateway_port <= 65535 && var.swarm_gateway_port != 8000
+    error_message = "swarm_gateway_port must be an unprivileged port distinct from vLLM port 8000."
+  }
+}
+
+variable "swarm_gateway_backend_context_tokens" {
+  description = "Context limit the gateway uses to budget private candidate and verifier evidence."
+  type        = number
+  default     = 65536
+
+  validation {
+    condition     = var.swarm_gateway_backend_context_tokens >= 4096 && var.swarm_gateway_backend_context_tokens <= 1048576
+    error_message = "swarm_gateway_backend_context_tokens must be between 4096 and 1048576."
+  }
+}
+
+variable "swarm_gateway_context_safety_tokens" {
+  description = "Tokens reserved so private Swarm stages cannot overflow the shared Qwen context."
+  type        = number
+  default     = 1024
+
+  validation {
+    condition     = var.swarm_gateway_context_safety_tokens >= 128 && var.swarm_gateway_context_safety_tokens <= 131072
+    error_message = "swarm_gateway_context_safety_tokens must be between 128 and 131072."
+  }
 }
 
 variable "budget_email" {
