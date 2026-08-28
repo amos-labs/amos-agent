@@ -109,7 +109,7 @@ test("hosted cell estimates compact a long tool session into the live 32k window
   );
 });
 
-test("compaction pins recent and longest user statements, not the first chat message", () => {
+test("compaction pins recent user statements, not the first chat message", () => {
   const greeting = { role: "user", content: "hey" };
   const tax = {
     role: "user",
@@ -156,7 +156,11 @@ test("compaction pins recent and longest user statements, not the first chat mes
     .join("\n");
   assert.match(userText, /Update tax_behavior to inclusive/);
   assert.match(userText, /lets try it again/);
-  assert.doesNotMatch(userText, /^hey$/m);
+  assert.ok(
+    compiled.messages.some((message) =>
+      message.role === "tool" && /403|Forbidden/.test(String(message.content))
+    )
+  );
   const compiledText = compiled.messages.map((message) => String(message.content)).join("\n");
   assert.match(compiledText, /desktop_inspect_conversation/);
   assert.match(compiledText, /<amos_scratchpad>/);
@@ -245,9 +249,87 @@ test("follow-up compaction keeps the original objective and latest steering", ()
   );
   assert.ok(
     compiled.messages.some((message) =>
-      /403|Forbidden/.test(String(message.content))
+      message.role === "tool" && /403|Forbidden/.test(String(message.content))
     )
   );
+});
+
+test("compaction keeps recent Stripe tool evidence instead of the longest early user dump", () => {
+  const dump = {
+    role: "user",
+    content: `Here is the whole company operating dump\n${"PLAN-NOTES ".repeat(8_000)}`
+  };
+  const tax = {
+    role: "user",
+    content: "Update tax_behavior to inclusive on price_1ABC, price_1DEF, and price_1GHI"
+  };
+  const followUp = { role: "user", content: "this issue should be fixed...lets try it again" };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      dump,
+      { role: "assistant", content: "Noted the dump." },
+      { role: "user", content: "Help me build a Stripe to QuickBooks integration" },
+      { role: "assistant", content: "Working the integration." },
+      tax,
+      {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "price-1",
+          function: {
+            name: "connection_call",
+            arguments: JSON.stringify({
+              connection: "stripe",
+              method: "POST",
+              path: "/v1/prices/price_1ABC",
+              body: { tax_behavior: "inclusive" }
+            })
+          }
+        }]
+      },
+      {
+        role: "tool",
+        tool_call_id: "price-1",
+        content: JSON.stringify({
+          status: 403,
+          ok: false,
+          path: "/v1/prices/price_1ABC",
+          error: "form-urlencoded required",
+          body: "<html>403 Forbidden</html>"
+        })
+      },
+      {
+        role: "assistant",
+        content: "I'll recover the exact state from the earlier turns and check live systems before I propose anything.\n".repeat(4_000)
+      },
+      followUp
+    ],
+    contextTokens: 32_768,
+    maxOutputTokens: 8_192,
+    charsPerToken: 2,
+    activeTask: followUp,
+    workingObjective: tax.content,
+    recentJobs: [
+      "Help me build a Stripe to QuickBooks integration",
+      "We need to add these accounts to QBO",
+      tax.content
+    ]
+  });
+
+  assert.equal(compiled.plan.compacted, true);
+  const compiledText = compiled.messages.map((message) => String(message.content)).join("\n");
+  const dumpChars = (compiledText.match(/PLAN-NOTES/g) || []).length;
+  assert.ok(dumpChars < 200, `early dump still dominates the window (${dumpChars} PLAN-NOTES tokens)`);
+  assert.ok(
+    compiled.messages.some((message) =>
+      message.role === "tool" && /403/.test(String(message.content)) && /price_1ABC/.test(String(message.content))
+    )
+  );
+  assert.match(compiledText, /price_1ABC/);
+  assert.match(compiledText, /lets try it again/);
+  assert.match(compiledText, /tax_behavior/);
+  assert.doesNotMatch(compiledText, /I'll recover the exact state from the earlier turns and check live systems before I propose anything\.(?:\nI'll recover){20,}/);
 });
 
 test("hard context pressure takes precedence over the preferred local budget", () => {
