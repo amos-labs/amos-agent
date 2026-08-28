@@ -44,9 +44,22 @@ test("thin follow-ups do not replace the current job when sync is skipped by the
     compacted: false
   });
   assert.match(card, /<amos_scratchpad>/);
-  assert.match(card, /not a Project/);
+  assert.match(card, /Act on the current job now/);
+  assert.match(card, /Do not restart, recover the thread/);
   assert.match(card, /tax_behavior/);
-  assert.doesNotMatch(card, /desktop_inspect_conversation with a word from an earlier job/);
+  assert.doesNotMatch(card, /desktop_inspect_conversation/);
+});
+
+test("compacted scratch pad does not tell the model to recover the whole thread", () => {
+  const card = formatScratchpadCard({
+    scratchpad: {
+      currentJob: "Fix tax_behavior on the three Stripe prices"
+    },
+    compacted: true
+  });
+  assert.match(card, /Continue with this pad/);
+  assert.match(card, /desktop_inspect_conversation only for one missing quote/);
+  assert.doesNotMatch(card, /recover exact messages/);
 });
 
 test("portable scratch pads come from the conversation, not a Project", () => {

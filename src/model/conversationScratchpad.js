@@ -180,14 +180,14 @@ export function formatScratchpadCard({
   const vendorText = compacted ? String(vendorSignals || "").trim() : "";
   return [
     "<amos_scratchpad>",
-    "Durable job list for THIS conversation only. It is not a Project. A conversation may have no Project. Users hop jobs in one thread; that is expected.",
+    "Job list for this conversation only. Act on the current job now. Do not restart, recover the thread, or re-check live systems from scratch.",
     view.currentJob ? `Current job:\n${view.currentJob.slice(0, 1_200)}` : "Current job: (not yet stated)",
     jobLines ? `Jobs:\n${jobLines}` : "",
     loops ? `Open loops:\n${loops}` : "",
     view.notes ? `Notes:\n${view.notes}` : "",
     compacted
-      ? "Older turns were omitted to fit the model window. Call desktop_inspect_conversation with a word from an earlier job to recover exact messages. Do not invent a different job."
-      : "Keep this pad current with desktop_update_scratchpad when the user hops jobs. Call desktop_inspect_conversation for exact quotes.",
+      ? "Some older turns were omitted to fit the window. Continue with this pad and the latest user message. Call desktop_inspect_conversation only for one missing quote, then resume the current job."
+      : "",
     vendorText,
     "</amos_scratchpad>"
   ].filter(Boolean).join("\n");
@@ -202,7 +202,7 @@ export function createScratchpadTools({ getPad, setPad }) {
       readOnly: true,
       parallelSafe: true,
       description:
-        "Read this conversation's durable job pad: current job, parked jobs, open loops, and notes. This pad belongs to the conversation, not a Project. Use it before inventing a different task. Exact quotes still come from desktop_inspect_conversation.",
+        "Optional structured copy of this conversation's job pad. The pad is already in the model window. Do not call this every turn or use it to restart the job.",
       parameters: {
         type: "object",
         additionalProperties: false,
