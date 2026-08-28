@@ -244,6 +244,10 @@ test("routine approval review stays inside Desktop", async () => {
   assert.doesNotMatch(javascript, /sha256:\$\{receipt\.digest/);
   assert.doesNotMatch(javascript, /for \(const receipt of receipts\.slice/);
   assert.match(javascript, /function decisionSummary\([\s\S]*?structuredTail/);
+  assert.match(javascript, /function missionDecisionCard\(/);
+  assert.match(javascript, /function renderInlineMissionDecision\(/);
+  assert.match(javascript, /api\.answerMissionDecision\(decision\.id, exactAnswer\)/);
+  assert.match(javascript, /inside its existing authority/);
   assert.doesNotMatch(javascript, /decided by \$\{approval\.decided_by\}/);
   assert.match(javascript, /Revalidate & reopen/);
   const decisions = html.match(/<section id="workView"([\s\S]*?)<section id="settingsView"/)?.[1] || "";

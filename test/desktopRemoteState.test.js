@@ -4,6 +4,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import {
   approvalReviewUrl,
   DesktopRemoteStateClient,
+  missionDecisionReviewUrl,
   parseMcpJson
 } from "../src/desktop/remoteState.js";
 import {
@@ -73,7 +74,21 @@ test("Desktop remote state resolves the signed-in user and their approvals", asy
             execution_result_sha256: "abc123",
             execution_result_truncated: false
           }
-        ]
+        ],
+        mission_decisions: [{
+          id: "33333333-3333-3333-3333-333333333333",
+          mission_id: "44444444-4444-4444-4444-444444444444",
+          contract_id: "55555555-5555-5555-5555-555555555555",
+          mission_name: "Build partner pipeline",
+          objective: "Find 500 qualified partners",
+          question: "Should I focus on MSPs or VARs first?",
+          options: ["MSPs", "VARs"],
+          context: { checkpoint: "segmentation" },
+          authority_expansion: false,
+          created_at: "2026-08-28T10:00:00Z",
+          decision_url:
+            "https://app.amoslabs.com/mission-decisions/33333333-3333-3333-3333-333333333333"
+        }]
       });
     }
   );
@@ -87,6 +102,8 @@ test("Desktop remote state resolves the signed-in user and their approvals", asy
   assert.equal(approvals.decision_mode, "desktop");
   assert.equal(approvals.pending_operations[0].review_summary, "Create Ad: launch the governed campaign");
   assert.deepEqual(approvals.pending_operations[0].execution_result, { unique_users: 42 });
+  assert.equal(approvals.mission_decisions[0].mission_name, "Build partner pipeline");
+  assert.deepEqual(approvals.mission_decisions[0].options, ["MSPs", "VARs"]);
   assert.equal(requests[1].url, "https://app.amoslabs.com/api/v1/approvals");
   assert.equal(requests[1].options.headers.Authorization, "Bearer user-access-token");
 });
@@ -695,6 +712,67 @@ test("Desktop sends native human decisions only through the dedicated approval e
   assert.deepEqual(signed, ["AMOS-DESKTOP-APPROVAL-V1\nchallenge"]);
 });
 
+test("Desktop signs the exact Mission answer and never routes it through an MCP tool", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "desktop-user-token"; } }
+    },
+    async (url, options) => {
+      requests.push({ url, options });
+      if (url.endsWith("/challenge")) {
+        return response(200, {
+          challenge_id: "66666666-6666-6666-6666-666666666666",
+          message: "AMOS-DESKTOP-MISSION-DECISION-V1\nchallenge"
+        });
+      }
+      return response(200, {
+        status: "answered",
+        mission_status: "running"
+      });
+    }
+  );
+  const signed = [];
+  const result = await client.answerMissionDecision(
+    "33333333-3333-3333-3333-333333333333",
+    "  Focus on MSPs first  ",
+    {
+      async sign(message) {
+        signed.push(message);
+        return "signed-mission-answer";
+      }
+    }
+  );
+
+  assert.equal(result.mission_status, "running");
+  assert.equal(
+    requests[0].url,
+    "https://app.amoslabs.com/api/v1/mission-decisions/33333333-3333-3333-3333-333333333333/challenge"
+  );
+  assert.deepEqual(JSON.parse(requests[0].options.body), { answer: "Focus on MSPs first" });
+  assert.equal(
+    requests[1].url,
+    "https://app.amoslabs.com/api/v1/mission-decisions/33333333-3333-3333-3333-333333333333/answer"
+  );
+  assert.deepEqual(JSON.parse(requests[1].options.body), {
+    answer: "Focus on MSPs first",
+    challenge_id: "66666666-6666-6666-6666-666666666666",
+    signature: "signed-mission-answer"
+  });
+  assert.deepEqual(signed, ["AMOS-DESKTOP-MISSION-DECISION-V1\nchallenge"]);
+});
+
+test("Desktop rejects cross-origin Mission decision review URLs", () => {
+  assert.throws(
+    () => missionDecisionReviewUrl("https://app.amoslabs.com/mcp", {
+      id: "33333333-3333-3333-3333-333333333333",
+      decision_url: "https://attacker.example/mission-decisions/33333333-3333-3333-3333-333333333333"
+    }),
+    /does not match/
+  );
+});
+
 test("Desktop projects credential-free connection and provider metadata from AMOS", async () => {
   const tools = [];
   const client = new DesktopRemoteStateClient(
@@ -1178,6 +1256,7 @@ test("Desktop treats a non-approver role as a bounded unavailable inbox", async 
   const approvals = await client.approvals();
   assert.equal(approvals.available, false);
   assert.deepEqual(approvals.pending_operations, []);
+  assert.deepEqual(approvals.mission_decisions, []);
 });
 
 test("Desktop derives active workspace eligibility from live AMOS billing state", async () => {
