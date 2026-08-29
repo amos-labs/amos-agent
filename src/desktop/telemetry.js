@@ -10,7 +10,8 @@ const REQUEST_TIMEOUT_MS = 5_000;
 const QUEUED_MILESTONES = new Set([
   "desktop_boundary_selected",
   "desktop_onboarding_completed",
-  "desktop_first_task_started"
+  "desktop_first_task_started",
+  "desktop_first_verified_outcome"
 ]);
 
 export class DesktopTelemetry {

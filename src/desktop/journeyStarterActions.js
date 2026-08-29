@@ -40,14 +40,6 @@ function companyStarterActions(state) {
   const automationCount = automations.length + recipes.length;
   const companyOutcomes = array(state.companyReceipts).filter(isCompanyOutcome);
   const briefings = array(state.briefings?.briefings);
-  const connectionCatalogAvailable = Boolean(
-    state.connectionsCatalog?.supported === true ||
-    array(state.connectionsCatalog?.providers).length > 0 ||
-    array(state.connectionsCatalog?.curated).length > 0 ||
-    array(state.connectionsCatalog?.tenantDefined).length > 0 ||
-    connectedSystems.length > 0
-  );
-
   if (
     checkpoints.length > 0 &&
     state.connectionMode === "user" &&
@@ -69,11 +61,6 @@ function companyStarterActions(state) {
       view: "decisions"
     });
   }
-
-  actions.push(...systemsPushActions(state, {
-    connectedSystems,
-    connectionCatalogAvailable
-  }));
 
   if (connectedSystems.length > 0) {
     if (automationNeedsAttention) {
@@ -119,14 +106,34 @@ function companyStarterActions(state) {
 
   actions.push(
     runAction(
-      "company-briefing",
-      "Brief me on what matters",
-      "Review the current authoritative company context and give me a concise executive briefing: what changed, what needs attention, what remains uncertain, and the highest-leverage next move."
+      "business-attention",
+      "Tell me what needs attention",
+      "Review the authoritative company context, connected systems, and anything I attach. Tell me what changed, what needs attention now, what remains uncertain, and the highest-leverage next move. If there is not enough evidence, ask for the single most useful source instead of guessing.",
+      "Find the important signal and recommend the next move."
     ),
     runAction(
-      "find-high-impact-workflow",
-      "Find a high-impact workflow",
-      "Inspect the current company systems, goals, operating context, and repeated work. Identify one high-impact workflow worth improving or automating, explain the business case, and do not activate anything yet."
+      "business-operating-plan",
+      "Build my operating plan",
+      "Use the company context and anything I attach to build a practical operating plan: the goal, current position, biggest constraints, prioritized moves, owners, measures, and the next seven days. Label assumptions and do not invent company facts.",
+      "Turn company evidence into a prioritized plan."
+    ),
+    runAction(
+      "business-prospects",
+      "Find my best prospects",
+      "Use the company context and anything I attach to define the highest-fit buyer, identify a bounded first prospecting segment, and prepare a research-backed outreach plan. Do not buy data, reveal personal data, or contact anyone without the required approval.",
+      "Define the buyer and prepare a governed prospecting move."
+    ),
+    runAction(
+      "business-revenue-review",
+      "Review revenue and cash",
+      "Review the authoritative finance, billing, and sales evidence available to AMOS or in anything I attach. Explain revenue, cash, collections, anomalies, and the most important follow-up. Reconcile conflicting figures explicitly and never invent missing amounts.",
+      "Explain what the numbers say and what to do next."
+    ),
+    runAction(
+      "business-follow-up",
+      "Turn work into follow-up",
+      "Review the meetings, messages, documents, tasks, and company context available to AMOS or in anything I attach. Produce a concise list of decisions, owners, deadlines, risks, and ready-to-review follow-up drafts. Do not send anything without the required approval.",
+      "Extract decisions and prepare the follow-through."
     )
   );
 
@@ -137,61 +144,33 @@ function demoStarterActions() {
   return [
     runAction(
       "demo-briefing",
-      "Brief me on Northwind",
-      "Give me an executive briefing on Northwind Labs: what matters, what needs attention, and what I can safely do next."
+      "Tell me what needs attention",
+      "Give me an executive briefing on Northwind Labs: what matters, what needs attention, and what I can safely do next.",
+      "Find the important signal in a live sample company."
     ),
     runAction(
       "demo-growth-opportunity",
       "Find a growth opportunity",
-      "Inspect Northwind's current growth signals and propose one useful, governed experiment."
+      "Inspect Northwind's current growth signals and propose one useful, governed experiment.",
+      "Use real sample data to recommend a bounded experiment."
     ),
     runAction(
       "demo-approval-flow",
-      "Experience an approval flow",
-      "Create a useful customer-facing asset for Northwind and walk me through the approval and receipt flow."
+      "Create a customer follow-up",
+      "Create a useful customer-facing follow-up for Northwind and walk me through the approval and receipt flow.",
+      "Make a deliverable, then show how approval protects it."
     ),
     runAction(
       "demo-proof-trail",
       "Show the proof trail",
-      "Show me recent Northwind activity and explain how AMOS proves what changed and why."
-    )
-  ];
-}
-
-function systemsPushActions(state, {
-  connectedSystems = array(state.connectionsCatalog?.connections).filter(
-    (item) => item.status === "connected" && item.usable !== false
-  ),
-  connectionCatalogAvailable = true
-} = {}) {
-  if (state.connectionMode === "demo" || connectedSystems.length > 0) return [];
-  const connect = state.connected || connectionCatalogAvailable
-    ? {
-        id: "connect-first-system",
-        label: "Connect your company",
-        type: "view",
-        view: "connections"
-      }
-    : {
-        id: "connect-business-systems",
-        label: "Connect your company",
-        type: "connect_platform"
-      };
-  return [
-    connect,
-    runAction(
-      "amos-savings-audit",
-      "See what AMOS could replace",
-      AMOS_SAVINGS_AUDIT_PROMPT
+      "Show me recent Northwind activity and explain how AMOS proves what changed and why.",
+      "See the evidence behind completed work."
     )
   ];
 }
 
 function personalStarterActions(state) {
-  const actions = systemsPushActions(state, {
-    connectedSystems: [],
-    connectionCatalogAvailable: Boolean(state.connected)
-  });
+  const actions = [];
   const conversations = array(state.tasks?.tasks).filter((task) => !task.archivedAt && !task.archived);
   if (conversations.length > 0) {
     actions.push({
@@ -203,35 +182,46 @@ function personalStarterActions(state) {
   }
   actions.push(
     runAction(
-      "project-briefing",
-      "Brief this project",
-      "Inspect this workspace and give me a concise project briefing: architecture, current state, risks, and the best next task."
+      "workspace-attention",
+      "Tell me what needs attention",
+      "Inspect this workspace and anything I attach. Give me a concise briefing on what matters, what is unfinished or risky, and the best next task. Cite the evidence you used and ask for one useful source if the workspace is empty.",
+      "Find the signal in the work already on this computer."
     ),
     runAction(
-      "explain-architecture",
-      "Explain the architecture",
-      "Inspect this workspace and explain how the main components fit together, citing the files you used."
+      "workspace-plan",
+      "Build a plan from my files",
+      "Inspect this workspace and anything I attach, then turn the evidence into a practical plan with priorities, dependencies, risks, and the next seven days. Cite the files you used and label assumptions.",
+      "Turn documents, spreadsheets, and project files into action."
     ),
     runAction(
-      "find-project-risks",
-      "Find the riskiest code",
-      "Inspect this project for the highest-leverage reliability, security, and maintainability risks. Do not change anything yet."
+      "workspace-follow-up",
+      "Find decisions and follow-ups",
+      "Review this workspace and anything I attach. Extract decisions, commitments, owners, deadlines, open questions, and ready-to-review follow-up drafts. Do not send anything.",
+      "Make sure decisions and commitments do not get lost."
     ),
     runAction(
-      "small-project-improvement",
-      "Improve something small",
-      "Inspect this workspace, propose one small high-value improvement, and wait for my approval before changing files."
+      "workspace-research",
+      "Research an opportunity",
+      "Use the public web, this workspace, and anything I attach to research one opportunity I describe. Separate evidence from inference, cite sources, and recommend a concrete next move.",
+      "Research the market and bring back a decision-ready answer."
+    ),
+    runAction(
+      "workspace-deliverable",
+      "Create the next deliverable",
+      "Inspect this workspace and anything I attach, identify the highest-value deliverable that can be completed safely now, and create it. Explain what you verified and wait for approval before consequential actions.",
+      "Move from discussion to a finished, reviewable artifact."
     )
   );
   return uniqueActions(actions).slice(0, MAX_STARTER_ACTIONS);
 }
 
-function runAction(id, label, prompt) {
+function runAction(id, label, prompt, description = "") {
   return {
     id,
     label,
     type: "run",
-    prompt
+    prompt,
+    description
   };
 }
 

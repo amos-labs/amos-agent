@@ -1392,6 +1392,37 @@ test("Desktop derives active workspace eligibility from live AMOS billing state"
   assert.equal(requests[0].options.headers.Authorization, "Bearer member-token");
 });
 
+test("Desktop preserves the free foreground Qwen and connection allowance", async () => {
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "free-token"; } }
+    },
+    async () => response(200, {
+      ready: true,
+      billing: {
+        subscription_status: "none",
+        billing_exempt: false,
+        workspace_active: false,
+        access_mode: "free_foreground_qwen",
+        free_connections_limit: 2,
+        included_credit_remaining_usd: "0.00"
+      }
+    })
+  );
+
+  assert.deepEqual(await client.intelligenceStatus(), {
+    ready: true,
+    subscriptionStatus: "none",
+    billingExempt: false,
+    accessMode: "free_foreground_qwen",
+    freeConnectionsLimit: 2,
+    includedCreditRemainingUsd: "0.00",
+    demo: null,
+    workspaceActive: false
+  });
+});
+
 test("Desktop preserves the authoritative Northwind hosted-turn balance", async () => {
   const client = new DesktopRemoteStateClient(
     {

@@ -986,7 +986,8 @@ test("first-run persists completion and requires local or BYO for My workspace",
   assert.match(javascript, /function workspaceFolderName/);
   assert.match(css, /\.onboarding\s*{[\s\S]*?minmax\(0, 1fr\)/);
   assert.match(html, /id="connectSystemsPush"/);
-  assert.match(html, /<strong>Connect your apps<\/strong>/);
+  assert.match(html, /<strong>Get the first answer from your real business<\/strong>/);
+  assert.match(html, /Connect up to two apps/);
   assert.doesNotMatch(html, /this is why customers stay/);
   assert.doesNotMatch(html, /That is the product/);
   assert.doesNotMatch(javascript, /That is the product/);

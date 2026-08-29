@@ -22,12 +22,11 @@ test("company quick actions follow deterministic journey state", () => {
 
   assert.deepEqual(
     actions.map((action) => action.id),
-    ["review-decisions", "connect-first-system", "amos-savings-audit", "review-recent-proof", "open-briefings"]
+    ["review-decisions", "review-recent-proof", "open-briefings", "business-attention", "business-operating-plan"]
   );
   assert.equal(actions[0].label, "Review 1 decision");
-  assert.equal(actions[1].label, "Connect your company");
-  assert.equal(actions[2].label, "See what AMOS could replace");
   assert.equal(actions[0].type, "view");
+  assert.equal(actions[3].description, "Find the important signal and recommend the next move.");
 });
 
 test("the newest interrupted checkpoint becomes an exact resume action", () => {
@@ -70,7 +69,7 @@ test("a connected company with no automation gets a typed builder action", () =>
 
   assert.equal(actions[0].id, "build-first-automation");
   assert.equal(actions[0].type, "automation_builder");
-  assert.equal(actions[1].id, "company-briefing");
+  assert.equal(actions[1].id, "business-attention");
 });
 
 test("personal workspaces surface existing conversations before project prompts", () => {
@@ -86,18 +85,13 @@ test("personal workspaces surface existing conversations before project prompts"
 
   assert.equal(actions.length, 5);
   assert.deepEqual(actions[0], {
-    id: "connect-business-systems",
-    label: "Connect your company",
-    type: "connect_platform"
-  });
-  assert.equal(actions[1].id, "amos-savings-audit");
-  assert.deepEqual(actions[2], {
     id: "open-conversations",
     label: "Open 1 conversation",
     type: "view",
     view: "tasks"
   });
-  assert.equal(actions[3].type, "run");
+  assert.equal(actions[1].id, "workspace-attention");
+  assert.equal(actions[4].type, "run");
 });
 
 test("the AMOS savings audit never invents a dollar amount", () => {
@@ -111,4 +105,23 @@ test("demo quick actions remain bounded code-owned requests", () => {
   assert.equal(actions.length, 4);
   assert.ok(actions.every((action) => action.type === "run"));
   assert.ok(actions.every((action) => action.id && action.label && action.prompt));
+  assert.ok(actions.every((action) => action.description));
+});
+
+test("an empty company starts with five outcome-led business jobs", () => {
+  const actions = selectJourneyStarterActions({
+    connectionMode: "user",
+    mode: { personal: false, offline: false },
+    connectionsCatalog: { connections: [] }
+  });
+
+  assert.deepEqual(actions.map((action) => action.id), [
+    "business-attention",
+    "business-operating-plan",
+    "business-prospects",
+    "business-revenue-review",
+    "business-follow-up"
+  ]);
+  assert.ok(actions.every((action) => action.type === "run"));
+  assert.ok(actions.every((action) => action.description.length > 0));
 });

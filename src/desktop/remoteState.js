@@ -1039,7 +1039,7 @@ export class DesktopRemoteStateClient {
           messagesRemaining: boundedCount(payload.demo.messages_remaining)
         }
       : null;
-    return {
+    const status = {
       ready: payload?.ready === true,
       subscriptionStatus,
       billingExempt,
@@ -1048,9 +1048,16 @@ export class DesktopRemoteStateClient {
           ? payload.billing.included_credit_remaining_usd.slice(0, 32)
           : null,
       demo,
-      workspaceActive:
+      workspaceActive: payload?.billing?.workspace_active === true ||
         billingExempt || subscriptionStatus === "active" || subscriptionStatus === "trialing"
     };
+    if (typeof payload?.billing?.access_mode === "string") {
+      status.accessMode = payload.billing.access_mode.slice(0, 64);
+    }
+    if (payload?.billing?.free_connections_limit != null) {
+      status.freeConnectionsLimit = boundedCount(payload.billing.free_connections_limit);
+    }
+    return status;
   }
 
   async companyCache({
