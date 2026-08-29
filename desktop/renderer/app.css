@@ -3808,6 +3808,43 @@ html[data-platform="win32"] .sidebar-toggle {
 }
 .decision-input-options,
 .decision-input-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.decision-card-actions .mission-optional-guidance {
+  max-width: none;
+  color: var(--muted-2);
+  font-size: 10px;
+}
+.decision-card-actions .mission-optional-guidance > summary {
+  cursor: pointer;
+  width: fit-content;
+  font-weight: 800;
+  text-align: left;
+}
+.mission-optional-guidance .decision-input-field { margin-top: 10px; }
+.mission-optional-guidance .decision-input-actions { margin-top: 10px; }
+.mission-contract-summary {
+  display: grid;
+  gap: 7px;
+  max-width: 780px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(109, 147, 255, .22);
+  border-radius: 10px;
+  background: rgba(109, 147, 255, .05);
+}
+.mission-contract-summary p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.mission-contract-summary p strong { color: var(--emphasis); }
+.mission-contract-safety {
+  width: fit-content;
+  color: var(--blue-2);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mission-contract-safety.read-only { color: var(--green); }
 .decision-card-actions details { max-width: 340px; color: var(--muted-2); font-size: 9px; }
 .decision-card-actions summary { cursor: pointer; text-align: right; }
 .decision-card-actions pre {
