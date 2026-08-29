@@ -2703,6 +2703,7 @@ export class DesktopController {
       await this.snapshotActiveTask(settings).catch((error) => {
         this.record("task", `Could not snapshot the task canvas: ${error.message}`);
       });
+      await this.recordFirstVerifiedOutcome(settings, receiptEvents, boundary);
       await this.recordNorthwindValue(settings, receiptEvents);
       await this.finishRunSupervision("completed", answer);
       await this.recordChildOutcome({
@@ -3105,6 +3106,26 @@ export class DesktopController {
         accessToken: credentials.access_token,
         once: true,
         context: { surface: "desktop", evidence: "completed_tool_task" }
+      })
+      .catch(() => {});
+  }
+
+  async recordFirstVerifiedOutcome(settings, receiptEvents, boundary) {
+    if (!this.telemetry) return;
+    const completedToolCount = receiptEvents.filter((event) =>
+      event?.type === "tool_end" && event?.outcome === "completed"
+    ).length;
+    if (completedToolCount === 0) return;
+    await this.telemetry
+      .record("desktop_first_verified_outcome", {
+        mcpUrl: settings.amosMcpUrl,
+        once: true,
+        context: {
+          surface: "desktop",
+          boundary: boundary || settings.onboardingBoundary || "unknown",
+          evidence: "completed_tool_task",
+          completed_tool_count: Math.min(completedToolCount, 100)
+        }
       })
       .catch(() => {});
   }
@@ -8219,6 +8240,13 @@ function receiptEvent(event) {
   }
   if (event.type === "tool_error") {
     return { type: "tool_error", name: event.name, outcome: String(event.error || "failed") };
+  }
+  if (event.type === "tool_end") {
+    return {
+      type: "tool_end",
+      name: event.name,
+      outcome: event.result?.ok === false ? "failed" : "completed"
+    };
   }
   return { type: String(event.type || "tool_result"), name: event.name, outcome: "completed" };
 }

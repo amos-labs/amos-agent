@@ -13,6 +13,15 @@ receipt. Desktop Operator plus Northwind is how a new person should feel that
 loop. Claude or Codex as an MCP client is a later appendix, not the first
 screen.
 
+The product promise is one trusted assistant that helps a person run their
+businesses from a conversation, including from a phone: it understands the
+person, each company, the current goal, and the connected systems; turns ideas
+into an inspectable plan; acts within standing authority; asks only when a
+decision or approval is truly needed; and proves what changed. Agents, swarms,
+Missions, memory, checkers, and automations are internal machinery. They are
+valuable only when they help the person reach a business outcome faster and
+must not become the product's organizing language.
+
 Completion is stored as `onboardingCompletedAt` and `onboardingBoundary` in
 Desktop settings (`personal`, `northwind`, or `company`). Those keys survive
 process restart because `sanitizeSettings` keeps them. An expired Northwind
@@ -36,12 +45,28 @@ First-run asks how AMOS should think before it asks for a company:
 
 Personal + AMOS Intelligence + no OAuth stays **not configured**.
 
-## Connect your company — the retention step
+## Connect your company — the paid retention step
 
-The company step is optional for Enter and required for a customer that
-stays. Chat without the company is a trial. AMOS becomes the operating
-system after it can see their apps and run work on a schedule, ad hoc, or
-app-to-app.
+The company step is optional for Enter. Foreground work in Desktop is a real
+free product, not a timed demo: a signed-in person can use AMOS-owned
+intelligence, local files, attachments, public research, and up to two
+connected business apps for safe foreground reads and analysis. That access
+exists to prove a real outcome on the person's own evidence—not to advertise a
+connector count. AMOS becomes the paid operating system when the person asks
+it to change company systems or keep working across systems, people, and time.
+
+That puts the upgrade at the moment of expanded value:
+
+- **Run this every week** — schedules and deterministic automations;
+- **Continue while I am away** — Missions, goals, and background work;
+- **Act across live company systems** — writes, cross-app workflows, durable
+  memory, policy, approvals, and receipts; and
+- **Share this with the team** — shared context, decisions, and concurrency.
+
+The first empty state therefore leads with outcome-oriented jobs plus one
+prominent route to connect real business evidence. The connection prompt must
+say what it unlocks: the first verified answer or useful move on live data. It
+must not present connection setup itself as the outcome.
 
 Copy states why, automations first:
 
@@ -50,9 +75,22 @@ Copy states why, automations first:
 - Connect the systems you already run so AMOS is not guessing from chat.
 - Keep durable company memory, policy, approvals, and receipts.
 
-The commercial boundary is a 14-day free trial and plans starting at
-$99/month. Skipping it does not block Enter. Operator then hits the same
-message again until at least one application is connected.
+The commercial boundary is a 14-day trial of the paid operating layer and
+plans starting at $99/month. The trial starts when the person first asks for a
+paid capability, not when Desktop is downloaded. Skipping it never blocks
+foreground Desktop work.
+
+The membership should be expressed in customer terms: it includes a pool of
+verified automated outcomes. AMOS may count an outcome only after its checker
+passes, its receipt is durable, and any required approval is complete. Model
+tokens, thinking time, retries, partial work, failed runs, and a model saying
+"done" are never outcomes and must never be billed as if they were.
+
+The outcome catalog should stay legible to the customer—examples include a
+reconciled period, a qualified prospect, a completed follow-up, an approved
+invoice sync, or a verified weekly operating brief. Conversation itself stays
+unmetered within fair use. An outcome is priced only when AMOS can define its
+completion contract before execution and show the supporting evidence after.
 
 Returning users see their active company instead of trial acquisition copy.
 "Reconnect" is reserved for an authentication session that actually needs to
@@ -163,6 +201,12 @@ after the browser hands off an authenticated demo or the user completes AMOS
 OAuth. Access and refresh tokens are never stored in the telemetry file.
 Telemetry is best-effort and never controls product access, policy, billing,
 or authorization.
+
+The activation funnel ends at `desktop_first_verified_outcome`, emitted once
+only after a task completes with at least one successfully completed tool
+result. A model saying that work is complete is not sufficient evidence. The
+event contains only the boundary, a coarse evidence class, and a bounded tool
+count—never prompts, responses, filenames, tool names, or company data.
 
 ## Intelligence posture
 

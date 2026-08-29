@@ -214,7 +214,7 @@ const elements = Object.fromEntries(
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
     "offlineSetupSteps", "offlineSetupRuntime", "offlineSetupModel", "offlineSetupActivate",
     "demoBanner", "demoExpiry", "demoConnectButton", "demoChangeIntelligenceButton",
-    "demoLeaveButton", "starterActions",
+    "demoLeaveButton", "starterActions", "starterActionList",
     "connectionCatalogSummary", "connectedSystemList", "availableProviderList", "liveCanvasList",
     "briefingScheduleModal", "briefingScheduleForm", "briefingScheduleTitle",
     "briefingScheduleKind", "briefingScheduleWeekday", "briefingScheduleTime",
@@ -762,13 +762,16 @@ function render() {
   const demo = state.connectionMode === "demo";
   const activeAccount =
     state.connectionMode === "user" && state.accountStatus?.workspaceActive === true;
+  const freeForegroundAccount = isFreeForegroundAccount();
   elements.modeBadge.textContent = demo
     ? "NORTHWIND DEMO"
     : state.mode?.offline
       ? "LOCAL-ONLY"
       : state.mode?.personal
         ? "PERSONAL WORKSPACE"
-        : "ONLINE COMPANY";
+        : freeForegroundAccount
+          ? "FREE DESKTOP"
+          : "ONLINE COMPANY";
   elements.modeBadge.classList.toggle("offline", Boolean(state.mode?.offline));
   elements.demoBanner.classList.toggle("hidden", !demo);
   elements.operatorView.classList.toggle("has-demo-banner", demo);
@@ -803,6 +806,13 @@ function render() {
       "Explore a live sample company with real AMOS tools, approvals, receipts, and governed actions.";
     elements.promptInput.placeholder =
       "Ask about Northwind, create something, or make a governed sample-company change…";
+  } else if (freeForegroundAccount) {
+    elements.operatorEyebrow.textContent = "GET USEFUL WORK DONE";
+    elements.readyTitle.textContent = "What would make today easier?";
+    elements.readyDescription.textContent =
+      "Connect one or two business apps for answers grounded in live data, or attach a file and describe the outcome you want.";
+    elements.promptInput.placeholder =
+      "Attach a document, paste a screenshot, or describe the outcome you want…";
   } else {
     elements.operatorEyebrow.textContent = "OPERATE THE COMPANY";
     elements.readyTitle.textContent = "AMOS is ready.";
@@ -884,6 +894,8 @@ function render() {
   elements.connectButton.disabled = false;
   elements.boundaryReadinessText.textContent = demo
     ? "Northwind sample is connected. Connect your own apps when you want AMOS on your company."
+    : freeForegroundAccount
+      ? "Free Desktop is ready. Activate the company layer when you want recurring, background, or cross-system work."
     : state.connected
       ? "Signed in. Connect the apps this company already runs."
       : state.mode?.offline
@@ -1141,13 +1153,17 @@ function renderConnections() {
   const connectionsByProvider = new Map(
     connectedSystems.map((connection) => [connection.provider, connection])
   );
-  const availableProviders = providers.filter(
-    (provider) => provider.provider === "custom" || !connectionsByProvider.has(provider.provider)
+  const freeForegroundAccount = isFreeForegroundAccount();
+  const availableProviders = providers.filter((provider) =>
+    (provider.provider === "custom" || !connectionsByProvider.has(provider.provider)) &&
+    (!freeForegroundAccount || provider.setupMode === "hosted_oauth")
   );
   elements.connectionBadge.textContent = String(connectedSystems.length);
   elements.connectionBadge.classList.toggle("hidden", connectedSystems.length === 0);
   elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
-    ? `${connectedSystems.length} connected system${connectedSystems.length === 1 ? "" : "s"} · ${availableProviders.length} available connection${availableProviders.length === 1 ? "" : "s"}`
+    ? freeForegroundAccount
+      ? `${connectedSystems.length} of ${state?.accountStatus?.freeConnectionsLimit || 2} free app connections used · safe foreground reads only`
+      : `${connectedSystems.length} connected system${connectedSystems.length === 1 ? "" : "s"} · ${availableProviders.length} available connection${availableProviders.length === 1 ? "" : "s"}`
     : "Connect your AMOS company to load its credential-free connection catalog.";
 
   elements.connectedSystemList.replaceChildren();
@@ -1175,17 +1191,30 @@ function renderConnections() {
       detail.textContent = `${humanizeProvider(connection.provider)} · ${connection.kind.replaceAll("_", " ")} · ${connection.ownership.replaceAll("_", " ")}`;
       const boundary = document.createElement("small");
       boundary.textContent = connection.usable
-        ? "Available to this signed-in user through governed platform calls"
+        ? freeForegroundAccount
+          ? "Available for safe foreground reads; writes and background work remain locked"
+          : "Available to this signed-in user through governed platform calls"
         : "Metadata only; this identity cannot use the connection";
       card.append(top, title, detail, boundary);
       if (connection.usable && connection.id) {
         const disconnect = document.createElement("button");
         disconnect.type = "button";
-        disconnect.className = "button danger connection-disconnect-button";
-        disconnect.textContent = "Disconnect";
-        disconnect.addEventListener("click", () =>
-          disconnectConnectedSystem(connection, disconnect)
-        );
+        disconnect.className = freeForegroundAccount
+          ? "button secondary connection-disconnect-button"
+          : "button danger connection-disconnect-button";
+        disconnect.textContent = freeForegroundAccount ? "Manage access" : "Disconnect";
+        disconnect.addEventListener("click", () => {
+          if (!freeForegroundAccount) {
+            disconnectConnectedSystem(connection, disconnect);
+            return;
+          }
+          try {
+            const url = new URL("/settings/connections", state?.settings?.amosMcpUrl || "");
+            api.openExternal(url.href).catch((error) => toast(error.message, true));
+          } catch {
+            toast("Open AMOS account settings to manage this connection.", true);
+          }
+        });
         card.append(disconnect);
       }
       elements.connectedSystemList.append(card);
@@ -6597,6 +6626,14 @@ async function handleAccountUpdate() {
   }
 }
 
+function isFreeForegroundAccount() {
+  return Boolean(
+    state?.connectionMode === "user" &&
+    state?.accountStatus?.ready === true &&
+    state?.accountStatus?.workspaceActive !== true
+  );
+}
+
 function connectedCompanySystems() {
   return (state?.connectionsCatalog?.connections || []).filter(
     (item) => item.status === "connected" && item.usable !== false
@@ -6612,7 +6649,7 @@ function shouldPushConnectSystems() {
 function renderConnectSystemsPush({ hasConversation = false } = {}) {
   const visible = shouldPushConnectSystems() && !hasConversation;
   elements.connectSystemsPush.classList.toggle("hidden", !visible);
-  elements.connectSystemsPushButton.textContent = "Connect your company";
+  elements.connectSystemsPushButton.textContent = "Connect an app";
 }
 
 async function startConnectApplications() {
@@ -6640,17 +6677,24 @@ async function runSavingsAudit() {
 }
 
 function renderStarterActions() {
-  if (!state || !elements.starterActions) return;
+  if (!state || !elements.starterActions || !elements.starterActionList) return;
   const actions = selectJourneyStarterActions(state);
-  elements.starterActions.replaceChildren();
+  elements.starterActionList.replaceChildren();
   for (const action of actions) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "starter-action";
     button.dataset.actionId = action.id;
-    button.textContent = action.label;
+    const title = document.createElement("strong");
+    title.textContent = action.label;
+    button.append(title);
+    if (action.description) {
+      const description = document.createElement("span");
+      description.textContent = action.description;
+      button.append(description);
+    }
     button.addEventListener("click", () => executeStarterAction(action, button));
-    elements.starterActions.append(button);
+    elements.starterActionList.append(button);
   }
 }
 

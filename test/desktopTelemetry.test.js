@@ -125,6 +125,47 @@ test("Desktop telemetry retains transient failures and never persists bearer tok
   assert.equal(JSON.parse(raw).pending.length, 0);
 });
 
+test("Desktop records first verified value only for a completed tool-backed task", async () => {
+  const calls = [];
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-desktop-first-value-controller",
+    settingsStore: { read: async () => ({ amosMcpUrl: "https://app.amoslabs.com/mcp" }) },
+    telemetry: {
+      async record(...args) {
+        calls.push(args);
+      }
+    },
+    openBrowser() {},
+    emit() {}
+  });
+
+  await controller.recordFirstVerifiedOutcome(
+    { amosMcpUrl: "https://app.amoslabs.com/mcp" },
+    [{ type: "phase", name: "completed", outcome: "Task completed" }],
+    "personal"
+  );
+  assert.equal(calls.length, 0);
+
+  await controller.recordFirstVerifiedOutcome(
+    { amosMcpUrl: "https://app.amoslabs.com/mcp" },
+    [
+      { type: "tool_end", name: "read_file", outcome: "completed" },
+      { type: "tool_end", name: "send_email", outcome: "failed" }
+    ],
+    "personal"
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0][0], "desktop_first_verified_outcome");
+  assert.equal(calls[0][1].once, true);
+  assert.deepEqual(calls[0][1].context, {
+    surface: "desktop",
+    boundary: "personal",
+    evidence: "completed_tool_task",
+    completed_tool_count: 1
+  });
+});
+
 test("completed Northwind tool work records the value milestone once", async () => {
   const calls = [];
   const controller = new DesktopController({

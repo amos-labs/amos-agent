@@ -995,24 +995,58 @@ html[data-platform="win32"] .sidebar-toggle {
 .welcome-message strong { font-size: 14px; }
 .welcome-message p { max-width: 610px; margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
 .starter-actions {
+  max-width: 960px;
+  margin: 2px 0 24px 48px;
+}
+.starter-actions-heading {
+  margin-bottom: 12px;
+}
+.starter-actions-heading .eyebrow {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--blue);
+  font-size: 9px;
+}
+.starter-actions-heading strong {
+  display: block;
+  font-size: 16px;
+}
+.starter-actions-heading p {
+  max-width: 680px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.starter-action-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  max-width: 960px;
-  margin: -4px 0 24px 48px;
 }
 .starter-action {
-  padding: 11px 12px;
+  min-height: 86px;
+  padding: 13px 14px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--surface-softer);
   color: var(--ink);
-  font-size: 11px;
-  font-weight: 700;
   text-align: left;
   cursor: pointer;
 }
 .starter-action:hover { border-color: var(--blue); background: rgba(109,147,255,.08); }
+.starter-action strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.starter-action span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+}
 .connect-systems-push {
   display: flex;
   align-items: flex-start;
