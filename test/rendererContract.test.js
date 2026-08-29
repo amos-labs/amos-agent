@@ -253,6 +253,10 @@ test("routine approval review stays inside Desktop", async () => {
   assert.match(javascript, /if \(isMissionApproval\(approval\)\)/);
   assert.match(javascript, /api\.answerMissionDecision\(decision\.id, exactAnswer\)/);
   assert.match(javascript, /inside its existing authority/);
+  assert.match(javascript, /Choose an action below\. Only type guidance if neither choice says what you want/);
+  assert.match(javascript, /Optional guidance/);
+  assert.match(javascript, /Mission has been stopped and its Run Contract revoked/);
+  assert.match(javascript, /Authorize “\$\{missionName\}”/);
   assert.doesNotMatch(javascript, /decided by \$\{approval\.decided_by\}/);
   assert.match(javascript, /Revalidate & reopen/);
   const decisions = html.match(/<section id="workView"([\s\S]*?)<section id="settingsView"/)?.[1] || "";

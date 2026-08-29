@@ -3879,6 +3879,19 @@ html[data-platform="win32"] .sidebar-toggle {
   text-transform: uppercase;
 }
 .mission-contract-safety.read-only { color: var(--green); }
+.decision-input-help {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 650;
+}
+.decision-control-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.decision-control-options .button { width: 100%; }
 .decision-card-actions details { max-width: 340px; color: var(--muted-2); font-size: 9px; }
 .decision-card-actions summary { cursor: pointer; text-align: right; }
 .decision-card-actions pre {
