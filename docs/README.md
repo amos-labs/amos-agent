@@ -28,6 +28,7 @@
 ## Product direction
 
 - [Recursive intelligence program](RECURSIVE_INTELLIGENCE_PROGRAM.md)
+- [Mission, Swarm, and Slice 0 boundary](MISSION_SWARM_SLICE_MAP.md)
 - [Research experiment protocol](RESEARCH_EXPERIMENT_PROTOCOL.md)
 - [Private AWS Qwen inference cell](../infra/aws/qwen-inference/README.md)
 - [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)

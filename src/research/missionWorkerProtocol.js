@@ -29,6 +29,9 @@ export function detectMissionWorkerRequest(request) {
       mission.verification_policy,
       "mission worker envelope.mission.verification_policy"
     );
+    const recoveryFeedback = mission.recovery_feedback == null
+      ? null
+      : object(mission.recovery_feedback, "mission worker envelope.mission.recovery_feedback");
     return {
       contract: AMOS_MISSION_WORKER_CONTRACT,
       missionId: requiredText(mission.mission_id, "mission_id", 160),
@@ -37,7 +40,13 @@ export function detectMissionWorkerRequest(request) {
       verificationPolicyDigest: digestResearchValue(verificationPolicy),
       allowedOperationsDigest: digestResearchValue(mission.allowed_operations ?? []),
       budgetDigest: digestResearchValue(mission.budgets ?? {}),
-      outputSchemaDigest: digestResearchValue(envelope.output_schema ?? {})
+      outputSchemaDigest: digestResearchValue(envelope.output_schema ?? {}),
+      recoveryKind: recoveryFeedback == null
+        ? null
+        : boundedText(recoveryFeedback.kind, 120).trim() || null,
+      recoveryFeedbackDigest: recoveryFeedback == null
+        ? null
+        : digestResearchValue(recoveryFeedback)
     };
   }
   return null;

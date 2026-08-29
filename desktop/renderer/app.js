@@ -7271,13 +7271,14 @@ function missionDecisionCard(decision, { inline = false } = {}) {
     review.addEventListener("click", () => openMissionDecision(decision, review));
     actions.append(review);
   } else {
+    const options = Array.isArray(decision.options) ? decision.options : [];
+    const hasOptions = options.length > 0;
     const form = document.createElement("form");
     form.className = "decision-input-form";
-    const hasOptions = Array.isArray(decision.options) && decision.options.length > 0;
     const field = document.createElement("label");
     field.className = "decision-input-field";
     const fieldLabel = document.createElement("span");
-    fieldLabel.textContent = hasOptions ? "Optional guidance" : "Your direction";
+    fieldLabel.textContent = hasOptions ? "Optional guidance" : "Your answer";
     const textarea = document.createElement("textarea");
     textarea.rows = 3;
     textarea.maxLength = 4000;
@@ -7291,23 +7292,26 @@ function missionDecisionCard(decision, { inline = false } = {}) {
     });
     field.append(fieldLabel, textarea);
     if (hasOptions) {
-      const chips = document.createElement("div");
-      chips.className = "decision-input-options";
-      for (const [index, option] of decision.options.entries()) {
+      const help = document.createElement("p");
+      help.className = "decision-input-help";
+      help.textContent = "Choose an action below. Only type guidance if neither choice says what you want.";
+      const choices = document.createElement("div");
+      choices.className = "decision-control-options";
+      for (const [index, option] of options.entries()) {
         const destructive = /\b(stop|cancel|deny|end)\b/i.test(option);
-        const chip = actionButton(
+        const choice = actionButton(
           missionDecisionOptionLabel(option),
           destructive ? "danger compact-button" : index === 0 ? "primary compact-button" : "secondary compact-button"
         );
-        chip.type = "button";
-        chip.addEventListener("click", () => {
+        choice.type = "button";
+        choice.addEventListener("click", () => {
           const guidance = textarea.value.trim();
           const answer = guidance ? `${option}\n\nAdditional guidance: ${guidance}` : option;
-          answerMissionDecision(decision, answer, chip);
+          answerMissionDecision(decision, answer, choice);
         });
-        chips.append(chip);
+        choices.append(choice);
       }
-      form.append(chips);
+      form.append(help, choices);
       const guidance = document.createElement("details");
       guidance.className = "mission-optional-guidance";
       const guidanceLabel = document.createElement("summary");
@@ -7378,7 +7382,12 @@ async function openMissionDecision(decision, button) {
 async function answerMissionDecision(decision, answer, button) {
   const exactAnswer = String(answer || "").trim();
   if (!exactAnswer) {
-    toast("Answer the Mission question before resuming.", true);
+    toast(
+      Array.isArray(decision.options) && decision.options.length > 0
+        ? "Choose an action or enter optional guidance."
+        : "Answer the Mission question before resuming.",
+      true
+    );
     return;
   }
   const label = button?.textContent || "Send answer & resume";
@@ -7393,12 +7402,12 @@ async function answerMissionDecision(decision, answer, button) {
       .filter((item) => item.id !== decision.id);
     missionDecisionDrafts.delete(decision.id);
     removeMissionDecisionCards(decision.id);
-    addMessage(
-      "assistant",
-      `Got it — the ${decision.mission_name || "Mission"} Mission is resuming inside its existing authority. Completed actions will not be replayed.`
-    );
+    const stopped = response?.mission_status === "cancelled";
+    addMessage("assistant", stopped
+      ? `The ${decision.mission_name || "Mission"} Mission has been stopped and its Run Contract revoked.`
+      : `Got it — the ${decision.mission_name || "Mission"} Mission is resuming inside its existing authority. Completed actions will not be replayed.`);
     renderDecisions();
-    toast("Direction sent. The Mission has resumed.");
+    toast(stopped ? "Mission stopped." : "Direction sent. The Mission has resumed.");
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -7575,9 +7584,10 @@ function decisionCard(approval, actionable) {
   time.textContent = eventTime ? new Date(eventTime).toLocaleString() : "";
   meta.append(status, time);
   const title = document.createElement("h2");
-  title.textContent = isMissionApproval(approval)
-    ? String(approval.args.name || "Create Mission")
-    : humanizeTool(approval.verb);
+  const missionName = isMissionApproval(approval)
+    ? String(approval.args?.name || "").trim()
+    : "";
+  title.textContent = missionName ? `Authorize “${missionName}”` : humanizeTool(approval.verb);
   const summary = document.createElement("p");
   summary.textContent = decisionSummary(approval, actionable);
   const provenance = document.createElement("small");
@@ -7635,6 +7645,19 @@ function decisionSummary(approval, actionable) {
     if (objective) return objective;
   }
   const reviewSummary = String(approval.review_summary || title).trim();
+  if (actionable && approval.verb === "create_mission" && approval.args?.objective) {
+    const operations = Array.isArray(approval.args.allowed_operations)
+      ? approval.args.allowed_operations
+        .map((entry) => entry?.verb || entry?.operation)
+        .filter(Boolean)
+        .slice(0, 4)
+      : [];
+    const limits = Number.isInteger(approval.args.max_tool_calls)
+      ? ` It can make at most ${approval.args.max_tool_calls} tool calls.`
+      : "";
+    return `Objective: ${String(approval.args.objective).trim()} ` +
+      `Allowed actions: ${operations.length > 0 ? operations.join(", ") : "none"}.${limits}`;
+  }
   if (actionable) return reviewSummary;
   const structuredTail = reviewSummary.search(/\s+[—–-]\s*[\[{]/);
   const cleanSummary = (structuredTail >= 0 ? reviewSummary.slice(0, structuredTail) : reviewSummary)

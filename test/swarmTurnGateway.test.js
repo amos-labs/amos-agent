@@ -343,6 +343,11 @@ test("the swarm gateway implements the Platform Mission worker contract and self
       recent_steps: [],
       operation_schemas: {},
       open_decision_answer: null,
+      recovery_feedback: {
+        kind: "usage_accounting",
+        no_company_effect: true,
+        safe_to_retry: true
+      },
       planner_attempt: 2
     },
     output_schema: {
@@ -363,12 +368,12 @@ test("the swarm gateway implements the Platform Mission worker contract and self
   assert.equal(calls[4].enable_thinking, false);
   assert.match(calls[4].messages.at(-1).content, /immutable AMOS Mission worker contract/);
   assert.deepEqual(JSON.parse(result.choices[0].message.content), validPlan);
-  assert.deepEqual(result.amos_swarm.mission, {
-    missionId: "mission-1",
-    contractId: "contract-1",
-    planDecision: "tool",
-    contractSatisfied: true
-  });
+  assert.equal(result.amos_swarm.mission.missionId, "mission-1");
+  assert.equal(result.amos_swarm.mission.contractId, "contract-1");
+  assert.equal(result.amos_swarm.mission.planDecision, "tool");
+  assert.equal(result.amos_swarm.mission.contractSatisfied, true);
+  assert.equal(result.amos_swarm.mission.recoveryKind, "usage_accounting");
+  assert.match(result.amos_swarm.mission.recoveryFeedbackDigest, /^[a-f0-9]{64}$/);
   assert.deepEqual(traces[0].stages.map(({ stage }) => stage), [
     "candidate:primary",
     "candidate:alternative",
@@ -378,4 +383,5 @@ test("the swarm gateway implements the Platform Mission worker contract and self
   ]);
   assert.equal(traces[0].mission.verificationPolicyDigest.length, 64);
   assert.equal(traces[0].mission.plannerAttempt, 2);
+  assert.equal(traces[0].mission.recoveryKind, "usage_accounting");
 });

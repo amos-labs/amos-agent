@@ -468,7 +468,9 @@ function mergedCompletion(response, trace) {
       missionId: trace.mission.missionId,
       contractId: trace.mission.contractId,
       planDecision: trace.mission.planDecision,
-      contractSatisfied: trace.mission.contractSatisfied
+      contractSatisfied: trace.mission.contractSatisfied,
+      recoveryKind: trace.mission.recoveryKind,
+      recoveryFeedbackDigest: trace.mission.recoveryFeedbackDigest
     };
   }
   return merged;
