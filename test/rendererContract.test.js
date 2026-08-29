@@ -246,6 +246,11 @@ test("routine approval review stays inside Desktop", async () => {
   assert.match(javascript, /function decisionSummary\([\s\S]*?structuredTail/);
   assert.match(javascript, /function missionDecisionCard\(/);
   assert.match(javascript, /function renderInlineMissionDecision\(/);
+  assert.match(javascript, /Retry the same mission/);
+  assert.match(javascript, /Add optional guidance/);
+  assert.match(javascript, /function missionContractSummary\(/);
+  assert.match(javascript, /Read-only authority · no writes/);
+  assert.match(javascript, /if \(isMissionApproval\(approval\)\)/);
   assert.match(javascript, /api\.answerMissionDecision\(decision\.id, exactAnswer\)/);
   assert.match(javascript, /inside its existing authority/);
   assert.doesNotMatch(javascript, /decided by \$\{approval\.decided_by\}/);

@@ -7229,42 +7229,61 @@ function missionDecisionCard(decision, { inline = false } = {}) {
   } else {
     const form = document.createElement("form");
     form.className = "decision-input-form";
+    const hasOptions = Array.isArray(decision.options) && decision.options.length > 0;
     const field = document.createElement("label");
     field.className = "decision-input-field";
     const fieldLabel = document.createElement("span");
-    fieldLabel.textContent = "Your direction";
+    fieldLabel.textContent = hasOptions ? "Optional guidance" : "Your direction";
     const textarea = document.createElement("textarea");
     textarea.rows = 3;
     textarea.maxLength = 4000;
-    textarea.required = true;
-    textarea.placeholder = "Answer in plain English. AMOS will continue inside the unchanged Run Contract…";
+    textarea.required = !hasOptions;
+    textarea.placeholder = hasOptions
+      ? "Only add context if AMOS should handle the retry differently…"
+      : "Answer in plain English. AMOS will continue inside the unchanged Run Contract…";
     textarea.value = missionDecisionDrafts.get(decision.id) || "";
     textarea.addEventListener("input", () => {
       missionDecisionDrafts.set(decision.id, textarea.value);
     });
     field.append(fieldLabel, textarea);
-    form.append(field);
-    if (Array.isArray(decision.options) && decision.options.length > 0) {
+    if (hasOptions) {
       const chips = document.createElement("div");
       chips.className = "decision-input-options";
-      for (const option of decision.options) {
-        const chip = actionButton(option, "ghost compact-button");
+      for (const [index, option] of decision.options.entries()) {
+        const destructive = /\b(stop|cancel|deny|end)\b/i.test(option);
+        const chip = actionButton(
+          missionDecisionOptionLabel(option),
+          destructive ? "danger compact-button" : index === 0 ? "primary compact-button" : "secondary compact-button"
+        );
         chip.type = "button";
         chip.addEventListener("click", () => {
-          textarea.value = option;
-          missionDecisionDrafts.set(decision.id, option);
-          textarea.focus();
+          const guidance = textarea.value.trim();
+          const answer = guidance ? `${option}\n\nAdditional guidance: ${guidance}` : option;
+          answerMissionDecision(decision, answer, chip);
         });
         chips.append(chip);
       }
       form.append(chips);
+      const guidance = document.createElement("details");
+      guidance.className = "mission-optional-guidance";
+      const guidanceLabel = document.createElement("summary");
+      guidanceLabel.textContent = "Add optional guidance";
+      guidance.append(guidanceLabel, field);
+      form.append(guidance);
+    } else {
+      form.append(field);
     }
     const buttons = document.createElement("div");
     buttons.className = "decision-input-actions";
-    const submit = actionButton("Send answer & resume", "primary");
+    const submit = actionButton(hasOptions ? "Send guidance & resume" : "Send answer & resume", "primary");
     submit.type = "submit";
     buttons.append(submit);
-    form.append(buttons);
+    if (hasOptions) {
+      const guidance = form.querySelector(".mission-optional-guidance");
+      guidance.append(buttons);
+    } else {
+      form.append(buttons);
+    }
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       answerMissionDecision(decision, textarea.value, submit);
@@ -7288,7 +7307,9 @@ function renderInlineMissionDecision(decision) {
   showView("operator");
   renderConversationChrome();
   card.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  window.setTimeout(() => card.querySelector("textarea")?.focus(), 0);
+  window.setTimeout(() => {
+    card.querySelector(".decision-input-options .button, textarea, .button")?.focus();
+  }, 0);
   return card;
 }
 
@@ -7408,6 +7429,91 @@ function researchCheckpointAcknowledgement(answer, answered) {
   return "Got it — I’m continuing with your direction and preserving all completed work.";
 }
 
+function missionDecisionOptionLabel(option) {
+  const normalized = String(option || "").trim().toLowerCase();
+  if (normalized === "retry") return "Retry the same mission";
+  if (normalized === "stop" || normalized === "stop this mission") return "Stop mission";
+  return option;
+}
+
+function isMissionApproval(approval) {
+  return approval?.verb === "create_mission" && approval.args && typeof approval.args === "object";
+}
+
+function missionConstraintSummary(constraints) {
+  if (!constraints || typeof constraints !== "object" || Array.isArray(constraints)) return "";
+  const parts = [];
+  for (const [key, rule] of Object.entries(constraints)) {
+    const label = humanizeTool(key);
+    if (rule && typeof rule === "object" && !Array.isArray(rule)) {
+      if (rule.$max != null) parts.push(`${label} ≤ ${rule.$max}`);
+      else if (rule.$min != null) parts.push(`${label} ≥ ${rule.$min}`);
+      else if (rule.$eq != null) parts.push(`${label} = ${rule.$eq}`);
+      else parts.push(label);
+    } else if (rule != null) {
+      parts.push(`${label} = ${rule}`);
+    }
+  }
+  return parts.join(", ");
+}
+
+function missionOperationSummary(entry) {
+  const operation = humanizeTool(String(entry?.operation || entry?.verb || "approved operation"));
+  const constraints = missionConstraintSummary(entry?.constraints);
+  return constraints ? `${operation} (${constraints})` : operation;
+}
+
+function missionDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  if (value % 3600 === 0) return `${value / 3600} hr`;
+  if (value % 60 === 0) return `${value / 60} min`;
+  return `${value} sec`;
+}
+
+function missionCompletionSummary(condition) {
+  const kind = String(condition?.kind || "");
+  if (kind === "work_exhausted") return "Complete when the approved work is exhausted";
+  if (kind === "owner_acceptance") return "Complete after owner acceptance";
+  if (kind === "metric_threshold") {
+    return `Complete when ${humanizeTool(String(condition.metric || "metric"))} ${condition.operator || "reaches"} ${condition.target ?? "its target"}`;
+  }
+  return "Completion is checked against the approved Run Contract";
+}
+
+function missionContractSummary(args) {
+  const operations = Array.isArray(args?.allowed_operations) ? args.allowed_operations : [];
+  const summary = document.createElement("div");
+  summary.className = "mission-contract-summary";
+  const readOnly = operations.length > 0 && operations.every((entry) => entry?.consequence?.is_read === true);
+  const safety = document.createElement("strong");
+  safety.className = `mission-contract-safety${readOnly ? " read-only" : ""}`;
+  safety.textContent = readOnly
+    ? "Read-only authority · no writes"
+    : "Bounded authority · every action still passes AMOS policy";
+  summary.append(safety);
+
+  const rows = [
+    ["Allowed work", operations.map(missionOperationSummary).join("; ") || "No operation details supplied"],
+    ["Done when", missionCompletionSummary(args?.completion_condition)]
+  ];
+  const limits = [
+    args?.max_tool_calls ? `${args.max_tool_calls} tool call${Number(args.max_tool_calls) === 1 ? "" : "s"}` : "",
+    missionDuration(args?.max_wall_time_seconds),
+    args?.max_decisions ? `${args.max_decisions} decision${Number(args.max_decisions) === 1 ? "" : "s"}` : "",
+    args?.expires_in_days ? `expires in ${args.expires_in_days} day${Number(args.expires_in_days) === 1 ? "" : "s"}` : ""
+  ].filter(Boolean);
+  if (limits.length > 0) rows.splice(1, 0, ["Hard limits", limits.join(" · ")]);
+  for (const [label, value] of rows) {
+    const row = document.createElement("p");
+    const heading = document.createElement("strong");
+    heading.textContent = `${label}: `;
+    row.append(heading, document.createTextNode(value));
+    summary.append(row);
+  }
+  return summary;
+}
+
 function decisionCard(approval, actionable) {
   const card = document.createElement("article");
   card.className = `decision-card ${approval.status}`;
@@ -7425,7 +7531,9 @@ function decisionCard(approval, actionable) {
   time.textContent = eventTime ? new Date(eventTime).toLocaleString() : "";
   meta.append(status, time);
   const title = document.createElement("h2");
-  title.textContent = humanizeTool(approval.verb);
+  title.textContent = isMissionApproval(approval)
+    ? String(approval.args.name || "Create Mission")
+    : humanizeTool(approval.verb);
   const summary = document.createElement("p");
   summary.textContent = decisionSummary(approval, actionable);
   const provenance = document.createElement("small");
@@ -7434,7 +7542,9 @@ function decisionCard(approval, actionable) {
     !actionable && approval.decided_by ? "Human decision recorded" : "",
     approval.last_error ? `execution error: ${approval.last_error}` : ""
   ].filter(Boolean).join(" · ");
-  content.append(meta, title, summary, provenance);
+  content.append(meta, title, summary);
+  if (isMissionApproval(approval)) content.append(missionContractSummary(approval.args));
+  content.append(provenance);
 
   const actions = document.createElement("div");
   actions.className = "decision-card-actions";
@@ -7476,6 +7586,10 @@ function decisionCard(approval, actionable) {
 
 function decisionSummary(approval, actionable) {
   const title = humanizeTool(approval.verb);
+  if (isMissionApproval(approval)) {
+    const objective = String(approval.args.objective || "").trim();
+    if (objective) return objective;
+  }
   const reviewSummary = String(approval.review_summary || title).trim();
   if (actionable) return reviewSummary;
   const structuredTail = reviewSummary.search(/\s+[—–-]\s*[\[{]/);
