@@ -2597,6 +2597,110 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   assert.match(synthesisMessages.at(-1).content, /Do not call another tool/);
 });
 
+test("an identical read-only status request synthesizes despite changing receipt metadata", async () => {
+  const registry = new ToolRegistry();
+  let modelCalls = 0;
+  let toolCalls = 0;
+  registry.register({
+    name: "get_mission",
+    readOnly: true,
+    parallelSafe: true,
+    async handler() {
+      toolCalls += 1;
+      return {
+        ok: true,
+        status: "queued",
+        providerCreditsUsed: 0,
+        updatedAt: `2026-09-01T00:00:0${toolCalls}Z`,
+        receiptId: `receipt-${toolCalls}`,
+        diagnostics: { trace_id: `trace-${toolCalls}` }
+      };
+    }
+  });
+  const loop = new AgentLoop({
+    config: { agent: { maxRepeatedToolCycles: 3 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        modelCalls += 1;
+        if (tools.length === 0) {
+          return {
+            message: {
+              role: "assistant",
+              content: "The Mission is queued and has used zero Apollo credits; it has not begun prospecting."
+            }
+          };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `mission-${modelCalls}`,
+              function: {
+                name: "get_mission",
+                arguments: JSON.stringify({ mission_id: "mission-1" })
+              }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("What is the Mission status?");
+
+  assert.equal(toolCalls, 2);
+  assert.equal(modelCalls, 3);
+  assert.match(answer, /queued/i);
+  assert.match(answer, /zero Apollo credits/i);
+});
+
+test("an unclassified repeated request cannot evade the loop guard with changing results", async () => {
+  const registry = new ToolRegistry();
+  let modelCalls = 0;
+  let toolCalls = 0;
+  registry.register({
+    name: "remote_operation",
+    async handler() {
+      toolCalls += 1;
+      return { ok: true, state: "unchanged", receipt_id: `receipt-${toolCalls}` };
+    }
+  });
+  const loop = new AgentLoop({
+    config: { agent: { maxRepeatedToolCycles: 3 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        modelCalls += 1;
+        if (tools.length === 0) {
+          return { message: { role: "assistant", content: "The remote operation made no progress." } };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `remote-${modelCalls}`,
+              function: { name: "remote_operation", arguments: "{\"value\":1}" }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("Run the remote operation");
+
+  assert.equal(toolCalls, 3);
+  assert.equal(modelCalls, 4);
+  assert.match(answer, /no progress/i);
+});
+
 function toolNames(tools) {
   return tools
     .map((tool) => tool.function.name)
