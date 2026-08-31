@@ -549,6 +549,9 @@ function registerIpc() {
   ipcMain.handle("desktop:start-autonomous-goal", (_event, input) =>
     controller.startAutonomousGoal(input)
   );
+  ipcMain.handle("desktop:start-mission", (_event, input) =>
+    controller.startMission(input)
+  );
   ipcMain.handle("desktop:open-task", (_event, id) => controller.openTask(id));
   ipcMain.handle("desktop:update-task", (_event, input) =>
     controller.updateTaskResource(input?.id, input?.changes)
@@ -592,6 +595,10 @@ function registerIpc() {
     controller.cancelSupervisedTaskRun(input?.runId, input?.reason)
   );
   ipcMain.handle("desktop:refresh-projects", () => controller.refreshProjects());
+  ipcMain.handle("desktop:refresh-missions", () => controller.refreshMissions());
+  ipcMain.handle("desktop:pause-mission", (_event, id) => controller.pauseMission(id));
+  ipcMain.handle("desktop:resume-mission", (_event, id) => controller.resumeMission(id));
+  ipcMain.handle("desktop:cancel-mission", (_event, id) => controller.cancelMission(id));
   ipcMain.handle("desktop:remove-saved-view", (_event, id) => controller.removeSavedView(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({

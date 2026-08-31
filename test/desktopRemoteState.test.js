@@ -1647,6 +1647,59 @@ test("Desktop requests, verifies, and binds the exact signed company snapshot", 
   assert.equal(grant.jwk.kid, "desktop-cache-test");
 });
 
+test("Desktop projects hosted Missions and their optional Project context", async () => {
+  const calls = [];
+  const missionId = "11111111-1111-4111-8111-111111111111";
+  const projectId = "22222222-2222-4222-8222-222222222222";
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "mission-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      calls.push(request.params.name);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              missions: [{
+                mission_id: missionId,
+                project_id: projectId,
+                project_name: "Channel launch",
+                name: "Build the VAR list",
+                objective: "Verify 500 qualified VAR and MSP contacts.",
+                status: "running",
+                intelligence: "amos",
+                created_at: "2026-08-31T08:00:00.000Z",
+                contract: {
+                  contract_id: "33333333-3333-4333-8333-333333333333",
+                  max_tool_calls: 100,
+                  used_tool_calls: 4,
+                  expires_at: "2026-09-14T08:00:00.000Z"
+                }
+              }],
+              count: 1
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const library = await client.missionsLibrary();
+  assert.equal(library.supported, true);
+  assert.equal(library.missions[0].id, missionId);
+  assert.equal(library.missions[0].projectId, projectId);
+  assert.equal(library.missions[0].projectName, "Channel launch");
+  assert.equal(library.missions[0].executionLocation, "hosted");
+  assert.equal(library.missions[0].contract.usedToolCalls, 4);
+  assert.deepEqual(calls, ["list_missions"]);
+});
+
 function signedCompanyCache() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const jwk = {

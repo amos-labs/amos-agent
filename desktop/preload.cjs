@@ -104,6 +104,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:start-new-conversation", input),
   startAutonomousGoal: (input) =>
     ipcRenderer.invoke("desktop:start-autonomous-goal", input),
+  startMission: (input) => ipcRenderer.invoke("desktop:start-mission", input),
   openTask: (id) => ipcRenderer.invoke("desktop:open-task", id),
   updateTask: (id, changes) => ipcRenderer.invoke("desktop:update-task", { id, changes }),
   forkTask: (input) => ipcRenderer.invoke("desktop:fork-task", input),
@@ -133,6 +134,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   cancelSupervisedRun: (runId, reason) =>
     ipcRenderer.invoke("desktop:cancel-supervised-run", { runId, reason }),
   refreshProjects: () => ipcRenderer.invoke("desktop:refresh-projects"),
+  refreshMissions: () => ipcRenderer.invoke("desktop:refresh-missions"),
+  pauseMission: (id) => ipcRenderer.invoke("desktop:pause-mission", id),
+  resumeMission: (id) => ipcRenderer.invoke("desktop:resume-mission", id),
+  cancelMission: (id) => ipcRenderer.invoke("desktop:cancel-mission", id),
   removeSavedView: (id) => ipcRenderer.invoke("desktop:remove-saved-view", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),

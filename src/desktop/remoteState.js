@@ -529,6 +529,69 @@ export class DesktopRemoteStateClient {
     };
   }
 
+  async missionsLibrary({ signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("list_missions", {}, { signal });
+      const payload = parseMcpJson(result, "AMOS Missions");
+      return {
+        supported: true,
+        missions: (Array.isArray(payload?.missions) ? payload.missions : [])
+          .map(normalizeMission)
+          .filter(Boolean),
+        count: boundedCount(payload?.count)
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "list_missions")) return emptyMissionsLibrary();
+      throw error;
+    }
+  }
+
+  async mission(id, { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool(
+        "get_mission",
+        { mission_id: requiredUuid(id, "Mission") },
+        { signal }
+      ),
+      "AMOS Mission"
+    );
+    const mission = normalizeMission(payload);
+    if (!mission) throw new Error("AMOS Mission returned an invalid response");
+    return mission;
+  }
+
+  async pauseMission(id, reason = "", { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("pause_mission", {
+        mission_id: requiredUuid(id, "Mission"),
+        ...(String(reason || "").trim()
+          ? { reason: String(reason).trim().slice(0, 400) }
+          : {})
+      }, { signal }),
+      "AMOS Mission pause"
+    );
+    return {
+      missionId: validUuidOrEmpty(payload?.mission_id),
+      status: String(payload?.status || "paused").slice(0, 40)
+    };
+  }
+
+  async cancelMission(id, reason = "", { signal = null } = {}) {
+    const payload = parseMcpJson(
+      await this.mcp.callTool("cancel_mission", {
+        mission_id: requiredUuid(id, "Mission"),
+        ...(String(reason || "").trim()
+          ? { reason: String(reason).trim().slice(0, 400) }
+          : {})
+      }, { signal }),
+      "AMOS Mission cancellation"
+    );
+    return {
+      missionId: validUuidOrEmpty(payload?.mission_id),
+      status: String(payload?.status || "cancelled").slice(0, 40)
+    };
+  }
+
   async project(id, { signal = null } = {}) {
     const payload = parseMcpJson(
       await this.mcp.callTool(
@@ -1755,6 +1818,58 @@ function emptyProjectsLibrary() {
     stalledCount: 0,
     projectContract: null,
     runContract: null
+  };
+}
+
+function emptyMissionsLibrary() {
+  return { supported: false, missions: [], count: 0 };
+}
+
+function normalizeMission(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = validUuidOrEmpty(value.mission_id || value.missionId);
+  const name = String(value.name || "").trim().slice(0, 160);
+  const objective = String(value.objective || "").trim().slice(0, 4_000);
+  if (!id || !name || !objective) return null;
+  const contract = value.contract && typeof value.contract === "object" ? value.contract : {};
+  const budgets = contract.budgets && typeof contract.budgets === "object"
+    ? contract.budgets
+    : contract;
+  const status = String(value.status || "authorized").slice(0, 40);
+  return {
+    id,
+    name,
+    objective,
+    projectId: validUuidOrEmpty(value.project_id || value.projectId),
+    projectName: String(value.project_name || value.projectName || "").trim().slice(0, 160),
+    status,
+    statusReason: String(value.status_reason || value.statusReason || "").slice(0, 1_000),
+    intelligence: ["amos", "byok", "local"].includes(value.intelligence)
+      ? value.intelligence
+      : "amos",
+    executionLocation: "hosted",
+    resumeUrl: String(value.resume_url || value.resumeUrl || "").slice(0, 2_000),
+    completionCondition: boundedJsonValue(
+      value.completion_condition || value.completionCondition || null
+    ),
+    contract: {
+      id: validUuidOrEmpty(contract.contract_id || contract.id),
+      status: String(contract.status || "").slice(0, 40),
+      maxToolCalls: boundedCount(budgets.max_tool_calls),
+      usedToolCalls: boundedCount(budgets.used_tool_calls),
+      maxCostMicrousd: boundedCount(budgets.max_cost_microusd),
+      usedCostMicrousd: boundedCount(budgets.used_cost_microusd),
+      maxProviderCredits: boundedCount(budgets.max_provider_credits),
+      usedProviderCredits: boundedCount(budgets.used_provider_credits),
+      maxWallTimeSeconds: boundedCount(budgets.max_wall_time_seconds),
+      expiresAt: safeTimestamp(contract.expires_at || contract.expiresAt)
+    },
+    steps: Array.isArray(value.steps) ? boundedJsonValue(value.steps) : [],
+    verification: Array.isArray(value.verification) ? boundedJsonValue(value.verification) : [],
+    decisions: Array.isArray(value.decisions) ? boundedJsonValue(value.decisions) : [],
+    createdAt: safeTimestamp(value.created_at || value.createdAt),
+    startedAt: safeTimestamp(value.started_at || value.startedAt),
+    finishedAt: safeTimestamp(value.finished_at || value.finishedAt)
   };
 }
 

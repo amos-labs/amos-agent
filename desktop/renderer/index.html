@@ -28,6 +28,9 @@
           <button class="nav-item active" data-view="operator">
             <span class="nav-icon">⌁</span><span>Operator</span>
           </button>
+          <button class="nav-item" data-view="missions">
+            <span class="nav-icon">◎</span><span>Missions</span><span id="missionBadge" class="nav-badge mission-badge hidden">0</span>
+          </button>
           <button class="nav-item" data-view="projects">
             <span class="nav-icon">▱</span><span>Projects</span><span id="projectBadge" class="nav-badge project-badge hidden">0</span>
           </button>
@@ -476,8 +479,8 @@
               <span class="eyebrow">PROJECTS</span>
               <h1>Projects</h1>
               <p>
-                A named workspace with instructions and a dollar cap.
-                Talk in it, or give it a goal and leave. The threads themselves live on Conversations.
+                A named context workspace with shared instructions and a dollar cap.
+                Use it for related conversations or attach it to a Mission.
               </p>
             </div>
             <div class="project-heading-actions">
@@ -495,10 +498,52 @@
           <div id="projectEmpty" class="automation-empty hidden">
             <span>▱</span>
             <strong>No Projects yet</strong>
-            <p>Create one to share instructions, set a dollar cap, and start talking or give AMOS a goal.</p>
+            <p>Create one when several conversations or Missions should share the same context.</p>
           </div>
           <div id="projectList" class="project-list"></div>
           <div id="projectPager" class="list-pager hidden"></div>
+        </section>
+
+        <section id="missionsView" class="view tasks-view missions-view hidden">
+          <div class="section-heading tasks-heading">
+            <div>
+              <span class="eyebrow">MISSIONS</span>
+              <h1>Missions</h1>
+              <p>
+                Finite autonomous work with a visible outcome, limits, progress, and proof.
+                Run it on AMOS Hosted or on this computer; a Project is optional context.
+              </p>
+            </div>
+            <div class="project-heading-actions">
+              <button id="refreshMissionsButton" class="button secondary" type="button">Refresh</button>
+              <button id="newMissionButton" class="button primary" type="button">New Mission <span>→</span></button>
+            </div>
+          </div>
+          <div id="missionSummary" class="task-summary"></div>
+          <section class="mission-templates" aria-labelledby="missionTemplatesHeading">
+            <div class="briefing-templates-heading">
+              <div>
+                <h2 id="missionTemplatesHeading">Start from a Mission template</h2>
+                <p>Choose an outcome, then edit it in plain English. AMOS infers the governed plan and proof.</p>
+              </div>
+            </div>
+            <div id="missionTemplateList" class="mission-template-list"></div>
+          </section>
+          <div class="task-toolbar">
+            <label class="task-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="missionSearchInput" type="search" maxlength="160" placeholder="Search Missions" autocomplete="off" />
+            </label>
+          </div>
+          <div id="missionStatusFilters" class="list-filters" role="tablist" aria-label="Filter Missions by status"></div>
+          <div id="missionUnavailable" class="task-platform-notice hidden"></div>
+          <div id="missionEmpty" class="automation-empty hidden">
+            <span>◎</span>
+            <strong>No matching Missions</strong>
+            <p>Describe an outcome in plain English. AMOS will turn it into bounded autonomous work.</p>
+          </div>
+          <div id="missionList" class="task-list mission-list"></div>
+          <div id="missionPager" class="list-pager hidden"></div>
         </section>
 
         <section id="tasksView" class="view tasks-view hidden">
@@ -1237,25 +1282,36 @@
       </form>
     </div>
 
-    <div id="goalModal" class="modal-backdrop hidden" role="presentation">
-      <form id="goalForm" class="connection-modal project-modal" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle">
+    <div id="missionModal" class="modal-backdrop hidden" role="presentation">
+      <form id="missionForm" class="connection-modal project-modal" role="dialog" aria-modal="true" aria-labelledby="missionModalTitle">
         <div class="connection-modal-heading">
           <div>
-            <span class="eyebrow">AUTONOMOUS GOAL</span>
-            <h2 id="goalModalTitle">Give AMOS a goal</h2>
-            <p>AMOS will start this in the Project and keep working. Progress lives on the Project card. Questions land in Decisions.</p>
+            <span class="eyebrow">FINITE AUTONOMOUS WORK</span>
+            <h2 id="missionModalTitle">Create a Mission</h2>
+            <p>Describe the outcome. AMOS will infer the safe plan, limits, and verification instead of asking you to write a Run Contract.</p>
           </div>
-          <button id="goalModalClose" class="icon-button" type="button" aria-label="Close goal setup">×</button>
+          <button id="missionModalClose" class="icon-button" type="button" aria-label="Close Mission setup">×</button>
         </div>
-        <input id="goalProjectIdInput" type="hidden" />
-        <p id="goalProjectName" class="project-modal-note"></p>
         <label class="connection-field">
-          <span>Goal</span>
-          <textarea id="goalObjectiveInput" maxlength="6000" rows="5" required placeholder="What should AMOS finish while you leave this running?"></textarea>
+          <span>What outcome should AMOS accomplish?</span>
+          <textarea id="missionObjectiveInput" maxlength="4000" rows="5" required placeholder="Build 500 qualified VAR and MSP prospects, save them in AMOS, verify the list, and do not send outreach."></textarea>
         </label>
         <label class="connection-field">
+          <span>Where should it run?</span>
+          <select id="missionExecutionInput">
+            <option value="hosted">AMOS Hosted — continues when this computer sleeps</option>
+            <option value="local">This computer — uses Desktop and its current intelligence</option>
+          </select>
+        </label>
+        <label class="connection-field">
+          <span>Project context (optional)</span>
+          <select id="missionProjectInput">
+            <option value="">No Project</option>
+          </select>
+        </label>
+        <label id="missionCheckpointField" class="connection-field hidden">
           <span>Research check-ins</span>
-          <select id="goalCheckpointInput">
+          <select id="missionCheckpointInput">
             <option value="0">Keep working; ask only when a real decision is needed</option>
             <option value="5">Ask whether to continue after 5 minutes</option>
             <option value="10">Ask whether to continue after 10 minutes</option>
@@ -1264,11 +1320,11 @@
             <option value="60">Ask whether to continue after 1 hour</option>
           </select>
         </label>
-        <p class="project-modal-note">This uses the Project dollar cap and existing approvals. It does not grant extra authority.</p>
-        <div id="goalModalError" class="connection-modal-error hidden" role="alert"></div>
+        <p id="missionBoundaryNote" class="project-modal-note">Hosted Missions keep running in AMOS Platform. AMOS will show the exact bounded contract for approval before execution.</p>
+        <div id="missionModalError" class="connection-modal-error hidden" role="alert"></div>
         <div class="connection-modal-actions">
-          <button id="goalCancelButton" class="button secondary" type="button">Cancel</button>
-          <button id="goalSubmitButton" class="button primary" type="submit">Start and leave <span>→</span></button>
+          <button id="missionCancelButton" class="button secondary" type="button">Cancel</button>
+          <button id="missionSubmitButton" class="button primary" type="submit">Create Mission <span>→</span></button>
         </div>
       </form>
     </div>
