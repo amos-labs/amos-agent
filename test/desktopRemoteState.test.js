@@ -1659,13 +1659,35 @@ test("Desktop projects hosted Missions and their optional Project context", asyn
     async (_url, options) => {
       const request = JSON.parse(options.body);
       calls.push(request.params.name);
-      return response(200, {
-        jsonrpc: "2.0",
-        id: request.id,
-        result: {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
+      const payload = request.params.name === "list_goals"
+        ? {
+            loop_enabled: true,
+            master_enabled: true,
+            execution_enabled: true,
+            goals: [{
+              id: "44444444-4444-4444-8444-444444444444",
+              objective: "Continuously improve qualified pipeline",
+              status: "active",
+              metric: "qualified_pipeline",
+              metric_label: "Qualified pipeline",
+              cadence_label: "Every day",
+              mode_label: "Bounded",
+              cycles: 3,
+              events: [{ cycle: 3, status: "kept", proposal: "Test the next segment" }]
+            }]
+          }
+        : request.params.name === "list_mission_templates"
+          ? {
+              contract_version: 1,
+              templates: [{
+                key: "qualified_prospects",
+                kind: "finite",
+                title: "Build a qualified prospect list",
+                description: "Find and verify prospects.",
+                objective: "Build a verified prospect list."
+              }]
+            }
+          : {
               missions: [{
                 mission_id: missionId,
                 project_id: projectId,
@@ -1683,7 +1705,14 @@ test("Desktop projects hosted Missions and their optional Project context", asyn
                 }
               }],
               count: 1
-            })
+            };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify(payload)
           }]
         }
       });
@@ -1697,7 +1726,11 @@ test("Desktop projects hosted Missions and their optional Project context", asyn
   assert.equal(library.missions[0].projectName, "Channel launch");
   assert.equal(library.missions[0].executionLocation, "hosted");
   assert.equal(library.missions[0].contract.usedToolCalls, 4);
-  assert.deepEqual(calls, ["list_missions"]);
+  assert.equal(library.optimizationMissions[0].missionKind, "optimization");
+  assert.equal(library.optimizationMissions[0].cycles, 3);
+  assert.equal(library.templates[0].label, "Build a qualified prospect list");
+  assert.equal(library.scheduler.enabled, true);
+  assert.deepEqual(calls, ["list_missions", "list_goals", "list_mission_templates"]);
 });
 
 function signedCompanyCache() {

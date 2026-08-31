@@ -2276,6 +2276,27 @@ html[data-platform="win32"] .sidebar-toggle {
   gap: 6px;
   margin: 0 0 14px;
 }
+.list-filter {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .035em;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+.list-filter:hover { border-color: rgba(109,147,255,.45); color: var(--ink); }
+.list-filter.active {
+  border-color: rgba(109,147,255,.62);
+  background: rgba(109,147,255,.13);
+  color: var(--blue-2);
+  box-shadow: inset 0 0 0 1px rgba(109,147,255,.08);
+}
 .list-pager {
   display: flex;
   align-items: center;
@@ -2320,6 +2341,20 @@ html[data-platform="win32"] .sidebar-toggle {
 .mission-card.attention { border-color: rgba(255,202,105,.42); }
 .mission-card.running { box-shadow: inset 3px 0 0 var(--green); }
 .mission-progress { margin: -4px 0 0; color: var(--muted-2); font-size: 9px; line-height: 1.5; }
+.mission-activity {
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-soft);
+}
+.mission-activity > strong { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; }
+.mission-activity > p { margin: 8px 0 0; color: var(--muted); font-size: 9px; }
+.mission-activity ol,
+.mission-activity ul { display: grid; gap: 8px; margin: 10px 0 12px; padding-left: 19px; }
+.mission-activity li { padding-left: 3px; color: var(--muted); font-size: 9px; line-height: 1.45; }
+.mission-activity li span,
+.mission-activity li small { display: block; }
+.mission-activity li small { margin-top: 2px; color: var(--muted-2); font-size: 7px; text-transform: uppercase; }
 .task-card-objective { max-width: 880px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
 .task-card-details { display: flex; flex-wrap: wrap; gap: 6px; }
 .task-card-details span { padding: 5px 7px; border-radius: 999px; background: var(--surface-pill); color: var(--muted-2); font-size: 8px; }

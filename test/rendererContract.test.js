@@ -569,6 +569,16 @@ test("Projects are context workspaces and Missions own autonomous work", async (
   assert.match(main, /controller\.startAutonomousGoal/);
   assert.match(controller, /async startAutonomousGoal\(/);
   assert.match(controller, /kind: "goal_pursuit"/);
+  assert.match(javascript, /optimizationMissions/);
+  assert.match(javascript, /controlOptimizationMission/);
+  assert.match(javascript, /function renderMissionActivity/);
+  assert.match(javascript, /api\.getMission\(mission\.id\)/);
+  assert.match(preload, /desktop:get-mission/);
+  assert.match(preload, /desktop:set-optimization-mission-status/);
+  assert.match(main, /controller\.getMission/);
+  assert.match(main, /controller\.setOptimizationMissionStatus/);
+  assert.match(css, /\.list-filter\s*\{/);
+  assert.match(html, /id="missionKindInput"/);
   assert.match(controller, /isolate: true/);
   assert.match(javascript, /function decisionInputCard\(/);
   assert.match(javascript, /request\.decisionType === "research-checkpoint"/);

@@ -3,17 +3,16 @@ import test from "node:test";
 import { DesktopController } from "../src/desktop/controller.js";
 import { profileCatalog } from "../src/desktop/relationshipProfile.js";
 
+import {
+  mergeRemoteProjection,
+  mergeRemoteProjectionValue
+} from "../src/desktop/remoteProjection.js";
+
 test("remote state events project every refreshed platform surface into Desktop", async () => {
   const emitted = [];
   const controller = {
-    identity: {
-      principal_type: "user",
-      tenant_id: "tenant-1",
-      role: "owner"
-    },
-    accountStatus: {
-      workspaceActive: true
-    },
+    identity: { principal_type: "user", tenant_id: "tenant-1", role: "owner" },
+    accountStatus: { workspaceActive: true },
     companyApprovals: [{ id: "approval-1", status: "pending" }],
     missionDecisions: [{ id: "mission-decision-1", mission_id: "mission-1" }],
     companyReceipts: [{ id: "receipt-1", operation: "create_ad" }],
@@ -48,18 +47,10 @@ test("remote state events project every refreshed platform surface into Desktop"
       error: null,
       paused: false
     },
-    async companyCacheState() {
-      return { available: true };
-    },
-    async offlineProposalState() {
-      return [{ id: "proposal-1" }];
-    },
-    async taskCheckpointState() {
-      return [{ id: "checkpoint-1" }];
-    },
-    send(channel, payload) {
-      emitted.push({ channel, payload });
-    }
+    async companyCacheState() { return { available: true }; },
+    async offlineProposalState() { return [{ id: "proposal-1" }]; },
+    async taskCheckpointState() { return [{ id: "checkpoint-1" }]; },
+    send(channel, payload) { emitted.push({ channel, payload }); }
   };
 
   await DesktopController.prototype.sendRemoteState.call(controller);
@@ -91,7 +82,16 @@ test("remote state events project every refreshed platform surface into Desktop"
     browserRecipes: { supported: false, recipes: [] },
     tasks: controller.tasks,
     projects: controller.projects,
-    missions: { supported: false, missions: [], count: 0 },
+    missions: {
+      supported: false,
+      missions: [],
+      optimizationMissions: [],
+      templates: [],
+      count: 0,
+      scheduler: null,
+      stale: false,
+      refreshError: ""
+    },
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,
@@ -114,9 +114,7 @@ test("Desktop review never silently opens hosted approval from an unbound sessio
   const controller = {
     companyApprovals: [{ id: "approval-1", status: "pending" }],
     approvalDecisionMode: "hosted",
-    async openApproval() {
-      browserOpenCount += 1;
-    }
+    async openApproval() { browserOpenCount += 1; }
   };
 
   const result = await DesktopController.prototype.reviewCompanyApproval.call(
@@ -126,4 +124,43 @@ test("Desktop review never silently opens hosted approval from an unbound sessio
 
   assert.deepEqual(result, { mode: "hosted", opened: false });
   assert.equal(browserOpenCount, 0);
+});
+
+test("remote libraries retain the last successful projection during a rollout gap", () => {
+  const current = { supported: true, missions: [{ id: "mission-1" }], count: 1 };
+  const merged = mergeRemoteProjectionValue(
+    current,
+    { supported: false, missions: [], count: 0 },
+    { supported: false, missions: [], count: 0 },
+    "AMOS Missions"
+  );
+  assert.equal(merged.supported, true);
+  assert.equal(merged.stale, true);
+  assert.equal(merged.missions[0].id, "mission-1");
+  assert.match(merged.refreshError, /last successfully synced data/);
+});
+
+test("remote libraries retain the last successful projection after a rejected refresh", () => {
+  const errors = [];
+  const merged = mergeRemoteProjection({
+    current: { supported: true, projects: [{ id: "project-1" }] },
+    result: { status: "rejected", reason: new Error("temporary upstream error") },
+    empty: { supported: false, projects: [] },
+    label: "AMOS Projects",
+    errors
+  });
+  assert.equal(merged.stale, true);
+  assert.equal(merged.projects[0].id, "project-1");
+  assert.deepEqual(errors, ["temporary upstream error"]);
+});
+
+test("a new successful projection replaces stale remote data", () => {
+  const merged = mergeRemoteProjectionValue(
+    { supported: true, briefings: [{ id: "old" }], stale: true },
+    { supported: true, briefings: [{ id: "new" }] },
+    { supported: false, briefings: [] },
+    "AMOS Briefings"
+  );
+  assert.equal(merged.stale, false);
+  assert.equal(merged.briefings[0].id, "new");
 });

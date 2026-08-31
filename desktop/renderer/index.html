@@ -613,6 +613,7 @@
                 <input id="briefingSearchInput" type="search" maxlength="160" placeholder="Search Briefings" autocomplete="off" />
               </label>
             </div>
+            <div id="briefingUnavailable" class="task-platform-notice hidden"></div>
             <section id="briefingLibrary" class="briefing-library">
               <section class="briefing-templates" aria-labelledby="briefingTemplatesHeading">
                 <div class="briefing-templates-heading">
@@ -1286,12 +1287,20 @@
       <form id="missionForm" class="connection-modal project-modal" role="dialog" aria-modal="true" aria-labelledby="missionModalTitle">
         <div class="connection-modal-heading">
           <div>
-            <span class="eyebrow">FINITE AUTONOMOUS WORK</span>
+            <span class="eyebrow">AUTONOMOUS WORK</span>
             <h2 id="missionModalTitle">Create a Mission</h2>
             <p>Describe the outcome. AMOS will infer the safe plan, limits, and verification instead of asking you to write a Run Contract.</p>
           </div>
           <button id="missionModalClose" class="icon-button" type="button" aria-label="Close Mission setup">×</button>
         </div>
+        <label class="connection-field">
+          <span>How should this Mission finish?</span>
+          <select id="missionKindInput">
+            <option value="finite">Complete a defined outcome, then stop</option>
+            <option value="optimization">Continuously improve a measured outcome</option>
+          </select>
+          <small>Both live in Missions. Optimization Missions repeatedly measure, propose, verify, and learn within their approved boundaries.</small>
+        </label>
         <label class="connection-field">
           <span>What outcome should AMOS accomplish?</span>
           <textarea id="missionObjectiveInput" maxlength="4000" rows="5" required placeholder="Build 500 qualified VAR and MSP prospects, save them in AMOS, verify the list, and do not send outreach."></textarea>
