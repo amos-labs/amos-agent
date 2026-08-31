@@ -135,9 +135,12 @@ contextBridge.exposeInMainWorld("amosDesktop", {
     ipcRenderer.invoke("desktop:cancel-supervised-run", { runId, reason }),
   refreshProjects: () => ipcRenderer.invoke("desktop:refresh-projects"),
   refreshMissions: () => ipcRenderer.invoke("desktop:refresh-missions"),
+  getMission: (id) => ipcRenderer.invoke("desktop:get-mission", id),
   pauseMission: (id) => ipcRenderer.invoke("desktop:pause-mission", id),
   resumeMission: (id) => ipcRenderer.invoke("desktop:resume-mission", id),
   cancelMission: (id) => ipcRenderer.invoke("desktop:cancel-mission", id),
+  setOptimizationMissionStatus: (id, status) =>
+    ipcRenderer.invoke("desktop:set-optimization-mission-status", { id, status }),
   removeSavedView: (id) => ipcRenderer.invoke("desktop:remove-saved-view", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),

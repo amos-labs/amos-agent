@@ -530,20 +530,53 @@ export class DesktopRemoteStateClient {
   }
 
   async missionsLibrary({ signal = null } = {}) {
-    try {
-      const result = await this.mcp.callTool("list_missions", {}, { signal });
-      const payload = parseMcpJson(result, "AMOS Missions");
-      return {
-        supported: true,
-        missions: (Array.isArray(payload?.missions) ? payload.missions : [])
-          .map(normalizeMission)
-          .filter(Boolean),
-        count: boundedCount(payload?.count)
-      };
-    } catch (error) {
-      if (isUnknownTool(error, "list_missions")) return emptyMissionsLibrary();
-      throw error;
-    }
+    const [missionsResult, goalsResult, templatesResult] = await Promise.allSettled([
+      this.mcp.callTool("list_missions", {}, { signal }),
+      this.mcp.callTool("list_goals", {}, { signal }),
+      this.mcp.callTool("list_mission_templates", {}, { signal })
+    ]);
+    const missionUnknown = missionsResult.status === "rejected" &&
+      isUnknownTool(missionsResult.reason, "list_missions");
+    const goalsUnknown = goalsResult.status === "rejected" &&
+      isUnknownTool(goalsResult.reason, "list_goals");
+    const templatesUnknown = templatesResult.status === "rejected" &&
+      isUnknownTool(templatesResult.reason, "list_mission_templates");
+    if (missionsResult.status === "rejected" && !missionUnknown) throw missionsResult.reason;
+    if (goalsResult.status === "rejected" && !goalsUnknown) throw goalsResult.reason;
+    if (templatesResult.status === "rejected" && !templatesUnknown) throw templatesResult.reason;
+
+    const missionsPayload = missionsResult.status === "fulfilled"
+      ? parseMcpJson(missionsResult.value, "AMOS Missions")
+      : null;
+    const goalsPayload = goalsResult.status === "fulfilled"
+      ? parseMcpJson(goalsResult.value, "AMOS Optimization Missions")
+      : null;
+    const templatesPayload = templatesResult.status === "fulfilled"
+      ? parseMcpJson(templatesResult.value, "AMOS Mission templates")
+      : null;
+    const missions = (Array.isArray(missionsPayload?.missions) ? missionsPayload.missions : [])
+      .map(normalizeMission)
+      .filter(Boolean);
+    const optimizationMissions = (Array.isArray(goalsPayload?.goals) ? goalsPayload.goals : [])
+      .map(normalizeOptimizationMission)
+      .filter(Boolean);
+    const templates = (Array.isArray(templatesPayload?.templates) ? templatesPayload.templates : [])
+      .map(normalizeMissionTemplate)
+      .filter(Boolean);
+    return {
+      supported: missionsResult.status === "fulfilled" || goalsResult.status === "fulfilled",
+      missions,
+      optimizationMissions,
+      templates,
+      count: missions.length + optimizationMissions.length,
+      scheduler: goalsPayload ? {
+        enabled: goalsPayload.loop_enabled === true,
+        masterEnabled: goalsPayload.master_enabled === true,
+        executionEnabled: goalsPayload.execution_enabled === true,
+        state: String(goalsPayload.state || "").slice(0, 80),
+        stateDetail: String(goalsPayload.state_detail || "").slice(0, 1_000)
+      } : null
+    };
   }
 
   async mission(id, { signal = null } = {}) {
@@ -558,6 +591,20 @@ export class DesktopRemoteStateClient {
     const mission = normalizeMission(payload);
     if (!mission) throw new Error("AMOS Mission returned an invalid response");
     return mission;
+  }
+
+  async setOptimizationMissionStatus(id, status, { signal = null } = {}) {
+    const normalizedStatus = String(status || "").trim();
+    if (!new Set(["active", "paused", "abandoned"]).has(normalizedStatus)) {
+      throw new Error("Optimization Mission status is invalid");
+    }
+    return parseMcpJson(
+      await this.mcp.callTool("set_goal_status", {
+        goal_id: requiredUuid(id, "Optimization Mission"),
+        status: normalizedStatus
+      }, { signal }),
+      "AMOS Optimization Mission"
+    );
   }
 
   async pauseMission(id, reason = "", { signal = null } = {}) {
@@ -1821,8 +1868,51 @@ function emptyProjectsLibrary() {
   };
 }
 
-function emptyMissionsLibrary() {
-  return { supported: false, missions: [], count: 0 };
+function normalizeMissionTemplate(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = String(value.key || value.id || "").trim().slice(0, 80);
+  const label = String(value.title || value.label || "").trim().slice(0, 160);
+  const objective = String(value.objective || "").trim().slice(0, 4_000);
+  if (!id || !label || !objective) return null;
+  return {
+    id,
+    kind: value.kind === "optimization" ? "optimization" : "finite",
+    label,
+    detail: String(value.description || value.detail || "").trim().slice(0, 500),
+    objective
+  };
+}
+
+function normalizeOptimizationMission(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const id = validUuidOrEmpty(value.id);
+  const objective = String(value.objective || "").trim().slice(0, 4_000);
+  if (!id || !objective) return null;
+  const events = Array.isArray(value.events) ? boundedJsonValue(value.events) : [];
+  const latest = events[0] || null;
+  return {
+    id,
+    name: objective.length > 100 ? `${objective.slice(0, 97)}…` : objective,
+    objective,
+    status: String(value.status || "active").slice(0, 40),
+    statusReason: String(
+      value.latest_proposal || latest?.proposal || value.capability_state_detail || ""
+    ).slice(0, 1_000),
+    missionKind: "optimization",
+    executionLocation: "hosted",
+    metric: String(value.metric_label || value.metric || "").slice(0, 160),
+    cadence: String(value.cadence_label || value.cadence || "").slice(0, 80),
+    mode: String(value.mode_label || value.mode || "").slice(0, 80),
+    cycles: boundedCount(value.cycles),
+    progressPercent: boundedCount(value.progress_percent),
+    pendingApprovals: boundedCount(value.pending_approvals),
+    latestValue: String(value.latest_value || "").slice(0, 160),
+    latestDelta: String(value.latest_delta || "").slice(0, 160),
+    nextRun: String(value.next_run || "").slice(0, 160),
+    events,
+    createdAt: safeTimestamp(value.created_at || value.createdAt),
+    updatedAt: safeTimestamp(latest?.created_at || value.last_activity || value.updatedAt)
+  };
 }
 
 function normalizeMission(value) {

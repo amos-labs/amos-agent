@@ -68,7 +68,9 @@ const providerDefaults = {
 const LIVE_EVENT_VISIBLE_COUNT = 20;
 const LIVE_THOUGHT_VISIBLE_LINES = 6;
 const LIST_PAGE_SIZE = 15;
-const MISSION_TEMPLATES = Object.freeze([
+// Upgrade-only fallback for Platform versions predating list_mission_templates.
+// Current product truth is returned by AMOS Platform and shared with MCP clients.
+const LEGACY_MISSION_TEMPLATES = Object.freeze([
   {
     id: "qualified_prospects",
     label: "Build a qualified prospect list",
@@ -229,7 +231,7 @@ const elements = Object.fromEntries(
     "missionSummary", "missionTemplateList", "missionSearchInput", "missionStatusFilters", "missionUnavailable",
     "missionEmpty", "missionList", "missionPager", "refreshMissionsButton", "newMissionButton",
     "missionModal", "missionForm", "missionModalTitle", "missionModalClose",
-    "missionObjectiveInput", "missionExecutionInput", "missionProjectInput",
+    "missionObjectiveInput", "missionKindInput", "missionExecutionInput", "missionProjectInput",
     "missionCheckpointField", "missionCheckpointInput", "missionBoundaryNote",
     "missionModalError", "missionCancelButton", "missionSubmitButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
@@ -238,7 +240,7 @@ const elements = Object.fromEntries(
     "capsulePreviewItems", "capsulePreviewWarning", "capsulePreviewCancelButton",
     "capsuleImportConfirmButton", "canvasTitle", "canvasSubtitle", "canvasRefreshButton", "canvasSaveButton", "canvasScheduleButton",
     "canvasCloseButton", "canvasToggleButton", "canvasSourceBar", "canvasTabs", "canvasEmpty", "canvasEmptyTitle",
-    "canvasEmptyMessage", "canvasBlocks", "briefingSearchInput", "briefingLibrary", "savedViewList", "briefingPager", "briefingTemplateList",
+    "canvasEmptyMessage", "canvasBlocks", "briefingSearchInput", "briefingLibrary", "savedViewList", "briefingPager", "briefingTemplateList", "briefingUnavailable",
     "newBriefingButton",
     "canvasStartButton", "scopeNote", "offlineRuntimeStatus", "offlineModelList",
     "offlineRefreshButton", "offlineInstallRuntimeButton", "offlineManifestDigest",
@@ -450,6 +452,7 @@ function bindActions() {
   elements.missionForm.addEventListener("submit", submitMission);
   elements.missionModalClose.addEventListener("click", closeMissionModal);
   elements.missionCancelButton.addEventListener("click", closeMissionModal);
+  elements.missionKindInput.addEventListener("change", renderMissionExecutionBoundary);
   elements.missionExecutionInput.addEventListener("change", renderMissionExecutionBoundary);
   elements.missionModal.addEventListener("click", (event) => {
     if (event.target === elements.missionModal) closeMissionModal();
@@ -3138,7 +3141,9 @@ function renderProjects() {
   const syncing = Boolean(state.remoteStatus?.syncing);
   const syncError = String(state.remoteStatus?.error || "").trim();
   let notice = "";
-  if (!syncing && library.supported !== true) {
+  if (library.stale) {
+    notice = library.refreshError || "Showing the last successfully synced Projects.";
+  } else if (!syncing && library.supported !== true) {
     if (connectedUser) {
       notice = syncError
         ? `AMOS could not load Projects: ${syncError}`
@@ -3705,6 +3710,7 @@ function openMissionModal(project = null) {
   }
   elements.missionProjectInput.value = project?.id || "";
   elements.missionObjectiveInput.value = "";
+  elements.missionKindInput.value = "finite";
   elements.missionCheckpointInput.value = String(state?.settings?.autonomousCheckpointMinutes ?? 0);
   const hosted = elements.missionExecutionInput.querySelector('option[value="hosted"]');
   hosted.disabled = state?.connectionMode !== "user";
@@ -3724,9 +3730,15 @@ function closeMissionModal() {
 }
 
 function renderMissionExecutionBoundary() {
+  const optimization = elements.missionKindInput.value === "optimization";
+  const localOption = elements.missionExecutionInput.querySelector('option[value="local"]');
+  localOption.disabled = optimization;
+  if (optimization) elements.missionExecutionInput.value = "hosted";
   const local = elements.missionExecutionInput.value === "local";
   elements.missionCheckpointField.classList.toggle("hidden", !local);
-  elements.missionBoundaryNote.textContent = local
+  elements.missionBoundaryNote.textContent = optimization
+    ? "Optimization Missions run in AMOS Platform. AMOS will infer a measurable goal contract, cadence, bounded actions, and proof, then show the exact authority change for approval."
+    : local
     ? "This Mission runs in Desktop and pauses if the app quits. It uses current intelligence, local approvals, and the selected Project's context and dollar cap when present."
     : "Hosted Missions keep running in AMOS Platform. AMOS will infer a finite Run Contract and show its exact limits for approval before execution.";
 }
@@ -3735,6 +3747,7 @@ async function submitMission(event) {
   event.preventDefault();
   const projectId = elements.missionProjectInput.value;
   const objective = elements.missionObjectiveInput.value.trim();
+  const missionKind = elements.missionKindInput.value;
   const executionLocation = elements.missionExecutionInput.value;
   const researchCheckpointMinutes = Number(elements.missionCheckpointInput.value);
   setButtonBusy(elements.missionSubmitButton, true, "Starting…");
@@ -3742,6 +3755,7 @@ async function submitMission(event) {
     const response = await api.startMission({
       projectId,
       objective,
+      missionKind,
       executionLocation,
       researchCheckpointMinutes
     });
@@ -3876,7 +3890,22 @@ function renderTaskStatusFilters(tasks) {
 
 function missionEntries() {
   const hosted = (Array.isArray(state?.missions?.missions) ? state.missions.missions : [])
-    .map((mission) => ({ ...mission, source: "hosted", executionLocation: "hosted" }));
+    .map((mission) => ({
+      ...mission,
+      source: "hosted",
+      missionKind: "finite",
+      executionLocation: "hosted"
+    }));
+  const optimization = (
+    Array.isArray(state?.missions?.optimizationMissions)
+      ? state.missions.optimizationMissions
+      : []
+  ).map((mission) => ({
+    ...mission,
+    source: "optimization",
+    missionKind: "optimization",
+    executionLocation: "hosted"
+  }));
   const tasks = Array.isArray(state?.tasks?.tasks) ? state.tasks.tasks : [];
   const runs = Array.isArray(state?.activeRuns) ? state.activeRuns : [];
   const projects = Array.isArray(state?.projects?.projects) ? state.projects.projects : [];
@@ -3902,7 +3931,7 @@ function missionEntries() {
       run
     };
   });
-  return [...hosted, ...local].sort((left, right) =>
+  return [...hosted, ...optimization, ...local].sort((left, right) =>
     String(right.updatedAt || right.createdAt || "").localeCompare(
       String(left.updatedAt || left.createdAt || "")
     )
@@ -3957,10 +3986,15 @@ function renderMissions() {
   const completed = missions.filter((mission) => missionStatusBucket(mission) === "completed").length;
   elements.missionBadge.textContent = String(attention || running);
   elements.missionBadge.classList.toggle("hidden", attention + running === 0);
-  elements.missionUnavailable.textContent = state.missions?.supported === false
-    ? "Hosted Missions are unavailable from this company right now. Missions on this computer remain available."
-    : "";
-  elements.missionUnavailable.classList.toggle("hidden", state.missions?.supported !== false);
+  elements.missionUnavailable.textContent = state.missions?.stale
+    ? state.missions.refreshError
+    : state.missions?.supported === false
+      ? "Hosted Missions are unavailable from this company right now. Missions on this computer remain available."
+      : "";
+  elements.missionUnavailable.classList.toggle(
+    "hidden",
+    state.missions?.supported !== false && !state.missions?.stale
+  );
   elements.refreshMissionsButton.disabled = state.connectionMode !== "user" || state.remoteStatus?.syncing;
   elements.missionEmpty.classList.toggle("hidden", page.total > 0);
   renderMissionStatusFilters(missions);
@@ -3990,7 +4024,10 @@ function renderMissions() {
 
 function renderMissionTemplates() {
   elements.missionTemplateList.replaceChildren();
-  for (const template of MISSION_TEMPLATES) {
+  const templates = Array.isArray(state?.missions?.templates) && state.missions.templates.length > 0
+    ? state.missions.templates
+    : LEGACY_MISSION_TEMPLATES;
+  for (const template of templates) {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "mission-template-card";
@@ -4003,7 +4040,9 @@ function renderMissionTemplates() {
     card.append(eyebrow, title, detail);
     card.addEventListener("click", () => {
       openMissionModal();
+      elements.missionKindInput.value = template.kind === "optimization" ? "optimization" : "finite";
       elements.missionObjectiveInput.value = template.objective;
+      renderMissionExecutionBoundary();
       elements.missionObjectiveInput.focus();
     });
     elements.missionTemplateList.append(card);
@@ -4025,6 +4064,10 @@ function missionCard(mission) {
   location.className = "task-lineage-chip current";
   location.textContent = mission.executionLocation === "local" ? "THIS COMPUTER" : "AMOS HOSTED";
   meta.append(status, location);
+  const kind = document.createElement("span");
+  kind.className = "task-lineage-chip";
+  kind.textContent = mission.missionKind === "optimization" ? "OPTIMIZATION" : "FINITE";
+  meta.append(kind);
   if (mission.projectName) {
     const project = document.createElement("span");
     project.className = "task-lineage-chip project";
@@ -4059,6 +4102,17 @@ function missionCard(mission) {
       chip.textContent = label;
       details.append(chip);
     }
+  } else if (mission.source === "optimization") {
+    for (const label of [
+      mission.metric ? `Metric · ${mission.metric}` : "Metric not connected",
+      mission.cadence ? `Cadence · ${mission.cadence}` : "Cadence pending",
+      `${mission.cycles || 0} learning cycle${mission.cycles === 1 ? "" : "s"}`,
+      mission.latestValue ? `Latest · ${mission.latestValue}` : "Awaiting measurement"
+    ]) {
+      const chip = document.createElement("span");
+      chip.textContent = label;
+      details.append(chip);
+    }
   } else {
     const chip = document.createElement("span");
     chip.textContent = mission.run ? `Live · ${mission.run.phase || "working"}` : "Durable local history";
@@ -4084,6 +4138,22 @@ function missionCard(mission) {
       });
       actions.append(stop);
     }
+  } else if (mission.source === "optimization") {
+    if (mission.status === "active") {
+      const pause = actionButton("Pause", "secondary");
+      pause.addEventListener("click", () => controlOptimizationMission(mission, "paused", pause));
+      actions.append(pause);
+    }
+    if (mission.status === "paused") {
+      const resume = actionButton("Resume", "primary");
+      resume.addEventListener("click", () => controlOptimizationMission(mission, "active", resume));
+      actions.append(resume);
+    }
+    if (!["abandoned", "achieved"].includes(mission.status)) {
+      const end = actionButton("End Mission", "ghost");
+      end.addEventListener("click", () => controlOptimizationMission(mission, "abandoned", end));
+      actions.append(end);
+    }
   } else {
     if (["authorized", "running", "waiting_decision"].includes(mission.status)) {
       const pause = actionButton("Pause", "secondary");
@@ -4106,8 +4176,111 @@ function missionCard(mission) {
       actions.append(cancel);
     }
   }
-  card.append(heading, objective, progress, details, actions);
+  const activity = document.createElement("button");
+  activity.type = "button";
+  activity.className = "button ghost";
+  activity.textContent = "View activity";
+  const activityPanel = document.createElement("div");
+  activityPanel.className = "mission-activity hidden";
+  activity.addEventListener("click", async () => {
+    if (!activityPanel.classList.contains("hidden")) {
+      activityPanel.classList.add("hidden");
+      activity.textContent = "View activity";
+      return;
+    }
+    setButtonBusy(activity, true, "Loading…");
+    try {
+      let detail = mission;
+      if (mission.source === "hosted" && (!mission.steps || mission.steps.length === 0)) {
+        detail = await api.getMission(mission.id);
+      }
+      renderMissionActivity(detail, activityPanel);
+      activityPanel.classList.remove("hidden");
+      activity.textContent = "Hide activity";
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      if (activity.isConnected && activityPanel.classList.contains("hidden")) {
+        setButtonBusy(activity, false, "View activity");
+      } else if (activity.isConnected) {
+        setButtonBusy(activity, false, "Hide activity");
+      }
+    }
+  });
+  actions.prepend(activity);
+  card.append(heading, objective, progress, details, actions, activityPanel);
   return card;
+}
+
+function renderMissionActivity(mission, container) {
+  container.replaceChildren();
+  const events = mission.missionKind === "optimization"
+    ? (Array.isArray(mission.events) ? mission.events : [])
+    : (Array.isArray(mission.steps) ? mission.steps : []);
+  const heading = document.createElement("strong");
+  heading.textContent = "Recorded activity";
+  container.append(heading);
+  if (events.length === 0) {
+    const empty = document.createElement("p");
+    empty.textContent = "No activity has been recorded yet.";
+    container.append(empty);
+  } else {
+    const list = document.createElement("ol");
+    for (const event of events.slice(0, 20)) {
+      const item = document.createElement("li");
+      const summary = document.createElement("span");
+      summary.textContent = String(event.summary || event.proposal || event.rationale || event.status || "Recorded step");
+      const meta = document.createElement("small");
+      meta.textContent = [
+        event.kind || (event.cycle != null ? `Cycle ${event.cycle}` : ""),
+        relativeTime(event.created_at || event.createdAt)
+      ].filter(Boolean).join(" · ");
+      item.append(summary, meta);
+      list.append(item);
+    }
+    container.append(list);
+  }
+
+  const verification = Array.isArray(mission.verification) ? mission.verification : [];
+  if (verification.length > 0) {
+    const verificationHeading = document.createElement("strong");
+    verificationHeading.textContent = "Verification and proof";
+    const verificationList = document.createElement("ul");
+    for (const check of verification.slice(0, 20)) {
+      const item = document.createElement("li");
+      const summary = document.createElement("span");
+      summary.textContent = String(
+        check.summary || check.description || check.check || check.name || "Verification recorded"
+      );
+      const meta = document.createElement("small");
+      meta.textContent = [
+        check.status || check.verdict || (check.verified === true ? "verified" : "recorded"),
+        check.evidence || check.detail || check.artifact || ""
+      ].filter(Boolean).join(" · ");
+      item.append(summary, meta);
+      verificationList.append(item);
+    }
+    container.append(verificationHeading, verificationList);
+  }
+}
+
+async function controlOptimizationMission(mission, status, button) {
+  const original = button.textContent;
+  setButtonBusy(button, true, "Saving…");
+  try {
+    const next = await api.setOptimizationMissionStatus(mission.id, status);
+    if (next?.missions || next?.optimizationMissions) state.missions = next;
+    renderMissions();
+    toast(next?.approvalRequired
+      ? "Resuming restores autonomous authority, so the exact change is waiting for your approval."
+      : status === "active" ? "Optimization Mission resumed." : status === "paused"
+      ? "Optimization Mission paused."
+      : "Optimization Mission ended with its history preserved.");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, original);
+  }
 }
 
 async function controlHostedMission(mission, action, button) {
@@ -4806,6 +4979,11 @@ function renderBriefingLibrary() {
   const platformLibrary = state.briefings || {};
   const platformBriefings = Array.isArray(platformLibrary.briefings) ? platformLibrary.briefings : [];
   const templates = Array.isArray(platformLibrary.templates) ? platformLibrary.templates : [];
+  const briefingNotice = platformLibrary.stale
+    ? platformLibrary.refreshError || "Showing the last successfully synced Briefings."
+    : "";
+  elements.briefingUnavailable.textContent = briefingNotice;
+  elements.briefingUnavailable.classList.toggle("hidden", !briefingNotice);
   const canvases = Array.isArray(state.canvases) ? state.canvases : [];
   const query = (elements.briefingSearchInput?.value || "").trim().toLowerCase();
   resetListPageIfQueryChanged("briefings", query);
