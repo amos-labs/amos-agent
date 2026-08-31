@@ -68,6 +68,32 @@ const providerDefaults = {
 const LIVE_EVENT_VISIBLE_COUNT = 20;
 const LIVE_THOUGHT_VISIBLE_LINES = 6;
 const LIST_PAGE_SIZE = 15;
+const MISSION_TEMPLATES = Object.freeze([
+  {
+    id: "qualified_prospects",
+    label: "Build a qualified prospect list",
+    detail: "Search, enrich, deduplicate, save, and verify a bounded list without sending outreach.",
+    objective: "Build 500 qualified prospects for our current ideal customer profile. Use connected prospecting sources for search and enrichment, save unique sufficiently enriched candidates in AMOS, do not send outreach, and verify the final count and quality before declaring completion. Ask before widening geography or lowering the fit threshold."
+  },
+  {
+    id: "finance_reconciliation",
+    label: "Reconcile connected finance systems",
+    detail: "Find mismatches, explain them, and stage governed corrections with independent checks.",
+    objective: "Reconcile the last 30 days across our connected billing and accounting systems. Identify missing, duplicated, or misclassified transactions, quantify every discrepancy, stage only the safe corrections allowed by policy, and verify the ending totals. Ask before any money-moving or irreversible action."
+  },
+  {
+    id: "operating_audit",
+    label: "Find operational leaks",
+    detail: "Inspect connected systems for avoidable cost, stalled work, and missed follow-up.",
+    objective: "Audit our connected business systems for the highest-value operational leaks from the last 30 days. Rank findings by verified financial or time impact, complete safe fixes within existing authority, and produce evidence for every claimed outcome."
+  },
+  {
+    id: "market_research",
+    label: "Research a market decision",
+    detail: "Gather evidence, challenge assumptions, and recommend an executable next move.",
+    objective: "Research the market decision I describe, using current authoritative sources and company context. Compare realistic options, challenge the key assumptions, quantify uncertainty, and finish with a verified recommendation and an actionable next-step plan."
+  }
+]);
 let state = null;
 let currentView = "operator";
 let currentWorkTab = "open";
@@ -106,8 +132,9 @@ let automationSetupOperations = null;
 let automationSetupBusy = false;
 let selectedProjectId = "";
 let taskStatusFilter = "all";
-const listPages = { tasks: 1, projects: 1, briefings: 1 };
-const listQueryKeys = { tasks: "", projects: "", briefings: "" };
+let missionStatusFilter = "all";
+const listPages = { tasks: 1, projects: 1, missions: 1, briefings: 1 };
+const listQueryKeys = { tasks: "", projects: "", missions: "", briefings: "" };
 const expandedProjectAccordions = new Set();
 const projectActivityFilters = new Map();
 let onboardingDoor = "hosted";
@@ -116,14 +143,14 @@ const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
-    "memoryView", "projectsView", "tasksView", "canvasView", "connectionsView", "automationsView",
+    "memoryView", "projectsView", "missionsView", "tasksView", "canvasView", "connectionsView", "automationsView",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
     "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
     "accountMemoryButton", "accountIntelligenceButton",
     "companySwitcherControl", "companySwitcher",
-    "decisionBadge", "privateMemoryBadge", "projectBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
+    "decisionBadge", "privateMemoryBadge", "projectBadge", "missionBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "localModeButton", "demoModeButton", "onboardHostedButton", "onboardByokButton", "connectCheck",
@@ -199,9 +226,12 @@ const elements = Object.fromEntries(
     "projectModalTitle", "projectModalClose", "projectIdInput", "projectNameInput",
     "projectInstructionsInput", "projectCostInput", "projectModalError", "projectCancelButton",
     "projectSubmitButton",
-    "goalModal", "goalForm", "goalModalTitle", "goalModalClose", "goalProjectIdInput",
-    "goalProjectName", "goalObjectiveInput", "goalCheckpointInput", "goalModalError", "goalCancelButton",
-    "goalSubmitButton",
+    "missionSummary", "missionTemplateList", "missionSearchInput", "missionStatusFilters", "missionUnavailable",
+    "missionEmpty", "missionList", "missionPager", "refreshMissionsButton", "newMissionButton",
+    "missionModal", "missionForm", "missionModalTitle", "missionModalClose",
+    "missionObjectiveInput", "missionExecutionInput", "missionProjectInput",
+    "missionCheckpointField", "missionCheckpointInput", "missionBoundaryNote",
+    "missionModalError", "missionCancelButton", "missionSubmitButton",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -398,6 +428,10 @@ function bindActions() {
     listPages.projects = 1;
     renderProjects();
   });
+  elements.missionSearchInput.addEventListener("input", () => {
+    listPages.missions = 1;
+    renderMissions();
+  });
   elements.briefingSearchInput.addEventListener("input", () => {
     listPages.briefings = 1;
     renderBriefingLibrary();
@@ -405,17 +439,20 @@ function bindActions() {
   elements.newBriefingButton.addEventListener("click", startNewBriefingFromScratch);
   elements.refreshProjectsButton.addEventListener("click", refreshProjects);
   elements.newProjectButton.addEventListener("click", () => openProjectModal());
+  elements.refreshMissionsButton.addEventListener("click", refreshMissions);
+  elements.newMissionButton.addEventListener("click", openMissionModal);
   elements.projectForm.addEventListener("submit", submitProject);
   elements.projectModalClose.addEventListener("click", closeProjectModal);
   elements.projectCancelButton.addEventListener("click", closeProjectModal);
   elements.projectModal.addEventListener("click", (event) => {
     if (event.target === elements.projectModal) closeProjectModal();
   });
-  elements.goalForm.addEventListener("submit", submitAutonomousGoal);
-  elements.goalModalClose.addEventListener("click", closeGoalModal);
-  elements.goalCancelButton.addEventListener("click", closeGoalModal);
-  elements.goalModal.addEventListener("click", (event) => {
-    if (event.target === elements.goalModal) closeGoalModal();
+  elements.missionForm.addEventListener("submit", submitMission);
+  elements.missionModalClose.addEventListener("click", closeMissionModal);
+  elements.missionCancelButton.addEventListener("click", closeMissionModal);
+  elements.missionExecutionInput.addEventListener("change", renderMissionExecutionBoundary);
+  elements.missionModal.addEventListener("click", (event) => {
+    if (event.target === elements.missionModal) closeMissionModal();
   });
   elements.forkTaskForm.addEventListener("submit", submitTaskFork);
   elements.forkTaskCancel.addEventListener("click", closeTaskForkModal);
@@ -550,6 +587,7 @@ function bindEvents() {
     const interaction = captureInteractiveState();
     state.activeRuns = Array.isArray(runs) ? runs : [];
     renderProjects();
+    renderMissions();
     renderTasks();
     restoreInteractiveState(interaction);
   });
@@ -601,6 +639,7 @@ function bindEvents() {
     state.taskCheckpoints = taskCheckpoints || [];
     renderTasks();
     renderProjects();
+    renderMissions();
     renderDecisions();
     renderStarterActions();
   });
@@ -625,6 +664,7 @@ function bindEvents() {
     renderConnections();
     renderAutomations();
     renderProjects();
+    renderMissions();
     renderTasks();
     renderHistory();
     renderCanvas();
@@ -739,6 +779,7 @@ function render() {
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
     elements.projectsView.classList.add("hidden");
+    elements.missionsView.classList.add("hidden");
     elements.tasksView.classList.add("hidden");
     elements.canvasView.classList.add("hidden");
     elements.memoryView.classList.add("hidden");
@@ -979,6 +1020,7 @@ function render() {
   renderConnections();
   renderAutomations();
   renderProjects();
+  renderMissions();
   renderTasks();
   activeCanvasId = state.activeCanvasId || activeCanvasId;
   renderCanvas();
@@ -1107,6 +1149,7 @@ function showView(view) {
   currentView = view;
   const map = {
     operator: elements.operatorView,
+    missions: elements.missionsView,
     projects: elements.projectsView,
     canvas: elements.canvasView,
     memory: elements.memoryView,
@@ -3069,7 +3112,9 @@ function renderProjects() {
   const projects = Array.isArray(library.projects) ? library.projects : [];
   const inbox = Array.isArray(library.inbox) ? library.inbox : [];
   const conversations = Array.isArray(state.tasks?.tasks)
-    ? state.tasks.tasks.filter((task) => task.projectId && !task.archivedAt && !task.archived)
+    ? state.tasks.tasks.filter((task) => (
+        task.kind !== "goal_pursuit" && task.projectId && !task.archivedAt && !task.archived
+      ))
     : [];
   const query = elements.projectSearchInput.value.trim().toLowerCase();
   resetListPageIfQueryChanged("projects", query);
@@ -3274,10 +3319,10 @@ function projectCard(project, conversations, runs) {
   const talk = actionButton("Talk", "primary");
   talk.disabled = project.archived || project.status !== "active";
   talk.addEventListener("click", () => createTaskInProject(project, talk));
-  const giveGoal = actionButton("Leave a goal", "secondary");
-  giveGoal.disabled = project.archived || project.status !== "active";
-  giveGoal.addEventListener("click", () => openGoalModal(project));
-  actions.append(talk, giveGoal, projectSettingsMenu(project));
+  const mission = actionButton("New Mission", "secondary");
+  mission.disabled = project.archived || project.status !== "active";
+  mission.addEventListener("click", () => openMissionModal(project));
+  actions.append(talk, mission, projectSettingsMenu(project));
 
   card.append(heading, instructions, details, actions);
   if (conversations.length > 0) {
@@ -3380,7 +3425,7 @@ function projectConversationList(projectId, conversations) {
     if (task.kind === "goal_pursuit") {
       const goal = document.createElement("span");
       goal.className = "task-lineage-chip";
-      goal.textContent = "GOAL";
+      goal.textContent = "LOCAL MISSION";
       meta.append(goal);
     }
     const rowActions = document.createElement("div");
@@ -3426,7 +3471,7 @@ function projectActivityList(projectId, runs) {
   if (runs.length === 0) {
     const empty = document.createElement("p");
     empty.className = "project-conversations-empty";
-    empty.textContent = "No background work yet. Leave a goal when you want AMOS to keep going.";
+    empty.textContent = "No supervised activity has used this Project yet.";
     section.append(empty);
     return section;
   }
@@ -3458,7 +3503,7 @@ function projectActivityList(projectId, runs) {
       ? "No failed work in this Project."
       : next === "succeeded"
         ? "No succeeded work in this Project."
-        : "No background work yet. Leave a goal when you want AMOS to keep going.";
+        : "No supervised activity has used this Project yet.";
     empty.classList.toggle("hidden", page.total > 0);
     renderListPager(pager, page, (pageNumber) => {
       listPages[pageKey] = pageNumber;
@@ -3645,50 +3690,77 @@ async function updateProject(project, changes, button) {
   }
 }
 
-function openGoalModal(project) {
-  elements.goalProjectIdInput.value = project.id;
-  elements.goalProjectName.textContent = `Project: ${project.name}`;
-  elements.goalObjectiveInput.value = "";
-  elements.goalCheckpointInput.value = String(state?.settings?.autonomousCheckpointMinutes ?? 0);
-  elements.goalModalError.textContent = "";
-  elements.goalModalError.classList.add("hidden");
-  elements.goalModal.classList.remove("hidden");
-  elements.goalObjectiveInput.focus();
+function openMissionModal(project = null) {
+  const projects = Array.isArray(state?.projects?.projects) ? state.projects.projects : [];
+  elements.missionProjectInput.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No Project";
+  elements.missionProjectInput.append(none);
+  for (const item of projects.filter((candidate) => !candidate.archived)) {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    elements.missionProjectInput.append(option);
+  }
+  elements.missionProjectInput.value = project?.id || "";
+  elements.missionObjectiveInput.value = "";
+  elements.missionCheckpointInput.value = String(state?.settings?.autonomousCheckpointMinutes ?? 0);
+  const hosted = elements.missionExecutionInput.querySelector('option[value="hosted"]');
+  hosted.disabled = state?.connectionMode !== "user";
+  elements.missionExecutionInput.value = hosted.disabled ? "local" : "hosted";
+  elements.missionModalError.textContent = "";
+  elements.missionModalError.classList.add("hidden");
+  renderMissionExecutionBoundary();
+  elements.missionModal.classList.remove("hidden");
+  elements.missionObjectiveInput.focus();
 }
 
-function closeGoalModal() {
-  elements.goalModal.classList.add("hidden");
-  elements.goalForm.reset();
-  elements.goalProjectIdInput.value = "";
-  elements.goalModalError.textContent = "";
-  elements.goalModalError.classList.add("hidden");
+function closeMissionModal() {
+  elements.missionModal.classList.add("hidden");
+  elements.missionForm.reset();
+  elements.missionModalError.textContent = "";
+  elements.missionModalError.classList.add("hidden");
 }
 
-async function submitAutonomousGoal(event) {
+function renderMissionExecutionBoundary() {
+  const local = elements.missionExecutionInput.value === "local";
+  elements.missionCheckpointField.classList.toggle("hidden", !local);
+  elements.missionBoundaryNote.textContent = local
+    ? "This Mission runs in Desktop and pauses if the app quits. It uses current intelligence, local approvals, and the selected Project's context and dollar cap when present."
+    : "Hosted Missions keep running in AMOS Platform. AMOS will infer a finite Run Contract and show its exact limits for approval before execution.";
+}
+
+async function submitMission(event) {
   event.preventDefault();
-  const projectId = elements.goalProjectIdInput.value;
-  const objective = elements.goalObjectiveInput.value.trim();
-  const researchCheckpointMinutes = Number(elements.goalCheckpointInput.value);
-  setButtonBusy(elements.goalSubmitButton, true, "Starting…");
+  const projectId = elements.missionProjectInput.value;
+  const objective = elements.missionObjectiveInput.value.trim();
+  const executionLocation = elements.missionExecutionInput.value;
+  const researchCheckpointMinutes = Number(elements.missionCheckpointInput.value);
+  setButtonBusy(elements.missionSubmitButton, true, "Starting…");
   try {
-    const response = await api.startAutonomousGoal({
+    const response = await api.startMission({
       projectId,
       objective,
+      executionLocation,
       researchCheckpointMinutes
     });
+    if (response.state) Object.assign(state, response.state);
     state.projects = response.projects || state.projects;
     state.tasks = response.tasks || state.tasks;
-    selectedProjectId = projectId;
-    closeGoalModal();
+    closeMissionModal();
     renderProjects();
+    renderMissions();
     renderTasks();
-    showView("projects");
-    toast("AMOS is pursuing that goal. Progress lives on the Project card; questions land in Decisions.");
+    showView(executionLocation === "hosted" ? "operator" : "missions");
+    toast(executionLocation === "hosted"
+      ? "AMOS is translating the outcome into a governed Mission. Review the inline contract when it appears."
+      : "Local Mission started. Progress and questions live in Missions.");
   } catch (error) {
-    elements.goalModalError.textContent = error.message;
-    elements.goalModalError.classList.remove("hidden");
+    elements.missionModalError.textContent = error.message;
+    elements.missionModalError.classList.remove("hidden");
   } finally {
-    setButtonBusy(elements.goalSubmitButton, false, "Start and leave →");
+    setButtonBusy(elements.missionSubmitButton, false, "Create Mission →");
   }
 }
 
@@ -3802,10 +3874,279 @@ function renderTaskStatusFilters(tasks) {
   }
 }
 
+function missionEntries() {
+  const hosted = (Array.isArray(state?.missions?.missions) ? state.missions.missions : [])
+    .map((mission) => ({ ...mission, source: "hosted", executionLocation: "hosted" }));
+  const tasks = Array.isArray(state?.tasks?.tasks) ? state.tasks.tasks : [];
+  const runs = Array.isArray(state?.activeRuns) ? state.activeRuns : [];
+  const projects = Array.isArray(state?.projects?.projects) ? state.projects.projects : [];
+  const local = tasks.filter((task) => task.kind === "goal_pursuit").map((task) => {
+    const run = runs.find((candidate) => (
+      candidate.taskRecordId === task.id ||
+      (task.remoteId && candidate.remoteTaskId === task.remoteId)
+    ));
+    const project = projects.find((candidate) => candidate.id === task.projectId);
+    return {
+      id: task.id,
+      name: task.title,
+      objective: task.objective,
+      status: run ? (run.phase === "waiting" ? "waiting_decision" : "running") : task.status,
+      statusReason: run?.summary || task.outcome?.summary || "",
+      source: "local",
+      executionLocation: "local",
+      projectId: task.projectId || "",
+      projectName: project?.name || "",
+      createdAt: task.createdAt,
+      updatedAt: run?.updatedAt || task.updatedAt,
+      task,
+      run
+    };
+  });
+  return [...hosted, ...local].sort((left, right) =>
+    String(right.updatedAt || right.createdAt || "").localeCompare(
+      String(left.updatedAt || left.createdAt || "")
+    )
+  );
+}
+
+function missionStatusBucket(mission) {
+  if (["running", "authorized", "active", "scheduled"].includes(mission.status)) return "running";
+  if (["waiting", "waiting_decision", "paused", "failed", "interrupted", "blocked"].includes(mission.status)) {
+    return "attention";
+  }
+  return "completed";
+}
+
+function renderMissionStatusFilters(missions) {
+  const counts = { all: missions.length, running: 0, attention: 0, completed: 0 };
+  for (const mission of missions) counts[missionStatusBucket(mission)] += 1;
+  elements.missionStatusFilters.replaceChildren();
+  for (const option of [
+    ["all", "All"],
+    ["attention", "Needs attention"],
+    ["running", "Running"],
+    ["completed", "Completed"]
+  ]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `list-filter${missionStatusFilter === option[0] ? " active" : ""}`;
+    button.textContent = `${option[1]} · ${counts[option[0]]}`;
+    button.addEventListener("click", () => {
+      missionStatusFilter = option[0];
+      listPages.missions = 1;
+      renderMissions();
+    });
+    elements.missionStatusFilters.append(button);
+  }
+}
+
+function renderMissions() {
+  if (!state) return;
+  renderMissionTemplates();
+  const missions = missionEntries();
+  const query = elements.missionSearchInput.value.trim().toLowerCase();
+  resetListPageIfQueryChanged("missions", `${query}|${missionStatusFilter}`);
+  const matching = missions.filter((mission) => {
+    const haystack = `${mission.name}\n${mission.objective}\n${mission.projectName || ""}`.toLowerCase();
+    return (!query || haystack.includes(query)) &&
+      (missionStatusFilter === "all" || missionStatusBucket(mission) === missionStatusFilter);
+  });
+  const page = paginateItems(matching, "missions");
+  const running = missions.filter((mission) => missionStatusBucket(mission) === "running").length;
+  const attention = missions.filter((mission) => missionStatusBucket(mission) === "attention").length;
+  const completed = missions.filter((mission) => missionStatusBucket(mission) === "completed").length;
+  elements.missionBadge.textContent = String(attention || running);
+  elements.missionBadge.classList.toggle("hidden", attention + running === 0);
+  elements.missionUnavailable.textContent = state.missions?.supported === false
+    ? "Hosted Missions are unavailable from this company right now. Missions on this computer remain available."
+    : "";
+  elements.missionUnavailable.classList.toggle("hidden", state.missions?.supported !== false);
+  elements.refreshMissionsButton.disabled = state.connectionMode !== "user" || state.remoteStatus?.syncing;
+  elements.missionEmpty.classList.toggle("hidden", page.total > 0);
+  renderMissionStatusFilters(missions);
+  elements.missionSummary.replaceChildren();
+  for (const [label, value, detail] of [
+    ["Running", running, "working now or ready for a hosted worker"],
+    ["Needs attention", attention, "waiting, paused, interrupted, or failed"],
+    ["Finished", completed, "completed, cancelled, or expired with history retained"]
+  ]) {
+    const item = document.createElement("article");
+    const number = document.createElement("strong");
+    number.textContent = String(value);
+    const title = document.createElement("span");
+    title.textContent = label;
+    const copy = document.createElement("small");
+    copy.textContent = detail;
+    item.append(number, title, copy);
+    elements.missionSummary.append(item);
+  }
+  elements.missionList.replaceChildren();
+  for (const mission of page.items) elements.missionList.append(missionCard(mission));
+  renderListPager(elements.missionPager, page, (next) => {
+    listPages.missions = next;
+    renderMissions();
+  });
+}
+
+function renderMissionTemplates() {
+  elements.missionTemplateList.replaceChildren();
+  for (const template of MISSION_TEMPLATES) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "mission-template-card";
+    const eyebrow = document.createElement("span");
+    eyebrow.textContent = "MISSION TEMPLATE";
+    const title = document.createElement("strong");
+    title.textContent = template.label;
+    const detail = document.createElement("small");
+    detail.textContent = template.detail;
+    card.append(eyebrow, title, detail);
+    card.addEventListener("click", () => {
+      openMissionModal();
+      elements.missionObjectiveInput.value = template.objective;
+      elements.missionObjectiveInput.focus();
+    });
+    elements.missionTemplateList.append(card);
+  }
+}
+
+function missionCard(mission) {
+  const card = document.createElement("article");
+  card.className = `task-card mission-card ${missionStatusBucket(mission)}`;
+  const heading = document.createElement("div");
+  heading.className = "task-card-heading";
+  const copy = document.createElement("div");
+  const meta = document.createElement("div");
+  meta.className = "task-card-kicker";
+  const status = document.createElement("span");
+  status.className = `task-status ${mission.status}`;
+  status.textContent = String(mission.status || "unknown").replaceAll("_", " ").toUpperCase();
+  const location = document.createElement("span");
+  location.className = "task-lineage-chip current";
+  location.textContent = mission.executionLocation === "local" ? "THIS COMPUTER" : "AMOS HOSTED";
+  meta.append(status, location);
+  if (mission.projectName) {
+    const project = document.createElement("span");
+    project.className = "task-lineage-chip project";
+    project.textContent = `PROJECT · ${mission.projectName.toUpperCase()}`;
+    meta.append(project);
+  }
+  const title = document.createElement("h2");
+  title.textContent = mission.name;
+  copy.append(meta, title);
+  const when = document.createElement("time");
+  when.textContent = relativeTime(mission.updatedAt || mission.createdAt);
+  heading.append(copy, when);
+  const objective = document.createElement("p");
+  objective.className = "task-card-objective";
+  objective.textContent = mission.objective;
+  const progress = document.createElement("p");
+  progress.className = "mission-progress";
+  progress.textContent = mission.statusReason || (
+    missionStatusBucket(mission) === "completed"
+      ? "Mission finished. Its history and proof remain available."
+      : "Waiting for the next recorded progress update."
+  );
+  const details = document.createElement("div");
+  details.className = "task-card-details";
+  if (mission.source === "hosted") {
+    for (const label of [
+      `${mission.contract?.usedToolCalls || 0} / ${mission.contract?.maxToolCalls || "—"} tool calls`,
+      `${formatUsdMicros(mission.contract?.usedCostMicrousd)} / ${formatUsdMicros(mission.contract?.maxCostMicrousd)} cost`,
+      mission.contract?.expiresAt ? `Expires ${relativeTime(mission.contract.expiresAt)}` : "Bounded Run Contract"
+    ]) {
+      const chip = document.createElement("span");
+      chip.textContent = label;
+      details.append(chip);
+    }
+  } else {
+    const chip = document.createElement("span");
+    chip.textContent = mission.run ? `Live · ${mission.run.phase || "working"}` : "Durable local history";
+    details.append(chip);
+  }
+  const actions = document.createElement("div");
+  actions.className = "task-card-actions";
+  if (mission.source === "local") {
+    const open = actionButton(mission.run ? "Open in Operator" : "Open", "primary");
+    open.addEventListener("click", () => openManagedTask(mission.task, open));
+    actions.append(open);
+    if (mission.run) {
+      const stop = actionButton("Stop safely", "ghost");
+      stop.addEventListener("click", async () => {
+        setButtonBusy(stop, true, "Stopping…");
+        try {
+          await api.cancelTask(mission.run.id);
+          toast("Local Mission is stopping safely.");
+        } catch (error) {
+          toast(error.message, true);
+          setButtonBusy(stop, false, "Stop safely");
+        }
+      });
+      actions.append(stop);
+    }
+  } else {
+    if (["authorized", "running", "waiting_decision"].includes(mission.status)) {
+      const pause = actionButton("Pause", "secondary");
+      pause.addEventListener("click", () => controlHostedMission(mission, "pause", pause));
+      actions.append(pause);
+    }
+    if (mission.status === "paused" && mission.resumeUrl) {
+      const resume = actionButton("Resume", "primary");
+      resume.addEventListener("click", () => controlHostedMission(mission, "resume", resume));
+      actions.append(resume);
+    }
+    if (mission.status === "waiting_decision") {
+      const answer = actionButton("Answer", "primary");
+      answer.addEventListener("click", () => showView("decisions"));
+      actions.append(answer);
+    }
+    if (["authorized", "running", "waiting_decision", "paused"].includes(mission.status)) {
+      const cancel = actionButton("Cancel", "ghost");
+      cancel.addEventListener("click", () => controlHostedMission(mission, "cancel", cancel));
+      actions.append(cancel);
+    }
+  }
+  card.append(heading, objective, progress, details, actions);
+  return card;
+}
+
+async function controlHostedMission(mission, action, button) {
+  const original = button.textContent;
+  setButtonBusy(button, true, action === "resume" ? "Opening…" : "Saving…");
+  try {
+    const next = action === "pause"
+      ? await api.pauseMission(mission.id)
+      : action === "cancel"
+        ? await api.cancelMission(mission.id)
+        : await api.resumeMission(mission.id);
+    if (next?.missions) state.missions = next;
+    if (action !== "resume") renderMissions();
+    toast(action === "resume" ? "Opened the verified resume step." : `Mission ${action}d.`);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected) setButtonBusy(button, false, original);
+  }
+}
+
+async function refreshMissions() {
+  setButtonBusy(elements.refreshMissionsButton, true, "Refreshing…");
+  try {
+    state.missions = await api.refreshMissions();
+    renderMissions();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setButtonBusy(elements.refreshMissionsButton, false, "Refresh");
+  }
+}
+
 function renderTasks() {
   if (!state) return;
   const library = state.tasks || { supported: false, tasks: [] };
-  const tasks = Array.isArray(library.tasks) ? library.tasks : [];
+  const tasks = Array.isArray(library.tasks)
+    ? library.tasks.filter((task) => task.kind !== "goal_pursuit")
+    : [];
   const checkpoints = Array.isArray(state.taskCheckpoints) ? state.taskCheckpoints : [];
   const query = elements.taskSearchInput.value.trim().toLowerCase();
   resetListPageIfQueryChanged("tasks", `${query}|${elements.taskProjectFilterInput.value}|${taskStatusFilter}`);
@@ -3943,7 +4284,7 @@ function taskCard(task) {
       ? `Project · ${project.name}`
       : task.projectId ? "Assigned to a Project" : "Standalone conversation",
     task.kind === "goal_pursuit"
-      ? "Autonomous goal"
+      ? "Local Mission"
       : task.kind === "automation_builder" ? "Automation build" : humanizeTool(task.kind || "general"),
     taskWorkspaceLabel(task),
     task.parentTaskId ? `From ${shortTaskId(task.parentTaskId)}` : "Root conversation",
@@ -7592,7 +7933,7 @@ function decisionCard(approval, actionable) {
   summary.textContent = decisionSummary(approval, actionable);
   const provenance = document.createElement("small");
   provenance.textContent = [
-    approval.agency_origin === "goal_pursuit" ? "Autonomous goal" : "Requested work",
+    approval.agency_origin === "goal_pursuit" ? "Local Mission" : "Requested work",
     !actionable && approval.decided_by ? "Human decision recorded" : "",
     approval.last_error ? `execution error: ${approval.last_error}` : ""
   ].filter(Boolean).join(" · ");

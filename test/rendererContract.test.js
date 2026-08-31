@@ -510,7 +510,7 @@ test("Conversations expose durable resume, explicit forking capability, lineage,
   assert.doesNotMatch(workspace, /"reset"|"checkout"|"clean"|"stash"/);
 });
 
-test("Projects are single-column conversation workspaces with accordion activity", async () => {
+test("Projects are context workspaces and Missions own autonomous work", async () => {
   const [javascript, html, css, preload, main, controller, remoteState] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
@@ -524,7 +524,8 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(html, /data-view="projects"/);
   assert.match(html, /id="projectsView"/);
   assert.match(html, />Projects</);
-  assert.match(html, /Talk in it, or give it a goal and leave/);
+  assert.match(html, /Use it for related conversations or attach it to a Mission/);
+  assert.doesNotMatch(html, /give it a goal and leave/);
   assert.doesNotMatch(html, /id="activityCenterList"/);
   assert.doesNotMatch(html, /ACTIVITY CENTER/);
   assert.doesNotMatch(html, /id="projectSummary"/);
@@ -545,12 +546,25 @@ test("Projects are single-column conversation workspaces with accordion activity
   assert.match(javascript, /task\.projectId === project\.id/);
   assert.match(javascript, /api\.startNewConversation\(\{[\s\S]*?projectId: project\.id[\s\S]*?title: `Talk in \$\{project\.name\}`/);
   assert.match(javascript, /actionButton\("Talk", "primary"\)/);
-  assert.match(javascript, /Leave a goal/);
-  assert.match(javascript, /api\.startAutonomousGoal\(/);
-  assert.match(html, /id="goalObjectiveInput"/);
-  assert.match(html, /id="goalCheckpointInput"/);
+  assert.match(javascript, /actionButton\("New Mission", "secondary"\)/);
+  assert.doesNotMatch(javascript, /Leave a goal/);
+  assert.match(html, /data-view="missions"/);
+  assert.match(html, /id="missionsView"/);
+  assert.match(html, /Start from a Mission template/);
+  assert.match(html, /id="missionObjectiveInput"/);
+  assert.match(html, /id="missionExecutionInput"/);
+  assert.match(html, /id="missionProjectInput"/);
+  assert.match(html, /id="missionCheckpointInput"/);
   assert.match(html, /Keep working; ask only when a real decision is needed/);
-  assert.match(html, /Start and leave/);
+  assert.match(html, /Create Mission/);
+  assert.match(javascript, /api\.startMission\(/);
+  assert.match(javascript, /function renderMissions\(\)/);
+  assert.match(javascript, /executionLocation === "local" \? "THIS COMPUTER" : "AMOS HOSTED"/);
+  assert.match(preload, /desktop:start-mission/);
+  assert.match(main, /controller\.startMission/);
+  assert.match(controller, /async startLocalMission\(/);
+  assert.match(controller, /async startHostedMission\(/);
+  assert.match(controller, /async startMission\(/);
   assert.match(preload, /desktop:start-autonomous-goal/);
   assert.match(main, /controller\.startAutonomousGoal/);
   assert.match(controller, /async startAutonomousGoal\(/);

@@ -243,6 +243,7 @@ export class DesktopController {
     this.pendingAutomationActivations = new Map();
     this.tasks = { supported: false, tasks: [], contract: null };
     this.projects = emptyProjectsState();
+    this.missions = emptyMissionsState();
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.onlineRelationshipProfile = null;
@@ -427,6 +428,7 @@ export class DesktopController {
       tasks,
       conversationCapabilities: tasks.activeForkCapability,
       projects: structuredClone(this.projects),
+      missions: structuredClone(this.missions || emptyMissionsState()),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -1545,6 +1547,7 @@ export class DesktopController {
       this.pendingAutomationActivations.clear();
       this.tasks = { supported: false, tasks: [], contract: null };
       this.projects = emptyProjectsState();
+      this.missions = emptyMissionsState();
       this.remoteStatus = {
         syncing: false,
         lastSyncedAt: this.remoteStatus.lastSyncedAt,
@@ -1578,6 +1581,7 @@ export class DesktopController {
       this.pendingAutomationActivations.clear();
       this.tasks = { supported: false, tasks: [], contract: null };
       this.projects = emptyProjectsState();
+      this.missions = emptyMissionsState();
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
       this.onlineRelationshipProfile = null;
@@ -1606,7 +1610,8 @@ export class DesktopController {
       automationsResult,
       automationTemplatesResult,
       tasksResult,
-      projectsResult
+      projectsResult,
+      missionsResult
     ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
@@ -1620,7 +1625,8 @@ export class DesktopController {
       remote.automationsLibrary(),
       remote.automationTemplateCatalog(),
       remote.tasksLibrary(),
-      remote.projectsLibrary()
+      remote.projectsLibrary(),
+      remote.missionsLibrary()
     ]);
 
     const errors = [];
@@ -1736,6 +1742,15 @@ export class DesktopController {
       this.projects = emptyProjectsState();
       if (projectsResult.status === "rejected") {
         errors.push(projectsResult.reason?.message || "Could not load AMOS Projects");
+      }
+    }
+
+    if (missionsResult.status === "fulfilled" && missionsResult.value) {
+      this.missions = missionsResult.value;
+    } else {
+      this.missions = emptyMissionsState();
+      if (missionsResult.status === "rejected") {
+        errors.push(missionsResult.reason?.message || "Could not load AMOS Missions");
       }
     }
 
@@ -2341,7 +2356,8 @@ export class DesktopController {
       automationSetup: isolated ? null : this.automationSetup,
       pendingAutomationActivations: isolated ? new Map() : this.pendingAutomationActivations,
       approvals,
-      browserRecipeRecorder: isolated ? new BrowserRecipeRecorder() : this.browserRecipeRecorder
+      browserRecipeRecorder: isolated ? new BrowserRecipeRecorder() : this.browserRecipeRecorder,
+      missionCreation: input?.missionCreation === true
     }, async () => {
       if (input?.taskRecordId) this.activeTaskRecordId = input.taskRecordId;
       if (task?.contextKey) this.activeContextKey = task.contextKey;
@@ -2474,6 +2490,8 @@ export class DesktopController {
       intelligenceRole: input?.role || null,
       intelligence: null,
       codingLifecycle: null,
+      missionCreation: input?.missionCreation === true || isMissionBuilderTask(conversationTask),
+      missionCreationObserved: false,
       children: []
     };
     this.send("agent:status", {
@@ -2622,7 +2640,7 @@ export class DesktopController {
         routingDecision,
         presentationIntent: objective,
         canvasActive: Boolean(this.canvases.state().activeCanvasId),
-        completionGate: () => this.codingLifecycleCompletionGate(),
+        completionGate: (context) => this.runCompletionGate(context),
         researchCheckpoint: desktopResearchCheckpointPolicy({
           settings,
           input,
@@ -4081,16 +4099,16 @@ export class DesktopController {
     };
   }
 
-  async startAutonomousGoal(input = {}) {
+  async startLocalMission(input = {}) {
     const projectId = String(input.projectId || "").trim();
-    if (!isUuid(projectId)) throw new Error("Choose a Project before giving AMOS a goal");
+    if (projectId && !isUuid(projectId)) throw new Error("That Project identifier is invalid");
     const objective = String(input.objective || "").trim().slice(0, 6_000);
-    if (!objective) throw new Error("A goal needs an objective");
+    if (!objective) throw new Error("A Mission needs an outcome");
     const project = (Array.isArray(this.projects?.projects) ? this.projects.projects : [])
       .find((item) => item.id === projectId) || null;
-    if (project?.archived) throw new Error("Restore the Project before giving it a goal");
+    if (project?.archived) throw new Error("Restore the Project before using it for a Mission");
     if (project && project.status !== "active") {
-      throw new Error("Resume the Project before giving it a goal");
+      throw new Error("Resume the Project before using it for a Mission");
     }
     const title = String(input.title || conversationTitle(objective)).trim().slice(0, 160)
       || conversationTitle(objective);
@@ -4103,7 +4121,7 @@ export class DesktopController {
     });
     const task = opened.launch?.task || null;
     const taskRecordId = opened.launch?.taskId || task?.id || "";
-    if (!taskRecordId) throw new Error("AMOS could not open that Project goal");
+    if (!taskRecordId) throw new Error("AMOS could not open that local Mission");
     const started = await this.run({
       text: objective,
       taskRecordId,
@@ -4112,10 +4130,11 @@ export class DesktopController {
       wait: false,
       isolate: true
     });
-    this.record("project", `Started autonomous goal: ${title}`, {
-      project_id: projectId,
+    this.record("mission", `Started local Mission: ${title}`, {
+      project_id: projectId || null,
       task_id: taskRecordId,
       run_id: started.runId || null,
+      execution_location: "local",
       execution_authority: false
     });
     const settings = await this.settingsStore.read();
@@ -4130,6 +4149,54 @@ export class DesktopController {
       projects: structuredClone(this.projects),
       tasks: await this.tasksState(settings)
     };
+  }
+
+  async startAutonomousGoal(input = {}) {
+    return this.startLocalMission(input);
+  }
+
+  async startHostedMission(input = {}) {
+    const objective = String(input.objective || "").trim().slice(0, 4_000);
+    if (!objective) throw new Error("A Mission needs an outcome");
+    const projectId = String(input.projectId || "").trim();
+    if (projectId && !isUuid(projectId)) throw new Error("That Project identifier is invalid");
+    const settings = await this.settingsStore.read();
+    if (settings.operatingMode !== "online" || this.identity?.principal_type !== "user") {
+      throw new Error("Connect your AMOS company before creating a hosted Mission");
+    }
+    const title = String(input.title || `Create Mission: ${conversationTitle(objective)}`)
+      .trim()
+      .slice(0, 160);
+    const opened = await this.startNewConversation({
+      kind: "general",
+      ...(projectId ? { projectId } : {}),
+      objective,
+      title,
+      select: true
+    });
+    const taskRecordId = opened.launch?.taskId || opened.launch?.task?.id || "";
+    if (!taskRecordId) throw new Error("AMOS could not open the Mission builder");
+    const started = await this.run({
+      text: objective,
+      taskRecordId,
+      select: true,
+      wait: false,
+      isolate: false,
+      missionCreation: true
+    });
+    return {
+      started: true,
+      executionLocation: "hosted",
+      taskId: taskRecordId,
+      runId: started.runId,
+      state: await this.state()
+    };
+  }
+
+  async startMission(input = {}) {
+    return input.executionLocation === "local"
+      ? this.startLocalMission(input)
+      : this.startHostedMission(input);
   }
 
   async openTask(id) {
@@ -4319,6 +4386,37 @@ export class DesktopController {
     this.projects = await client.projectsLibrary();
     if (send) await this.sendRemoteState();
     return structuredClone(this.projects);
+  }
+
+  async refreshMissions(remote = null, { send = true } = {}) {
+    const settings = await this.settingsStore.read();
+    const client = remote || await this.personalRemote(settings, "refreshing Missions");
+    this.missions = await client.missionsLibrary();
+    if (send) await this.sendRemoteState();
+    return structuredClone(this.missions);
+  }
+
+  async pauseMission(id) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "pausing this Mission");
+    await remote.pauseMission(id, "paused from AMOS Desktop");
+    return this.refreshMissions(remote);
+  }
+
+  async cancelMission(id) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "cancelling this Mission");
+    await remote.cancelMission(id, "cancelled from AMOS Desktop");
+    return this.refreshMissions(remote);
+  }
+
+  async resumeMission(id) {
+    const mission = (this.missions?.missions || []).find((item) => item.id === id);
+    if (!mission?.resumeUrl) throw new Error("That Mission is not ready to resume");
+    const url = new URL(mission.resumeUrl);
+    if (url.protocol !== "https:") throw new Error("AMOS blocked an invalid Mission resume link");
+    await this.openBrowser(url.href);
+    return { opened: true, missionId: mission.id };
   }
 
   async startRunSupervision(settings, abortController) {
@@ -5531,11 +5629,21 @@ export class DesktopController {
               : SYSTEM_PROMPT, settings, config, {
                 project: activeProjectForRuntime(this.projects, taskRecord),
                 autonomousGoal: taskRecord?.kind === "goal_pursuit"
-              })}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly
+              })}${hostedMissionCreationPrompt(
+                this.runManager.current()?.missionCreation === true || isMissionBuilderTask(taskRecord),
+                taskRecord?.projectId
+              )}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly
           ? "\n\nThis task is context-only. No local workspace is granted, and local shell, file, code, Git, and document-generation tools are unavailable."
           : ""}`,
         extraTools,
         onToolResult: (outcome) => {
+          if (
+            this.activeTask?.missionCreation &&
+            /(^|_)create_mission$/.test(String(outcome?.name || "")) &&
+            outcome?.failed !== true
+          ) {
+            this.activeTask.missionCreationObserved = true;
+          }
           this.captureContinuityToolOutcome(outcome, config.safety.workspaceRoot);
           if (outcome?.name === "desktop_focus_workspace" && outcome.result?.ok && !outcome.failed) {
             void this.persistWorkspaceFocus(outcome.result);
@@ -6614,6 +6722,25 @@ export class DesktopController {
     return lifecycle.completionGate();
   }
 
+  runCompletionGate({ answer = "" } = {}) {
+    const coding = this.codingLifecycleCompletionGate();
+    if (coding?.allow === false) return coding;
+    if (!this.activeTask?.missionCreation || this.activeTask.missionCreationObserved) {
+      return { allow: true };
+    }
+    if (missionBuilderNeedsUserInput(answer)) return { allow: true };
+    return {
+      allow: false,
+      summary: "A hosted Mission has not been created yet",
+      message: [
+        "<amos_mission_creation_required>",
+        "The user opened the dedicated Mission builder. An ordinary task, campaign, Automation, or plan does not satisfy this run.",
+        "Call create_mission with a finite, feasible Run Contract. If the outcome itself is impossible under the requested constraints, ask one concrete plain-English question instead of silently substituting another primitive.",
+        "</amos_mission_creation_required>"
+      ].join("\n")
+    };
+  }
+
   assertCodingChildrenCollected() {
     const pending = (this.activeTask?.children || []).filter((child) => {
       const lane = this.runManager.findByTask(child.taskId);
@@ -7061,6 +7188,7 @@ export class DesktopController {
     this.pendingAutomationActivations.clear();
     this.tasks = { supported: false, tasks: [], contract: null };
     this.projects = emptyProjectsState();
+    this.missions = emptyMissionsState();
     this.companies = { currentTenantId: null, tenants: [] };
     this.workingContinuity = null;
     this.onlineRelationshipProfile = null;
@@ -7149,6 +7277,7 @@ export class DesktopController {
         ? { conversationCapabilities: tasks.activeForkCapability }
         : {}),
       projects: structuredClone(this.projects),
+      missions: structuredClone(this.missions || emptyMissionsState()),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -8345,14 +8474,41 @@ function autonomousGoalPrompt(enabled) {
   if (!enabled) return "";
   return [
     "",
-    "Autonomous Project goal:",
-    "- The user gave you this goal and left you to pursue it in the background.",
-    "- Continue until the goal is complete, blocked, or you need a consequential answer.",
+    "Local Mission:",
+    "- The user started this finite Mission on this computer and left you to pursue it in the background.",
+    "- Continue until the outcome is independently supported, blocked, or you need a consequential answer.",
     "- Ask that question in the conversation and wait. Do not invent a form or second waiting UI.",
     "- Autonomy does not grant extra approval, spending, or execution authority.",
     "- Do not claim completion unless a tool result or receipt proves it.",
     ""
   ].join("\n");
+}
+
+function hostedMissionCreationPrompt(enabled, projectId = "") {
+  if (!enabled) return "";
+  return [
+    "",
+    "Dedicated hosted Mission builder:",
+    "- Translate the user's plain-English outcome into one finite, governed AMOS Mission.",
+    "- create_mission is the only successful terminal creation operation for this run.",
+    "- Related tools may be read for context or prerequisites, but a campaign, Project goal, Automation, or ordinary task is not a Mission and cannot replace it.",
+    "- Infer conservative contract details. Check mathematical feasibility across target counts, pages, batches, credits, time, and tool-call ceilings before proposing the Mission.",
+    projectId
+      ? `- Associate the Mission with this exact user-private Project context using project_id: ${projectId}`
+      : "- Do not associate a Project unless the user selected one.",
+    "- Never tell the user the Mission exists unless create_mission returned a pending approval or mission_id.",
+    ""
+  ].join("\n");
+}
+
+function isMissionBuilderTask(task) {
+  return String(task?.title || "").startsWith("Create Mission:");
+}
+
+function missionBuilderNeedsUserInput(answer) {
+  const text = String(answer || "").trim();
+  if (!text.includes("?")) return false;
+  return /\b(which|what|where|when|who|how|choose|confirm|need|before i|before creating)\b/i.test(text);
 }
 
 function emptyProjectsState() {
@@ -8364,6 +8520,10 @@ function emptyProjectsState() {
     projectContract: null,
     runContract: null
   };
+}
+
+function emptyMissionsState() {
+  return { supported: false, missions: [], count: 0 };
 }
 
 function runStatusForEvent(event) {

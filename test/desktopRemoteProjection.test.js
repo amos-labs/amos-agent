@@ -91,6 +91,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     browserRecipes: { supported: false, recipes: [] },
     tasks: controller.tasks,
     projects: controller.projects,
+    missions: { supported: false, missions: [], count: 0 },
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,

@@ -369,7 +369,7 @@ test("a Project goal starts in the background without stealing Operator", async 
     return { answer: "Working", taskEventId: "run:goal" };
   };
 
-  const started = await controller.startAutonomousGoal({
+  const started = await controller.startLocalMission({
     projectId: "22222222-2222-4222-8222-222222222222",
     objective: "Ship the first-location scorecard"
   });
@@ -389,7 +389,7 @@ test("a Project goal starts in the background without stealing Operator", async 
   assert.equal(runCalls, 1);
 });
 
-test("a Project goal requires an active Project and an objective", async () => {
+test("a local Mission accepts optional Project context and requires an outcome", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-autonomous-goal-guard-"));
   const tasks = new DesktopTaskStore({
     filePath: join(root, "tasks.json"),
@@ -419,14 +419,14 @@ test("a Project goal requires an active Project and an objective", async () => {
   };
 
   await assert.rejects(
-    controller.startAutonomousGoal({
+    controller.startLocalMission({
       projectId: "22222222-2222-4222-8222-222222222222",
       objective: ""
     }),
-    /goal needs an objective/
+    /Mission needs an outcome/
   );
   await assert.rejects(
-    controller.startAutonomousGoal({
+    controller.startLocalMission({
       projectId: "22222222-2222-4222-8222-222222222222",
       objective: "Do the work"
     }),
