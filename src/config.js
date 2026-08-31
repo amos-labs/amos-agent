@@ -69,6 +69,12 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
         1,
         12
       ),
+      maxCapabilityDiscoveryCycles: intFromEnv(
+        env.AMOS_AGENT_MAX_CAPABILITY_DISCOVERY_CYCLES,
+        3,
+        2,
+        12
+      ),
       maxModelTransientRetries: intFromEnv(
         env.AMOS_AGENT_MAX_MODEL_TRANSIENT_RETRIES,
         2,

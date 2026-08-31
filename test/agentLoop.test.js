@@ -264,6 +264,67 @@ test("malformed tool JSON from any model is corrected and never executes", async
   ));
 });
 
+test("alternating capability catalog calls stop when they add no usable operation", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "amos_list_engines",
+    handler: async () => ({ ok: true, engines: ["growth"] })
+  });
+  registry.register({
+    name: "amos_load_engine_tools",
+    handler: async () => ({ ok: true, tools: [], note: "nothing new" })
+  });
+  const requests = [];
+  let turn = 0;
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 3,
+        maxConsecutiveToolErrorCycles: 3,
+        maxCapabilityDiscoveryCycles: 3
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat(input) {
+        requests.push(input);
+        turn += 1;
+        if (turn <= 3) {
+          const name = turn % 2 === 1 ? "amos_list_engines" : "amos_load_engine_tools";
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: `catalog-${turn}`,
+                function: {
+                  name,
+                  arguments: name === "amos_load_engine_tools"
+                    ? "{\"engine\":\"growth\",\"toolkit\":\"admin\"}"
+                    : "{}"
+                }
+              }]
+            }
+          };
+        }
+        assert.deepEqual(input.tools, []);
+        assert.ok(input.messages.some((message) =>
+          /capability discovery repeated without adding a usable operation/.test(String(message.content || ""))
+        ));
+        return { message: { role: "assistant", content: "I could not find a usable operation." } };
+      }
+    }
+  });
+
+  assert.equal(
+    await loop.run("create a mission without looping through catalogs"),
+    "I could not find a usable operation."
+  );
+  assert.equal(requests.length, 4);
+});
+
 test("an output-limited model response is explained and retried automatically", async () => {
   const requests = [];
   const loop = new AgentLoop({

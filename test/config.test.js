@@ -12,15 +12,18 @@ test("agent work has progress guards instead of a productive-cycle ceiling", () 
   const defaults = loadConfig({}, ".").agent;
   assert.equal(defaults.maxRepeatedToolCycles, 3);
   assert.equal(defaults.maxConsecutiveToolErrorCycles, 3);
+  assert.equal(defaults.maxCapabilityDiscoveryCycles, 3);
   assert.equal(defaults.maxModelTransientRetries, 2);
   assert.equal(Object.hasOwn(defaults, "maxToolTurns"), false);
 
   const configured = loadConfig({
     AMOS_AGENT_MAX_REPEATED_TOOL_CYCLES: "5",
-    AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES: "4"
+    AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES: "4",
+    AMOS_AGENT_MAX_CAPABILITY_DISCOVERY_CYCLES: "6"
   }, ".").agent;
   assert.equal(configured.maxRepeatedToolCycles, 5);
   assert.equal(configured.maxConsecutiveToolErrorCycles, 4);
+  assert.equal(configured.maxCapabilityDiscoveryCycles, 6);
 });
 
 test("model provider defaults to Kimi while preserving legacy environment names", () => {

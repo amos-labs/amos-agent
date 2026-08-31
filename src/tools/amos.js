@@ -30,6 +30,138 @@ export function createAmosTools() {
         additionalProperties: false
       }
     ),
+    {
+      name: "amos_resolve_capabilities",
+      source: "amos",
+      toolkit: "core",
+      description: "Resolve a concrete business outcome once into a small, exact, expiring AMOS capability manifest. Prefer this over listing and loading engine catalogs; discovery grants no authority.",
+      parameters: {
+        type: "object",
+        properties: {
+          outcome: { type: "string", description: "What the user wants accomplished, in ordinary business language." },
+          limit: { type: "integer", minimum: 1, maximum: 20, default: 8 },
+          ttl_seconds: { type: "integer", minimum: 60, maximum: 86400, default: 3600 }
+        },
+        required: ["outcome"],
+        additionalProperties: false
+      },
+      async handler(args, context) {
+        const result = await context.amosClient.callTool(
+          "resolve_capabilities",
+          {
+            outcome: args.outcome,
+            limit: args.limit,
+            ttl_seconds: args.ttl_seconds,
+            include_input_schemas: true
+          },
+          { signal: context.signal }
+        );
+        const normalized = normalizeMcpToolResult(result);
+        if (normalized.ok === false) return normalized;
+        const operations = Array.isArray(normalized.operations) ? normalized.operations : [];
+        const manifestId = String(normalized.manifest_id || "");
+        if (!manifestId || operations.length === 0) {
+          return {
+            ok: true,
+            manifest_id: manifestId || null,
+            operation_count: operations.length,
+            available_capabilities: [],
+            next_step: normalized.next_step || "No matching caller-available capability was found."
+          };
+        }
+        const schemas = operations.map((operation) => ({
+          name: sanitizeToolName(`amos_capability_${operation.operation}`),
+          description: operation.description || `Execute AMOS ${operation.operation} from the pinned capability manifest.`,
+          inputSchema: operation.input_schema || {
+            type: "object",
+            properties: {},
+            additionalProperties: true
+          }
+        }));
+        const limits = dynamicEngineLimits(context.config);
+        const surface = measureToolSurface(schemas.map(asOpenAiSchema));
+        if (schemas.length > limits.maxTools || surface.schemaBytes > limits.maxSchemaBytes) {
+          return {
+            ok: false,
+            error: `The resolved capability manifest exceeds Desktop's active tool budget (${schemas.length} tools, ${surface.schemaBytes} schema bytes). Resolve a narrower outcome.`
+          };
+        }
+        context.registry.unregisterWhere((tool) => tool.toolkit?.startsWith("amos-capability:"));
+        const toolkit = `amos-capability:${manifestId}`;
+        const registered = [];
+        for (let index = 0; index < operations.length; index += 1) {
+          const operation = operations[index];
+          const schema = schemas[index];
+          const localName = schema.name;
+          const wasRegistered = context.registry.register({
+            name: localName,
+            source: "amos:capability",
+            toolkit,
+            remoteName: operation.operation,
+            description: schema.description,
+            parameters: schema.inputSchema,
+            readOnly: operation.effect === "read",
+            parallelSafe: operation.effect === "read",
+            async handler(toolArgs, innerContext) {
+              const remoteResult = await innerContext.amosClient.callTool(
+                "execute_capability",
+                {
+                  manifest_id: manifestId,
+                  operation: operation.operation,
+                  arguments: toolArgs || {}
+                },
+                { signal: innerContext.signal }
+              );
+              return normalizeMcpToolResult(remoteResult);
+            }
+          });
+          if (wasRegistered) registered.push(localName);
+        }
+        const activation = context.registry.activateToolkit(toolkit, {
+          mode: "add",
+          replacePrefix: "amos-capability:",
+          evictPrefix: "amos-engine:"
+        });
+        if (activation.ok === false) {
+          context.registry.unregisterWhere((tool) => tool.toolkit === toolkit);
+          return activation;
+        }
+        return {
+          ok: true,
+          manifest_id: manifestId,
+          manifest_sha256: normalized.manifest_sha256,
+          expires_at: normalized.expires_at,
+          operation_count: operations.length,
+          registered_dynamic_tools: registered,
+          available_capabilities: operations.map((operation, index) => ({
+            tool: schemas[index].name,
+            operation: operation.operation,
+            effect: operation.effect,
+            description: operation.description
+          })),
+          authority: normalized.authority,
+          next_step: "Use the single best matching registered capability. Do not resolve or reload catalogs again unless the outcome changes or this manifest expires."
+        };
+      }
+    },
+    {
+      ...mcpTool(
+        "amos_execute_capability",
+        "Compatibility gateway for executing one exact operation from a manifest returned by amos_resolve_capabilities. Prefer the dynamically registered typed capability tool when available.",
+        "execute_capability",
+        {
+          type: "object",
+          properties: {
+            manifest_id: { type: "string", description: "Manifest UUID returned by amos_resolve_capabilities." },
+            operation: { type: "string", description: "Exact operation from that manifest." },
+            arguments: { type: "object", description: "Arguments matching the pinned operation schema." }
+          },
+          required: ["manifest_id", "operation", "arguments"],
+          additionalProperties: false
+        }
+      ),
+      toolkit: "core"
+    },
     mcpTool("amos_list_engines", "List available AMOS engines filtered by scope and plan.", "list_engines"),
     {
       name: "amos_load_engine_tools",
