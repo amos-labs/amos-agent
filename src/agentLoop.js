@@ -66,6 +66,7 @@ export const GATHER_TOOL_NAMES = new Set([
   "amos_whoami",
   "amos_resume_company",
   "amos_company_overview",
+  "amos_resolve_capabilities",
   "amos_list_engines",
   "amos_load_engine_tools",
   "desktop_activate_toolkit",
@@ -76,6 +77,13 @@ export const GATHER_TOOL_NAMES = new Set([
   "git_diff"
 ]);
 const MAX_GATHER_REASONING_TURNS = 4;
+const CAPABILITY_DISCOVERY_TOOL_NAMES = new Set([
+  "amos_get_started",
+  "amos_whoami",
+  "amos_resolve_capabilities",
+  "amos_list_engines",
+  "amos_load_engine_tools"
+]);
 const DEFAULT_LOCAL_PREFERRED_INPUT_TOKENS = 8_192;
 const DEFAULT_LOCAL_PROMPT_TARGET_MS = 60_000;
 const MIN_LOCAL_PREFERRED_INPUT_TOKENS = 4_096;
@@ -316,6 +324,8 @@ export class AgentLoop {
       let previousToolFingerprint = null;
       let repeatedToolCycles = 0;
       let consecutiveToolErrorCycles = 0;
+      let capabilityDiscoveryCyclesWithoutProgress = 0;
+      let previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
       let completedToolActions = 0;
       let failedToolActions = 0;
       let rejectedCompletions = 0;
@@ -343,11 +353,15 @@ export class AgentLoop {
           previousToolFingerprint = null;
           repeatedToolCycles = 0;
           consecutiveToolErrorCycles = 0;
+          capabilityDiscoveryCyclesWithoutProgress = 0;
+          previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
         }
         if (this.applyHandoff(this.pendingHandoff, onEvent)) {
           previousToolFingerprint = null;
           repeatedToolCycles = 0;
           consecutiveToolErrorCycles = 0;
+          capabilityDiscoveryCyclesWithoutProgress = 0;
+          previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
         }
         onEvent({
           type: "phase",
@@ -767,6 +781,8 @@ export class AgentLoop {
           previousToolFingerprint = null;
           repeatedToolCycles = 0;
           consecutiveToolErrorCycles = 0;
+          capabilityDiscoveryCyclesWithoutProgress = 0;
+          previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
           turn += 1;
           continue;
         }
@@ -778,11 +794,21 @@ export class AgentLoop {
         consecutiveToolErrorCycles = outcomes.every((outcome) => outcome.failed)
           ? consecutiveToolErrorCycles + 1
           : 0;
+        const capabilitySurface = capabilitySurfaceFingerprint(this.registry);
+        if (outcomes.every((outcome) => CAPABILITY_DISCOVERY_TOOL_NAMES.has(outcome.name))) {
+          capabilityDiscoveryCyclesWithoutProgress = capabilitySurface === previousCapabilitySurface
+            ? capabilityDiscoveryCyclesWithoutProgress + 1
+            : 0;
+        } else {
+          capabilityDiscoveryCyclesWithoutProgress = 0;
+        }
+        previousCapabilitySurface = capabilitySurface;
         toolCyclesSinceResearchCheckpoint += 1;
 
         const guardReason = this.guardReason({
           repeatedToolCycles,
-          consecutiveToolErrorCycles
+          consecutiveToolErrorCycles,
+          capabilityDiscoveryCyclesWithoutProgress
         });
         if (guardReason) {
           return this.summarizeGuardedStop(guardReason, { onEvent, signal, turn });
@@ -1775,7 +1801,11 @@ export class AgentLoop {
     return response.message.content || "";
   }
 
-  guardReason({ repeatedToolCycles, consecutiveToolErrorCycles }) {
+  guardReason({
+    repeatedToolCycles,
+    consecutiveToolErrorCycles,
+    capabilityDiscoveryCyclesWithoutProgress = 0
+  }) {
     const repeatedLimit = this.config.agent?.maxRepeatedToolCycles ?? 3;
     if (repeatedToolCycles >= repeatedLimit) {
       return "the same tool plan and results repeated without producing new evidence";
@@ -1783,6 +1813,10 @@ export class AgentLoop {
     const errorLimit = this.config.agent?.maxConsecutiveToolErrorCycles ?? 3;
     if (consecutiveToolErrorCycles >= errorLimit) {
       return "every tool in several consecutive cycles failed";
+    }
+    const discoveryLimit = this.config.agent?.maxCapabilityDiscoveryCycles ?? 3;
+    if (capabilityDiscoveryCyclesWithoutProgress >= discoveryLimit) {
+      return "capability discovery repeated without adding a usable operation or changing task state";
     }
     return null;
   }
@@ -2266,6 +2300,7 @@ function isCanvasEligibleCompanyTool(name) {
     "amos_get_started",
     "amos_whoami",
     "amos_resume_company",
+    "amos_resolve_capabilities",
     "amos_list_engines",
     "amos_load_engine_tools"
   ].includes(name);
@@ -2389,6 +2424,15 @@ function toolCycleFingerprint(outcomes) {
     }))
   );
   return createHash("sha256").update(encoded).digest("hex");
+}
+
+function capabilitySurfaceFingerprint(registry) {
+  const names = registry
+    .openAiTools({ activeOnly: true })
+    .map((tool) => tool?.function?.name || "")
+    .filter(Boolean)
+    .sort();
+  return createHash("sha256").update(JSON.stringify(names)).digest("hex");
 }
 
 function stableLoopEvidence(value) {

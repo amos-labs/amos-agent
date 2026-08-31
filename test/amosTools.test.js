@@ -79,6 +79,77 @@ test("AMOS MCP error envelopes fail the agent tool cycle", async () => {
   assert.deepEqual(result, { ok: false, error: "tenant unavailable" });
 });
 
+test("plain-English capability resolution registers a pinned typed operation and executes through its manifest", async () => {
+  const registry = new ToolRegistry({ progressive: true });
+  for (const tool of createAmosTools()) registry.register(tool);
+  const calls = [];
+  const manifestId = "1a5d7649-4c5b-4596-bfaa-c6bc628f5df7";
+  const context = {
+    registry,
+    config: { agent: {} },
+    signal: null,
+    amosClient: {
+      async callTool(name, args) {
+        calls.push({ name, args });
+        if (name === "resolve_capabilities") {
+          return mcpResult({
+            manifest_id: manifestId,
+            manifest_sha256: "a".repeat(64),
+            expires_at: "2026-09-01T00:00:00Z",
+            authority: "none",
+            operations: [{
+              operation: "create_mission",
+              effect: "write",
+              description: "Create a bounded Mission",
+              input_schema: {
+                type: "object",
+                properties: { objective: { type: "string" } },
+                required: ["objective"],
+                additionalProperties: false
+              }
+            }]
+          });
+        }
+        return mcpResult({ mission_id: "mission-1", status: "pending_approval" });
+      }
+    }
+  };
+
+  const resolved = await registry.execute(
+    "amos_resolve_capabilities",
+    { outcome: "create a prospecting mission" },
+    context
+  );
+  assert.equal(resolved.ok, true);
+  assert.deepEqual(resolved.registered_dynamic_tools, ["amos_capability_create_mission"]);
+  assert.ok(registry.openAiTools({ activeOnly: true }).some((tool) =>
+    tool.function.name === "amos_capability_create_mission"
+  ));
+
+  const executed = await registry.execute(
+    "amos_capability_create_mission",
+    { objective: "Find qualified prospects" },
+    context
+  );
+  assert.equal(executed.status, "pending_approval");
+  assert.deepEqual(calls, [{
+    name: "resolve_capabilities",
+    args: {
+      outcome: "create a prospecting mission",
+      limit: undefined,
+      ttl_seconds: undefined,
+      include_input_schemas: true
+    }
+  }, {
+    name: "execute_capability",
+    args: {
+      manifest_id: manifestId,
+      operation: "create_mission",
+      arguments: { objective: "Find qualified prospects" }
+    }
+  }]);
+});
+
 test("large AMOS engines require and then activate one advertised subtoolkit", async () => {
   const registry = new ToolRegistry({ progressive: true });
   for (const tool of createAmosTools()) registry.register(tool);
