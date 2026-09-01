@@ -838,7 +838,17 @@ export class AgentLoop {
         const discoveryCalls = outcomes.filter((outcome) =>
           CAPABILITY_DISCOVERY_TOOL_NAMES.has(outcome.name)
         ).length;
-        if (discoveryCalls > 0) {
+        const successfulStateChange = outcomes.some((outcome) =>
+          !outcome.failed &&
+          !CAPABILITY_DISCOVERY_TOOL_NAMES.has(outcome.name) &&
+          !this.registry.executionPolicy(outcome.name).readOnly
+        );
+        if (successfulStateChange) {
+          // Capability discovery is only "without progress" while it remains a
+          // consecutive read-only search. A landed write changes task state and
+          // must start a fresh discovery window for the next phase.
+          capabilityDiscoveryCyclesWithoutProgress = 0;
+        } else if (discoveryCalls > 0) {
           capabilityDiscoveryCyclesWithoutProgress = capabilitySurface === previousCapabilitySurface
             ? capabilityDiscoveryCyclesWithoutProgress + discoveryCalls
             : 0;
