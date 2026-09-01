@@ -2658,6 +2658,69 @@ test("an identical read-only status request synthesizes despite changing receipt
   assert.match(answer, /zero Apollo credits/i);
 });
 
+test("paraphrased read-only discovery cannot evade the guard and synthesis routes one tier higher", async () => {
+  const registry = new ToolRegistry();
+  let modelCalls = 0;
+  let discoveryCalls = 0;
+  let synthesisRouting = null;
+  registry.register({
+    name: "amos_resolve_capabilities",
+    readOnly: true,
+    parallelSafe: true,
+    async handler() {
+      discoveryCalls += 1;
+      return { ok: true, operation_count: 0, operations: [] };
+    }
+  });
+  const events = [];
+  const loop = new AgentLoop({
+    config: { agent: { maxRepeatedToolCycles: 3, maxCapabilityDiscoveryCycles: 3 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools, preclassifiedRouting }) {
+        modelCalls += 1;
+        if (tools.length === 0) {
+          synthesisRouting = preclassifiedRouting;
+          return {
+            message: {
+              role: "assistant",
+              content: "No matching capability exists. Ask the user for the missing connection."
+            }
+          };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `discovery-${modelCalls}`,
+              function: {
+                name: "amos_resolve_capabilities",
+                arguments: JSON.stringify({ outcome: `paraphrase ${modelCalls}` })
+              }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("Create a Mission", {
+    routingDecision: { minimumClass: "balanced", source: "test" },
+    onEvent: (event) => events.push(event)
+  });
+
+  assert.equal(discoveryCalls, 2);
+  assert.equal(modelCalls, 3);
+  assert.equal(synthesisRouting.minimumClass, "deep");
+  assert.match(answer, /missing connection/i);
+  assert.ok(events.some((event) =>
+    event.type === "guard" && event.escalatedRoutingClass === "deep"
+  ));
+});
+
 test("an unclassified repeated request cannot evade the loop guard with changing results", async () => {
   const registry = new ToolRegistry();
   let modelCalls = 0;

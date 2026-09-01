@@ -84,6 +84,7 @@ const CAPABILITY_DISCOVERY_TOOL_NAMES = new Set([
   "amos_list_engines",
   "amos_load_engine_tools"
 ]);
+const ROUTING_CLASSES = Object.freeze(["routine", "balanced", "deep", "frontier"]);
 const DEFAULT_LOCAL_PREFERRED_INPUT_TOKENS = 8_192;
 const DEFAULT_LOCAL_PROMPT_TARGET_MS = 60_000;
 const MIN_LOCAL_PREFERRED_INPUT_TOKENS = 4_096;
@@ -343,6 +344,7 @@ export class AgentLoop {
       let pendingRoutingDecision = routingDecision?.minimumClass
         ? routingDecision
         : null;
+      let lastRoutingClass = routingDecision?.minimumClass || null;
       let lastToolNames = [];
       let gatherTurns = 0;
       let timeoutContinuations = 0;
@@ -411,6 +413,7 @@ export class AgentLoop {
             preclassifiedRouting: pendingRoutingDecision,
             reasoningEffortOverride: useGatherReasoning ? gatherEffort : null,
             onRoutingDecision: (decision) => {
+              lastRoutingClass = observedRoutingClass(decision) || lastRoutingClass;
               onEvent({ type: "routing", turn, ...decision });
             },
             onDelta: (delta, text, meta = {}) => {
@@ -539,6 +542,20 @@ export class AgentLoop {
           });
         }
         onEvent(usageEvent);
+        onEvent({
+          type: "model_call",
+          turn,
+          provider: String(this.config.model?.provider || ""),
+          model: String(response.usage?.model || this.config.model?.model || ""),
+          finishReason: modelFinishReason(response),
+          toolCallCount: Array.isArray(response.message?.tool_calls)
+            ? response.message.tool_calls.length
+            : 0,
+          inputTokens: usageEvent.inputTokens,
+          outputTokens: usageEvent.outputTokens,
+          cachedInputTokens: usageEvent.cachedInputTokens,
+          latencyMs: usageEvent.latencyMs
+        });
 
         throwIfAborted(signal);
         const assistantMessage = canonicalizeMessageToolCalls(response.message);
@@ -799,27 +816,32 @@ export class AgentLoop {
           continue;
         }
 
-        const fingerprint = toolCycleFingerprint(outcomes);
-        repeatedToolCycles =
-          fingerprint === previousToolFingerprint ? repeatedToolCycles + 1 : 1;
-        previousToolFingerprint = fingerprint;
-        const planFingerprint = toolPlanFingerprint(outcomes);
-        repeatedToolPlanCycles =
-          planFingerprint === previousToolPlanFingerprint ? repeatedToolPlanCycles + 1 : 1;
-        previousToolPlanFingerprint = planFingerprint;
         const readOnlyToolPlan = outcomes.length > 0 && outcomes.every((outcome) =>
           this.registry.executionPolicy(outcome.name).readOnly
         );
+        const fingerprint = readOnlyToolPlan
+          ? readOnlyToolCycleFingerprint(outcomes)
+          : toolCycleFingerprint(outcomes);
+        repeatedToolCycles =
+          fingerprint === previousToolFingerprint ? repeatedToolCycles + 1 : 1;
+        previousToolFingerprint = fingerprint;
+        const planFingerprint = readOnlyToolPlan
+          ? readOnlyToolPlanFingerprint(outcomes)
+          : toolPlanFingerprint(outcomes);
+        repeatedToolPlanCycles =
+          planFingerprint === previousToolPlanFingerprint ? repeatedToolPlanCycles + 1 : 1;
+        previousToolPlanFingerprint = planFingerprint;
         consecutiveToolErrorCycles = outcomes.every((outcome) => outcome.failed)
           ? consecutiveToolErrorCycles + 1
           : 0;
         const capabilitySurface = capabilitySurfaceFingerprint(this.registry);
-        if (outcomes.every((outcome) => CAPABILITY_DISCOVERY_TOOL_NAMES.has(outcome.name))) {
+        const discoveryCalls = outcomes.filter((outcome) =>
+          CAPABILITY_DISCOVERY_TOOL_NAMES.has(outcome.name)
+        ).length;
+        if (discoveryCalls > 0) {
           capabilityDiscoveryCyclesWithoutProgress = capabilitySurface === previousCapabilitySurface
-            ? capabilityDiscoveryCyclesWithoutProgress + 1
+            ? capabilityDiscoveryCyclesWithoutProgress + discoveryCalls
             : 0;
-        } else {
-          capabilityDiscoveryCyclesWithoutProgress = 0;
         }
         previousCapabilitySurface = capabilitySurface;
         toolCyclesSinceResearchCheckpoint += 1;
@@ -832,7 +854,23 @@ export class AgentLoop {
           capabilityDiscoveryCyclesWithoutProgress
         });
         if (guardReason) {
-          return this.summarizeGuardedStop(guardReason, { onEvent, signal, turn });
+          const escalatedRouting = escalateRoutingDecision(
+            pendingRoutingDecision,
+            lastRoutingClass
+          );
+          onEvent({
+            type: "guard",
+            reason: guardReason,
+            priorRoutingClass: lastRoutingClass,
+            escalatedRoutingClass: escalatedRouting.minimumClass,
+            summary: `No-progress guard escalated synthesis to ${escalatedRouting.minimumClass}`
+          });
+          return this.summarizeGuardedStop(guardReason, {
+            onEvent,
+            signal,
+            turn,
+            routingDecision: escalatedRouting
+          });
         }
         if (
           completedToolActions > 0 &&
@@ -1853,7 +1891,7 @@ export class AgentLoop {
     return null;
   }
 
-  async summarizeGuardedStop(reason, { onEvent, signal, turn }) {
+  async summarizeGuardedStop(reason, { onEvent, signal, turn, routingDecision = null }) {
     throwIfAborted(signal);
     onEvent({
       type: "phase",
@@ -1882,6 +1920,7 @@ export class AgentLoop {
       signal,
       promptSessionId: this.activePromptSessionId,
       promptContractHash: this.pendingPromptContract?.sha256 || null,
+      preclassifiedRouting: routingDecision,
       onRoutingDecision: (decision) => {
         onEvent({ type: "routing", turn: turn + 1, ...decision });
       },
@@ -2464,6 +2503,63 @@ function toolPlanFingerprint(outcomes) {
     args: stableLoopValue(args ?? rawArgs)
   })));
   return createHash("sha256").update(encoded).digest("hex");
+}
+
+function readOnlyToolCycleFingerprint(outcomes) {
+  const encoded = JSON.stringify(outcomes.map(({ name, failed, result }) => ({
+    name,
+    failed,
+    resultShape: readOnlyResultShape(result)
+  })));
+  return createHash("sha256").update(encoded).digest("hex");
+}
+
+function readOnlyToolPlanFingerprint(outcomes) {
+  const encoded = JSON.stringify(outcomes.map(({ name }) => ({ name })));
+  return createHash("sha256").update(encoded).digest("hex");
+}
+
+function readOnlyResultShape(value) {
+  if (value == null) return "empty";
+  if (Array.isArray(value)) return value.length === 0 ? "empty_array" : "non_empty_array";
+  if (typeof value !== "object") return value === "" ? "empty" : "scalar";
+  const entries = Object.entries(value).filter(([key]) => !isVolatileLoopEvidenceKey(key));
+  if (entries.length === 0) return "empty_object";
+  const count = ["count", "total", "result_count", "operation_count"]
+    .map((key) => Number(value[key]))
+    .find((candidate) => Number.isFinite(candidate));
+  if (count === 0) return "zero_results";
+  return "non_empty_object";
+}
+
+function observedRoutingClass(decision) {
+  const value = String(decision?.hostedClass || decision?.minimumClass || "").toLowerCase();
+  return ROUTING_CLASSES.includes(value) ? value : null;
+}
+
+function escalateRoutingDecision(decision, observedClass) {
+  const current = ROUTING_CLASSES.includes(observedClass)
+    ? observedClass
+    : ROUTING_CLASSES.includes(decision?.minimumClass)
+      ? decision.minimumClass
+      : "routine";
+  const next = ROUTING_CLASSES[Math.min(ROUTING_CLASSES.length - 1, ROUTING_CLASSES.indexOf(current) + 1)];
+  return {
+    ...(decision || {}),
+    minimumClass: next,
+    source: "amos-no-progress-guard"
+  };
+}
+
+function modelFinishReason(response) {
+  return String(
+    response?.stopReason ||
+    response?.stop_reason ||
+    response?.raw?.choices?.[0]?.finish_reason ||
+    response?.raw?.stop_reason ||
+    response?.raw?.incomplete_details?.reason ||
+    ""
+  ).slice(0, 128);
 }
 
 function capabilitySurfaceFingerprint(registry) {

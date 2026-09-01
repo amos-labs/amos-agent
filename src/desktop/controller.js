@@ -118,6 +118,10 @@ import {
   shouldReplaceScratchpad
 } from "../model/conversationScratchpad.js";
 import { taskOwnerScope } from "./taskStore.js";
+import {
+  DesktopTaskEpisodeStore,
+  taskEpisodeEvent
+} from "./taskEpisodeStore.js";
 import { DesktopRunManager, DesktopRunSupervisor } from "./runManager.js";
 import {
   createTaskWorktree,
@@ -208,6 +212,7 @@ export class DesktopController {
     sessionContinuityStore = null,
     relationshipProfileStore = null,
     taskStore = null,
+    taskEpisodeStore = null,
     decisionKeyStore = null,
     accountStore = null,
     offlineManager = null,
@@ -222,6 +227,9 @@ export class DesktopController {
   }) {
     this.runManager = new DesktopRunManager();
     this.userDataPath = userDataPath;
+    this.taskEpisodeStore = taskEpisodeStore || new DesktopTaskEpisodeStore({
+      rootPath: join(userDataPath, "learning-episodes")
+    });
     this.settingsStore = settingsStore;
     this.createRuntime = createRuntimeImpl;
     this.openBrowser = openBrowser;
@@ -2485,6 +2493,7 @@ export class DesktopController {
       steeringCount: 0,
       acceptingSteering: true,
       receiptEvents: [],
+      episodeEvents: [],
       continuityArtifacts: [],
       continuityAllowed: false,
       usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsedMicrousd: 0, models: [] },
@@ -2680,6 +2689,7 @@ export class DesktopController {
           this.send("agent:event", safeEvent);
           if (safeEvent.type !== "assistant_delta") {
             receiptEvents.push(receiptEvent(safeEvent));
+            this.activeTask?.episodeEvents?.push(taskEpisodeEvent(safeEvent));
             this.record(
               safeEvent.type === "phase" || safeEvent.type === "workflow" ? "task" : "tool",
               toolEventSummary(safeEvent),
@@ -4986,33 +4996,58 @@ export class DesktopController {
     error = null,
     usage = null
   }) {
-    if (!this.localReceiptStore) return null;
+    const model = this.activeTask?.intelligence
+      ? `${this.activeTask.intelligence.provider}:${this.activeTask.intelligence.model}`
+      : continuityModelIdentity(settings);
+    const finishedAt = new Date().toISOString();
+    let receipt = null;
+    if (this.localReceiptStore) {
+      try {
+        receipt = await this.localReceiptStore.add({
+          taskId,
+          status,
+          boundary,
+          workspace: basename(settings.workspace || homedir()),
+          model,
+          objective: prompt,
+          startedAt,
+          finishedAt,
+          events: receiptEvents,
+          error,
+          usage
+        }, privateMemoryScope(this.identity));
+        this.record("proof", `Local task receipt ${receipt.digest.slice(0, 12)} · ${status}`, {
+          receipt_id: receipt.id,
+          digest: receipt.digest,
+          boundary
+        });
+      } catch (receiptError) {
+        this.record("proof", `Could not save local task receipt: ${receiptError.message}`);
+      }
+    }
     try {
-      const receipt = await this.localReceiptStore.add({
+      const episode = await this.taskEpisodeStore?.record({
         taskId,
         status,
         boundary,
-        workspace: basename(settings.workspace || homedir()),
-        model: this.activeTask?.intelligence
-          ? `${this.activeTask.intelligence.provider}:${this.activeTask.intelligence.model}`
-          : continuityModelIdentity(settings),
+        model,
         objective: prompt,
         startedAt,
-        finishedAt: new Date().toISOString(),
-        events: receiptEvents,
-        error,
-        usage
-      }, privateMemoryScope(this.identity));
-      this.record("proof", `Local task receipt ${receipt.digest.slice(0, 12)} · ${status}`, {
-        receipt_id: receipt.id,
-        digest: receipt.digest,
-        boundary
+        finishedAt,
+        events: this.activeTask?.episodeEvents || [],
+        error
       });
-      return receipt;
-    } catch (receiptError) {
-      this.record("proof", `Could not save local task receipt: ${receiptError.message}`);
-      return null;
+      if (episode) {
+        this.record("proof", `Immutable task episode ${episode.episode.digest.slice(0, 12)} · local only`, {
+          episode_digest: episode.episode.digest,
+          content_included: false,
+          export_eligible: false
+        });
+      }
+    } catch (episodeError) {
+      this.record("proof", `Could not save local task episode: ${episodeError.message}`);
     }
+    return receipt;
   }
 
   async persistCompanyMemory(references, runtime, config, signal = null) {
@@ -8474,6 +8509,15 @@ function toolEventSummary(event) {
       ? `Local routing classified this step as ${event.minimumClass} (${event.rolloutMode})`
       : `Local routing used hosted fallback (${event.reason || "unavailable"})`;
   }
+  if (event.type === "model_call") {
+    const model = event.model || event.provider || "model";
+    const finish = event.finishReason ? ` · ${event.finishReason}` : "";
+    return `${model} responded${finish}`;
+  }
+  if (event.type === "guard") {
+    return event.summary || `No-progress guard escalated the next synthesis step`;
+  }
+  if (event.type === "context_compiled") return "Compiled bounded task context";
   if (event.type === "tool_start") return `Started ${event.name}`;
   if (event.type === "tool_error") return `${event.name} failed: ${event.error}`;
   return `Completed ${event.name}`;
