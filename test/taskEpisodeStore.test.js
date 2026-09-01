@@ -9,7 +9,7 @@ import {
   taskEpisodeEvent
 } from "../src/desktop/taskEpisodeStore.js";
 
-test("Desktop stores one immutable digest-only organism trace bundle per task", async () => {
+test("Desktop stores an immutable digest-only episode per terminal task attempt", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-task-episode-"));
   const store = new DesktopTaskEpisodeStore({ rootPath: root });
   const args = { token: "must-not-appear", query: "private buyer search" };
@@ -30,15 +30,14 @@ test("Desktop stores one immutable digest-only organism trace bundle per task", 
   });
 
   const contents = await readFile(recorded.filePath, "utf8");
-  const bundle = JSON.parse(contents);
-  assert.equal(bundle.schema, "amos.organism-trace-bundle");
-  assert.equal(bundle.schemaVersion, 1);
-  assert.equal(bundle.entries.length, 0);
-  assert.equal(bundle.source.episode.outcome.outcomeBearing, true);
-  assert.equal(bundle.source.episode.dataPolicy.exportEligible, false);
-  assert.equal(bundle.source.episode.events[0].argsSha256.length, 64);
-  assert.equal(bundle.source.episode.events[1].resultSha256.length, 64);
-  assert.equal(bundle.source.episode.events[2].finishReason, "stop");
+  const episode = JSON.parse(contents);
+  assert.equal(episode.schema, "amos.desktop-task-episode");
+  assert.equal(episode.schemaVersion, 1);
+  assert.equal(episode.outcome.outcomeBearing, true);
+  assert.equal(episode.dataPolicy.exportEligible, false);
+  assert.equal(episode.events[0].argsSha256.length, 64);
+  assert.equal(episode.events[1].resultSha256.length, 64);
+  assert.equal(episode.events[2].finishReason, "stop");
   assert.doesNotMatch(contents, /must-not-appear|private buyer search|private@example\.com|Private customer objective/);
 
   const repeated = await store.record({
@@ -72,6 +71,38 @@ test("Desktop stores one immutable digest-only organism trace bundle per task", 
     }),
     /already finalized/
   );
+});
+
+test("a resumed task preserves both its interruption and completed outcome", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-task-episode-"));
+  const store = new DesktopTaskEpisodeStore({ rootPath: root });
+  const interrupted = await store.record({
+    taskId: "task.resume.with.dots",
+    status: "interrupted",
+    boundary: "online",
+    model: "amos-hosted:auto",
+    objective: "Finish safely after sleep",
+    startedAt: "2026-09-01T10:00:00.000Z",
+    finishedAt: "2026-09-01T10:01:00.000Z",
+    events: [taskEpisodeEvent({ type: "phase", phase: "interrupted" })],
+    error: "system_sleep"
+  });
+  const completed = await store.record({
+    taskId: "task.resume.with.dots",
+    status: "completed",
+    boundary: "online",
+    model: "amos-hosted:auto",
+    objective: "Finish safely after sleep",
+    startedAt: "2026-09-01T10:05:00.000Z",
+    finishedAt: "2026-09-01T10:06:00.000Z",
+    events: [taskEpisodeEvent({ type: "tool_end", name: "verify", result: { ok: true } })]
+  });
+
+  assert.notEqual(interrupted.filePath, completed.filePath);
+  assert.equal(interrupted.episode.outcome.status, "interrupted");
+  assert.equal(completed.episode.outcome.status, "completed");
+  assert.equal(completed.episode.outcome.outcomeBearing, true);
+  assert.equal((await store.list()).length, 2);
 });
 
 test("non-outcome task episodes are explicitly blocked from export", async () => {

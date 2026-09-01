@@ -3,7 +3,6 @@ import { mkdir, open, readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 export const DESKTOP_TASK_EPISODE_SCHEMA = "amos.desktop-task-episode";
-export const ORGANISM_TRACE_BUNDLE_SCHEMA = "amos.organism-trace-bundle";
 export const DESKTOP_TASK_EPISODE_VERSION = 1;
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled", "interrupted"]);
@@ -37,18 +36,21 @@ export class DesktopTaskEpisodeStore {
     const events = (Array.isArray(input.events) ? input.events : [])
       .slice(0, 10_000)
       .map((event, index) => normalizeEpisodeEvent(event, index));
+    const startedAt = validDate(input.startedAt, "startedAt");
+    const attemptId = digestValue({ taskId, startedAt }).slice(0, 24);
     const outcomeBearing = status === "completed" && events.some((event) =>
       event.type === "tool_end" && event.outcome === "completed"
     );
     const episodeWithoutDigest = {
       schema: DESKTOP_TASK_EPISODE_SCHEMA,
       schemaVersion: DESKTOP_TASK_EPISODE_VERSION,
-      episodeId: `desktop-task-${taskId}`,
+      episodeId: `desktop-task:${taskId}:${attemptId}:${status}`,
       taskId,
+      attemptId,
       boundary: boundedText(input.boundary || "personal", 32),
       model: boundedText(input.model || "", 256),
       objectiveSha256: digestValue(String(input.objective || "")),
-      startedAt: validDate(input.startedAt, "startedAt"),
+      startedAt,
       finishedAt: validDate(input.finishedAt || this.now().toISOString(), "finishedAt"),
       outcome: {
         status,
@@ -70,33 +72,33 @@ export class DesktopTaskEpisodeStore {
       ...episodeWithoutDigest,
       digest: digestValue(episodeWithoutDigest)
     };
-    const bundle = {
-      schema: ORGANISM_TRACE_BUNDLE_SCHEMA,
-      schemaVersion: 1,
-      source: {
-        kind: DESKTOP_TASK_EPISODE_SCHEMA,
-        episodeDigest: episode.digest,
-        episode
-      },
-      entries: [],
-      approvals: []
-    };
     const directory = join(this.rootPath, "episodes");
     await mkdir(directory, { recursive: true, mode: 0o700 });
-    const priorName = (await readdir(directory))
-      .find((name) => name.startsWith(`${taskId}.`) && name.endsWith(".json"));
-    if (priorName) {
+    const priorNames = (await readdir(directory))
+      .filter((name) => name.endsWith(".json"));
+    for (const priorName of priorNames) {
       const priorPath = join(directory, priorName);
-      const priorBundle = JSON.parse(await readFile(priorPath, "utf8"));
-      if (priorBundle?.source?.episode?.digest !== episode.digest) {
-        throw new Error(`Desktop task episode is already finalized: ${taskId}`);
+      const priorEpisode = storedEpisode(JSON.parse(await readFile(priorPath, "utf8")));
+      if (priorEpisode?.taskId !== taskId) continue;
+      if (priorEpisode.episodeId === episode.episodeId) {
+        if (priorEpisode.digest !== episode.digest) {
+          throw new Error(`Desktop task attempt is already finalized: ${taskId}/${attemptId}/${status}`);
+        }
+        return { filePath: priorPath, episode, episodeDigest: episode.digest };
       }
-      return { filePath: priorPath, episode, bundleDigest: digestValue(bundle) };
+      if (
+        priorEpisode.attemptId === attemptId
+        && priorEpisode.outcome?.status !== "interrupted"
+        && status !== "interrupted"
+      ) {
+        throw new Error(`Desktop task attempt is already finalized: ${taskId}/${attemptId}`);
+      }
     }
-    const filePath = join(directory, `${taskId}.${episode.digest}.json`);
-    const contents = `${JSON.stringify(bundle, null, 2)}\n`;
+    const taskKey = digestValue(taskId).slice(0, 24);
+    const filePath = join(directory, `${taskKey}.${attemptId}.${status}.${episode.digest}.json`);
+    const contents = `${JSON.stringify(episode, null, 2)}\n`;
     await writeImmutable(filePath, contents);
-    return { filePath, episode, bundleDigest: digestValue(bundle) };
+    return { filePath, episode, episodeDigest: episode.digest };
   }
 
   async list() {
@@ -112,11 +114,20 @@ export class DesktopTaskEpisodeStore {
     for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
       if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
       const filePath = join(directory, entry.name);
-      const bundle = JSON.parse(await readFile(filePath, "utf8"));
-      bundles.push({ filePath, bundle });
+      const payload = JSON.parse(await readFile(filePath, "utf8"));
+      const episode = storedEpisode(payload);
+      if (episode) bundles.push({ filePath, episode });
     }
     return bundles;
   }
+}
+
+function storedEpisode(payload) {
+  if (payload?.schema === DESKTOP_TASK_EPISODE_SCHEMA) return payload;
+  // Read legacy local files written before Desktop stopped presenting a
+  // non-exportable episode as a canonical organism trace bundle.
+  const legacy = payload?.source?.episode;
+  return legacy?.schema === DESKTOP_TASK_EPISODE_SCHEMA ? legacy : null;
 }
 
 export function taskEpisodeEvent(event = {}, { at = new Date().toISOString() } = {}) {

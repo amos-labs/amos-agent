@@ -325,6 +325,72 @@ test("alternating capability catalog calls stop when they add no usable operatio
   assert.equal(requests.length, 4);
 });
 
+test("a successful state-changing tool resets the capability discovery streak", async () => {
+  const registry = new ToolRegistry();
+  let modelCalls = 0;
+  let discoveryCalls = 0;
+  let writes = 0;
+  registry.register({
+    name: "amos_list_engines",
+    readOnly: true,
+    handler: async () => {
+      discoveryCalls += 1;
+      return { ok: true, engines: ["missions"] };
+    }
+  });
+  registry.register({
+    name: "create_record",
+    readOnly: false,
+    handler: async () => {
+      writes += 1;
+      return { ok: true, record_id: `record-${writes}` };
+    }
+  });
+  const loop = new AgentLoop({
+    config: {
+      agent: {
+        maxRepeatedToolCycles: 5,
+        maxConsecutiveToolErrorCycles: 3,
+        maxCapabilityDiscoveryCycles: 2
+      }
+    },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat({ tools }) {
+        modelCalls += 1;
+        const sequence = [
+          "amos_list_engines",
+          "create_record",
+          "amos_list_engines",
+          "create_record"
+        ];
+        const name = sequence[modelCalls - 1];
+        if (name) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: `call-${modelCalls}`,
+                function: { name, arguments: "{}" }
+              }]
+            }
+          };
+        }
+        assert.ok(tools.length > 0);
+        return { message: { role: "assistant", content: "Finished after two phases." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("discover, write, then continue"), "Finished after two phases.");
+  assert.equal(discoveryCalls, 2);
+  assert.equal(writes, 2);
+  assert.equal(modelCalls, 5);
+});
+
 test("an output-limited model response is explained and retried automatically", async () => {
   const requests = [];
   const loop = new AgentLoop({
