@@ -1,0 +1,52 @@
+{
+  "schema": "amos.swarm-organism-real-qwen-policy-candidate",
+  "version": 1,
+  "id": "organism-simulation-ap-stage1-20260824-0801-r1-001",
+  "status": "real-qwen-phase-probes-passed",
+  "promotionAllowed": false,
+  "nextGate": "full-real-qwen-mission",
+  "policyDigest": "4c1421c83dfc2562334c4944278f30543f2b38cfc40f0dd1c82f5948c1f24131",
+  "policy": {
+    "bid.affinityWeight": 1,
+    "bid.pheromoneWeight": 1,
+    "bid.reputationWeight": 1,
+    "bid.energyWeight": 1,
+    "bid.repetitionPenalty": 1.0518059871757504,
+    "pheromone.successIntensity": 0.9,
+    "pheromone.partialProgressIntensity": 0.34145682352715795,
+    "pheromone.failureIntensity": 0.8,
+    "pheromone.successDecay": 0.03,
+    "pheromone.failureDecay": 0.12,
+    "energy.claimCost": 1,
+    "energy.partialProgressReward": 0.8470378117183333,
+    "energy.verifiedReward": 1,
+    "energy.failurePenalty": 0.75,
+    "energy.repeatFailurePenalty": 1.5,
+    "energy.stallPenalty": 1,
+    "energy.regressionPenalty": 1.25,
+    "energy.efficiencyBonus": 1,
+    "retry.challengerExploration": 0,
+    "phase.retryLimit": 1,
+    "phase.artifactHorizon": 8,
+    "memory.compactionThreshold": 12000,
+    "time.targetLeaseUtilization": 0.6,
+    "stopping.minimumConfidence": 0.8
+  },
+  "provenance": {
+    "sourceRunId": "organism-simulation-ap-stage1-20260824-0801-r1",
+    "policySearchDigest": "5e4cae41eea1278a6a5c9bed9ba450251a082a8d06169f55e211d91d43ace831",
+    "transitionModelDigest": "4edf3e45b3bc0857d5bba2bff398efb1c395c3d6d93780ec6f88ac3bbda438d7",
+    "artifactReplayCases": 8,
+    "rank": 1
+  },
+  "qualification": {
+    "realQwenPhaseProbeRunId": "organism-qwen-phase-probes-20260824-0857-r2",
+    "realQwenPhaseProbeReportDigest": "987baf40b53c50169ee798719316380aed986f41fac532a8991c68d4983518e3",
+    "gatePassed": true,
+    "policyLiftObserved": false,
+    "baselinePassRate": 1,
+    "candidatePassRate": 1,
+    "receiptGatedCredit": true,
+    "interpretation": "The real-Qwen execution and governance boundary passed, but the development fixtures saturated before either policy entered a retry; this is not policy-quality lift evidence."
+  }
+}

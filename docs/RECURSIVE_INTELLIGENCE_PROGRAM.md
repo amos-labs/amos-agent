@@ -96,6 +96,11 @@ The scientific portfolio targets capabilities that do not reduce to AMOS:
 The two flywheels share infrastructure and verified learning methods, but keep
 separate evaluation denominators.
 
+Product packaging of the cheap hosted cortex (AMOS Intelligence vs local vs
+bring-your-key) is [INTELLIGENCE_PRODUCT.md](INTELLIGENCE_PRODUCT.md). Public
+benchmarks are a storefront proof that the Hosted path is not a toy; they are
+not the RSI metric and not the AMOS pricing model.
+
 ## Nested organism architecture
 
 This program is the micro-scale continuation of the original AMOS organism
@@ -201,6 +206,628 @@ versus a pinned Opus 5 control on complex research, finance, planning, and build
 tasks. Reports show both unconstrained quality and matched time/token/cost
 results. A swarm win that merely spends three times the inference budget is
 reported honestly rather than collapsed into one score.
+
+The first Terminal-Bench 3.0 production-planning pilot exposed a boundary in
+the initial turn gateway: selecting two candidate actions and critiquing them
+on every turn does not by itself create task-level specialization. After
+proactive context compaction, the outer agent could preserve files yet still
+reread schemas and gateway implementation instead of advancing from verified
+state to solver construction. The next runtime slice therefore adds a
+task-level coordinator above the turn gateway with five bounded roles:
+
+1. `state-compiler` converts authoritative inputs into compact requirements
+   and facts;
+2. `solver-builder` creates executable artifacts and records content receipts;
+3. `verifier` executes independent checks against every success criterion;
+4. `repairer` fixes only cited verifier gaps without replaying discovery; and
+5. `integrator` returns the verified outcome without changing the artifacts.
+
+Its evidence board is append-only, content-addressed, checkpointable after
+every unit, and deduplicates semantic repeats. A model cannot declare success:
+completion requires every typed criterion to pass with cited board evidence,
+plus a verified artifact receipt and a verified test receipt. This coordinator
+is the mission-level architecture; the turn gateway remains an inference
+primitive underneath it rather than pretending that each turn is a complete
+swarm mission.
+
+The development-visible Harbor adapter
+`benchmarks.harbor_agents.amos_task_swarm:AmosTaskSwarm` operationalizes this
+boundary for the hard pilot. It runs fresh bounded contexts for compilation,
+construction, preflight verification, targeted repair, governed execution,
+post-execution verification, and integration while sharing one terminal and
+`/tmp/amos_swarm` board. Model-authored `pass` is insufficient: the adapter
+recomputes every referenced artifact and test-receipt SHA-256 before advancing.
+The host initializes the board before inference. A short interface scanner
+captures access contracts and schemas; a fresh data scanner writes source
+extracts; and a fresh state compiler turns those files into solver constraints.
+After each scanning phase the host—not the model—harvests every created file,
+checks immutability, computes SHA-256 receipts, and appends it to the board. No
+model-written conversational summary sits on the critical path. Cross-role
+memory comes only from the host-validated board and receipts, not from an
+indefinitely growing conversation.
+Solver construction is deliver-first and may continue across three fresh,
+bounded contexts. A builder may read only the compiled state and saved typed
+extracts; it cannot restart gateway discovery or source-database inspection.
+If one context expires before producing the candidate, the host checkpoints
+the board and the next builder continues the same durable files. The host
+harvests construction artifacts only after the board reaches `constructed`,
+so a partial cycle is recoverable without weakening the verifier gate.
+Safe schema shorthand is self-healed deterministically at the boundary—for
+example, a string source path becomes a typed source-reference object—and every
+normalization is appended to the board. Semantic claims and receipt mismatches
+remain hard failures.
+The host validates the board schema after every phase, enforces append-only
+array prefixes across builder, repair, and execution boundaries, and rejects
+any board mutation by a verifier or integrator. The invariant is therefore a
+harness guarantee rather than a prompt request.
+Its per-phase trajectories are retained separately so repeated inspection and
+repair efficiency remain measurable. Because this adapter was developed
+against the visible production-planning task, its result is development
+evidence only; sealed generalization remains a later promotion gate.
+The adapter calls the private vLLM Qwen endpoint directly: nesting the old
+candidate/critic/integrator turn gateway inside task-level specialists would
+multiply calls without adding another independent execution perspective. The
+turn gateway is retained as the explicit development control.
+
+The fixed task coordinator is also a control, not the destination architecture.
+The original Holographic Swarm remains a distinct treatment: a lightweight
+router records dependencies and governed state while logical agents sharing one
+Qwen backbone sense decaying pheromones, bid for open work, spend internal
+energy, form temporary teams, and reinforce verified skills. Classical
+Holographic Reduced Representations provide lossy associative orientation and
+task/skill affinity; they never replace exact board evidence, source authority,
+or receipt validation. Successful and failed verifier outcomes strengthen or
+inhibit future trails, allowing specialization to emerge from experience
+instead of permanently assigning role names.
+
+Pragmatism constrains this treatment. Internal energy is a compute-allocation
+ledger, not a blockchain token. Emotional vectors, token markets, quantum
+language, and separate model copies remain excluded until controlled evidence
+shows that they improve verified quality. The AWS implementation uses logical
+agents over one continuously batched Qwen model. The first treatment is kept
+separate from `amos-task-swarm-v2` so an apparent gain can be attributed to
+stigmergic assignment and holographic association rather than an untracked
+rewrite of the control.
+
+### Simulation and continual-learning arena
+
+The original SWARM simulation becomes a curriculum and self-play environment,
+not an evaluator. Its useful loop is preserved: observe weak skills, generate
+nearby challenges, allow agents to compete and cooperate, retain successful
+experience, and increase difficulty. Its randomized success probabilities,
+in-memory knowledge, and simulated rewards are replaced by real Qwen rollouts,
+durable trajectories, artifact receipts, and independent verifiers.
+
+Every run compiles to an immutable `amos.swarm-learning-episode` containing the
+task and model lineage, execution result, official verifier evidence, artifact
+and trajectory digests, ecology snapshot, curriculum signals, and permitted-use
+policy. Eligibility is derived from that evidence. A model cannot mark its own
+trajectory trainable. Objective errored executions may teach the organism's
+routing and ecological policy when their trajectories, failure evidence, data
+rights, and contamination boundaries are complete; they cannot directly train
+adapter weights or enter distillation replay. Unverified completed work remains
+research and curriculum evidence only. Rights-cleared public development tasks
+may teach the organism or substrate only after task-level license review and an
+immutable family-level evaluation exclusion. Unapproved public episodes remain
+evaluation/research-only and can never silently enter training replay.
+
+This organism is treated as a model architecture at the system level, not as
+mere multi-agent prompting. Qwen is the shared neural substrate, while the
+persistent ecology, holographic associations, stigmergic memory, bidding,
+verification, and governed state transitions form the higher-order cognitive
+architecture. The organism can therefore learn while its substrate weights are
+frozen: verified experience changes future assignment, inhibition, retrieval,
+procedure selection, and stopping behavior. A later fine-tuned Qwen may improve
+the substrate, but it does not define the boundary of the model or its learning.
+
+The learning system operates at three speeds:
+
+1. verified operational outcomes may update retrieval, reputation, energy, and
+   decaying pheromone state immediately;
+2. batches of rights-cleared episodes may train bidding, routing, decomposition,
+   and stopping policies after regression evaluation; and
+3. specialist adapters or model weights may change only from explicitly
+   training-approved replay followed by frozen holdout and canary gates.
+
+### Arena versus organism
+
+The harness is the arena and referee, not a hidden solver. It may make reality
+more observable, evaluation more faithful, and execution more reproducible. It
+must not encode a domain answer or silently substitute deterministic task logic
+for learning. This distinction is applied with one test: would the proposed
+change help every candidate receive truer feedback on an unseen mission, or
+would it mainly help this candidate pass a known fixture?
+
+Harness-owned responsibilities are limited to authority boundaries, immutable
+inputs and receipts, sandbox and fault isolation, provider-error attribution,
+artifact integrity, exact independent verification, and reproducible resource
+accounting. Harness repairs are appropriate when an infrastructure or parsing
+failure would otherwise be mistaken for a reasoning failure. The harness may
+measure general learning signals such as verified phase advancement, semantic
+artifact validity, novelty, repetition, and model-call or token cost, but it may
+not decide how to solve the mission from those measurements.
+
+Organism-owned responsibilities include decomposition, bidding and assignment,
+role formation, tool strategy, memory and retrieval, attention allocation,
+retry and stopping behavior, confidence, synthesis, and the conversion of
+evidence into artifacts. Repeated inspection, low-yield token use, failure to
+advance a phase, or recurrence of a previously failed approach become learning
+episodes for the ecology. They must improve reward estimation, inhibition,
+pheromone dynamics, energy allocation, routing, curriculum, or the substrate;
+they must not become fixture-specific preprocessing or scripted plans.
+
+Ambiguous changes are evaluated as treatments. The harness first records the
+candidate-independent signal without changing behavior. A rights-cleared
+training split may then learn how the organism should react to that signal, and
+a frozen holdout determines whether the reaction generalizes. Public benchmark
+traces may diagnose failure modes without entering training. When an exact
+public development task is independently confirmed as training-permitted, the
+trace may update the organism or substrate only if its task family is
+permanently excluded from evaluation and promotion. A trained benchmark family
+is homework, never a grade. AMOS-owned, time-separated holdouts remain the
+primary generalization test.
+
+The first public Terminal-Bench Holographic Swarm diagnostic exposed this
+boundary clearly. Three construction cycles consumed 802,788 prompt tokens and
+50,515 completion tokens, advanced a solver from 0 to only 1,156 bytes, never
+ran it, and produced 37 invalid control-envelope fallbacks. Because the worker
+held one uninterrupted 28-turn lease, the ecology could not react to those
+micro-failures. Because any manifest change counted as durable progress, two
+small file changes increased the same builder's energy, reputation, pheromone
+signal, and next bid despite no governed phase advancement. These measurements
+are contamination-tagged research evidence. They do not authorize a task-
+specific solver, a forced worker switch, or a policy update from the benchmark.
+
+Instead, the arena exposes bounded intervention receipts: verified phase
+advancement, semantic artifact validity, artifact novelty, construction
+milestones, repeated control-envelope failure, lease utilization, and model-
+call/token cost. The organism—not the harness—learns whether each receipt
+should cause continuation, inhibition, a challenger, compaction, verification,
+or stopping. The first search stage now varies ten credit-assignment controls:
+repetition penalty, partial-progress pheromone intensity and energy reward,
+failure, repeat-failure, stall, and regression penalties, a quality-gated
+efficiency bonus, target lease utilization, and challenger exploration. All
+remaining ecology parameters stay pinned until this treatment generalizes on
+rights-cleared validation missions; only then does the broader policy search
+begin.
+
+This energy economy is quality-lexicographic. An independent verifier pass
+outranks every speed or cost measurement. Within equal-quality outcomes, a
+specialist that reaches the next host-verified milestone using less of its turn
+lease earns more energy, while an unproductive full lease loses the base
+failure penalty plus a stall penalty. Repeating the same failed approach with
+the same specialist and repair signals incurs an additional penalty; destroying
+previously observed construction state incurs a regression penalty. Raw wall
+time is retained as a later tie-breaker and calibration signal rather than the
+primary individual punishment because infrastructure load is not organism
+behavior. This preserves pressure toward faster solutions without rewarding a
+fast wrong answer or punishing an agent solely for transient GPU contention.
+
+The system was rerun twice on the full public Terminal-Bench production-
+planning task after the earlier diagnostics. Run
+`organism-full-qwen-production-planning-20260824-0910-r1` (agent `0.2.0`)
+failed after 15 minutes 46 seconds at `data-scanned`, before state compilation.
+Run `organism-full-qwen-production-planning-20260824-093701-r2` (agent `0.2.1`)
+advanced through state compilation and wrote three SQL artifacts, but exhausted
+construction after 29 minutes 51 seconds at `construction-checkpoint-2` before
+the official verifier ran. The latter is retained as immutable negative
+research episode `harbor-0c8d53ee-e011-4391-82a4-7dec3e1803c1`, digest
+`5d285f18bde8473516be41b7d046e2b46448263b0959f1b7a65d7ccd1e6bd320`.
+It is an execution error rather than partial success.
+That trace exposed a feedback bug: a host-created retry-checkpoint phase could
+itself mint a board-phase progress receipt. Retry checkpoints are now
+explicitly reward-ineligible. Only a separately host-harvested artifact may
+earn partial credit at that boundary. This is an arena repair because it makes
+the learning signal truthful; it does not prescribe how the organism should
+solve the task. The public benchmark episode remains evaluation/research-only
+and cannot enter adapter training.
+
+The first real calibration curriculum contains eight AMOS-owned development
+mission families covering authority precedence, recorded versus proposed
+state, idempotent recovery, approval boundaries, typed-tool recovery, lossless
+compaction, provider retry, and sleep recovery. Each answer is checked by a
+pre-registered, candidate-independent concept verifier and compiled into an
+immutable ecology episode. These deliberately accessible missions validate the
+continual-learning loop; their families are permanently excluded from
+evaluation and they cannot support a frontier-quality claim.
+
+Public data enters through a separate rights registry. Terminal-Bench remains
+evaluation-only because its task template explicitly marks benchmark contents
+as outside training corpora. Public training environments and trajectory sets
+that are intentionally released for model training may enter development after
+dataset- and task-level license review, provenance capture, decontamination,
+and permanent exclusion of overlapping evaluation families. The desired mix is
+therefore AMOS-owned operational competence plus explicitly trainable public
+capability data—not benchmark leakage disguised as learning.
+
+The public intake queue is recorded in
+`benchmarks/swarm-public-dataset-intake-v1.json`. It begins in quarantine with
+`trainingApproved=false`; a dataset card claim is evidence to audit, not an
+approval. The first audit wave prioritizes execution-verified function calls,
+open-weight SWE success/failure pairs, AppWorld train/development rollouts,
+human desktop traces, and process event logs. Process-mining logs are useful as
+workflow dynamics and simulator seeds, but are not agent trajectories by
+themselves. Each event-log DOI requires its own license and privacy review, and
+natural-language missions plus outcome verifiers must be generated separately.
+The TF-PM and processmining.org pages are indexes, while commercial simulated
+log libraries require explicit model-training and derivative-data rights.
+
+Private or organization-authorized data uses a separate lineage registry in
+`benchmarks/swarm-private-dataset-intake-v1.json`; raw records never enter the
+repository or public benchmark artifacts. The first private intake is the
+Process Mining Data Accounts Payable package: 75,234 invoice cases, 701,929
+events, and 10 complete process variants. Its source archive and derived
+curriculum are KMS-encrypted in the private research bucket. The curriculum
+contains 2,000 training, 500 validation, and 500 holdout cases split by entire
+process variant rather than by event row. This lets the ecology learn from
+rework, dispute, duplicate-processing, and early-payment dynamics without
+seeing its validation or holdout variant during search.
+
+The organism-level training program freezes the Qwen digest and optimizes only
+interpretable ecological policy parameters: bid weights, pheromone
+reinforcement and decay, energy rewards, retry limits, artifact horizons,
+compaction thresholds, and stopping confidence. The executable Stage 1 search
+evaluates 256 policies over eight generations and 32 common-random-number seeds
+on rights-cleared, deterministically verified scenarios. Promotion is
+lexicographic—verifier pass rate first, then recovery and efficiency—and any
+authority violation, forged receipt, contamination, or replay receives zero
+reward. A parallel specialist-LoRA track may use the same approved data, but it
+remains a separate candidate so organism gains and substrate gains stay
+attributable.
+
+The shared holographic world is its own learning lane between ecology search
+and substrate fine-tuning. The current `deterministic-hrr-v1` encoder is an
+interface and governance proof: it turns host-verified board entries into a
+read-only shared projection, retains the exact entries beside that lossy
+projection, and gives every logical specialist the same representation. Its
+SHA-derived token and role vectors are not claimed to be a learned world model.
+They are the pinned baseline that makes the later representation gain
+measurable.
+
+Stage 1 keeps Qwen frozen and learns a small projection from pinned Qwen hidden
+states into the shared world space, learned role/slot vectors, and a cleanup
+dictionary used to reconstruct exact board entry IDs. Binding and
+superposition remain HRR operations; when dimensions exceed the current small
+256-dimensional research surface, circular convolution must use an FFT-backed
+implementation rather than the quadratic reference implementation. The
+authoritative board is never replaced by the vector: only host-receipted events
+may update it, and every retrieved item must resolve back to an exact entry and
+evidence reference before it can affect an action.
+
+The first isolated HRR-v2 algebra treatment is frozen in
+`benchmarks/swarm-holographic-world-v2-experiment-v1.json`. It introduces
+frequency-unitary role codes, exact multi-key FFT unbinding, a raw shared world
+vector `W` that is never projected after superposition, and two retrieval arms:
+per-item scan and true-`W` presence plus exact-dictionary cleanup. The harness
+uses 1,024 dimensions at capacities 10, 25, 50, 100, and 200, with typed
+negation, proposed/current, superseded/current, forged-receipt, and
+missing-receipt hard negatives. It is model-free and cannot touch Harbor,
+Qwen, live swarm state, or organism policy.
+
+The predeclared run is preserved at
+`benchmarks/results/holographic-world-v2-algebra-2026-08-24.json`, evidence
+digest `d663d401012efe6dac053554101d8c039b5772b6b3ae8d5b355d25477006f293`.
+At 100 entries, exact dictionary cleanup reached 100% top-1 and top-5 and the
+typed slot index reduced mean cleanup scans by 97.77%. The promotion gate still
+failed: the true-`W` arm's hard-negative false-positive rate was 64.6%, with
+phase and polarity contrasts collapsing. The result is not repaired by
+post-hoc threshold or fixture tuning. It identifies an architectural boundary:
+one crude token-superposition filler cannot simultaneously represent semantic
+similarity and prove exact typed membership. The next registered treatment
+will separate a frequency-unitary exact-identity channel from a learned
+semantic-association channel, then require both to resolve through the same
+authoritative entry and receipt dictionary.
+
+That follow-up treatment is now frozen in
+`benchmarks/swarm-holographic-world-dual-channel-experiment-v1.json`. Its
+exact channel maps canonical typed content to an atomic frequency-unitary code;
+its semantic channel remains the deterministic token encoder as a development
+control. Semantic retrieval may propose candidates but is structurally unable
+to authorize them. Authorization requires both an exact-channel presence signal
+and a matching host dictionary entry carrying a verified receipt.
+
+The first run is preserved at
+`benchmarks/results/holographic-world-dual-channel-2026-08-24.json`, evidence
+digest `9968271ec3e6770301e3abb275984aa60792afa9b3378df8f796d0fc14be2de4`.
+It passed the predeclared 100-entry, 4,096-dimensional algebra gate: 100% exact
+positive acceptance, zero observed false positives across all five typed hard-
+negative families, 100% semantic paraphrase top-5 retrieval, zero authority
+leakage, and 96.6% cleanup-scan reduction. The capacity curve remains a real
+constraint: 1,024 dimensions produced 6% false positives at 100 entries and
+13.6% at 200; 2,048 produced 2% and 6.8%; 4,096 produced zero at 100 and 1.2%
+at 200. This is algebra evidence, not learned-semantic or mission-quality
+evidence. The next full Terminal-Bench treatment may observe the dual channels
+in read-only shadow mode, but they may not change bids, rewards, state, or
+completion until shadow traces and replicated AMOS-owned tests support that
+separate promotion.
+
+The first shadow run preserved 12 live snapshots with one exact positive, zero
+false positives, and zero authority leakage, but it also showed that passive
+telemetry could not rescue a builder that ignored its partial construction.
+The next development treatment therefore activates HRR only as a bounded
+attention and bid-affinity surface. Host-observed construction state, required
+next actions, failed checks, and repair principles enter the shared semantic
+world; every retrieved candidate must resolve back through the exact host
+dictionary and carries `authorityGranted=false`. HRR may now change which
+specialist receives a lease and which verified evidence it attends to, but it
+still cannot mint a fact, receipt, completion, approval, or production action.
+Its active utility must beat the frozen shadow/control treatment on real Qwen
+missions while retaining zero authority leakage.
+
+Representation training uses only rights-cleared, verifier-receipted mission
+transitions. Positive objectives include recovering the next relevant board
+binding, reconstructing role/value pairs after unbinding, predicting the
+verified evidence gap or next artifact class, and associating a task with a
+specialist only when the specialist's output passed its independent verifier.
+Hard negatives cover negation, superseded versus current state, proposal versus
+host authority, schema drift, misleading lexical overlap, and forged or absent
+receipts. Raw private process-mining data is not authorized for this weight
+update merely because it is authorized for organism-policy simulation; its
+data contract must separately permit representation training.
+
+The representation ablation is pre-registered as: deterministic HRR baseline;
+frozen Qwen embedding retrieval without binding; learned projection without
+binding; and learned projection plus role binding, superposition, and cleanup.
+It is evaluated with the same frozen organism policy and Qwen digest. Only a
+gain that survives unseen mission families, authority/negation hard negatives,
+and exact-entry attribution may advance. The winning representation then enters
+the outer base/adapter × direct/organism comparison as a separately pinned
+digest, preserving the ability to distinguish representation, ecology, and
+substrate gains.
+
+The parallel adapter pilot uses a two-by-two factorial comparison: base Qwen
+direct, base Qwen plus the organism, adapter Qwen direct, and adapter Qwen plus
+the organism. The base checkpoint and organism-policy digests remain pinned
+within each comparison. This exposes the organism's main effect, the adapter's
+main effect, and—most importantly—whether specialist weights and the ecology
+compound each other. Training runs in disposable jobs and never mutates the
+live inference endpoint in place. The first pass uses QLoRA for typed tool use,
+artifact construction, recovery, and verification/integration, followed by
+preference tuning only where an independent verifier provides the selection
+signal. Quality is the promotion objective; speed is measured but is not a
+gate during this phase.
+
+Multimodality is part of the model target, not a later product attachment. The
+canonical Qwen3.8-27B substrate remains the full vision-language checkpoint in
+every training and inference lineage. A text-only stage-zero pipeline proof may
+train language-layer LoRA parameters because its AMOS contract curriculum has
+no images, but it must keep the vision tower loaded, frozen, and separately
+addressable. It may not export a text-only replacement checkpoint or treat a
+text-only win as model completion.
+
+The first quality dataset expands into rights-cleared multimodal mission
+families: screenshots and visible UI state, documents and layout, spreadsheet
+tables and charts, diagrams and workflow state, visual tool grounding, and
+cross-modal contradiction detection. The complete organism target also accepts
+speech and other audio with timestamps and speaker provenance, plus temporal
+video represented by synchronized frames, audio, transcript, and time ranges.
+The selected Qwen checkpoint is natively vision-language rather than native
+audio, so audio enters through a versioned, governed encoder/ASR contract until
+an independently evaluated native audio substrate earns promotion. That
+boundary must remain visible in every receipt; a transcript may not be passed
+off as the original audio observation.
+
+AMOS-owned renderers can produce many document, chart, UI, and video-frame
+pairs deterministically while retaining the originating artifact and
+region/time-level receipts. Promotion repeats the factorial comparison on a
+frozen multimodal portfolio—base direct, base plus organism, adapter direct,
+and adapter plus organism—and requires no regression on broader general-vision,
+speech, and temporal-grounding floors. Multimodal observations remain evidence,
+not authority: the host still owns state transitions and receipts. Text is the
+initial universal control/output channel, while generated speech, images, and
+video remain separately permissioned capabilities with their own provenance
+and safety evaluations.
+
+This first adapter is system adaptation, not an attempt to replace broad
+pretraining. It makes Qwen AMOS-native: tool selection and typed arguments,
+governed state transitions, the boundary between model proposals and host
+authority, artifact and receipt contracts, approval semantics, idempotent
+recovery, and the swarm evidence-board protocol. The curriculum is composed of
+rights-cleared success/failure/correction triples and schema perturbations.
+Unseen tools and future schema revisions are held out so the adapter must learn
+the protocol rather than memorize a catalog. General reasoning suites remain a
+regression floor, and tenant facts, hidden reasoning, and benchmark answers are
+never training targets.
+
+The corresponding executable research contracts are
+`benchmarks/swarm-organism-policy-training-v1.json` and
+`benchmarks/swarm-qwen-adapter-training-v1.json`. The independently attributable
+shared-world lane is pinned in
+`benchmarks/swarm-holographic-world-training-v1.json`.
+
+The stage-zero substrate pipeline is now proven end to end on the disposable
+AWS verifier. Contract `qwen38-adapter-stage0-20260823-2034-r3` trained and
+reloaded an isolated language-layer adapter without changing the base probe;
+vLLM 0.27.1 then exposed both the pinned base alias and adapter alias and
+completed an independent request through each. The immutable load receipt is
+stored at
+`s3://amos-qwen-research-plane-637423327454-us-east-1/runs/qwen38-adapter-stage0-20260823-2034-r3/vllm-proof-r6/vllm-adapter-load-proof.json`
+with digest
+`50bbb46eb49afa1bd9423bf530d2b2cd133b633c5e3295e321d4eb5fa25c7617`.
+It has no remaining pipeline exit criteria, but still sets
+`qualityClaimAllowed=false` and `promotionAllowed=false`: loadability is an
+arena fact, not evidence that the adapter or organism is better.
+
+The organism search now has an executable multi-fidelity simulator in
+`src/research/swarmOrganismSimulator.js`. It fits role-transition distributions
+from immutable learning episodes and their ecology artifacts, then runs seeded
+model-free missions under candidate bidding, pheromone, energy, retry,
+compaction, artifact-horizon, and stopping policies. A constrained
+cross-entropy search uses common random numbers so candidates see the same
+synthetic uncertainty. Simulation output is prediction, never verifier
+evidence, and carries an explicit real-Qwen promotion queue rather than a
+deployment claim.
+
+The policy search is stage-constrained by the pinned training contract. Stage
+one may alter only the ten credit-assignment controls above; all remaining
+policy values remain fixed and their digest is recorded. Those controls are
+consumed by the real holographic kernel: host-observed solver creation,
+execution, self-check, candidate-status, and failed-check reduction may earn
+bounded energy without becoming success; unverified file churn earns nothing;
+and failed, repeated, stalled, or regressive leases leave proportionately
+stronger decaying inhibitory trails that alter the next bid.
+
+`src/research/swarmOrganismLearningCycle.js` turns each simulation winner into
+a machine-readable qualification candidate. A candidate advances in order
+through simulation, immutable artifact replay, real-Qwen phase probes, a full
+real-Qwen mission replicated across three seeds, frozen holdout, and canary
+telemetry. Each gate requires a host-generated receipt from the designated
+evaluator; gates cannot be skipped, and failed gates become durable learning
+feedback. The organism cannot mark itself deployed or permit production
+promotion. This makes the loop automatable without allowing the learner to own
+its scoreboard.
+
+The cloud calibration contains 147 readable ecology records, of which eight
+AMOS-owned development episodes are eligible to update the policy: six verifier
+passes and two verifier failures spanning authority, recorded state, recovery,
+approvals, schemas, compaction, provider retry, and sleep recovery. The first
+unconstrained diagnostic remains non-promotable because it varied the full
+policy and produced tied candidates.
+
+The constrained Stage 1 run
+`organism-simulation-ap-stage1-20260824-0801-r1` completed 100,000 baseline
+rollouts plus a 256-candidate, eight-generation search over 24 private AP
+training scenarios and 32 seeds in 8 minutes 3 seconds. A paired comparison on
+identical draws raised predicted pass rate from 7.94% to 10.42% (+2.47 points),
+phase completion by 3.11 points, recovery by 3.69 points, and artifact
+compliance by 1.64 points, at a predicted cost of 0.40 additional model calls
+and 2.87 additional seconds per mission. On 500 disjoint validation scenarios,
+the three candidates retained approximately +3.2 points of predicted pass-rate
+lift and +4.5 points of recovery lift. The holdout partition remains unopened.
+
+All three candidates also passed eight immutable host-contract replays: partial
+progress remained non-terminal, a challenger received the retry, and only a
+verifier receipt completed the task. These results are simulator predictions
+and kernel-contract evidence—not Qwen quality evidence. The top policies remain
+close enough that Stage 1 has not identified a unique winner; bounded real-Qwen
+phase probes are the next information-gaining gate before any holdout or canary
+evaluation.
+
+The first paired real-Qwen phase probe,
+`organism-qwen-phase-probes-20260824-0857-r2`, then passed its execution and
+governance gate with report digest
+`987baf40b53c50169ee798719316380aed986f41fac532a8991c68d4983518e3`.
+Base and learned policies each passed all eight AMOS-owned missions and all 24
+criteria on their first organism attempt; partial credit remained entirely
+receipt-gated and both exact policy digests were consumed. Three missions in
+each arm exhausted the private-reasoning slice and self-healed through the
+reserved answer pass. The run is therefore real-Qwen infrastructure,
+answer-recovery, and contract evidence, but it is not policy-lift evidence:
+pass-rate lift, criterion lift, recovery lift, and model-call lift were all
+zero because none of the easy fixtures reached an organism retry. The learned
+policy advances only to a full development mission where partial work and
+reassignment can occur naturally; the saturated fixtures will not be made
+artificially harder merely to manufacture treatment separation.
+
+Substrate training follows a separate escalation ladder. It begins with a
+64-example pipeline/lineage proof, then a three-seed QLoRA SFT sweep over
+rank 16/32/64 adapters, followed only when supported by evidence by verifier-
+grounded DPO, role-specialist adapters, environment outcome tuning, and finally
+full-weight training. The trainable source is the canonical
+`Qwen/Qwen3.8-27B` checkpoint; the deployed FP8 artifact is an inference
+quantization, not the training source. Every candidate is evaluated in the
+same two-by-two base/adapter × direct/organism design with pinned model,
+adapter, organism, data, recipe, and evaluator digests.
+
+The file-backed replay store is content-addressed and immutable by episode ID.
+Curriculum generation prioritizes execution failures and official-verifier
+failures, carries their contamination lineage forward, and produces targeted
+repair or boundary-extension challenge specifications. It never treats a
+simulated prediction of success as a reward. The Harbor collector records the
+first Holographic Swarm treatment automatically after each benchmark run.
+
+The replay store is also the organism's durable episodic memory across process
+restarts, benchmark jobs, and user sessions. At the beginning of a new run, a
+bounded loader selects only research-permitted, non-sealed episodes for the
+matching task family, verifies each content-addressed ecology blob, and derives
+state -> strategy -> observed-effect -> reward genes from host-settled outcomes.
+Those genes enter the shared HRR world as learned prior experience. They may
+change attention, bidding, and repair focus; they cannot replace the current
+exact board, grant authority, or claim completion. The exact ledger is the
+world model's factual grounding, while HRR is its lossy associative belief
+surface. New typed repair hypotheses can earn one bounded implementation lease
+only when they cite the exact host failure digest; the hypothesis itself earns
+no solution reward. This is the first live continual-learning loop in which the
+organism changes behavior across states, jobs, and sessions without changing
+base-model weights.
+
+Failed-run capsules are the organism's durable negative-experience substrate,
+not disposable logs. Every development run records an exact task identity,
+elapsed time, model/seed provenance, host-observed candidate lineage, failed
+checks, repair signals, and immutable artifact references. When a substantive,
+syntactically valid challenger exists, its source is stored as a separate
+content-addressed blob. A later run for the exact same instruction may restore
+the strongest such blob only as the repairable challenger. The protected
+incumbent remains fresh, the restored source is re-executed and re-observed in
+the new sandbox, and neither the stored capsule nor HRR grants verifier or
+completion credit.
+
+The three-seed v10 treatment exposed a concrete learning-boundary defect rather
+than a lack of candidate evolution. All three runs passed the structural gate,
+but each official verifier result remained flat at 11/20. The collector had
+persisted an empty `failedChecks` list even though the official CTRF artifact
+named nine failing checks, so the next run inherited executable state without
+inheriting the independently observed lesson. V11 closes that channel
+generically: the host converts official checker status into bounded typed
+feedback, stores it with explicit non-authority, ranks exact-task candidates by
+official partial quality before self-authored checks, and presents inherited
+gaps to the first fresh construction lease. Hidden answers and raw verifier
+outputs are not imported. The unchanged official verifier remains the only
+source of completion credit, and the v11 gate still requires every seed to
+preserve 11/20 plus at least one seed to improve.
+
+V11 also exposed the more important organism defect: the same implementation
+digest survived every repair lease. Memory was reaching attention, but not
+causing variation. V12 closes the first full expression loop. Durable episodes
+are context-matched against the current role, repair signals, and failed-check
+surface; the host emits a `gene-expression` receipt naming exactly which prior
+procedures entered the worker prompt and whether each is guidance or negative
+experience to avoid. Outcome memory carries that receipt, so credit and blame
+are no longer model-claimed. A host-authored repair agenda selects the
+least-tried coherent failure cluster and records rejected strategy
+fingerprints. An unresolved lease must create a syntax-valid substantive
+implementation with a new digest, while timeout checkpoints preserve a useful
+in-flight mutation for the next run. No-op source reuse cannot advance either
+the incumbent or repairable challenger.
+
+Governance is intentionally lighter inside this metabolism. Selecting,
+expressing, generating, applying, and locally testing research variants does
+not require human approval. External operations, authoritative promotion,
+fitness vesting, gene admission, and mission success still require host
+receipts or the independent verifier. This is the minimum boundary that lets
+the organism explore rapidly without letting it grade itself.
+
+This memory has two retrieval tiers so growth does not make every mission
+slower. Exact instruction-digest indexes make same-task candidate recovery
+proportional only to prior attempts for that task. The HRR world remains the
+fixed-width associative tier for strategy, failure-pattern, specialist, and
+procedure recall across related tasks. HRR returns bounded candidate IDs and
+attention signals; the content-addressed store returns exact evidence. Every
+approximate hit must resolve through the exact dictionary, rights boundary,
+task signature, blob digest, and current deterministic checks before it can
+affect a candidate. At larger scale, indexes can be sharded by tenant/rights
+domain and task family while HRR projections remain incrementally updated;
+executable blobs never enter the superposed vector itself.
+
+The scaling reason for HRR is fixed-width shared recall rather than archival
+compression. Adding a verified experience updates one bounded world projection
+instead of appending that experience to every specialist prompt or searching
+the entire replay corpus on every phase. With FFT binding, projection updates
+and unbinding scale with the fixed representation dimension rather than the
+token length of accumulated history. A typed cleanup shard then resolves the
+small candidate set back to exact IDs. Capacity remains explicit: projections
+are partitioned by tenant, rights domain, task family, and time window before
+collision rates cross the registered gate, while cold exact capsules stay in
+content-addressed object storage.
+
+This creates three separate speed paths. Same-task recovery uses the exact
+instruction index and skips rediscovering a known repairable implementation.
+Related-task recovery uses HRR to bound which strategies and specialists enter
+the prompt. Concurrent missions share one Qwen serving pool and rely on
+continuous batching rather than loading a model per logical worker. None of
+these shortcuts changes the verification boundary: retrieved IDs, restored
+source, and model outputs must still pass current host checks and the official
+verifier.
 
 ### Specialist swarm: shared backbone plus adapters
 
@@ -392,10 +1019,13 @@ blind judging where deterministic grading is unavailable, and independent
 reproduction. A single aggregate score cannot override a failed floor.
 
 Public benchmarks are development or validation evidence, not sealed proof.
-SWE-bench contamination is specifically controlled with a later untouched
-SWE-rebench slice; public task leakage and benchmark-specific scaffold
-overfitting remain explicit failure risks. Final superiority requires the
-AMOS-private, time-separated mission and canary partitions.
+Any task family admitted to training is development-only thereafter and is
+removed permanently from benchmark validation and promotion scoring. Untrained
+public families may remain validation evidence. SWE-bench contamination is
+specifically controlled with a later untouched SWE-rebench slice; public task
+leakage and benchmark-specific scaffold overfitting remain explicit failure
+risks. Final superiority requires the AMOS-private, time-separated mission and
+canary partitions.
 
 #### Quality-first control ladder
 
@@ -425,10 +1055,24 @@ per control are required before comparing consistency.
 
 The custom Qwen model must be registered with Terminus-2 as a 32,768-token
 input / 4,096-token output model, with proactive summarization beginning while
-16,000 input tokens remain. A missing model registration causes Harbor to
-assume a one-million-token context and is classified as a harness failure, not
-a model-quality loss. Critic and integrator stages each receive one fail-closed,
-no-thinking visible-output recovery; candidates are never replayed.
+16,000 input tokens remain. Smaller 8,000- and 12,000-token reserves let the
+backend tokenizer cross the 32K boundary before Harbor's optimistic estimate
+triggered. The original 16,000-token reserve had caused rediscovery loops only
+when the generic roles printed raw data and failed to leave durable state; the
+gateway now directs workers to persist compact typed evidence and advance to
+solver construction before compaction. Those earlier runs are harness failures,
+not model losses. The gateway uses the candidates'
+measured prompt-token usage to budget that board inside the 32,768-token
+backend window, truncating private evidence first and then reducing the private
+stage's output allowance when near the boundary. The outer agent cannot see
+these internal tokens, so relying on its context estimate alone is invalid. If
+even the minimum private critic and evidence board cannot fit, the gateway
+returns the first complete candidate directly and records a
+`direct-context-fallback` trace instead of failing the outer agent's compaction
+request. A missing model registration causes Harbor to assume a
+one-million-token context and is likewise classified as a harness failure.
+Critic and integrator stages each receive one fail-closed, no-thinking
+visible-output recovery; candidates are never replayed.
 
 ### Promotion requirements
 

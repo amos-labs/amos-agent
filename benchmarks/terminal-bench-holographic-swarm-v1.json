@@ -1,0 +1,44 @@
+{
+  "schema": "amos.hard-benchmark-treatment",
+  "version": 1,
+  "id": "terminal-bench-holographic-swarm-v1",
+  "status": "development",
+  "dataClassification": "public-development",
+  "objective": "Test the original Holographic Swarm architecture as a distinct quality treatment against the fixed task-pipeline control.",
+  "dataset": {
+    "harness": "harbor",
+    "harnessVersion": "0.22.0",
+    "id": "terminal-bench/terminal-bench",
+    "version": "3.0.0",
+    "task": "terminal-bench/production-planning",
+    "verifier": "official-deterministic"
+  },
+  "candidate": {
+    "id": "qwen-holographic-swarm",
+    "model": "amos-qwen38-27b-fp8",
+    "harborAgent": "benchmarks.harbor_agents.amos_holographic_swarm:AmosHolographicSwarm",
+    "sharedBackbone": true,
+    "logicalAgents": 6,
+    "holographicDimension": 128,
+    "coordination": "stigmergic-contract-net",
+    "routerAuthority": "dependency-and-governance-only",
+    "internalEnergyLedger": true,
+    "tokenEconomics": false,
+    "emotionalVector": false,
+    "verifiedOutcomeLearning": true,
+    "officialVerifierModified": false
+  },
+  "control": {
+    "id": "qwen-task-swarm",
+    "scaffold": "amos-task-swarm-v2",
+    "result": "production-planning-qwen-task-swarm-v9",
+    "classification": "invalid-harness-run"
+  },
+  "promotion": {
+    "minimumValidRuns": 3,
+    "primaryMetric": "official-reward",
+    "requireArtifactReceipts": true,
+    "requireIndependentVerification": true,
+    "publicTreatmentCountsAsSealedEvidence": false
+  }
+}

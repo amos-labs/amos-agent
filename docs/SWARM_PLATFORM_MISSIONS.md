@@ -19,6 +19,29 @@ This separation is the production harness for the organism. Swarm may propose
 `tool`, `checkpoint`, `ask_user`, `verify`, or `fail`; it cannot mint tool
 authority, approve its own work, or convert missing verification into success.
 
+## Ownership boundary
+
+The production decomposition is one organism with distinct organs, not two
+competing learning systems:
+
+- `amos-managed-platform` owns mission authority, execution, checker truth,
+  tenant consent, and terminal outcome receipts.
+- Swarm OS owns within-mission cognition: logical specialists, evidence-board
+  coordination, mission energy, pheromones, active HRR attention, and prompt
+  compilation.
+- `amos-organism` owns cross-mission heredity: the canonical genome, gene
+  selection rank, expression and outcome history, fitness settlement and
+  regression clawback, candidate lineage, promotion, replay, and the durable
+  learned HRR world representation.
+- AMOS Desktop is a client and optional local Mission worker. It does not mint
+  truth, fitness, or learning attestations.
+
+These components exchange versioned organism contracts. The current Python
+Swarm selector is an explicitly provisional research projection of the
+organism's lexicographic rank; production expression comes from
+`amos-organism`, and Swarm attests only what the host prompt compiler actually
+compiled. Transient mission coordination never becomes durable authority.
+
 ## Worker protocol
 
 The gateway recognizes only the exact Platform planner envelope

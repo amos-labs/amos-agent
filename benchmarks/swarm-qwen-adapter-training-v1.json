@@ -1,0 +1,317 @@
+{
+  "schema": "amos.swarm-substrate-adapter-training",
+  "version": 1,
+  "id": "swarm-qwen-adapter-training-v1",
+  "status": "data-gated",
+  "objective": "Train an AMOS-native Qwen substrate in parallel with frozen-weight organism-policy learning, while preserving general reasoning and attribution between substrate and organism gains.",
+  "target": {
+    "type": "system-competence",
+    "preserveGeneralReasoning": true,
+    "preserveMultimodalCapability": true,
+    "multimodalIsFirstClass": true,
+    "teach": [
+      "amos-tool-selection-and-typed-arguments",
+      "governed-state-machine-transitions",
+      "proposal-versus-host-authority-boundary",
+      "artifact-contracts-and-receipts",
+      "approval-and-policy-boundaries",
+      "idempotent-error-recovery",
+      "swarm-role-and-evidence-board-protocol",
+      "ground-images-documents-screenshots-and-ui-state-to-typed-evidence",
+      "produce-verifiable-actions-from-visual-and-textual-context"
+    ],
+    "doNotTeach": [
+      "sealed-or-evaluation-held-public-benchmark-solutions",
+      "sealed-evaluation-labels",
+      "tenant-private-facts",
+      "provider-hidden-reasoning"
+    ]
+  },
+  "base": {
+    "model": "amos-qwen38-27b-fp8",
+    "inferenceRepository": "Qwen/Qwen3.8-27B-FP8",
+    "trainingRepository": "Qwen/Qwen3.8-27B",
+    "requireSameUpstreamModelLineage": true,
+    "requirePinnedTrainingRevision": true,
+    "trainFromCanonicalCheckpointRatherThanInferenceQuantization": true,
+    "requirePinnedCheckpointDigest": true,
+    "fullWeightTraining": false,
+    "trainingMethod": "qlora",
+    "inferenceEndpointMutable": false,
+    "sharedBackbone": true
+  },
+  "experiment": {
+    "design": "two-by-two-factorial",
+    "qualityPrimary": true,
+    "arms": [
+      {
+        "id": "base-direct",
+        "adapter": false,
+        "swarm": false
+      },
+      {
+        "id": "base-swarm",
+        "adapter": false,
+        "swarm": true
+      },
+      {
+        "id": "adapter-direct",
+        "adapter": true,
+        "swarm": false
+      },
+      {
+        "id": "adapter-swarm",
+        "adapter": true,
+        "swarm": true
+      }
+    ],
+    "requirePinnedOrganismPolicyDigest": true,
+    "requireMatchedInferenceBudgetForAttribution": true,
+    "report": [
+      "organism-main-effect",
+      "adapter-main-effect",
+      "organism-adapter-interaction",
+      "frontier-control-gap"
+    ]
+  },
+  "data": {
+    "minimumTrainingEpisodes": 200,
+    "minimumValidationEpisodes": 50,
+    "minimumHoldoutEpisodes": 50,
+    "minimumTaskFamilies": 6,
+    "splitUnit": "mission-family",
+    "allowed": [
+      "amos-owned-rights-cleared-missions",
+      "amos-owned-rights-cleared-multimodal-missions",
+      "rights-cleared-public-development-trajectories-with-evaluation-exclusions",
+      "deterministically-rendered-document-ui-and-chart-pairs",
+      "deterministically-verified-self-play",
+      "explicitly-licensed-open-teachers"
+    ],
+    "forbidden": [
+      "public-benchmark-trajectories-without-task-level-training-rights",
+      "public-benchmark-tasks-reused-for-evaluation-after-training",
+      "sealed-evaluation-tasks",
+      "provider-output-without-training-rights",
+      "raw-private-user-content",
+      "unverified-model-self-labels"
+    ],
+    "requireEpisodePermissionTrainingApproved": true,
+    "requireDeterministicVerifierOrAuditedGrade": true,
+    "requireDeidentification": true,
+    "requireDeduplicationAcrossSplits": true,
+    "requireContaminationScan": true
+  },
+  "curriculum": {
+    "unit": "verified-amos-mission-transition",
+    "families": [
+      "choose-the-smallest-sufficient-tool-set",
+      "emit-valid-typed-tool-arguments",
+      "produce-contract-valid-artifacts",
+      "recover-without-replaying-completed-actions",
+      "request-approval-only-at-real-authority-boundaries",
+      "compact-context-without-losing-governed-state",
+      "distinguish-proposed-state-from-host-recorded-state",
+      "integrate-multiple-specialists-into-a-verifiable-result",
+      "ground-screenshot-regions-to-visible-ui-state",
+      "extract-typed-evidence-from-documents-spreadsheets-and-charts",
+      "cross-check-visual-observations-against-tool-and-file-evidence"
+    ],
+    "includeSuccessFailureCorrectionTriples": true,
+    "includeSchemaPerturbations": true,
+    "holdOutUnseenToolsAndSchemaRevisions": true
+  },
+  "adapters": {
+    "initial": [
+      "tool-selection-and-typed-arguments",
+      "artifact-construction",
+      "error-diagnosis-and-recovery",
+      "evidence-verification-and-integration",
+      "multimodal-grounding-and-ui-state"
+    ],
+    "routing": "task-phase",
+    "maximumActiveAdaptersPerTurn": 1,
+    "trainOnHiddenReasoning": false,
+    "supervision": [
+      "verified-actions",
+      "typed-artifacts",
+      "successful-recovery-transitions",
+      "verifier-selected-output-pairs"
+    ]
+  },
+  "multimodal": {
+    "baseArchitectureMustRemain": "Qwen3_5ForConditionalGeneration",
+    "stageZero": "Keep the complete vision-language base loaded and frozen; text-only pipeline data may update language-layer LoRA weights but may not remove, merge, or mutate the vision tower.",
+    "organismInputContract": {
+      "modalities": [
+        "text",
+        "images",
+        "documents",
+        "spreadsheets-and-charts",
+        "visible-ui-state",
+        "timestamped-speech-and-audio",
+        "temporal-video"
+      ],
+      "preserveSourceBytesOrImmutableArtifactReference": true,
+      "preserveRegionTimeSpeakerAndTransformProvenance": true,
+      "transcodedOrTranscribedEvidenceMustIdentifyItsEncoder": true,
+      "modelObservationNeverGrantsHostAuthority": true
+    },
+    "nativeCapabilityBoundary": {
+      "checkpoint": "vision-language",
+      "audioPath": "versioned-governed-encoder-or-asr-until-native-audio-substrate-earns-promotion",
+      "videoPath": "synchronized-frames-audio-transcript-and-time-ranges",
+      "doNotRepresentTranscriptAsOriginalAudioEvidence": true
+    },
+    "trainingFamilies": [
+      "screenshots-and-visible-ui-state",
+      "documents-and-layout",
+      "spreadsheets-tables-and-charts",
+      "diagrams-and-workflow-state",
+      "visual-tool-grounding",
+      "timestamped-speech-speaker-and-audio-grounding",
+      "temporal-video-event-and-cross-stream-grounding",
+      "cross-modal-contradiction-detection"
+    ],
+    "evaluationArms": [
+      "base-multimodal-direct",
+      "base-multimodal-swarm",
+      "adapter-multimodal-direct",
+      "adapter-multimodal-swarm"
+    ],
+    "hardFloors": [
+      "no-regression-on-frozen-general-vision-portfolio",
+      "no-regression-on-frozen-speech-and-temporal-grounding-portfolios",
+      "no-image-derived-claims-without-visible-grounding",
+      "no-audio-or-video-derived-claims-without-time-bounded-source-grounding",
+      "no-transcript-presented-as-original-audio-evidence",
+      "no-visual-observation-promoted-to-host-recorded-state-without-receipt"
+    ]
+  },
+  "training": {
+    "parallelToOrganismPolicySearch": true,
+    "isolateTrainingJobsFromInferenceEndpoint": true,
+    "initialSeeds": 3,
+    "stages": [
+      "role-conditioned-supervised-fine-tuning",
+      "multimodal-grounded-supervised-fine-tuning",
+      "verifier-grounded-preference-tuning"
+    ],
+    "checkpointSelection": "validation-verifier-pass-rate",
+    "retainBaseAndAllCandidateDigests": true
+  },
+  "trainingLadder": [
+    {
+      "stage": 0,
+      "id": "pipeline-and-lineage-proof",
+      "method": "qlora-micro-overfit",
+      "examples": 64,
+      "purpose": "Prove tokenizer, multimodal chat template, loss masking, checkpoint lineage, adapter save/load, and vLLM compatibility before spending on a real run.",
+      "exit": [
+        "near-perfect-training-contract-compliance",
+        "adapter-reloads-on-pinned-base",
+        "base-output-is-bitwise-unchanged-when-adapter-disabled",
+        "complete-multimodal-base-remains-loadable-and-unmodified"
+      ]
+    },
+    {
+      "stage": 1,
+      "id": "amos-system-competence-sft",
+      "method": "qlora-sft",
+      "sourceCheckpoint": "Qwen/Qwen3.8-27B",
+      "quantization": "nf4-training-view",
+      "adapterPrecision": "bf16",
+      "targetModules": "all-linear",
+      "rankCandidates": [16, 32, 64],
+      "initializationCandidates": ["default-no-op", "loftq"],
+      "seeds": 3,
+      "selection": "validation-independent-verifier-pass-rate",
+      "exit": [
+        "adapter-direct-beats-base-direct",
+        "no-general-reasoning-regression",
+        "unseen-tool-and-schema-holdouts-pass"
+      ]
+    },
+    {
+      "stage": 2,
+      "id": "amos-multimodal-grounding-sft",
+      "method": "vision-language-qlora-sft",
+      "sourceCheckpoint": "Qwen/Qwen3.8-27B",
+      "condition": "Begin after rights-cleared multimodal mission-family train, validation, and holdout splits pass contamination and deidentification checks.",
+      "selection": "frozen-multimodal-verifier-pass-rate-with-general-vision-floors",
+      "exit": [
+        "adapter-multimodal-direct-beats-base-multimodal-direct",
+        "adapter-multimodal-swarm-beats-base-multimodal-swarm",
+        "no-general-vision-regression",
+        "unseen-layout-ui-and-document-families-pass"
+      ]
+    },
+    {
+      "stage": 3,
+      "id": "verifier-grounded-preference",
+      "method": "dpo",
+      "requires": "independent-verifier-selected-output-pairs",
+      "selection": "frozen-holdout-verifier-pass-rate",
+      "exit": [
+        "dpo-beats-sft-on-holdout",
+        "calibration-and-refusal-floors-preserved"
+      ]
+    },
+    {
+      "stage": 4,
+      "id": "role-specialist-adapters",
+      "method": "phase-routed-lora",
+      "condition": "Only if one unified adapter shows measurable negative transfer between tool use, construction, verification, and integration.",
+      "serve": "vllm-per-request-adapter-selection",
+      "maximumActiveAdaptersPerTurn": 1,
+      "exit": [
+        "specialists-beat-unified-adapter",
+        "routing-gain-survives-three-seed-factorial-test"
+      ]
+    },
+    {
+      "stage": 5,
+      "id": "environment-outcome-tuning",
+      "method": "grpo-or-equivalent-verifiable-outcome-optimization",
+      "condition": "Only after deterministic AMOS mission environments produce stable rewards and the SFT/DPO path plateaus.",
+      "exit": [
+        "real-mission-lift-beyond-adapter-and-organism-controls",
+        "no-reward-hacking-under-adversarial-verification"
+      ]
+    },
+    {
+      "stage": 6,
+      "id": "full-weight-escalation",
+      "method": "full-or-partial-weight-post-training",
+      "condition": "Only if adapters plateau, the dataset is large and diverse enough, and a small-model scaling study predicts a quality gain worth the cost.",
+      "exit": [
+        "beats-best-adapter-plus-organism",
+        "survives-broad-regression-and-safety-portfolio"
+      ]
+    }
+  ],
+  "cloudExecution": {
+    "trainingEndpointIsDisposable": true,
+    "liveInferenceEndpointIsImmutable": true,
+    "initialHardware": "single-96-gib-nvidia-gpu",
+    "scaleOutTrigger": "measured-memory-or-step-time-bottleneck",
+    "artifacts": [
+      "pinned-base-digest",
+      "dataset-manifest-digest",
+      "container-digest",
+      "recipe-digest",
+      "adapter-digest",
+      "optimizer-state-digest",
+      "evaluation-report-digest"
+    ]
+  },
+  "promotion": {
+    "primary": "independent-verifier-pass-rate",
+    "requireFrozenHoldout": true,
+    "requireBlindFrontierComparison": true,
+    "requireThreeSeedReplication": true,
+    "maximumSignificantSafetyRegressions": 0,
+    "latencyIsPromotionGate": false,
+    "deployment": "shadow-then-canary"
+  }
+}

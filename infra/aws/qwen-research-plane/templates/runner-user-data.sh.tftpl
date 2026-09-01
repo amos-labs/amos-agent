@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec > >(tee -a /var/log/amos-research-runner-bootstrap.log | logger -t amos-research-runner -s 2>/dev/console) 2>&1
+
+dnf install -y amazon-ssm-agent awscli-2 docker
+systemctl enable --now amazon-ssm-agent
+systemctl enable --now docker
+install -d -m 0750 \
+  /opt/amos-research \
+  /var/lib/amos-research \
+  /var/lib/amos-research/harbor-cache
+
+aws ecr get-login-password --region "${aws_region}" | \
+  docker login --username AWS --password-stdin "${ecr_registry}"
+docker pull "${runner_image_uri}"
+
+cat > /etc/amos-research-runner.env <<'ENV'
+AMOS_AWS_REGION=${aws_region}
+AMOS_QWEN_API_BASE=${api_base}
+AMOS_QWEN_SECRET_ID=${api_key_secret_id}
+AMOS_QWEN_SERVED_MODEL=${served_model_name}
+AMOS_RESEARCH_ARTIFACT_BUCKET=${artifact_bucket}
+AMOS_RESEARCH_JOB_QUEUE_URL=${job_queue_url}
+AMOS_RESEARCH_RUN_TABLE=${run_table}
+AMOS_RESEARCH_WORK_ROOT=/var/lib/amos-research
+AMOS_SWARM_REPLAY_DIR=/var/lib/amos-research/replay
+ENV
+chmod 0600 /etc/amos-research-runner.env
+
+cat > /etc/systemd/system/amos-research-runner.service <<'UNIT'
+[Unit]
+Description=AMOS cloud research job runner
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+ExecStartPre=-/usr/bin/docker rm -f amos-research-runner
+ExecStart=/usr/bin/docker run --name amos-research-runner --rm --network=host --env-file /etc/amos-research-runner.env -v /var/run/docker.sock:/var/run/docker.sock -v /var/lib/amos-research:/var/lib/amos-research -v /var/lib/amos-research/harbor-cache:/root/.cache/harbor ${runner_image_uri}
+ExecStop=/usr/bin/docker stop --time 30 amos-research-runner
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+chmod 0644 /etc/systemd/system/amos-research-runner.service
+systemctl daemon-reload
+systemctl enable --now amos-research-runner.service

@@ -15,6 +15,7 @@ export function createSwarmFailureCapsule({
   result,
   ecology = null,
   selfCheck = null,
+  verifierFeedback = null,
   candidateStatus = null,
   artifactReferences = [],
   candidateEvolution = null,
@@ -22,7 +23,11 @@ export function createSwarmFailureCapsule({
   sourceRunId = null
 }) {
   const assignments = Array.isArray(ecology?.assignments) ? ecology.assignments : [];
-  const failedChecks = extractFailedChecks(selfCheck);
+  const verifierEvidence = normalizeVerifierEvidence(verifierFeedback, result);
+  const failedChecks = mergeFailedChecks(
+    extractFailedChecks(selfCheck),
+    verifierEvidence.failedCheckDetails
+  );
   const terminalAssignments = assignments.filter(({ status }) => status !== "completed");
   const repairSignals = deriveRepairSignals({
     result,
@@ -60,6 +65,7 @@ export function createSwarmFailureCapsule({
     },
     candidate: normalizeCandidateStatus(candidateStatus),
     candidateLineage: normalizeCandidateLineage(candidateEvolution, repairableCandidate),
+    verifierEvidence,
     failedChecks,
     repairSignals,
     artifactEvidence: artifactReferences.slice(0, 256).map((reference) => ({
@@ -107,6 +113,16 @@ export function validateSwarmFailureCapsule(input) {
     || input.safeguards?.grantsCompletionCredit !== false
   ) {
     throw new Error("Failure capsules must remain non-authoritative repair memory");
+  }
+  if (
+    input.verifierEvidence
+    && (
+      input.verifierEvidence.authority?.hostObservedOnly !== true
+      || input.verifierEvidence.authority?.grantsCompletionCredit !== false
+      || input.verifierEvidence.authority?.bypassesVerifier !== false
+    )
+  ) {
+    throw new Error("Failure capsule verifier feedback must remain host-observed and non-authoritative");
   }
   if (!/^[a-f0-9]{64}$/.test(String(input.task?.signature || ""))) {
     throw new Error("Failure capsule task signature is invalid");
@@ -169,20 +185,49 @@ function normalizeProvenance(result, ecology) {
 function normalizeCandidateLineage(input, repairableCandidate) {
   const events = Array.isArray(input?.events) ? input.events : [];
   const normalizedRepairable = normalizeRepairableCandidate(repairableCandidate);
+  const pendingCheckpoint = normalizeCandidateCheckpoint(input?.pendingCheckpoint);
+  const lastCheckpoint = normalizeCandidateCheckpoint(input?.lastCheckpoint);
   return {
     selection: boundedId(input?.selection || "unknown"),
     eventCount: events.length,
     promotionCount: events.filter(({ promoted }) => promoted === true).length,
     challengerAdvanceCount: events.filter(({ challengerAdvanced }) => challengerAdvanced === true).length,
     boundedTransportCount: events.filter(({ mutationReceiptValid }) => mutationReceiptValid === true).length,
+    implementationChangeCount: events.filter(({ implementationChanged }) => implementationChanged === true).length,
+    substantiveMutationCount: events.filter(({ substantiveMutation }) => substantiveMutation === true).length,
+    noOpMutationCount: events.filter(({ implementationChanged }) => implementationChanged !== true).length,
     incumbentEvidence: normalizeConstructionEvidence(input?.incumbentEvidence),
     challengerEvidence: normalizeConstructionEvidence(input?.challengerEvidence),
+    pendingCheckpoint,
+    lastCheckpoint,
     repairableState: normalizedRepairable,
     authority: {
       hostObservedOnly: true,
       grantsCompletionCredit: false,
       bypassesVerifier: false
     }
+  };
+}
+
+function normalizeCandidateCheckpoint(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const cycle = boundedInteger(input.cycle, 0, 1_000_000, 0);
+  const candidateEvidence = normalizeConstructionEvidence(input.candidateEvidence);
+  return {
+    cycle,
+    status: boundedId(input.status || "unknown"),
+    sourceDigest: /^[a-f0-9]{64}$/.test(String(input.sourceDigest || ""))
+      ? String(input.sourceDigest)
+      : null,
+    candidateDigest: /^[a-f0-9]{64}$/.test(String(input.candidateDigest || ""))
+      ? String(input.candidateDigest)
+      : null,
+    implementationChanged: input.implementationChanged === true,
+    substantiveMutation: input.substantiveMutation === true,
+    mutationReceiptValid: input.mutationReceiptValid === true,
+    candidateEvidence,
+    repairReuseOnly: input.authority?.repairReuseOnly === true,
+    grantsCompletionCredit: false
   };
 }
 
@@ -331,6 +376,62 @@ function extractFailedChecks(input) {
   return checks.sort((left, right) => left.id.localeCompare(right.id));
 }
 
+function mergeFailedChecks(...groups) {
+  const merged = [];
+  for (const check of groups.flat()) {
+    if (!check || typeof check !== "object" || merged.length >= 128) continue;
+    const normalized = {
+      id: boundedId(check.id || `check-${merged.length + 1}`),
+      detail: boundedText(check.detail || "Deterministic check failed.", 1_000)
+    };
+    if (!merged.some(({ id, detail }) => id === normalized.id && detail === normalized.detail)) {
+      merged.push(normalized);
+    }
+  }
+  return merged.sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function normalizeVerifierEvidence(input, result) {
+  const source = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+  const summary = source.summary && typeof source.summary === "object" && !Array.isArray(source.summary)
+    ? source.summary
+    : {};
+  const failedChecks = extractFailedChecks(source);
+  const reward = Number.isFinite(source.reward)
+    ? Number(source.reward)
+    : Number.isFinite(result?.verifier_result?.rewards?.reward)
+      ? Number(result.verifier_result.rewards.reward)
+      : null;
+  const totalChecks = boundedInteger(summary.totalChecks ?? summary.tests, 0, 1_000_000, 0);
+  const passedChecks = boundedInteger(summary.passedChecks ?? summary.passed, 0, totalChecks || 1_000_000, 0);
+  const failedCheckCount = boundedInteger(
+    summary.failedChecks ?? summary.failed,
+    0,
+    totalChecks || 1_000_000,
+    failedChecks.length
+  );
+  const present = source.present === true || totalChecks > 0 || failedChecks.length > 0 || reward !== null;
+  return {
+    present,
+    source: boundedId(source.source || "unavailable"),
+    status: boundedId(source.status || (reward !== null ? (reward > 0 ? "passed" : "failed") : "unavailable")),
+    reward,
+    totalChecks,
+    passedChecks,
+    failedChecks: failedCheckCount,
+    qualityFraction: totalChecks > 0 ? passedChecks / totalChecks : 0,
+    failedCheckDetails: failedChecks,
+    evidenceRefs: (Array.isArray(source.evidenceRefs) ? source.evidenceRefs : [])
+      .map((value) => boundedText(value, 4_000))
+      .slice(0, 64),
+    authority: {
+      hostObservedOnly: true,
+      grantsCompletionCredit: false,
+      bypassesVerifier: false
+    }
+  };
+}
+
 function deriveRepairSignals({ result, failedChecks, terminalAssignments, candidateStatus }) {
   const text = [
     result?.exception_info?.exception_message,
@@ -384,5 +485,7 @@ function mean(values) {
 
 export const swarmFailureCapsuleInternals = Object.freeze({
   extractFailedChecks,
-  deriveRepairSignals
+  deriveRepairSignals,
+  mergeFailedChecks,
+  normalizeVerifierEvidence
 });

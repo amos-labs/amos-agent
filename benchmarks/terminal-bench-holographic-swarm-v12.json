@@ -1,0 +1,57 @@
+{
+  "schema": "amos.hard-benchmark-treatment",
+  "version": 1,
+  "id": "terminal-bench-holographic-swarm-v12",
+  "status": "queued-not-running",
+  "dataClassification": "public-development",
+  "objective": "Prove a complete organism learning loop: durable replay, contextual strategy expression, host-attested attribution, substantive variation, and independent outcome settlement.",
+  "dataset": {
+    "harness": "harbor",
+    "harnessVersion": "0.22.0",
+    "id": "terminal-bench/terminal-bench",
+    "version": "3.0.0",
+    "trainingTask": "terminal-bench/production-planning",
+    "trainingSeeds": [101, 202, 303],
+    "heldOutTasks": "supplied explicitly at qualification time and never collected into training replay",
+    "verifier": "official-deterministic"
+  },
+  "candidate": {
+    "id": "qwen-holographic-swarm-v12",
+    "model": "amos-qwen38-27b-fp8",
+    "harborAgentVersion": "0.11.0",
+    "durableReplay": true,
+    "contextualGeneSelection": true,
+    "hostAttestedGeneExpression": true,
+    "negativeGeneAttribution": true,
+    "researchMutationApprovalRequired": false,
+    "externalAuthorityStillGoverned": true,
+    "resumableCandidateCheckpoints": true,
+    "substantiveMutationRequired": true,
+    "novelRepairAgenda": true,
+    "transactionalCandidates": true,
+    "objectiveEvidenceSelection": true,
+    "externalVerifierFeedbackMemory": true,
+    "proceduralGenes": true,
+    "persistentEcology": true,
+    "holographicWorld": "bounded-active-retrieval",
+    "frontierEscalationAllowed": false,
+    "officialVerifierModified": false
+  },
+  "promotion": {
+    "minimumValidTrainingRuns": 3,
+    "minimumSubstantiveMutationsPerSeed": 1,
+    "minimumOfficialPassedTestsPerSeed": 11,
+    "requireAtLeastOneOfficialImprovement": true,
+    "requireMonotonicIncumbent": true,
+    "requireHostAttestedGeneExpressionWhenMemoryMatches": true,
+    "requireArtifactReceipts": true,
+    "requireIndependentVerification": true,
+    "verifierFeedbackGrantsCompletionCredit": false,
+    "trainingTaskCountsAsHeldOutEvidence": false,
+    "heldOutRunsMayEnterTrainingReplay": false
+  },
+  "launch": {
+    "automatic": false,
+    "reason": "Prepared at user request; AWS rerun must be started explicitly later."
+  }
+}

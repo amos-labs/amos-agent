@@ -1,0 +1,69 @@
+{
+  "schema": "amos.private-dataset-intake",
+  "version": 1,
+  "id": "swarm-private-dataset-intake-v1",
+  "status": "internal-authorized-organism-policy-training",
+  "datasets": [
+    {
+      "id": "process-mining-data-accounts-payable-1.0.0",
+      "source": "https://www.processminingdata.com/",
+      "acquiredBy": "amos-labs-owner",
+      "acquisitionMethod": "authenticated-free-download",
+      "archiveSha256": "750228c13cf71bb195744a44225357a1cf8659018820b74c60696ac24f40926b",
+      "archiveBytes": 10099564,
+      "contents": [
+        {
+          "name": "2_PMD_AP_Event_Log_1.0.0.csv",
+          "bytes": 103581674,
+          "sha256": "60b48f57ab728b266fc0961b7dea9da7f1add1a1c6fbf717daf220360e97e192",
+          "cases": 75234,
+          "events": 701929,
+          "processVariants": 10
+        },
+        {
+          "name": "Use_Case_Handbook_V_1.0.0.pdf",
+          "bytes": 1268585,
+          "pages": 28
+        }
+      ],
+      "licenseRecord": {
+        "source": "Use_Case_Handbook_V_1.0.0.pdf page 2",
+        "classification": "internal-business-use; redistribution-prohibited; training-not-explicit",
+        "rawRedistributionAllowed": false,
+        "publicArtifactBundlingAllowed": false
+      },
+      "ownerDecision": {
+        "date": "2026-08-24",
+        "decision": "approved-for-internal-research-and-training",
+        "initialLane": "organism-policy-simulation-and-verifier-construction",
+        "qwenWeightTraining": "separately-gated"
+      },
+      "controls": {
+        "rawDataPrivate": true,
+        "lineageRequired": true,
+        "derivedExamplesSourceTagged": true,
+        "removableContributionRequired": true,
+        "evaluationReuseForbiddenAfterTraining": true
+      },
+      "trainingApproved": true,
+      "approvalScope": {
+        "organismPolicyTraining": true,
+        "qwenWeightTraining": false,
+        "publicRedistribution": false
+      },
+      "completedGates": {
+        "privateResearchPlaneCopy": true,
+        "schemaAndSyntheticIdentityReview": true,
+        "leakageSafeSplit": "complete-process-variant",
+        "executableVerifierContract": true,
+        "derivedCurriculumDigest": "bf697474522cac2bd4aa17180a425a5ff775ac91204c806e6197cc8f2787d1a4",
+        "partitions": {
+          "training": 2000,
+          "validation": 500,
+          "holdout": 500
+        }
+      },
+      "blockers": []
+    }
+  ]
+}

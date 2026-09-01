@@ -1,0 +1,71 @@
+{
+  "schema": "amos.holographic-world-v2-experiment",
+  "version": 1,
+  "id": "swarm-holographic-world-v2-experiment-v1",
+  "status": "development-visible",
+  "claimBoundary": "Algebra and retrieval stress test only. This result cannot establish mission quality, Harbor performance, or production readiness.",
+  "hypothesis": "Frequency-unitary role codes and a raw superposed world vector can preserve typed retrieval at 100 nested entries while reducing exact cleanup scans relative to per-item memory.",
+  "seed": "amos-holographic-world-v2-frozen-seed-1",
+  "fixture": {
+    "sizes": [10, 25, 50, 100, 200],
+    "shape": "nested-typed-entries",
+    "kinds": ["artifact", "criterion", "fact", "gap", "requirement"],
+    "phases": ["recorded", "proposed", "superseded"],
+    "polarities": ["positive", "negative"],
+    "receiptStatuses": ["verified"],
+    "hardNegativeFamilies": [
+      "negation",
+      "proposed-vs-recorded",
+      "superseded-vs-current",
+      "forged-receipt",
+      "missing-receipt"
+    ]
+  },
+  "arms": [
+    {
+      "id": "deterministic-hrr-v1-item-memory",
+      "dimension": 128,
+      "purpose": "Historical implementation reference; dimension is the deployed research default and is not promotion-gated."
+    },
+    {
+      "id": "unitary-fft-item-memory",
+      "dimension": 1024,
+      "fillerMode": "unitary"
+    },
+    {
+      "id": "unitary-fft-true-hologram",
+      "dimension": 1024,
+      "fillerMode": "unitary",
+      "worldVectorPolicy": "raw-sum-never-project"
+    }
+  ],
+  "futureFillerAblations": ["l2", "raw"],
+  "metrics": [
+    "exactTop1Rate",
+    "exactTop5Rate",
+    "positiveMeanScore",
+    "negativeMeanScore",
+    "positiveNegativeGap",
+    "hardNegativeFalsePositiveRate",
+    "meanLatencyMicros",
+    "meanItemsScanned"
+  ],
+  "hardNegativeThreshold": 0.5,
+  "promotionGate": {
+    "arm": "unitary-fft-true-hologram",
+    "fixtureSize": 100,
+    "minimumExactTop1Rate": 0.95,
+    "minimumExactTop5Rate": 0.99,
+    "minimumPositiveNegativeGap": 0.5,
+    "maximumHardNegativeFalsePositiveRate": 0.05,
+    "maximumPerFamilyFalsePositiveRate": 0.05,
+    "minimumCleanupScanReduction": 0.5
+  },
+  "isolation": {
+    "harbor": false,
+    "liveSwarm": false,
+    "qwen": false,
+    "organismPolicyUpdates": false,
+    "exactEntriesRemainAuthoritative": true
+  }
+}
