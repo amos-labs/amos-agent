@@ -2558,6 +2558,10 @@ export class DesktopController {
       const previewWorkflow = pairing.enabled && classifiedWorkflow?.family === "coding"
         ? withWorkflowToolkits(classifiedWorkflow, ["collaboration"])
         : classifiedWorkflow;
+      if (company && previewWorkflow?.id === "hosted-mission-create") {
+        this.activeTask.missionCreation = true;
+        this.activeTask.missionCreationType = "finite";
+      }
       const role = normalizeIntelligenceRole(
         this.activeTask.intelligenceRole ||
           input?.role ||
@@ -5716,7 +5720,9 @@ export class DesktopController {
                 project: activeProjectForRuntime(this.projects, taskRecord),
                 autonomousGoal: taskRecord?.kind === "goal_pursuit"
               })}${hostedMissionCreationPrompt(
-                this.runManager.current()?.missionCreation === true || isMissionBuilderTask(taskRecord),
+                this.activeTask?.missionCreation === true ||
+                  this.runManager.current()?.missionCreation === true ||
+                  isMissionBuilderTask(taskRecord),
                 taskRecord?.projectId,
                 this.runManager.current()?.missionCreationType || missionBuilderKind(taskRecord)
               )}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly

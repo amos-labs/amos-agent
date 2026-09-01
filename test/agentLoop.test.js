@@ -2381,6 +2381,7 @@ test("a conversation scratch pad tracks job hops and is always in the model wind
   assert.match(seen.at(-1), /try again/);
   assert.match(seen[0], /<amos_scratchpad>/);
 
+  const restoredSeen = [];
   const restored = new AgentLoop({
     config: { agent: {}, model: { contextTokens: 32_768 } },
     registry: new ToolRegistry(),
@@ -2389,18 +2390,20 @@ test("a conversation scratch pad tracks job hops and is always in the model wind
     scratchpad: persisted.at(-1),
     kimiClient: {
       async chat({ messages }) {
+        restoredSeen.push(messages.map((message) => String(message.content || "")).join("\n"));
         return {
           message: {
             role: "assistant",
-            content: messages.map((message) => String(message.content || "")).join("\n")
+            content: "The Stripe tax work remains the current priority."
           }
         };
       }
     }
   });
   const replayed = await restored.run("is it live");
-  assert.match(replayed, /Fix tax_behavior on the three Stripe prices/);
-  assert.match(replayed, /Stripe to QuickBooks integration/);
+  assert.match(restoredSeen.at(-1), /Fix tax_behavior on the three Stripe prices/);
+  assert.match(restoredSeen.at(-1), /Stripe to QuickBooks integration/);
+  assert.doesNotMatch(replayed, /scratch\s*pad|job\s*pad/i);
   assert.equal(restored.workingObjective, "Fix tax_behavior on the three Stripe prices");
 });
 
@@ -2722,6 +2725,110 @@ test("an identical read-only status request synthesizes despite changing receipt
   assert.equal(modelCalls, 3);
   assert.match(answer, /queued/i);
   assert.match(answer, /zero Apollo credits/i);
+});
+
+test("a scratchpad update cannot replace a live campaign status answer", async () => {
+  const registry = new ToolRegistry();
+  const events = [];
+  let modelCalls = 0;
+  let scratchpadCalls = 0;
+  let statusCalls = 0;
+  registry.register({
+    name: "desktop_update_scratchpad",
+    async handler() {
+      scratchpadCalls += 1;
+      return {
+        ok: true,
+        bookkeeping_only: true,
+        user_facing_evidence: false
+      };
+    }
+  });
+  registry.register({
+    name: "get_prospecting_campaign",
+    readOnly: true,
+    parallelSafe: true,
+    async handler() {
+      statusCalls += 1;
+      return {
+        ok: true,
+        status: "active",
+        next_page: 1,
+        credits_used: 0,
+        qualified: 0,
+        updated_at: "2026-09-01T15:51:32Z"
+      };
+    }
+  });
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    kimiClient: {
+      async chat() {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "The campaign details are captured and I can check its first batch next.",
+              tool_calls: [{
+                id: "scratchpad-1",
+                function: {
+                  name: "desktop_update_scratchpad",
+                  arguments: JSON.stringify({ note: "Check the first batch" })
+                }
+              }]
+            }
+          };
+        }
+        if (modelCalls === 2) {
+          return {
+            message: {
+              role: "assistant",
+              content: "Job pad updated. Say the word and I'll re-poll now for the first batch."
+            }
+          };
+        }
+        if (modelCalls === 3) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "status-1",
+                function: {
+                  name: "get_prospecting_campaign",
+                  arguments: JSON.stringify({ campaign_id: "campaign-1" })
+                }
+              }]
+            }
+          };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "The campaign exists but is not processing: it remains on page 1 with 0 qualified prospects and 0 credits used."
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("Can you confirm this is running?", {
+    onEvent: (event) => events.push(event)
+  });
+
+  assert.equal(scratchpadCalls, 1);
+  assert.equal(statusCalls, 1);
+  assert.equal(modelCalls, 4);
+  assert.match(answer, /not processing/i);
+  assert.match(answer, /0 credits used/i);
+  assert.doesNotMatch(answer, /job pad|scratchpad/i);
+  assert.ok(events.some((event) =>
+    event.phase === "retrying" && /Private bookkeeping/i.test(event.summary)
+  ));
 });
 
 test("paraphrased read-only discovery cannot evade the guard and synthesis routes one tier higher", async () => {

@@ -47,6 +47,15 @@ test("Excel and financial-model requests select deterministic spreadsheet modeli
   assert.match(workflow.doneWhen, /baselines pass/i);
 });
 
+test("an explicit chat request to create a Mission selects the hosted Mission compiler", () => {
+  const workflow = selectTaskWorkflow({
+    objective: "Create mission: use Apollo to build 500 qualified VAR and MSP prospects"
+  });
+  assert.equal(workflow.id, "hosted-mission-create");
+  assert.match(workflow.doneWhen, /Mission id and Run Contract/i);
+  assert.match(workflow.steps.join(" "), /prerequisites.*not the Mission itself/i);
+});
+
 test("deterministic task evidence wins when the local router is cold or disagrees", () => {
   assert.equal(
     resolveTaskWorkflow({

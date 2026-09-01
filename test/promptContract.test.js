@@ -47,6 +47,12 @@ test("the company agent leaves routine workflow narration to Desktop", () => {
   assert.match(SYSTEM_PROMPT, /Do not narrate routine planning/);
 });
 
+test("Mission requests cannot silently degrade into domain campaign creation", () => {
+  assert.match(SYSTEM_PROMPT, /a domain campaign, goal, or job is only a dependency—not a substitute/);
+  assert.match(SYSTEM_PROMPT, /A Mission exists only when create_mission returns a Mission id and Run Contract/);
+  assert.match(SYSTEM_PROMPT, /verify the Mission record and actual worker progress/);
+});
+
 test("canvas guidance defaults to chat and requires a material visual advantage", () => {
   assert.match(SYSTEM_PROMPT, /Chat is the default/);
   assert.match(SYSTEM_PROMPT, /slightly longer prose does not qualify/);
