@@ -280,6 +280,32 @@ const RECIPES = Object.freeze([
     ]
   },
   {
+    id: "hosted-mission-create",
+    family: "governed-action",
+    toolkits: [],
+    title: "Compile and create the hosted Mission",
+    summary: "Turn the requested finite autonomous outcome into an approved AMOS Mission with explicit limits, prohibitions, and verification.",
+    skills: ["company-context", "governed-execution", "verification"],
+    steps: [
+      "Translate the outcome into a finite Mission contract and infer conservative bounds where the user has not specified them.",
+      "Create or inspect only the domain prerequisites the Mission needs; a campaign, goal, Automation, or ordinary task is not the Mission itself.",
+      "Call create_mission with the outcome, ceilings, prohibitions, ask-first boundaries, and verification intent.",
+      "Finish only when create_mission returns a pending approval or Mission id and Run Contract."
+    ],
+    doneWhen: "The actual hosted Mission is parked for approval or created with a Mission id and Run Contract; prerequisite records alone never satisfy the request.",
+    patterns: [
+      /\b(?:create|start|launch|build|set up)\s+(?:a\s+|an\s+|this\s+)?(?:hosted\s+|autonomous\s+)?mission\b/i
+    ],
+    phrases: [
+      "create mission",
+      "create a mission",
+      "start mission",
+      "start a mission",
+      "launch mission",
+      "launch a mission"
+    ]
+  },
+  {
     id: "governed-company-action",
     family: "governed-action",
     toolkits: [],

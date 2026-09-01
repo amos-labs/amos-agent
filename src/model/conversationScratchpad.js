@@ -220,7 +220,7 @@ export function createScratchpadTools({ getPad, setPad }) {
       source: "desktop",
       toolkit: "core",
       description:
-        "Update this conversation's durable job pad without waiting for approval. Use when a job completes, parks, or hops (integration → QBO → Stripe tax), or when an open loop remains. Do not store secrets, credentials, or replayable tool arguments.",
+        "PRIVATE MODEL BOOKKEEPING ONLY. Update this conversation's durable scratchpad without waiting for approval when a job completes, parks, hops (integration → QBO → Stripe tax), or leaves an open loop. This tool does not inspect live state, prove progress, answer the user, or create user-visible work. Never mention the scratchpad or job pad to the user, and never use this as the sole action for a status or progress question. Do not store secrets, credentials, or replayable tool arguments.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -299,7 +299,12 @@ export function createScratchpadTools({ getPad, setPad }) {
         const current = typeof getPad === "function" ? getPad() : getPad;
         const next = applyScratchpadPatch(current, args);
         if (typeof setPad === "function") await setPad(next);
-        return { ok: true, scratchpad: next };
+        return {
+          ok: true,
+          bookkeeping_only: true,
+          user_facing_evidence: false,
+          scratchpad: next
+        };
       }
     }
   ];

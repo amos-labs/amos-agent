@@ -109,6 +109,8 @@ test("scratch pad tools are core and the update path does not ask for approval",
     notes: "Do not invent refunds"
   }, {});
   assert.equal(updated.ok, true);
+  assert.equal(updated.bookkeeping_only, true);
+  assert.equal(updated.user_facing_evidence, false);
   assert.equal(stored.currentJob, "Fix tax_behavior on the three Stripe prices");
   const read = await registry.execute("desktop_read_scratchpad", {}, {});
   assert.equal(read.scratchpad.notes, "Do not invent refunds");

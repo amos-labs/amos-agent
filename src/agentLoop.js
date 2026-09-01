@@ -330,6 +330,8 @@ export class AgentLoop {
       let capabilityDiscoveryCyclesWithoutProgress = 0;
       let previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
       let completedToolActions = 0;
+      let completedEvidenceToolActions = 0;
+      let completedScratchpadActions = 0;
       let failedToolActions = 0;
       let rejectedCompletions = 0;
       let rejectedInternalCompletions = 0;
@@ -582,7 +584,16 @@ export class AgentLoop {
             turn += 1;
             continue;
           }
-          if (invalidTaskCompletion(assistantMessage.content, completedToolActions)) {
+          const invalidScratchpadResult = invalidScratchpadCompletion({
+            content: assistantMessage.content,
+            completedScratchpadActions,
+            completedEvidenceToolActions,
+            userContent: incomingText
+          });
+          if (
+            invalidScratchpadResult ||
+            invalidTaskCompletion(assistantMessage.content, completedToolActions)
+          ) {
             rejectedInternalCompletions += 1;
             if (rejectedInternalCompletions >= 2) {
               const error = new Error(
@@ -603,13 +614,23 @@ export class AgentLoop {
               type: "phase",
               phase: "retrying",
               turn,
-              summary: recoverRitual
+              summary: invalidScratchpadResult
+                ? "Private bookkeeping was returned instead of the requested result; requesting live evidence and a standalone answer"
+                : recoverRitual
                 ? "The model announced a recovery instead of acting; requesting the current job"
                 : "The model returned internal context instead of a user-facing result; requesting the actual outcome"
             });
             this.messages.push({
               role: "user",
-              content: recoverRitual
+              content: invalidScratchpadResult
+                ? [
+                    "<amos_user_facing_result_required>",
+                    "The scratchpad is private, non-evidentiary model bookkeeping. Never mention the scratchpad or job pad to the user, and do not treat updating it as progress or a completed answer.",
+                    "Answer the user's current request directly. For live status or progress, call the relevant current-state read exactly once, then report the observed status, counters, timestamps, blockers, and next action. Do not infer that an active, approved, configured, or queued record is executing unless the live evidence shows advancement.",
+                    "Return one self-contained final answer. Any prose emitted alongside an earlier tool call was transient and must not be relied upon.",
+                    "</amos_user_facing_result_required>"
+                  ].join("\n")
+                : recoverRitual
                 ? [
                     "<amos_user_facing_result_required>",
                     "The previous response announced recovering the thread, reframing already-known facts, or re-checking live systems. That is not a completed answer.",
@@ -765,7 +786,11 @@ export class AgentLoop {
           }
           modelEvidence.push(...takeModelEvidence(result));
           if (failed) failedToolActions += 1;
-          else completedToolActions += 1;
+          else {
+            completedToolActions += 1;
+            if (isScratchpadBookkeepingTool(name)) completedScratchpadActions += 1;
+            else completedEvidenceToolActions += 1;
+          }
 
           if (!failed && this.onToolResult) {
             try {
@@ -841,6 +866,7 @@ export class AgentLoop {
         const successfulStateChange = outcomes.some((outcome) =>
           !outcome.failed &&
           !CAPABILITY_DISCOVERY_TOOL_NAMES.has(outcome.name) &&
+          !isScratchpadBookkeepingTool(outcome.name) &&
           !this.registry.executionPolicy(outcome.name).readOnly
         );
         if (successfulStateChange) {
@@ -2245,6 +2271,29 @@ function invalidTaskCompletion(content, completedToolActions) {
   if (isRecoverRitualAnswer(answer)) return true;
   if (completedToolActions <= 0) return false;
   return /^(?:Earlier tool evidence was compacted to fit this model's context window\.|Earlier task context was compacted to fit this model's context window\.|Earlier tool activity was compacted to keep this task within the model message limit\.|Earlier task activity was compacted to keep this task within the model message limit\.)/i.test(answer);
+}
+
+function invalidScratchpadCompletion({
+  content,
+  completedScratchpadActions,
+  completedEvidenceToolActions,
+  userContent
+}) {
+  const answer = String(content || "").replace(/\s+/g, " ").trim();
+  if (!answer) return false;
+  if (/\b(?:job\s*pad|scratch\s*pad|scratchpad)\b/i.test(answer)) return true;
+  if (completedScratchpadActions <= 0 || completedEvidenceToolActions > 0) return false;
+  if (isLiveStatusRequest(userContent)) return true;
+  return /^(?:updated|saved|noted|done|got it|standing by|ready\b|say the word|i can (?:check|re-?poll)|the (?:note|flag|job) (?:is|was|has been) (?:saved|updated|set))/i.test(answer);
+}
+
+function isScratchpadBookkeepingTool(name) {
+  return name === "desktop_update_scratchpad";
+}
+
+function isLiveStatusRequest(content) {
+  const request = String(content || "").replace(/\s+/g, " ").trim();
+  return /\b(?:status|progress|running|processing|started|finished|complete(?:d)?|where (?:are|is|did)|credits? used|how (?:far|many)|confirm (?:that )?(?:it|this|the .*?) (?:is|has been))\b/i.test(request);
 }
 
 function isRecoverRitualAnswer(content) {
