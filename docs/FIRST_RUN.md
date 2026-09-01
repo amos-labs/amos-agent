@@ -1,17 +1,19 @@
 # First run and operating boundaries
 
 AMOS Desktop is the cold path. The first-run screen is one column of
-required and optional steps, not a marketing page. The only required step is
-**choose intelligence** (AMOS Intelligence, this computer, or your key).
-Connecting AMOS Platform and a workspace folder are optional; Desktop still
-works if they skip. The selected boundary persists so a restart does not send
-a configured user back through onboarding.
+ready and optional steps, not a marketing page. **AMOS Intelligence ·
+Automatic** is ready by default; a new user does not choose a provider or
+model before they can start. Connecting an AMOS account and one real business
+system is the recommended activation path. A workspace folder remains
+optional, and Desktop still works with a document, screenshot, or conversation
+if the user skips connection. The selected boundary persists so a restart does
+not send a configured user back through onboarding.
 
 The product loop is the same on every path: describe the work, build or change
 something, ask for the next step, delegate a bounded task, and keep a local
-receipt. Desktop Operator plus Northwind is how a new person should feel that
-loop. Claude or Codex as an MCP client is a later appendix, not the first
-screen.
+receipt. Desktop Operator on the user's own evidence is how a new person should
+feel that loop. Claude or Codex as an MCP client is an advanced alternative,
+not the first screen.
 
 The product promise is one trusted assistant that helps a person run their
 businesses from a conversation, including from a phone: it understands the
@@ -23,7 +25,8 @@ valuable only when they help the person reach a business outcome faster and
 must not become the product's organizing language.
 
 Completion is stored as `onboardingCompletedAt` and `onboardingBoundary` in
-Desktop settings (`personal`, `northwind`, or `company`). Those keys survive
+Desktop settings (`personal`, `northwind`, or `company`). `northwind` remains
+only for backward compatibility with existing demo sessions. Those keys survive
 process restart because `sanitizeSettings` keeps them. An expired Northwind
 demo is not a live boundary: Desktop clears the Northwind completion and
 reopens first-run so the user is not left in a dead Online company shell.
@@ -31,21 +34,21 @@ reopens first-run so the user is not left in a dead Online company shell.
 Anonymous usage events stay off until the first-run privacy choice. Telemetry
 never gates **Enter**.
 
-## Intelligence — required
+## Intelligence — ready automatically
 
-First-run asks how AMOS should think before it asks for a company:
+First-run reports the active intelligence; it does not ask the user to choose
+infrastructure before they understand the product:
 
-- **AMOS Intelligence (Hosted)** — the default. Included with an AMOS
-  account. Enter is available immediately; signing in and connecting company
-  systems remain optional on the same screen.
-- **This computer** — AMOS Local. No AMOS subscription. The recommended
-  local model for this computer is selected on the same form.
-- **Your key** — OpenAI, Claude, Grok, Kimi, or a compatible endpoint. No AMOS
-  subscription; the provider may bill its own usage.
+- **AMOS Intelligence · Automatic** — the default. It routes each step to the
+  appropriate hosted model and requires no model selection on first run.
+- **AMOS Local** and **bring your own provider** remain available from
+  Intelligence & Settings. They are deliberate advanced choices, not competing
+  onboarding doors.
 
-Personal + AMOS Intelligence + no OAuth stays **not configured**.
+The user can change intelligence at any time without changing the company,
+workspace, or conversation they are operating.
 
-## Connect your company — the paid retention step
+## Connect one app — the activation step
 
 The company step is optional for Enter. Foreground work in Desktop is a real
 free product, not a timed demo: a signed-in person can use AMOS-owned
@@ -96,23 +99,22 @@ Returning users see their active company instead of trial acquisition copy.
 "Reconnect" is reserved for an authentication session that actually needs to
 be renewed.
 
-## Northwind demo
+## Northwind demo — legacy only
 
-Northwind sits under the optional Platform step: a realistic but intentionally
-bounded sample company. The demo launches the public Playground in a browser. After abuse
+Northwind is no longer offered in customer first-run. New users should reach a
+verified outcome on their own document or connected business system rather
+than learn a sample company. Existing and internal demo sessions remain
+supported.
+
+The legacy demo launches the public Playground in a browser. After abuse
 checks create a short-lived Northwind tenant, the Playground sends the
 tenant-scoped key to a one-time loopback receiver using an HTML form POST. The
 key does not enter the browser URL, history, query logs, or referrer.
 
 Desktop stores the expiring demo credential with the same owner-only token
-store used for OAuth, switches to an app-owned demo workspace, and returns to
-first-run for an explicit intelligence choice:
-
-- AMOS Intelligence is preselected and includes 30 hosted messages per demo;
-- AMOS Local uses an installed model on the person's computer with no AMOS
-  subscription; and
-- BYOK uses the person's selected provider credential with no AMOS
-  subscription (the provider's own usage charges may still apply).
+store used for OAuth and switches to an app-owned demo workspace. It uses the
+currently selected intelligence and does not reintroduce a customer first-run
+provider chooser.
 
 The hosted balance comes from `/v1/intelligence/status`; Desktop does not
 infer it from rendered messages. The persistent Northwind banner shows the
@@ -124,12 +126,12 @@ The demo uses real AMOS tools, policy, approvals, receipts, and metered hosted
 intelligence against sample data. It cannot connect credentials, spend real
 money, or escape the demo tenant.
 
-## This computer / your key
+## This computer / your provider
 
-**Your model, this computer.** No AMOS account or AMOS subscription is
-required. Hosted `auto` is not available here and needs a sign-in — use
-**AMOS Intelligence** or **Northwind** for AMOS Intelligence. A BYOK provider
-may bill its own usage separately.
+Local and BYO-provider modes are configured later from Intelligence & Settings.
+They remain useful for privacy, customer-owned inference, and specialist
+workloads, but they are not first-run decisions. A BYO provider may bill its
+own usage separately.
 
 Recommended intelligence:
 
@@ -163,14 +165,9 @@ it inventories a bounded project, omits secret-like files, and reports the
 stack, manifests, scripts, Git state, README excerpt, likely checks, and
 suggested tasks.
 
-Personal + AMOS Intelligence + no OAuth stays **not configured**. Enter stays
-off until a local profile or BYO key is saved. A workspace folder is optional:
-it is the folder AMOS may read and change with approval. Chat works without
-one; local file, Git, patch, and shell tools wait until a folder is chosen.
-
-The readiness row is path-aware: its intelligence check remains incomplete
-until the person chooses a starting point. The stored hosted default therefore
-does not appear as a completed choice on an untouched first-run screen.
+A workspace folder is optional: it is the folder AMOS may read and change with
+approval. Chat works without one; local file, Git, patch, and shell tools wait
+until a folder is chosen.
 
 Intelligence and workspace selection are independent. Choosing, activating,
 or saving intelligence keeps the person in **Intelligence & Settings** until
@@ -214,9 +211,10 @@ There is no anonymous hosted `auto`.
 
 | Path | Intelligence |
 | --- | --- |
-| My workspace | Local profile or BYO key. Hosted `auto` requires sign-in. |
-| Northwind | Hosted `auto` with 30 included demo messages, AMOS Local, or BYOK. |
+| New Desktop install | Hosted `auto`; no provider choice in first-run. |
+| Local / personal workspace | Local profile or BYO provider selected later in Settings. |
 | My company | Hosted `auto` after OAuth 2.1 + PKCE + installation key. |
+| Existing Northwind session | Current selected intelligence; legacy support only. |
 
 On Northwind and My company, Desktop sends the stable `auto` model alias
 without a user-selected reasoning tier. The managed platform selects the least

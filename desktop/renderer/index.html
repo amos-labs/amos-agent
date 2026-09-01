@@ -137,10 +137,10 @@
           <div class="setup-panel">
             <div class="setup-heading">
               <span class="eyebrow accent">WELCOME TO AMOS DESKTOP</span>
-              <h1>Get a working brain. Then connect your company.</h1>
+              <h1>What would you like AMOS to get done?</h1>
               <p>
-                Intelligence is required so you can enter. Connecting the company is why a
-                customer stays: automations, apps talking to apps, memory and proof. A folder is optional.
+                AMOS Intelligence is ready automatically. Connect one real business system for
+                answers grounded in live data, then start with an outcome that matters to you.
               </p>
             </div>
 
@@ -148,41 +148,18 @@
               <div class="onboarding-step-heading">
                 <span id="providerCheck" class="step-check">—</span>
                 <div>
-                  <span class="onboarding-step-badge">Required</span>
-                  <h2 id="onboardingIntelligenceTitle">Choose intelligence</h2>
-                  <p>How AMOS thinks on this computer. Change this later from Intelligence &amp; Settings.</p>
+                  <span class="onboarding-step-badge">Ready</span>
+                  <h2 id="onboardingIntelligenceTitle">Automatic intelligence</h2>
+                  <p>AMOS routes each step to the right hosted model. There is nothing to configure before you start.</p>
                 </div>
               </div>
-              <div class="onboarding-choice-grid">
-                <button id="onboardHostedButton" class="intelligence-choice-card" type="button">
-                  <span class="start-mode-kicker">DEFAULT · AMOS HOSTED</span>
-                  <strong>AMOS Intelligence</strong>
-                  <small>AMOS Hosted is selected. Included with an AMOS account. Connect Platform later if you want company systems.</small>
-                </button>
-                <button id="localModeButton" class="intelligence-choice-card" type="button">
-                  <span class="start-mode-kicker">THIS COMPUTER</span>
-                  <strong>AMOS Local</strong>
-                  <small>No AMOS subscription. The recommended local model for this computer is selected automatically.</small>
-                </button>
-                <button id="onboardByokButton" class="intelligence-choice-card" type="button">
-                  <span class="start-mode-kicker">YOUR KEY</span>
-                  <strong>Bring my own key</strong>
-                  <small>No AMOS subscription. Use OpenAI, Claude, Grok, Kimi, or a compatible endpoint. Provider charges may apply.</small>
-                </button>
-              </div>
-              <p id="onboardingIntelligenceHint" class="onboarding-intelligence-hint">
-                AMOS Hosted is the default. Local and your key stay on this screen — pick a model here.
-              </p>
-              <div id="onboardingPicker" class="onboarding-picker">
-                <label class="onboarding-byok-field">
-                  <span id="onboardingPickerLabel">Model</span>
-                  <select id="onboardingModelSelect" aria-label="Selected model"></select>
-                </label>
-                <label id="onboardingKeyField" class="onboarding-byok-field hidden">
-                  <span>API key</span>
-                  <input id="onboardingByokKey" type="password" autocomplete="off" spellcheck="false" />
-                </label>
-                <p id="onboardingProviderText" class="onboarding-intelligence-hint">AMOS Intelligence · Hosted</p>
+              <div class="automatic-intelligence-card">
+                <div>
+                  <span class="start-mode-kicker">SELECTED FOR YOU</span>
+                  <strong id="onboardingIntelligenceStatus">AMOS Intelligence · Automatic</strong>
+                  <p>Prefer a local model or your own provider later? You can change intelligence anytime.</p>
+                </div>
+                <button class="button ghost" type="button" data-open-settings>Intelligence &amp; Settings</button>
               </div>
             </section>
 
@@ -190,63 +167,28 @@
               <div class="onboarding-step-heading">
                 <span id="connectCheck" class="step-check">—</span>
                 <div>
-                  <span class="onboarding-step-badge recommended">Recommended</span>
-                  <h2 id="onboardingPlatformTitle">Connect your company</h2>
-                  <p id="boundaryReadinessText">Connect the apps the business already runs so AMOS can move work between them — on a schedule, when you ask, or app to app.</p>
+                  <span class="onboarding-step-badge recommended">Best next step</span>
+                  <h2 id="onboardingPlatformTitle">Connect one real business system</h2>
+                  <p id="boundaryReadinessText">Give AMOS live evidence from the business, then ask for a useful outcome in plain English.</p>
                 </div>
               </div>
               <ul class="onboarding-why">
-                <li>Run automations on a schedule or ad hoc — app to app, inbox to ledger, ticket to fix — that run outside of Desktop.</li>
-                <li>Connect the systems you already run so AMOS is not guessing from chat.</li>
-                <li>Keep durable company memory, policy, approvals, and receipts.</li>
+                <li>Connect accounting, payments, CRM, sales, or another system you already use.</li>
+                <li>Start with an outcome: reconcile a period, qualify prospects, find a leak, or move a project forward.</li>
+                <li>AMOS shows what it found, what it changed, and the proof behind the result.</li>
               </ul>
               <div class="start-mode-grid">
                 <button id="connectButton" class="start-mode-card featured primary-path" type="button">
-                  <span class="start-mode-kicker">14-DAY TRIAL</span>
-                  <strong>Connect your company</strong>
-                  <span>Sign in, attach the apps the business already runs, then let AMOS move work between them on a schedule or when you ask. Plans start at $99/month after the trial.</span>
-                  <span class="start-mode-options company-plan">14-day free trial · Plans start at $99/month</span>
-                  <em>Connect your company →</em>
-                </button>
-                <button id="demoModeButton" class="start-mode-card" type="button">
-                  <span class="start-mode-kicker">SAMPLE COMPANY</span>
-                  <strong>Explore the Northwind demo</strong>
-                  <span>See AMOS on realistic sample data, tools, approvals, and automations. Some integrations and real-world actions are limited.</span>
-                  <span class="start-mode-options">Limited hosted turns included · Local and BYOK available</span>
-                  <em>Try the sample company →</em>
+                  <span class="start-mode-kicker">REAL DATA · REAL OUTCOME</span>
+                  <strong>Create or connect your AMOS account</strong>
+                  <span>Sign in once, choose an app, and come back to Desktop ready to work with your company.</span>
+                  <span class="start-mode-options company-plan">Automatic intelligence included · Change it anytime</span>
+                  <em>Connect an app →</em>
                 </button>
               </div>
               <p class="onboarding-intelligence-hint">
-                You can skip this for now and connect apps later.
+                Not ready to connect an app? Enter Desktop now and start with a document, screenshot, or conversation.
               </p>
-            </section>
-
-            <section id="northwindIntelligenceChoice" class="northwind-intelligence-choice hidden" aria-labelledby="northwindIntelligenceTitle">
-              <div class="northwind-intelligence-heading">
-                <div>
-                  <span class="eyebrow accent">NORTHWIND IS CONNECTED</span>
-                  <h3 id="northwindIntelligenceTitle">Choose how to power the demo</h3>
-                </div>
-                <span id="northwindUsageSummary" class="northwind-usage-summary">Limited hosted turns included</span>
-              </div>
-              <div class="northwind-intelligence-options">
-                <button id="demoHostedIntelligenceButton" class="intelligence-choice-card" type="button">
-                  <span class="start-mode-kicker">RECOMMENDED</span>
-                  <strong>AMOS Intelligence</strong>
-                  <small>AMOS subscription required for ongoing use. Northwind includes limited hosted demo turns.</small>
-                </button>
-                <button id="demoLocalIntelligenceButton" class="intelligence-choice-card" type="button">
-                  <span class="start-mode-kicker">THIS COMPUTER</span>
-                  <strong>AMOS Local</strong>
-                  <small>No AMOS subscription required. Use an installed local model; capability depends on your hardware.</small>
-                </button>
-                <button id="demoByokIntelligenceButton" class="intelligence-choice-card" type="button">
-                  <span class="start-mode-kicker">YOUR PROVIDER</span>
-                  <strong>Bring my own key</strong>
-                  <small>No AMOS subscription required. Use OpenAI, Claude, Grok, Kimi, or a compatible endpoint; provider charges may apply.</small>
-                </button>
-              </div>
-              <p id="northwindCurrentIntelligence" class="northwind-current-intelligence"></p>
             </section>
 
             <section class="onboarding-step optional" aria-labelledby="onboardingWorkspaceTitle">

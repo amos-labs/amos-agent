@@ -139,7 +139,6 @@ const listPages = { tasks: 1, projects: 1, missions: 1, briefings: 1 };
 const listQueryKeys = { tasks: "", projects: "", missions: "", briefings: "" };
 const expandedProjectAccordions = new Set();
 const projectActivityFilters = new Map();
-let onboardingDoor = "hosted";
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
 const elements = Object.fromEntries(
@@ -155,11 +154,7 @@ const elements = Object.fromEntries(
     "decisionBadge", "privateMemoryBadge", "projectBadge", "missionBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
-    "connectButton", "localModeButton", "demoModeButton", "onboardHostedButton", "onboardByokButton", "connectCheck",
-    "onboardingPicker", "onboardingPickerLabel", "onboardingModelSelect", "onboardingKeyField", "onboardingByokKey",
-    "northwindIntelligenceChoice", "northwindUsageSummary", "northwindCurrentIntelligence",
-    "demoHostedIntelligenceButton", "demoLocalIntelligenceButton", "demoByokIntelligenceButton",
-    "providerCheck", "onboardingProviderText", "onboardingIntelligenceHint",
+    "connectButton", "connectCheck", "providerCheck", "onboardingIntelligenceStatus",
     "workspaceCheck", "onboardingWorkspaceText", "onboardingWorkspaceHint", "enterButton", "boundaryReadinessText",
     "onboardingGateModal", "onboardingGateTitle", "onboardingGateMessage", "onboardingGateClose",
     "personalIntelligenceCallout",
@@ -306,16 +301,7 @@ function bindActions() {
   }
   elements.settingsBackButton.addEventListener("click", returnFromIntelligenceSettings);
   elements.connectButton.addEventListener("click", startConnectApplications);
-  elements.onboardHostedButton.addEventListener("click", chooseHostedIntelligence);
-  elements.localModeButton.addEventListener("click", () => chooseOnboardingDoor("local"));
-  elements.onboardByokButton.addEventListener("click", () => chooseOnboardingDoor("byok"));
-  elements.onboardingModelSelect.addEventListener("change", commitOnboardingPicker);
-  elements.onboardingByokKey.addEventListener("change", commitOnboardingPicker);
-  elements.demoModeButton.addEventListener("click", startDemo);
   elements.demoConnectButton.addEventListener("click", connectAmos);
-  elements.demoHostedIntelligenceButton.addEventListener("click", useDemoHostedIntelligence);
-  elements.demoLocalIntelligenceButton.addEventListener("click", () => openDemoIntelligenceSettings("ollama"));
-  elements.demoByokIntelligenceButton.addEventListener("click", () => openDemoIntelligenceSettings("openai"));
   elements.demoChangeIntelligenceButton.addEventListener("click", () => openDemoIntelligenceSettings());
   elements.demoLeaveButton.addEventListener("click", leaveDemo);
   elements.workspaceButton.addEventListener("click", chooseWorkspace);
@@ -620,17 +606,6 @@ function bindEvents() {
     if (!state) return;
     state.offline = offline;
     renderOfflineModels();
-    if (onboardingDoor === "local") {
-      const recommended = recommendedOnboardingLocalModel();
-      if (
-        recommended?.installed &&
-        !(state.settings.provider === "ollama" && state.settings.model)
-      ) {
-        activateRecommendedOnboardingLocal().then(() => render()).catch((error) => toast(error.message, true));
-        return;
-      }
-      renderOnboardingPicker();
-    }
   });
   api.on("offline-proposals:changed", (offlineProposals) => {
     if (!state) return;
@@ -827,7 +802,6 @@ function render() {
         minute: "2-digit"
       })}${usage ? ` · ${usage}` : ""}`;
   }
-  renderNorthwindIntelligenceChoice(demo);
   if (state.mode?.offline) {
     elements.operatorEyebrow.textContent = "WORK OFFLINE";
     elements.readyTitle.textContent = "Local-only is ready.";
@@ -891,28 +865,11 @@ function render() {
       : taskLocalApproval
         ? "Local work allowed for task"
         : "Auto-approve local work";
-  const personalLocal = Boolean(
-    (state.mode?.personal || state.mode?.offline) &&
-    ["ollama", "llama-cpp"].includes(state.settings.provider)
-  );
-  const personalByok = Boolean(
-    state.mode?.personal &&
-    !demo &&
-    !["amos-hosted", "ollama", "llama-cpp"].includes(state.settings.provider)
-  );
-  if (["ollama", "llama-cpp"].includes(state.settings.provider)) onboardingDoor = "local";
-  else if (state.mode?.personal && !["amos-hosted", "ollama", "llama-cpp"].includes(state.settings.provider)) {
-    onboardingDoor = "byok";
-  } else if (state.settings.provider === "amos-hosted" && !state.mode?.personal && !state.mode?.offline) {
-    onboardingDoor = "hosted";
+  if (elements.onboardingIntelligenceStatus) {
+    elements.onboardingIntelligenceStatus.textContent = state.configured
+      ? providerStatusLabel()
+      : "AMOS Intelligence · Automatic";
   }
-  elements.onboardHostedButton.classList.toggle("selected", onboardingDoor === "hosted" && !demo);
-  elements.localModeButton.classList.toggle("selected", onboardingDoor === "local" && !demo);
-  elements.onboardByokButton.classList.toggle("selected", onboardingDoor === "byok" && !demo);
-  renderOnboardingPicker();
-  elements.demoModeButton.classList.toggle("selected", demo);
-  elements.demoModeButton.disabled = demo;
-  elements.demoModeButton.classList.toggle("hidden", activeAccount);
   elements.connectButton.classList.toggle(
     "selected",
     Boolean(state.connected && !demo && !state.mode?.personal && !state.mode?.offline)
@@ -924,29 +881,29 @@ function render() {
   const connectAction = elements.connectButton.querySelector("em");
   connectKicker.textContent = activeAccount
     ? "YOUR APPLICATIONS · CONNECT NEXT"
-    : "14-DAY TRIAL";
+    : "REAL DATA · REAL OUTCOME";
   connectTitle.textContent = activeAccount
-    ? `Connect ${activeCompanyName()}`
-    : "Connect your company";
+    ? `Connect an app to ${activeCompanyName()}`
+    : "Create or connect your AMOS account";
   connectDescription.textContent = activeAccount
-    ? "Attach the apps this company already runs, then automate them on a schedule or ad hoc — app to app. AMOS is guessing from chat until those systems are connected."
-    : "Sign in, attach the apps the business already runs, then let AMOS move work between them on a schedule or when you ask.";
+    ? "Choose one system this company already runs so your first outcome is grounded in live business data."
+    : "Sign in once, choose an app, and come back to Desktop ready to work with your company.";
   connectPlan.textContent = activeAccount
     ? "Signed in · connect your apps"
-    : "14-day free trial · Plans start at $99/month";
-  connectAction.textContent = "Connect your company →";
+    : "Automatic intelligence included · Change it anytime";
+  connectAction.textContent = "Connect an app →";
   elements.connectButton.disabled = false;
   elements.boundaryReadinessText.textContent = demo
-    ? "Northwind sample is connected. Connect your own apps when you want AMOS on your company."
+    ? "Sample data is connected. Connect your own apps when you want AMOS on your company."
     : freeForegroundAccount
-      ? "Free Desktop is ready. Activate the company layer when you want recurring, background, or cross-system work."
+      ? "Desktop is ready. Connect one app so your first outcome uses live business evidence."
     : state.connected
-      ? "Signed in. Connect the apps this company already runs."
+      ? "Signed in. Connect one app, then describe the outcome you want."
       : state.mode?.offline
         ? "Local-only. You can chat now and connect apps later."
         : state.mode?.personal
           ? "This computer is ready for chat and code. Connect apps when you want AMOS across the business."
-          : "You can skip this for now. Connect apps when you want AMOS to run work across them.";
+          : "Give AMOS live business evidence, then ask for a useful outcome in plain English.";
   const startingPointSelected = Boolean(
     state.connected || state.mode?.personal || state.mode?.offline
   );
@@ -1124,8 +1081,8 @@ function firstRunNeeded(current = state) {
 function explainOnboardingGate() {
   const ready = elements.enterButton && !elements.enterButton.disabled;
   elements.onboardingGateMessage.textContent = ready
-    ? "Operator, Connections, and the rest of the sidebar unlock after you enter AMOS Desktop. Intelligence is already selected — use Enter AMOS Desktop on this screen."
-    : "Operator, Connections, and the rest of the sidebar unlock after setup. Finish choosing intelligence on this screen, then enter AMOS Desktop.";
+    ? "Operator, Connections, and the rest of the sidebar unlock after you enter AMOS Desktop. Automatic intelligence is already ready."
+    : "Operator, Connections, and the rest of the sidebar unlock after setup. Check the intelligence status, then enter AMOS Desktop.";
   elements.onboardingGateModal.classList.remove("hidden");
   elements.onboardingGateClose.focus();
 }
@@ -8373,22 +8330,6 @@ function northwindUsageLabel(demoStatus) {
   return "Limited hosted turns included";
 }
 
-function renderNorthwindIntelligenceChoice(demo) {
-  elements.northwindIntelligenceChoice.classList.toggle("hidden", !demo);
-  if (!demo) return;
-  const provider = state.settings.provider;
-  elements.demoHostedIntelligenceButton.classList.toggle("selected", provider === "amos-hosted");
-  elements.demoLocalIntelligenceButton.classList.toggle("selected", provider === "ollama");
-  elements.demoByokIntelligenceButton.classList.toggle(
-    "selected",
-    !["amos-hosted", "ollama"].includes(provider)
-  );
-  elements.northwindUsageSummary.textContent = northwindUsageLabel(state.accountStatus?.demo);
-  elements.northwindCurrentIntelligence.textContent = state.configured
-    ? `Current intelligence: ${providerStatusLabel()}. You can change this now or anytime from the Northwind banner.`
-    : "Choose and finish intelligence setup before entering Northwind.";
-}
-
 function onboardingEnterLabel() {
   if (state?.connectionMode === "demo") return "Enter Northwind demo";
   if (state?.mode?.personal || state?.mode?.offline) return "Start local workspace";
@@ -9230,235 +9171,6 @@ function onboardingBoundaryFromState(current) {
   if (current?.mode?.personal || current?.mode?.offline) return "personal";
   if (current?.connected) return "company";
   return current?.settings?.onboardingBoundary || "";
-}
-
-async function chooseOnboardingDoor(door) {
-  onboardingDoor = door;
-  renderOnboardingPicker();
-  if (door === "hosted") {
-    await chooseHostedIntelligence();
-    return;
-  }
-  const button = door === "byok" ? elements.onboardByokButton : elements.localModeButton;
-  setButtonBusy(button, true, "Preparing…");
-  try {
-    state = await api.startPersonal();
-    if (door === "local") {
-      if (!state.offline) state.offline = await api.refreshOffline();
-      await activateRecommendedOnboardingLocal();
-    }
-    render();
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    setButtonBusy(button, false, door === "byok" ? "Bring my own key" : "AMOS Local");
-  }
-}
-
-async function chooseHostedIntelligence() {
-  onboardingDoor = "hosted";
-  setButtonBusy(elements.onboardHostedButton, true, "Selecting…");
-  try {
-    state = await api.saveSettings({
-      provider: "amos-hosted",
-      model: "auto",
-      baseUrl: "",
-      intelligenceProfile: "auto",
-      reasoningEffort: "",
-      operatingMode: "online"
-    });
-    selectedProvider = "amos-hosted";
-    render();
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    setButtonBusy(elements.onboardHostedButton, false, "AMOS Intelligence");
-  }
-}
-
-function recommendedOnboardingLocalModel() {
-  const models = state.offline?.models || [];
-  return models.find((model) => model.recommended) ||
-    models.find((model) =>
-      model.installed && ["qualified", "conditional"].includes(model.qualification?.status)
-    ) ||
-    null;
-}
-
-function preferredOnboardingLocalRuntime(model) {
-  const accelerator = state.offline?.accelerator || null;
-  return accelerator?.sourceModelId === model?.id && accelerator.available ? "mtplx" : "ollama";
-}
-
-async function activateRecommendedOnboardingLocal() {
-  const recommended = recommendedOnboardingLocalModel();
-  if (!recommended?.installed) return;
-  state = await api.activateLocalModel(
-    recommended.id,
-    "personal",
-    preferredOnboardingLocalRuntime(recommended)
-  );
-  selectedProvider = "ollama";
-}
-
-function byokOnboardingOptions() {
-  const allowed = new Set(["anthropic", "openai", "xai", "kimi"]);
-  const options = [];
-  for (const provider of state.providers || []) {
-    if (!allowed.has(provider.id)) continue;
-    const models = Array.isArray(provider.models) && provider.models.length > 0
-      ? provider.models
-      : [{ id: provider.defaultModel, label: provider.defaultModel }];
-    for (const model of models) {
-      options.push({
-        value: `${provider.id}::${model.id}`,
-        label: `${model.label || model.id} · ${provider.displayName}`
-      });
-    }
-  }
-  return options;
-}
-
-function renderOnboardingPicker() {
-  const select = elements.onboardingModelSelect;
-  if (!select) return;
-  const previous = select.value;
-  select.replaceChildren();
-  select.disabled = false;
-  elements.onboardingKeyField.classList.toggle("hidden", onboardingDoor !== "byok");
-  if (onboardingDoor === "hosted") {
-    elements.onboardingPickerLabel.textContent = "Model";
-    select.append(option("hosted", "AMOS Intelligence · Hosted"));
-    select.value = "hosted";
-    select.disabled = true;
-    elements.onboardingProviderText.textContent = "AMOS Hosted is selected. Connect Platform later if you want company systems.";
-    return;
-  }
-  if (onboardingDoor === "local") {
-    elements.onboardingPickerLabel.textContent = "Local model";
-    const models = state.offline?.models || [];
-    const recommended = recommendedOnboardingLocalModel();
-    const activeId = state.settings.provider === "ollama"
-      ? state.settings.model
-      : recommended?.id;
-    if (models.length === 0) {
-      select.append(option("", "Preparing local models…"));
-      select.disabled = true;
-      elements.onboardingProviderText.textContent = "AMOS Local is preparing model choices for this computer.";
-      return;
-    }
-    for (const model of models) {
-      const suffix = model.recommended
-        ? " · recommended"
-        : model.installed
-          ? ""
-          : " · install needed";
-      select.append(option(model.id, `${model.name}${suffix}`));
-    }
-    select.value = models.some((model) => model.id === activeId)
-      ? activeId
-      : models.some((model) => model.id === previous)
-        ? previous
-        : recommended?.id || models[0].id;
-    elements.onboardingProviderText.textContent = "The recommended local model is selected. Change it here without leaving setup.";
-    return;
-  }
-  elements.onboardingPickerLabel.textContent = "Model";
-  const options = byokOnboardingOptions();
-  const current = `${state.settings.provider}::${state.settings.model}`;
-  for (const item of options) select.append(option(item.value, item.label));
-  select.value = options.some((item) => item.value === current)
-    ? current
-    : options.some((item) => item.value === previous)
-      ? previous
-      : options[0]?.value || "";
-  elements.onboardingProviderText.textContent = "Choose a model, then enter its API key. Stay on this screen.";
-}
-
-async function commitOnboardingPicker() {
-  if (onboardingDoor === "hosted") return;
-  if (onboardingDoor === "local") {
-    const model = (state.offline?.models || []).find((item) =>
-      item.id === elements.onboardingModelSelect.value
-    );
-    if (model) await chooseOnboardingLocalModel(model);
-    return;
-  }
-  const [providerId, modelId] = String(elements.onboardingModelSelect.value || "").split("::");
-  const apiKey = elements.onboardingByokKey.value.trim();
-  if (!providerId || !modelId || !apiKey) return;
-  const provider = (state.providers || []).find((item) => item.id === providerId);
-  const defaults = providerDefaults[providerId] || {};
-  try {
-    if (!state.mode?.personal) state = await api.startPersonal();
-    state = await api.saveSettings({
-      provider: providerId,
-      model: modelId,
-      baseUrl: provider?.defaultBaseUrl || defaults.baseUrl || "",
-      apiKey,
-      operatingMode: "personal"
-    });
-    selectedProvider = providerId;
-    render();
-  } catch (error) {
-    toast(error.message, true);
-  }
-}
-
-async function chooseOnboardingLocalModel(model) {
-  try {
-    if (!model.installed) {
-      await api.installOfflineModel(model.id);
-      toast(`Installing ${model.name}…`);
-      return;
-    }
-    if (!state.mode?.personal) state = await api.startPersonal();
-    state = await api.activateLocalModel(
-      model.id,
-      "personal",
-      preferredOnboardingLocalRuntime(model)
-    );
-    selectedProvider = "ollama";
-    render();
-  } catch (error) {
-    toast(error.message, true);
-  }
-}
-
-async function startDemo() {
-  setButtonBusy(elements.demoModeButton, true, "Opening demo…");
-  try {
-    state = await api.startDemo();
-    selectedProvider = state.settings.provider;
-    toast("Northwind Labs is connected. Stay here to choose intelligence, then enter.");
-    render();
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    setButtonBusy(elements.demoModeButton, false, "Explore the Northwind demo");
-    if (state?.connectionMode === "demo") elements.demoModeButton.disabled = true;
-  }
-}
-
-async function useDemoHostedIntelligence() {
-  setButtonBusy(elements.demoHostedIntelligenceButton, true, "Selecting…");
-  try {
-    state = await api.saveSettings({
-      provider: "amos-hosted",
-      model: "auto",
-      baseUrl: "",
-      intelligenceProfile: "auto",
-      reasoningEffort: "",
-      operatingMode: "online"
-    });
-    selectedProvider = "amos-hosted";
-    render();
-    toast("AMOS Intelligence will power this Northwind demo.");
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    setButtonBusy(elements.demoHostedIntelligenceButton, false, "AMOS Intelligence");
-  }
 }
 
 function openDemoIntelligenceSettings(providerId = "") {
