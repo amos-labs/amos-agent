@@ -1,0 +1,55 @@
+{
+  "schema": "amos.holographic-world-dual-channel-experiment",
+  "version": 1,
+  "id": "swarm-holographic-world-dual-channel-experiment-v1",
+  "status": "development-visible",
+  "claimBoundary": "Model-free representation experiment only. It cannot establish mission quality, learned semantic quality, Harbor performance, or production readiness.",
+  "hypothesis": "Separating atomic exact identity from fuzzy semantic association prevents typed semantic similarity from becoming false authority while preserving useful cleanup retrieval.",
+  "seed": "amos-holographic-world-dual-channel-frozen-seed-1",
+  "fixture": {
+    "sizes": [25, 100, 200],
+    "dimensions": [1024, 2048, 4096],
+    "evaluationLimit": 50,
+    "kinds": ["artifact", "criterion", "fact", "gap", "requirement"],
+    "phases": ["recorded", "proposed", "superseded"],
+    "polarities": ["positive", "negative"],
+    "receiptStatuses": ["verified"],
+    "hardNegativeFamilies": [
+      "negation",
+      "proposed-vs-recorded",
+      "superseded-vs-current",
+      "forged-receipt",
+      "missing-receipt"
+    ]
+  },
+  "channels": {
+    "identity": {
+      "encoder": "canonical-typed-content-sha256-to-frequency-unitary-code",
+      "threshold": 0.5,
+      "authorityEligible": true,
+      "worldVectorPolicy": "raw-sum-never-project"
+    },
+    "semantic": {
+      "encoder": "deterministic-token-superposition-unitary-v2",
+      "authorityEligible": false,
+      "purpose": "Development control before a learned Qwen projection."
+    }
+  },
+  "promotionGate": {
+    "fixtureSize": 100,
+    "dimension": 4096,
+    "minimumExactPositiveRate": 0.99,
+    "maximumExactFalsePositiveRate": 0.01,
+    "maximumPerFamilyFalsePositiveRate": 0.01,
+    "minimumSemanticParaphraseTop5Rate": 0.95,
+    "maximumAuthorityLeakRate": 0,
+    "minimumCleanupScanReduction": 0.5
+  },
+  "isolation": {
+    "harbor": false,
+    "liveSwarm": false,
+    "qwen": false,
+    "organismPolicyUpdates": false,
+    "exactEntriesRemainAuthoritative": true
+  }
+}

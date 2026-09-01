@@ -30,6 +30,7 @@ const missionId = option("--mission-id");
 const endpointOverride = option("--url");
 const repetitions = integerOption("--repetitions", 1, 1, 20);
 const probeOnly = args.includes("--probe-only");
+const allowRemote = args.includes("--allow-remote");
 
 if (!controlId) fail("--control qwen-direct|qwen-swarm|fable-control is required");
 if (!outputPath) fail("--output REPORT.json is required");
@@ -45,6 +46,7 @@ if (missions.length === 0) fail(`Unknown mission: ${missionId}`);
 
 const baseUrl = endpointOverride || process.env[control.endpointEnv] || control.defaultEndpoint;
 const apiKey = control.apiKeyEnv ? process.env[control.apiKeyEnv] || null : null;
+if (allowRemote && !apiKey) fail("--allow-remote requires the selected control's API key");
 const worker = new OpenAiResearchWorker({
   controlId: control.id,
   model: control.model,
@@ -52,17 +54,18 @@ const worker = new OpenAiResearchWorker({
   apiKey,
   dialect: control.dialect,
   reasoningEffort: control.reasoningEffort,
-  requestTimeoutMs: config.budget.maxWallMilliseconds
+  requestTimeoutMs: config.budget.maxWallMilliseconds,
+  allowRemote
 });
 const readiness = await worker.probe();
-const sourceRevision = (await execFileAsync("git", ["rev-parse", "HEAD"], {
-  cwd: repositoryRoot
-})).stdout.trim();
+const sourceRevision = await resolveSourceRevision();
+const sourceDigest = optionalSourceDigest(process.env.AMOS_SOURCE_DIGEST);
 const report = {
   schema: "amos.swarm-experiment-report",
   version: 1,
   createdAt: new Date().toISOString(),
   sourceRevision,
+  sourceDigest,
   configId: config.id,
   configDigest: digestResearchValue(config),
   missionManifestId: missionManifest.id,
@@ -158,6 +161,25 @@ async function atomicWriteJson(path, value) {
   await rename(temporary, destination);
 }
 
+async function resolveSourceRevision() {
+  const embedded = String(process.env.AMOS_SOURCE_REVISION || "").trim();
+  if (/^[a-f0-9]{40}$/.test(embedded)) return embedded;
+  try {
+    return (await execFileAsync("git", ["rev-parse", "HEAD"], {
+      cwd: repositoryRoot
+    })).stdout.trim();
+  } catch {
+    throw new Error("Research source revision is unavailable from the image or git checkout");
+  }
+}
+
+function optionalSourceDigest(value) {
+  const digest = String(value || "").trim();
+  if (!digest) return null;
+  if (!/^[a-f0-9]{64}$/.test(digest)) throw new Error("AMOS_SOURCE_DIGEST is invalid");
+  return digest;
+}
+
 function redactedEndpoint(value) {
   const endpoint = new URL(value);
   endpoint.username = "";
@@ -189,7 +211,7 @@ function fail(message) {
   console.error(
     `${message}\n\n` +
     "Usage: node scripts/runSwarmExperiment.js --control CONTROL --output REPORT.json " +
-    "[--mission-id ID] [--repetitions 3] [--url LOOPBACK_URL] [--probe-only]"
+    "[--mission-id ID] [--repetitions 3] [--url URL] [--allow-remote] [--probe-only]"
   );
   process.exit(2);
 }

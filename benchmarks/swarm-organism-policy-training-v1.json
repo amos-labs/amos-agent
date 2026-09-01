@@ -1,0 +1,190 @@
+{
+  "schema": "amos.swarm-organism-policy-training",
+  "version": 1,
+  "id": "swarm-organism-policy-training-v1",
+  "status": "planned",
+  "objective": "Improve verified mission quality by training the Holographic Swarm policy while keeping the Qwen substrate frozen.",
+  "substrate": {
+    "model": "amos-qwen38-27b-fp8",
+    "weightsFrozen": true,
+    "sharedBackbone": true,
+    "parallelLoraTrackAllowed": true,
+    "requireImmutableControlDigest": true
+  },
+  "data": {
+    "allowed": [
+      "amos-owned-rights-cleared-missions",
+      "rights-cleared-public-development-trajectories-with-evaluation-exclusions",
+      "deterministically-verified-self-play",
+      "explicitly-licensed-open-teachers"
+    ],
+    "forbidden": [
+      "public-benchmark-trajectories-without-task-level-training-rights",
+      "public-benchmark-tasks-reused-for-evaluation-after-training",
+      "sealed-evaluation-tasks",
+      "provider-output-without-training-rights"
+    ],
+    "split": {
+      "trainingMissions": 24,
+      "validationMissions": 8,
+      "holdoutMissions": 8,
+      "minimumSeeds": 3
+    }
+  },
+  "policy": {
+    "optimizer": "constrained-cross-entropy-method",
+    "initialCandidates": 8,
+    "eliteCandidates": 2,
+    "generations": 3,
+    "stages": [
+      {
+        "id": "credit-assignment",
+        "purpose": "Learn when partial work merits continuation versus inhibition or a challenger without making partial work equivalent to success.",
+        "parameters": [
+          "bid.repetitionPenalty",
+          "pheromone.partialProgressIntensity",
+          "energy.partialProgressReward",
+          "energy.failurePenalty",
+          "energy.repeatFailurePenalty",
+          "energy.stallPenalty",
+          "energy.regressionPenalty",
+          "energy.efficiencyBonus",
+          "time.targetLeaseUtilization",
+          "retry.challengerExploration"
+        ],
+        "fixed": "all remaining parameters stay at the pinned baseline",
+        "requiredSignals": [
+          "verified-phase-advancement",
+          "semantic-artifact-validity",
+          "artifact-novelty",
+          "repeated-control-envelope-failure",
+          "lease-utilization",
+          "wall-time-to-verified-milestone",
+          "repeated-identical-failure",
+          "verified-progress-regression",
+          "model-call-and-token-cost"
+        ]
+      },
+      {
+        "id": "core-ecology",
+        "purpose": "Optimize the wider ecology only after credit-assignment generalizes on validation missions.",
+        "requires": "credit-assignment-validation-pass",
+        "parameters": [
+          "bid.affinityWeight",
+          "bid.pheromoneWeight",
+          "bid.reputationWeight",
+          "bid.energyWeight",
+          "pheromone.successIntensity",
+          "pheromone.failureIntensity",
+          "pheromone.successDecay",
+          "pheromone.failureDecay",
+          "energy.claimCost",
+          "energy.verifiedReward",
+          "phase.retryLimit",
+          "phase.artifactHorizon",
+          "memory.compactionThreshold",
+          "stopping.minimumConfidence"
+        ]
+      }
+    ],
+    "parameters": [
+      "bid.affinityWeight",
+      "bid.pheromoneWeight",
+      "bid.reputationWeight",
+      "bid.energyWeight",
+      "bid.repetitionPenalty",
+      "pheromone.successIntensity",
+      "pheromone.partialProgressIntensity",
+      "pheromone.failureIntensity",
+      "pheromone.successDecay",
+      "pheromone.failureDecay",
+      "energy.claimCost",
+      "energy.partialProgressReward",
+      "energy.verifiedReward",
+      "energy.failurePenalty",
+      "energy.repeatFailurePenalty",
+      "energy.stallPenalty",
+      "energy.regressionPenalty",
+      "energy.efficiencyBonus",
+      "retry.challengerExploration",
+      "phase.retryLimit",
+      "phase.artifactHorizon",
+      "memory.compactionThreshold",
+      "time.targetLeaseUtilization",
+      "stopping.minimumConfidence"
+    ]
+  },
+  "multiFidelitySimulation": {
+    "purpose": "Search the organism-policy space quickly without treating a simulated prediction as evidence.",
+    "levels": [
+      {
+        "level": 0,
+        "name": "ecology-kernel",
+        "modelCalls": 0,
+        "target": "tens-of-thousands-of-seeded-rollouts"
+      },
+      {
+        "level": 1,
+        "name": "immutable-artifact-replay",
+        "modelCalls": 0,
+        "target": "host-contract-and-recovery-validation"
+      },
+      {
+        "level": 2,
+        "name": "real-qwen-phase-probes",
+        "modelCalls": "bounded",
+        "target": "uncertain-transition-calibration"
+      },
+      {
+        "level": 3,
+        "name": "full-real-qwen-mission",
+        "modelCalls": "full",
+        "target": "top-candidates-only"
+      }
+    ],
+    "calibration": {
+      "source": "immutable-execution-and-ecology-artifacts",
+      "failureModes": [
+        "invalid-artifact",
+        "context-overflow",
+        "provider-stall",
+        "no-progress",
+        "execution-error"
+      ],
+      "requirePeriodicRealWorldRecalibration": true,
+      "domainRandomization": true
+    },
+    "safety": {
+      "simulatorCreatesVerifierEvidence": false,
+      "simulatorMayPromote": false,
+      "publicBenchmarkTrainingRequiresRightsAndEvaluationExclusion": true,
+      "publicBenchmarkEvaluationReuseForbidden": true,
+      "requireFrozenHoldoutAfterSimulation": true
+    }
+  },
+  "reward": {
+    "primary": "independent-verifier-pass-rate",
+    "lexicographic": [
+      "independent-verifier-pass-rate",
+      "criteria-pass-rate",
+      "recovery-after-first-failure",
+      "artifact-contract-compliance",
+      "lower-model-calls",
+      "lower-wall-time"
+    ],
+    "hardZero": [
+      "authority-violation",
+      "receipt-forgery",
+      "benchmark-contamination",
+      "irreversible-replay"
+    ]
+  },
+  "promotion": {
+    "requireFrozenHoldout": true,
+    "requireBlindComparison": true,
+    "minimumPassRateLift": 0.1,
+    "maximumSignificantRegressions": 0,
+    "requireThreeSeedReplication": true,
+    "deployment": "canary-only"
+  }
+}

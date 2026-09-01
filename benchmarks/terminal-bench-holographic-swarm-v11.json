@@ -1,0 +1,45 @@
+{
+  "schema": "amos.hard-benchmark-treatment",
+  "version": 1,
+  "id": "terminal-bench-holographic-swarm-v11",
+  "status": "development",
+  "dataClassification": "public-development",
+  "objective": "Test cross-run organism learning from typed independent-verifier feedback without granting the learner completion authority.",
+  "dataset": {
+    "harness": "harbor",
+    "harnessVersion": "0.22.0",
+    "id": "terminal-bench/terminal-bench",
+    "version": "3.0.0",
+    "trainingTask": "terminal-bench/production-planning",
+    "trainingSeeds": [101, 202, 303],
+    "heldOutTasks": "supplied explicitly at qualification time and never collected into training replay",
+    "verifier": "official-deterministic"
+  },
+  "candidate": {
+    "id": "qwen-holographic-swarm-v11",
+    "model": "amos-qwen38-27b-fp8",
+    "harborAgentVersion": "0.10.0",
+    "transactionalCandidates": true,
+    "objectiveEvidenceSelection": true,
+    "externalVerifierFeedbackMemory": true,
+    "externalVerifierFirstCandidateSelection": true,
+    "dynamicWorkGraph": true,
+    "boundedMutationTransport": true,
+    "proceduralGenes": true,
+    "persistentEcology": true,
+    "holographicWorld": "bounded-active-retrieval",
+    "frontierEscalationAllowed": false,
+    "officialVerifierModified": false
+  },
+  "promotion": {
+    "minimumValidTrainingRuns": 3,
+    "minimumOfficialPassedTestsPerSeed": 11,
+    "requireAtLeastOneOfficialImprovement": true,
+    "requireMonotonicIncumbent": true,
+    "requireArtifactReceipts": true,
+    "requireIndependentVerification": true,
+    "verifierFeedbackGrantsCompletionCredit": false,
+    "trainingTaskCountsAsHeldOutEvidence": false,
+    "heldOutRunsMayEnterTrainingReplay": false
+  }
+}

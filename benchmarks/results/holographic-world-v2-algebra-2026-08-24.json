@@ -1,0 +1,677 @@
+{
+  "schema": "amos.holographic-world-v2-experiment-result",
+  "version": 1,
+  "experimentId": "swarm-holographic-world-v2-experiment-v1",
+  "contractDigest": "15b51ba5986c1391af4debf18d600eb6d7218bfd9e193e1f750a6505af6cf8a4",
+  "seed": "amos-holographic-world-v2-frozen-seed-1",
+  "rows": [
+    {
+      "arm": "deterministic-hrr-v1-item-memory",
+      "fixtureSize": 10,
+      "dimension": 128,
+      "positiveCount": 10,
+      "negativeCount": 50,
+      "exactTop1Rate": 0.1,
+      "exactTop5Rate": 0.7,
+      "positiveMeanScore": 0.15775796929326974,
+      "negativeMeanScore": 0.15775796929326982,
+      "positiveNegativeGap": -8.326672684688674e-17,
+      "hardNegativeFalsePositiveRate": 0,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 10,
+          "meanScore": 0.15775796929326974,
+          "falsePositiveRate": 0
+        },
+        "proposed-vs-recorded": {
+          "count": 10,
+          "meanScore": 0.15775796929326974,
+          "falsePositiveRate": 0
+        },
+        "superseded-vs-current": {
+          "count": 10,
+          "meanScore": 0.15775796929326974,
+          "falsePositiveRate": 0
+        },
+        "forged-receipt": {
+          "count": 10,
+          "meanScore": 0.15775796929326974,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 10,
+          "meanScore": 0.15775796929326974,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 183.71389999999985,
+      "meanItemsScanned": 10,
+      "representationDigest": "750ff36b8b12094699539d68b4d0df038f0a57f4f845ad44c697128445baa43c"
+    },
+    {
+      "arm": "unitary-fft-item-memory",
+      "fixtureSize": 10,
+      "dimension": 1024,
+      "positiveCount": 10,
+      "negativeCount": 50,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 1.0000000000000004,
+      "negativeMeanScore": 0.19515869470127567,
+      "positiveNegativeGap": 0.8048413052987248,
+      "hardNegativeFalsePositiveRate": 0.2,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 10,
+          "meanScore": 0.04444340641571605,
+          "falsePositiveRate": 0
+        },
+        "proposed-vs-recorded": {
+          "count": 10,
+          "meanScore": 0.787777658637428,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 10,
+          "meanScore": 0.047724270265595246,
+          "falsePositiveRate": 0
+        },
+        "forged-receipt": {
+          "count": 10,
+          "meanScore": 0.051981022545264356,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 10,
+          "meanScore": 0.04386711564237457,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 1407.8979166666677,
+      "meanItemsScanned": 10,
+      "representationDigest": "c5af0ae8be0ce2895d1ba9f0149bfb4c345355bb508ca49fb4dc61fab6be1812"
+    },
+    {
+      "arm": "unitary-fft-true-hologram",
+      "fixtureSize": 10,
+      "dimension": 1024,
+      "positiveCount": 10,
+      "negativeCount": 50,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 1.0115450695361676,
+      "negativeMeanScore": 0.16100711686705987,
+      "positiveNegativeGap": 0.8505379526691077,
+      "hardNegativeFalsePositiveRate": 0.2,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 10,
+          "meanScore": -0.07234476707150658,
+          "falsePositiveRate": 0
+        },
+        "proposed-vs-recorded": {
+          "count": 10,
+          "meanScore": 0.783693182189708,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 10,
+          "meanScore": 0.007760125172629517,
+          "falsePositiveRate": 0
+        },
+        "forged-receipt": {
+          "count": 10,
+          "meanScore": 0.03954762505070053,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 10,
+          "meanScore": 0.04637941899376809,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 445.1306666666669,
+      "meanItemsScanned": 0.3333333333333333,
+      "representationDigest": "c5af0ae8be0ce2895d1ba9f0149bfb4c345355bb508ca49fb4dc61fab6be1812"
+    },
+    {
+      "arm": "deterministic-hrr-v1-item-memory",
+      "fixtureSize": 25,
+      "dimension": 128,
+      "positiveCount": 25,
+      "negativeCount": 125,
+      "exactTop1Rate": 0.04,
+      "exactTop5Rate": 0.28,
+      "positiveMeanScore": 0.19268498944294815,
+      "negativeMeanScore": 0.19268498944294837,
+      "positiveNegativeGap": -2.220446049250313e-16,
+      "hardNegativeFalsePositiveRate": 0,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 25,
+          "meanScore": 0.19268498944294815,
+          "falsePositiveRate": 0
+        },
+        "proposed-vs-recorded": {
+          "count": 25,
+          "meanScore": 0.19268498944294815,
+          "falsePositiveRate": 0
+        },
+        "superseded-vs-current": {
+          "count": 25,
+          "meanScore": 0.19268498944294815,
+          "falsePositiveRate": 0
+        },
+        "forged-receipt": {
+          "count": 25,
+          "meanScore": 0.19268498944294815,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 25,
+          "meanScore": 0.19268498944294815,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 213.5233733333326,
+      "meanItemsScanned": 25,
+      "representationDigest": "9bd50a463f42f1b5f1e42468d26682485e4b35664d28b3add30363541a72340d"
+    },
+    {
+      "arm": "unitary-fft-item-memory",
+      "fixtureSize": 25,
+      "dimension": 1024,
+      "positiveCount": 25,
+      "negativeCount": 125,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 1.0000000000000002,
+      "negativeMeanScore": 0.3765348302718891,
+      "positiveNegativeGap": 0.6234651697281111,
+      "hardNegativeFalsePositiveRate": 0.48,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 25,
+          "meanScore": 0.6052540948665857,
+          "falsePositiveRate": 0.8
+        },
+        "proposed-vs-recorded": {
+          "count": 25,
+          "meanScore": 0.705744650454636,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 25,
+          "meanScore": 0.44918414219286473,
+          "falsePositiveRate": 0.6
+        },
+        "forged-receipt": {
+          "count": 25,
+          "meanScore": 0.06055720497894708,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 25,
+          "meanScore": 0.06193405886641228,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 2484.6208466666685,
+      "meanItemsScanned": 25,
+      "representationDigest": "afc3fc58524f99d17f9dfbf7e9d910b59c339baa9598ed25ddf8e4dea8efdb81"
+    },
+    {
+      "arm": "unitary-fft-true-hologram",
+      "fixtureSize": 25,
+      "dimension": 1024,
+      "positiveCount": 25,
+      "negativeCount": 125,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 1.062862779345435,
+      "negativeMeanScore": 0.4209742079871579,
+      "positiveNegativeGap": 0.6418885713582771,
+      "hardNegativeFalsePositiveRate": 0.472,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 25,
+          "meanScore": 0.667941518594633,
+          "falsePositiveRate": 0.76
+        },
+        "proposed-vs-recorded": {
+          "count": 25,
+          "meanScore": 0.8107819838843942,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 25,
+          "meanScore": 0.5354437638793386,
+          "falsePositiveRate": 0.6
+        },
+        "forged-receipt": {
+          "count": 25,
+          "meanScore": 0.08237205262172756,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 25,
+          "meanScore": 0.008331720955696597,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 405.3533400000053,
+      "meanItemsScanned": 0.5666666666666667,
+      "representationDigest": "afc3fc58524f99d17f9dfbf7e9d910b59c339baa9598ed25ddf8e4dea8efdb81"
+    },
+    {
+      "arm": "deterministic-hrr-v1-item-memory",
+      "fixtureSize": 50,
+      "dimension": 128,
+      "positiveCount": 50,
+      "negativeCount": 250,
+      "exactTop1Rate": 0,
+      "exactTop5Rate": 0.12,
+      "positiveMeanScore": 0.196541023473814,
+      "negativeMeanScore": 0.1965410234738141,
+      "positiveNegativeGap": -1.1102230246251565e-16,
+      "hardNegativeFalsePositiveRate": 0,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "meanScore": 0.196541023473814,
+          "falsePositiveRate": 0
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "meanScore": 0.196541023473814,
+          "falsePositiveRate": 0
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "meanScore": 0.196541023473814,
+          "falsePositiveRate": 0
+        },
+        "forged-receipt": {
+          "count": 50,
+          "meanScore": 0.196541023473814,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 50,
+          "meanScore": 0.196541023473814,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 330.08347999999995,
+      "meanItemsScanned": 50,
+      "representationDigest": "aa4b20daafa7374ef894bc3884a1556c3a2dc8490d82aded26ade80cb2e9e196"
+    },
+    {
+      "arm": "unitary-fft-item-memory",
+      "fixtureSize": 50,
+      "dimension": 1024,
+      "positiveCount": 50,
+      "negativeCount": 250,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 0.9999999999999997,
+      "negativeMeanScore": 0.4604628168906667,
+      "positiveNegativeGap": 0.539537183109333,
+      "hardNegativeFalsePositiveRate": 0.6,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "meanScore": 0.7179544532075015,
+          "falsePositiveRate": 1
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "meanScore": 0.7335320506021245,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "meanScore": 0.712650801733806,
+          "falsePositiveRate": 1
+        },
+        "forged-receipt": {
+          "count": 50,
+          "meanScore": 0.07114197864252997,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 50,
+          "meanScore": 0.06703480026737137,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 4580.204213333334,
+      "meanItemsScanned": 50,
+      "representationDigest": "c763ac114224898c20ee98d671e17e185d213c533468262226cdcec998f7f9b2"
+    },
+    {
+      "arm": "unitary-fft-true-hologram",
+      "fixtureSize": 50,
+      "dimension": 1024,
+      "positiveCount": 50,
+      "negativeCount": 250,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 1.358362043476333,
+      "negativeMeanScore": 0.5394719182624282,
+      "positiveNegativeGap": 0.8188901252139048,
+      "hardNegativeFalsePositiveRate": 0.512,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "meanScore": 0.8840240259170967,
+          "falsePositiveRate": 0.84
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "meanScore": 1.0611264458088643,
+          "falsePositiveRate": 0.9
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "meanScore": 0.8432772984796914,
+          "falsePositiveRate": 0.8
+        },
+        "forged-receipt": {
+          "count": 50,
+          "meanScore": -0.036891051520532896,
+          "falsePositiveRate": 0.02
+        },
+        "missing-receipt": {
+          "count": 50,
+          "meanScore": -0.05417712737298015,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 456.3565700000088,
+      "meanItemsScanned": 1.15,
+      "representationDigest": "c763ac114224898c20ee98d671e17e185d213c533468262226cdcec998f7f9b2"
+    },
+    {
+      "arm": "deterministic-hrr-v1-item-memory",
+      "fixtureSize": 100,
+      "dimension": 128,
+      "positiveCount": 100,
+      "negativeCount": 500,
+      "exactTop1Rate": 0.01,
+      "exactTop5Rate": 0.08,
+      "positiveMeanScore": 0.22202583476152934,
+      "negativeMeanScore": 0.22202583476152882,
+      "positiveNegativeGap": 5.273559366969494e-16,
+      "hardNegativeFalsePositiveRate": 0,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 100,
+          "meanScore": 0.22202583476152934,
+          "falsePositiveRate": 0
+        },
+        "proposed-vs-recorded": {
+          "count": 100,
+          "meanScore": 0.22202583476152934,
+          "falsePositiveRate": 0
+        },
+        "superseded-vs-current": {
+          "count": 100,
+          "meanScore": 0.22202583476152934,
+          "falsePositiveRate": 0
+        },
+        "forged-receipt": {
+          "count": 100,
+          "meanScore": 0.22202583476152934,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 100,
+          "meanScore": 0.22202583476152934,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 559.3849249999946,
+      "meanItemsScanned": 100,
+      "representationDigest": "bf6a1ea0d45e760c6c5757eba5b17c5ed1d2c9c0d8ef4c3a6a95e48391cb2021"
+    },
+    {
+      "arm": "unitary-fft-item-memory",
+      "fixtureSize": 100,
+      "dimension": 1024,
+      "positiveCount": 100,
+      "negativeCount": 500,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 0.9999999999999999,
+      "negativeMeanScore": 0.47675732958854705,
+      "positiveNegativeGap": 0.5232426704114528,
+      "hardNegativeFalsePositiveRate": 0.6,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 100,
+          "meanScore": 0.7208320858346235,
+          "falsePositiveRate": 1
+        },
+        "proposed-vs-recorded": {
+          "count": 100,
+          "meanScore": 0.7726393520172854,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 100,
+          "meanScore": 0.7411782217289522,
+          "falsePositiveRate": 1
+        },
+        "forged-receipt": {
+          "count": 100,
+          "meanScore": 0.07597936187054372,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 100,
+          "meanScore": 0.07315762649133431,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 9043.586599999984,
+      "meanItemsScanned": 100,
+      "representationDigest": "62e97797074ad6659af014bd524833ca8e3c167164cbec28384bb8bd302491a0"
+    },
+    {
+      "arm": "unitary-fft-true-hologram",
+      "fixtureSize": 100,
+      "dimension": 1024,
+      "positiveCount": 100,
+      "negativeCount": 500,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 2.600472429649161,
+      "negativeMeanScore": 1.3332239241708763,
+      "positiveNegativeGap": 1.2672485054782847,
+      "hardNegativeFalsePositiveRate": 0.646,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 100,
+          "meanScore": 2.1684582922627875,
+          "falsePositiveRate": 1
+        },
+        "proposed-vs-recorded": {
+          "count": 100,
+          "meanScore": 2.435711141162467,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 100,
+          "meanScore": 2.146926324283214,
+          "falsePositiveRate": 1
+        },
+        "forged-receipt": {
+          "count": 100,
+          "meanScore": -0.053491927032097306,
+          "falsePositiveRate": 0.15
+        },
+        "missing-receipt": {
+          "count": 100,
+          "meanScore": -0.031484209821990794,
+          "falsePositiveRate": 0.08
+        }
+      },
+      "meanLatencyMicros": 547.2664600000409,
+      "meanItemsScanned": 2.2333333333333334,
+      "representationDigest": "62e97797074ad6659af014bd524833ca8e3c167164cbec28384bb8bd302491a0"
+    },
+    {
+      "arm": "deterministic-hrr-v1-item-memory",
+      "fixtureSize": 200,
+      "dimension": 128,
+      "positiveCount": 200,
+      "negativeCount": 1000,
+      "exactTop1Rate": 0.01,
+      "exactTop5Rate": 0.065,
+      "positiveMeanScore": 0.2443647465836041,
+      "negativeMeanScore": 0.24436474658360438,
+      "positiveNegativeGap": -2.7755575615628914e-16,
+      "hardNegativeFalsePositiveRate": 0,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 200,
+          "meanScore": 0.2443647465836041,
+          "falsePositiveRate": 0
+        },
+        "proposed-vs-recorded": {
+          "count": 200,
+          "meanScore": 0.2443647465836041,
+          "falsePositiveRate": 0
+        },
+        "superseded-vs-current": {
+          "count": 200,
+          "meanScore": 0.2443647465836041,
+          "falsePositiveRate": 0
+        },
+        "forged-receipt": {
+          "count": 200,
+          "meanScore": 0.2443647465836041,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 200,
+          "meanScore": 0.2443647465836041,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 1066.958571666687,
+      "meanItemsScanned": 200,
+      "representationDigest": "c6f650a025bbdd3080ee513c3ddee1a67e16bd5f37fc68bd76ab471fba9cb699"
+    },
+    {
+      "arm": "unitary-fft-item-memory",
+      "fixtureSize": 200,
+      "dimension": 1024,
+      "positiveCount": 200,
+      "negativeCount": 1000,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 1,
+      "negativeMeanScore": 0.4934605826109246,
+      "positiveNegativeGap": 0.5065394173890754,
+      "hardNegativeFalsePositiveRate": 0.6,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 200,
+          "meanScore": 0.7615262068818329,
+          "falsePositiveRate": 1
+        },
+        "proposed-vs-recorded": {
+          "count": 200,
+          "meanScore": 0.7721396150607772,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 200,
+          "meanScore": 0.7591445245415532,
+          "falsePositiveRate": 1
+        },
+        "forged-receipt": {
+          "count": 200,
+          "meanScore": 0.08639285611212993,
+          "falsePositiveRate": 0
+        },
+        "missing-receipt": {
+          "count": 200,
+          "meanScore": 0.08809971045832991,
+          "falsePositiveRate": 0
+        }
+      },
+      "meanLatencyMicros": 17476.05850750003,
+      "meanItemsScanned": 200,
+      "representationDigest": "2f015001de568fb455438788678e7fa5905c5d51e200d4995d201488097e87ab"
+    },
+    {
+      "arm": "unitary-fft-true-hologram",
+      "fixtureSize": 200,
+      "dimension": 1024,
+      "positiveCount": 200,
+      "negativeCount": 1000,
+      "exactTop1Rate": 1,
+      "exactTop5Rate": 1,
+      "positiveMeanScore": 4.340440118910468,
+      "negativeMeanScore": 2.6002543197983923,
+      "positiveNegativeGap": 1.740185799112076,
+      "hardNegativeFalsePositiveRate": 0.749,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 200,
+          "meanScore": 4.092117695418214,
+          "falsePositiveRate": 1
+        },
+        "proposed-vs-recorded": {
+          "count": 200,
+          "meanScore": 4.147860322676628,
+          "falsePositiveRate": 1
+        },
+        "superseded-vs-current": {
+          "count": 200,
+          "meanScore": 4.256165172904943,
+          "falsePositiveRate": 1
+        },
+        "forged-receipt": {
+          "count": 200,
+          "meanScore": 0.16218000812432581,
+          "falsePositiveRate": 0.32
+        },
+        "missing-receipt": {
+          "count": 200,
+          "meanScore": 0.3429483998678608,
+          "falsePositiveRate": 0.425
+        }
+      },
+      "meanLatencyMicros": 750.1510825000454,
+      "meanItemsScanned": 4.475,
+      "representationDigest": "2f015001de568fb455438788678e7fa5905c5d51e200d4995d201488097e87ab"
+    }
+  ],
+  "gate": {
+    "passed": false,
+    "arm": "unitary-fft-true-hologram",
+    "fixtureSize": 100,
+    "cleanupScanReduction": 0.9776666666666667,
+    "checks": {
+      "exactTop1": true,
+      "exactTop5": true,
+      "positiveNegativeGap": true,
+      "overallHardNegativeFpr": false,
+      "everyHardNegativeFamily": false,
+      "cleanupScanReduction": true
+    }
+  },
+  "claimBoundary": "Algebra and retrieval stress test only. This result cannot establish mission quality, Harbor performance, or production readiness.",
+  "isolation": {
+    "harbor": false,
+    "liveSwarm": false,
+    "qwen": false,
+    "organismPolicyUpdates": false,
+    "exactEntriesRemainAuthoritative": true
+  },
+  "evidenceDigest": "d663d401012efe6dac053554101d8c039b5772b6b3ae8d5b355d25477006f293"
+}

@@ -59,6 +59,66 @@ test("failure capsules preserve objective repair evidence and HRR safety telemet
   assert.equal(capsule.safeguards.authorityGrantedByHrr, false);
 });
 
+test("failure capsules preserve independent verifier gaps as non-authoritative repair memory", () => {
+  const capsule = createSwarmFailureCapsule({
+    task: {
+      source: "terminal-bench/terminal-bench",
+      name: "production-planning",
+      ref: "3.0.0",
+      instructionDigest: "9".repeat(64)
+    },
+    result: {
+      verifier_result: { rewards: { reward: 0 } }
+    },
+    selfCheck: {
+      checks: [{ id: "internal-schema", status: "failed", detail: "Schema needs repair." }]
+    },
+    verifierFeedback: {
+      present: true,
+      source: "harbor-official-deterministic",
+      status: "failed",
+      reward: 0,
+      summary: { totalChecks: 20, passedChecks: 11, failedChecks: 9 },
+      checks: [
+        {
+          id: "official:test_outputs.py::test_downtime",
+          status: "failed",
+          detail: "Official checker reported failed."
+        },
+        {
+          id: "official:test_outputs.py::test_reservations_use_valid_lots",
+          status: "failed",
+          detail: "Official checker reported failed."
+        },
+        {
+          id: "official:test_outputs.py::test_schema",
+          status: "passed",
+          detail: "Official checker reported passed."
+        }
+      ],
+      evidenceRefs: ["trial/verifier/ctrf.json"]
+    }
+  });
+
+  assert.equal(capsule.verifierEvidence.present, true);
+  assert.equal(capsule.verifierEvidence.totalChecks, 20);
+  assert.equal(capsule.verifierEvidence.passedChecks, 11);
+  assert.equal(capsule.verifierEvidence.failedChecks, 9);
+  assert.equal(capsule.verifierEvidence.qualityFraction, 0.55);
+  assert.equal(capsule.verifierEvidence.authority.grantsCompletionCredit, false);
+  assert.deepEqual(
+    capsule.failedChecks.map(({ id }) => id),
+    [
+      "internal-schema",
+      "official:test_outputs.py::test_downtime",
+      "official:test_outputs.py::test_reservations_use_valid_lots"
+    ]
+  );
+  assert.ok(capsule.repairSignals.includes("finite-capacity-interval-repair"));
+  assert.ok(capsule.repairSignals.includes("inventory-substitution-feasibility"));
+  assert.equal(validateSwarmFailureCapsule(capsule).digest, capsule.digest);
+});
+
 test("failure capsules never retain raw model or tool content", () => {
   const capsule = createSwarmFailureCapsule({
     task: { source: "test", name: "fixture" },
@@ -98,7 +158,28 @@ test("failure capsules bind a repairable challenger to exact task and source dig
     },
     candidateEvolution: {
       selection: "monotonic-incumbent-with-repairable-challenger",
-      events: [{ challengerAdvanced: true, mutationReceiptValid: true }],
+      events: [{
+        challengerAdvanced: true,
+        mutationReceiptValid: true,
+        implementationChanged: true,
+        substantiveMutation: true
+      }],
+      lastCheckpoint: {
+        cycle: 2,
+        status: "settled",
+        sourceDigest: "a".repeat(64),
+        candidateDigest: sourceDigest,
+        implementationChanged: true,
+        substantiveMutation: true,
+        mutationReceiptValid: true,
+        candidateEvidence: {
+          implementationPresent: true,
+          implementationSyntaxValid: true,
+          implementationSubstantive: true,
+          implementationSha256: sourceDigest
+        },
+        authority: { repairReuseOnly: true }
+      },
       challengerEvidence: {
         implementationPresent: true,
         implementationSyntaxValid: true,
@@ -131,6 +212,10 @@ test("failure capsules bind a repairable challenger to exact task and source dig
   assert.equal(capsule.execution.elapsedMilliseconds, 600_000);
   assert.equal(capsule.candidateLineage.repairableState.available, true);
   assert.equal(capsule.candidateLineage.repairableState.source.digest, sourceDigest);
+  assert.equal(capsule.candidateLineage.substantiveMutationCount, 1);
+  assert.equal(capsule.candidateLineage.noOpMutationCount, 0);
+  assert.equal(capsule.candidateLineage.lastCheckpoint.status, "settled");
+  assert.equal(capsule.candidateLineage.lastCheckpoint.repairReuseOnly, true);
   assert.equal(capsule.candidateLineage.authority.grantsCompletionCredit, false);
   assert.equal(validateSwarmFailureCapsule(capsule).digest, capsule.digest);
 });

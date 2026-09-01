@@ -1,0 +1,481 @@
+{
+  "schema": "amos.holographic-world-dual-channel-experiment-result",
+  "version": 1,
+  "experimentId": "swarm-holographic-world-dual-channel-experiment-v1",
+  "contractDigest": "bed507c2eeed758d2486b74a69b86a45214f5f66e9ff1a69dfdc803f134f7240",
+  "seed": "amos-holographic-world-dual-channel-frozen-seed-1",
+  "rows": [
+    {
+      "fixtureSize": 25,
+      "evaluatedEntries": 25,
+      "dimension": 1024,
+      "exactPositiveRate": 1,
+      "exactPositiveMeanScore": 0.9821551679502687,
+      "exactFalsePositiveRate": 0,
+      "exactNegativeMeanScore": -0.002374855558789666,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.015973133432757698
+        },
+        "proposed-vs-recorded": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.0001236575818054897
+        },
+        "superseded-vs-current": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.00889754686390053
+        },
+        "forged-receipt": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.005713208651708711
+        },
+        "missing-receipt": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.013360313292902269
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 0.5666666666666667,
+      "meanSemanticItemsScanned": 1,
+      "cleanupScanReduction": 0.96,
+      "meanLatencyMicros": 916.0038342857134,
+      "representationDigest": "b952c737ab411a5bcdcb3e08247fb0b88f2d84a402268ad9e5ee9a6269191ff7",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 100,
+      "evaluatedEntries": 50,
+      "dimension": 1024,
+      "exactPositiveRate": 0.96,
+      "exactPositiveMeanScore": 0.9205287421045053,
+      "exactFalsePositiveRate": 0.06,
+      "exactNegativeMeanScore": 0.0016238505473520673,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": 0.00015367038509505603
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "falsePositiveRate": 0.08,
+          "authorityLeakRate": 0,
+          "meanScore": -0.05271278604648216
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "falsePositiveRate": 0.08,
+          "authorityLeakRate": 0,
+          "meanScore": 0.0478308402111628
+        },
+        "forged-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.08,
+          "authorityLeakRate": 0,
+          "meanScore": 0.0600213692211309
+        },
+        "missing-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.04,
+          "authorityLeakRate": 0,
+          "meanScore": -0.04717384103414639
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 2.25,
+      "meanSemanticItemsScanned": 3.4,
+      "cleanupScanReduction": 0.966,
+      "meanLatencyMicros": 1071.72965142857,
+      "representationDigest": "a0a083e0a6e3f5e203eccb12dea6baa45e4363891b3cb1f1df319fd4fe5f6b68",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 200,
+      "evaluatedEntries": 50,
+      "dimension": 1024,
+      "exactPositiveRate": 0.82,
+      "exactPositiveMeanScore": 0.910293894320414,
+      "exactFalsePositiveRate": 0.136,
+      "exactNegativeMeanScore": 0.03858402214028442,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "falsePositiveRate": 0.1,
+          "authorityLeakRate": 0,
+          "meanScore": 0.07746620555387725
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "falsePositiveRate": 0.16,
+          "authorityLeakRate": 0,
+          "meanScore": 0.04903650227145001
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "falsePositiveRate": 0.16,
+          "authorityLeakRate": 0,
+          "meanScore": 0.038595199297908736
+        },
+        "forged-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.14,
+          "authorityLeakRate": 0,
+          "meanScore": 0.03372728286631733
+        },
+        "missing-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.12,
+          "authorityLeakRate": 0,
+          "meanScore": -0.0059050792881311705
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 4.483333333333333,
+      "meanSemanticItemsScanned": 6.8,
+      "cleanupScanReduction": 0.966,
+      "meanLatencyMicros": 1254.6422628571402,
+      "representationDigest": "59a777f8c0a8d3effc141f4296682869eed29573d42e360f623c15dbdcd9477d",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 25,
+      "evaluatedEntries": 25,
+      "dimension": 2048,
+      "exactPositiveRate": 1,
+      "exactPositiveMeanScore": 0.9865228892366192,
+      "exactFalsePositiveRate": 0,
+      "exactNegativeMeanScore": -0.006225893344497299,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.009605205957050826
+        },
+        "proposed-vs-recorded": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.012066850737020492
+        },
+        "superseded-vs-current": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.01424983020028392
+        },
+        "forged-receipt": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.015687637166524594
+        },
+        "missing-receipt": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.010895216994655867
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 0.5666666666666667,
+      "meanSemanticItemsScanned": 1,
+      "cleanupScanReduction": 0.96,
+      "meanLatencyMicros": 2050.113314285711,
+      "representationDigest": "69d763166922acc283546168bc8d60c4fc6ce769170de1f446409130efd034c7",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 100,
+      "evaluatedEntries": 50,
+      "dimension": 2048,
+      "exactPositiveRate": 1,
+      "exactPositiveMeanScore": 1.0064776010049397,
+      "exactFalsePositiveRate": 0.02,
+      "exactNegativeMeanScore": -0.01257437410542215,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.005701375868940112
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.008401052547597068
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": -0.0030077878744972065
+        },
+        "forged-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": -0.06352249301119528
+        },
+        "missing-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.06,
+          "authorityLeakRate": 0,
+          "meanScore": 0.01776083877511893
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 2.25,
+      "meanSemanticItemsScanned": 3.4,
+      "cleanupScanReduction": 0.966,
+      "meanLatencyMicros": 2258.7348885714214,
+      "representationDigest": "8f326f068c096c19450aee2c484910e6e60ade14fc2c4c9d9465749fd445b139",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 200,
+      "evaluatedEntries": 50,
+      "dimension": 2048,
+      "exactPositiveRate": 0.92,
+      "exactPositiveMeanScore": 1.0613536164293689,
+      "exactFalsePositiveRate": 0.068,
+      "exactNegativeMeanScore": 0.014701808812836111,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "falsePositiveRate": 0.06,
+          "authorityLeakRate": 0,
+          "meanScore": 0.007359723201169973
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": -0.002845595868373171
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "falsePositiveRate": 0.12,
+          "authorityLeakRate": 0,
+          "meanScore": 0.09417030146038398
+        },
+        "forged-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.12,
+          "authorityLeakRate": 0,
+          "meanScore": -0.0009025474513547683
+        },
+        "missing-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": -0.02427283727764549
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 4.483333333333333,
+      "meanSemanticItemsScanned": 6.8,
+      "cleanupScanReduction": 0.966,
+      "meanLatencyMicros": 2701.9694057142733,
+      "representationDigest": "de7fc0c73ef1c62b6b8534b166ad5d413ac08844819de1dfc90d083d1928416b",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 25,
+      "evaluatedEntries": 25,
+      "dimension": 4096,
+      "exactPositiveRate": 1,
+      "exactPositiveMeanScore": 0.9795757334011235,
+      "exactFalsePositiveRate": 0,
+      "exactNegativeMeanScore": 0.00011106801635907271,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.005646150649902366
+        },
+        "proposed-vs-recorded": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.002903465853823627
+        },
+        "superseded-vs-current": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.016361211039346416
+        },
+        "forged-receipt": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.004127074883892951
+        },
+        "missing-receipt": {
+          "count": 25,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.0031291795699320934
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 0.5666666666666667,
+      "meanSemanticItemsScanned": 1,
+      "cleanupScanReduction": 0.96,
+      "meanLatencyMicros": 3801.224525714247,
+      "representationDigest": "62cf6666730c437469caab9274d52fee50ac6a45d3a4ed65b76501dde35e536b",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 100,
+      "evaluatedEntries": 50,
+      "dimension": 4096,
+      "exactPositiveRate": 1,
+      "exactPositiveMeanScore": 1.0248550896221709,
+      "exactFalsePositiveRate": 0,
+      "exactNegativeMeanScore": 0.0023843043217294064,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.01368693469980491
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.016608918391620722
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.015139927213572279
+        },
+        "forged-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.020581348636085774
+        },
+        "missing-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.009402083877949361
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 2.25,
+      "meanSemanticItemsScanned": 3.4,
+      "cleanupScanReduction": 0.966,
+      "meanLatencyMicros": 4465.898308571394,
+      "representationDigest": "e0515c894a2b6bf1b55d022d613bafae804f961c4c997e86daef40166976345f",
+      "threshold": 0.5
+    },
+    {
+      "fixtureSize": 200,
+      "evaluatedEntries": 50,
+      "dimension": 4096,
+      "exactPositiveRate": 1,
+      "exactPositiveMeanScore": 1.0191667086619658,
+      "exactFalsePositiveRate": 0.012,
+      "exactNegativeMeanScore": -0.0007775925691208606,
+      "hardNegativeFamilies": {
+        "negation": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": -0.020884102452171257
+        },
+        "proposed-vs-recorded": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": 0.04750625986311927
+        },
+        "superseded-vs-current": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": -0.01243189114449369
+        },
+        "forged-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0.02,
+          "authorityLeakRate": 0,
+          "meanScore": -0.03062923760094205
+        },
+        "missing-receipt": {
+          "count": 50,
+          "falsePositiveRate": 0,
+          "authorityLeakRate": 0,
+          "meanScore": 0.012551008488883466
+        }
+      },
+      "semanticParaphraseTop1Rate": 1,
+      "semanticParaphraseTop5Rate": 1,
+      "authorityLeakRate": 0,
+      "meanIdentityItemsScanned": 4.483333333333333,
+      "meanSemanticItemsScanned": 6.8,
+      "cleanupScanReduction": 0.966,
+      "meanLatencyMicros": 5252.375871428578,
+      "representationDigest": "274ec72c859863df01e6691e7fcbf030906e4d2e011b7bda0d9a5843855f1d4c",
+      "threshold": 0.5
+    }
+  ],
+  "gate": {
+    "passed": true,
+    "fixtureSize": 100,
+    "dimension": 4096,
+    "checks": {
+      "exactPositiveRate": true,
+      "exactFalsePositiveRate": true,
+      "everyHardNegativeFamily": true,
+      "semanticParaphraseTop5Rate": true,
+      "authorityLeakRate": true,
+      "cleanupScanReduction": true
+    }
+  },
+  "claimBoundary": "Model-free representation experiment only. It cannot establish mission quality, learned semantic quality, Harbor performance, or production readiness.",
+  "isolation": {
+    "harbor": false,
+    "liveSwarm": false,
+    "qwen": false,
+    "organismPolicyUpdates": false,
+    "exactEntriesRemainAuthoritative": true
+  },
+  "evidenceDigest": "9968271ec3e6770301e3abb275984aa60792afa9b3378df8f796d0fc14be2de4"
+}

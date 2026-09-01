@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+exec > >(tee -a /var/log/amos-qwen-trainer-bootstrap.log | logger -t amos-qwen-trainer -s 2>/dev/console) 2>&1
+
+for binary in aws docker nvidia-smi; do
+  command -v "$binary" >/dev/null || {
+    echo "Required trainer binary is unavailable: $binary"
+    exit 1
+  }
+done
+
+nvidia-smi
+install -d -m 0750 -o 10001 -g 10001 \
+  /opt/amos-stage0 \
+  /opt/amos-huggingface \
+  /opt/amos-triton \
+  /opt/amos-nvidia-cache
+aws ecr get-login-password --region "${aws_region}" | \
+  docker login --username AWS --password-stdin "${ecr_registry}"
+docker pull "${trainer_image_uri}"
+
+set +e
+docker run \
+  --name amos-qwen-stage0-trainer \
+  --gpus all \
+  --ipc=host \
+  --network=bridge \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=16g \
+  --env "AMOS_TRAINING_CONTRACT_URI=${trainer_contract_uri}" \
+  --env HF_HOME=/home/trainer/.cache/huggingface \
+  --env TRITON_CACHE_DIR=/home/trainer/.triton/cache \
+  --env CUDA_CACHE_PATH=/home/trainer/.nv/ComputeCache \
+  --volume /opt/amos-stage0:/work/stage0:rw \
+  --volume /opt/amos-huggingface:/home/trainer/.cache/huggingface:rw \
+  --volume /opt/amos-triton:/home/trainer/.triton:rw \
+  --volume /opt/amos-nvidia-cache:/home/trainer/.nv:rw \
+  "${trainer_image_uri}"
+STATUS=$?
+set -e
+
+printf '%s\n' "$STATUS" > /opt/amos-stage0/container-exit-status
+sync
+if [[ "$STATUS" -eq 0 ]]; then
+  echo "AMOS Qwen stage-zero trainer completed; stopping the disposable instance"
+else
+  echo "AMOS Qwen stage-zero trainer failed with status $STATUS; preserving disk and stopping for inspection"
+fi
+shutdown -h now

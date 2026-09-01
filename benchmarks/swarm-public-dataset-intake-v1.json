@@ -1,0 +1,156 @@
+{
+  "schema": "amos.public-dataset-intake",
+  "version": 1,
+  "id": "swarm-public-dataset-intake-v1",
+  "status": "quarantine",
+  "trainingApproved": false,
+  "policy": {
+    "availabilityIsNotConsent": true,
+    "teacherOutputRightsRequired": true,
+    "taskLevelLicenseRequired": true,
+    "executableVerifierPreferred": true,
+    "evaluationOverlapIsPermanentExclusion": true,
+    "requiredChecks": [
+      "dataset-license",
+      "row-source-license",
+      "teacher-output-rights",
+      "named-instance-overlap",
+      "canary-scan",
+      "trajectory-completeness",
+      "verifier-replay"
+    ]
+  },
+  "permanentEvaluationFamilies": [
+    "swe-bench-verified",
+    "swe-bench-lite",
+    "terminal-bench",
+    "osworld",
+    "tau-bench",
+    "spreadsheetbench",
+    "crmarena",
+    "workarena",
+    "metr-reward-hacking"
+  ],
+  "candidates": [
+    {
+      "id": "nvidia-swe-hero-openhands",
+      "locator": "https://huggingface.co/datasets/nvidia/SWE-Hero-openhands-trajectories",
+      "priority": "p0",
+      "lanes": ["qwen-adapter-sft", "organism-policy"],
+      "claimedLicense": "CC-BY-4.0 with permissive upstream repository filters",
+      "teacherClass": "open-weight-qwen",
+      "verifierClass": "repository-tests",
+      "auditStatus": "source-card-confirmed; overlap-audit-pending"
+    },
+    {
+      "id": "nebius-swe-rebench-openhands",
+      "locator": "https://huggingface.co/datasets/nebius/SWE-rebench-openhands-trajectories",
+      "priority": "p0",
+      "lanes": ["qwen-adapter-sft", "organism-policy", "negative-trajectories"],
+      "claimedLicense": "CC-BY-4.0 plus upstream repository licenses",
+      "teacherClass": "open-weight-qwen",
+      "verifierClass": "repository-tests",
+      "auditStatus": "candidate; row-license-and-eval-overlap-audit-pending"
+    },
+    {
+      "id": "salesforce-xlam-function-calling-60k",
+      "locator": "https://huggingface.co/datasets/Salesforce/xlam-function-calling-60k",
+      "priority": "p0",
+      "lanes": ["qwen-adapter-sft"],
+      "claimedLicense": "CC-BY-4.0; gated use terms",
+      "teacherClass": "open-weight-deepseek-mixtral",
+      "verifierClass": "executable-function-call",
+      "auditStatus": "source-card-confirmed; gated-terms-review-pending"
+    },
+    {
+      "id": "toucan-1-5m",
+      "locator": "https://github.com/TheAgentArk/Toucan",
+      "priority": "p0",
+      "lanes": ["qwen-adapter-sft", "organism-policy"],
+      "claimedLicense": "MIT repository; dataset-card review required",
+      "teacherClass": "synthetic-open-tool-environments",
+      "verifierClass": "real-mcp-execution",
+      "auditStatus": "repository-confirmed; dataset-and-row-audit-pending"
+    },
+    {
+      "id": "appworld-train-dev",
+      "locator": "AppWorld train and development partitions only",
+      "priority": "p0",
+      "lanes": ["organism-policy", "qwen-adapter-sft", "stateful-workflow"],
+      "claimedLicense": "engine Apache-2.0; bundle-specific terms require review",
+      "teacherClass": "amos-generated-rollouts",
+      "verifierClass": "state-based-unit-tests",
+      "auditStatus": "candidate; bundle-terms-and-canary-controls-pending"
+    },
+    {
+      "id": "xlang-agentnet",
+      "locator": "xlangai/AgentNet",
+      "priority": "p0",
+      "lanes": ["multimodal-sft", "organism-policy", "negative-trajectories"],
+      "claimedLicense": "MIT",
+      "teacherClass": "human-desktop-demonstrations",
+      "verifierClass": "human-task-completion",
+      "auditStatus": "candidate; task-overlap-and-provenance-audit-pending"
+    },
+    {
+      "id": "nvidia-nemotron-terminal-corpus",
+      "locator": "nvidia/Nemotron-Terminal-Corpus",
+      "priority": "p1",
+      "lanes": ["qwen-adapter-sft", "organism-policy"],
+      "claimedLicense": "CC-BY-4.0",
+      "teacherClass": "synthetic-terminal",
+      "verifierClass": "execution-filtered",
+      "auditStatus": "candidate; terminal-bench-decontamination-required"
+    },
+    {
+      "id": "nvidia-nemotron-sft-agentic-v2",
+      "locator": "nvidia/Nemotron-SFT-Agentic-v2",
+      "priority": "p1",
+      "lanes": ["qwen-adapter-sft"],
+      "claimedLicense": "CC-BY-4.0 with mixed-source overlays",
+      "teacherClass": "mixed-synthetic",
+      "verifierClass": "role-and-consistency-filter",
+      "auditStatus": "candidate; component-provenance-audit-required"
+    },
+    {
+      "id": "spreadsheet-rl-train",
+      "locator": "Spreadsheet-RL train partitions only",
+      "priority": "p1",
+      "lanes": ["multimodal-sft", "artifact-construction"],
+      "claimedLicense": "CC-BY-SA-4.0",
+      "teacherClass": "tool-agent-trajectories",
+      "verifierClass": "workbook-recalculation-and-cell-oracle",
+      "auditStatus": "candidate; share-alike-impact-and-split-audit-pending"
+    },
+    {
+      "id": "process-mining-bpi-business-logs",
+      "locator": "https://www.tf-pm.org/resources/logs",
+      "priority": "p1",
+      "lanes": ["organism-simulation-seed", "workflow-pretraining"],
+      "claimedLicense": "varies by DOI deposit; no collection-wide training grant",
+      "teacherClass": "observed-business-events",
+      "verifierClass": "process-conformance-and-outcome-derived",
+      "auditStatus": "index-confirmed; per-log-license-and-privacy-audit-required"
+    },
+    {
+      "id": "process-mining-data-simulated-business-logs",
+      "locator": "https://www.processminingdata.com/",
+      "priority": "p1",
+      "lanes": ["organism-simulation-seed", "stateful-workflow"],
+      "claimedLicense": "not stated on public landing page",
+      "teacherClass": "simulated-business-events",
+      "verifierClass": "derived-process-outcomes",
+      "auditStatus": "downloaded AP package moved to private intake; embedded terms recorded there"
+    },
+    {
+      "id": "amos-owned-governed-business-missions",
+      "locator": "AMOS-owned QBO, Stripe, CRM, support, approval, and recovery sandboxes",
+      "priority": "p0",
+      "lanes": ["organism-policy", "qwen-adapter-sft", "stateful-workflow", "negative-trajectories"],
+      "claimedLicense": "internal-authorized or explicit customer opt-in only",
+      "teacherClass": "amos-owned-execution",
+      "verifierClass": "authoritative-state-and-receipt-checks",
+      "auditStatus": "generation-environment-required"
+    }
+  ]
+}

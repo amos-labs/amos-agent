@@ -1,0 +1,112 @@
+{
+  "schema": "amos.holographic-world-training",
+  "version": 1,
+  "id": "swarm-holographic-world-training-v1",
+  "status": "interface-baseline-active",
+  "objective": "Learn a shared, global world representation for all logical specialists while keeping Qwen frozen and preserving exact host authority.",
+  "authority": {
+    "authoritativeState": "host-verified-evidence-board",
+    "vectorIsAuthority": false,
+    "onlyHostReceiptedEventsMayUpdateWorld": true,
+    "modelProposalsMayUpdateWorld": false,
+    "retrievalMustResolveToExactEntryAndEvidenceRefs": true,
+    "forgedOrMissingReceiptReward": 0
+  },
+  "substrate": {
+    "model": "amos-qwen38-27b-fp8",
+    "weightsFrozen": true,
+    "sharedBackbone": true,
+    "hiddenStateSourceMustBePinned": true,
+    "organismPolicyDigestMustBePinned": true
+  },
+  "baseline": {
+    "encoder": "deterministic-hrr-v1",
+    "roleVectors": "sha256-derived",
+    "dimensions": [128, 256],
+    "purpose": "interface-governance-and-causal-control",
+    "qualityClaimAllowed": false
+  },
+  "learnedRepresentation": {
+    "encoder": "frozen-qwen-hidden-state-projection",
+    "projection": "low-rank-linear-then-unit-normalize",
+    "dimensionCandidates": [512, 1024, 2048],
+    "roleVectors": "learned-role-and-slot-basis",
+    "binding": "fft-circular-convolution",
+    "superposition": true,
+    "cleanup": "exact-entry-autoassociative-dictionary",
+    "readers": "all-logical-specialists",
+    "writers": "amos-host-only"
+  },
+  "data": {
+    "allowed": [
+      "amos-owned-rights-cleared-verifier-receipted-transitions",
+      "deterministically-verified-self-play",
+      "rights-cleared-public-development-trajectories-with-evaluation-exclusions",
+      "explicitly-licensed-open-teachers"
+    ],
+    "forbidden": [
+      "private-data-authorized-only-for-organism-policy-simulation",
+      "public-benchmark-trajectories-without-task-level-training-rights",
+      "public-benchmark-tasks-reused-for-evaluation-after-training",
+      "sealed-evaluation-tasks",
+      "provider-output-without-training-rights",
+      "model-self-labeled-success",
+      "unreceipted-board-events"
+    ],
+    "splitUnit": "mission-family",
+    "requireDeidentification": true,
+    "requireCrossSplitDeduplication": true,
+    "requireContaminationScan": true
+  },
+  "objectives": [
+    "next-relevant-board-binding-retrieval",
+    "role-value-unbinding-reconstruction",
+    "verified-evidence-gap-prediction",
+    "next-artifact-class-prediction",
+    "verifier-passing-task-to-specialist-association"
+  ],
+  "hardNegatives": [
+    "negated-fact",
+    "superseded-versus-current-state",
+    "proposal-versus-host-recorded-state",
+    "schema-drift",
+    "misleading-lexical-overlap",
+    "forged-receipt",
+    "missing-receipt"
+  ],
+  "ablation": {
+    "arms": [
+      "deterministic-hrr-v1",
+      "frozen-qwen-embedding-retrieval-no-binding",
+      "learned-projection-no-binding",
+      "learned-projection-role-binding-superposition-cleanup"
+    ],
+    "matchedQwenDigest": true,
+    "matchedOrganismPolicyDigest": true,
+    "matchedInferenceBudget": true,
+    "qualityPrimary": true
+  },
+  "promotion": {
+    "requireUnseenMissionFamilyLift": true,
+    "requireAuthorityAndNegationHardNegativePass": true,
+    "requireExactEntryAttribution": true,
+    "requireThreeSeedReplication": true,
+    "maximumSignificantRegressions": 0,
+    "automaticallyPromotes": false
+  },
+  "factorialFollowup": {
+    "arms": [
+      "base-qwen-direct",
+      "base-qwen-organism",
+      "amos-adapter-qwen-direct",
+      "amos-adapter-qwen-organism"
+    ],
+    "representationDigestPinnedAcrossArms": true,
+    "report": [
+      "representation-main-effect",
+      "organism-main-effect",
+      "adapter-main-effect",
+      "representation-organism-adapter-interactions"
+    ]
+  }
+}

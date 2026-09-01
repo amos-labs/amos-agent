@@ -1,0 +1,78 @@
+{
+  "schema": "amos.swarm-candidate-counterfactual-fixture",
+  "version": 1,
+  "partition": "development-visible-training",
+  "description": "Counterfactual objective-evidence selection over the observed v8 near-candidate and v9 destructive rewrite failure modes. This is regression evidence, not held-out quality evidence.",
+  "cases": [
+    {
+      "id": "v8-near-candidate-beats-scaffold",
+      "incumbent": {
+        "implementationPresent": true,
+        "implementationSyntaxValid": true,
+        "implementationContractPresent": true,
+        "implementationSubstantive": false,
+        "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "solverExecutionPresent": true,
+        "solverSucceeded": false,
+        "selfCheckPresent": false,
+        "selfCheckAllPass": false,
+        "candidateStatusPresent": false,
+        "candidateAllPass": false,
+        "failedCheckCount": 2
+      },
+      "mutation": {
+        "implementationPresent": true,
+        "implementationSyntaxValid": true,
+        "implementationContractPresent": true,
+        "implementationSubstantive": true,
+        "implementationSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "solverExecutionPresent": true,
+        "solverSucceeded": false,
+        "selfCheckPresent": true,
+        "selfCheckAllPass": false,
+        "candidateStatusPresent": false,
+        "candidateAllPass": false,
+        "failedCheckCount": 2
+      },
+      "expected": {
+        "promoted": true,
+        "reason": "objective-evidence-improved"
+      }
+    },
+    {
+      "id": "v9-missing-interface-cannot-destroy-v8-incumbent",
+      "incumbent": {
+        "implementationPresent": true,
+        "implementationSyntaxValid": true,
+        "implementationContractPresent": true,
+        "implementationSubstantive": true,
+        "implementationSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "solverExecutionPresent": true,
+        "solverSucceeded": false,
+        "selfCheckPresent": true,
+        "selfCheckAllPass": false,
+        "candidateStatusPresent": false,
+        "candidateAllPass": false,
+        "failedCheckCount": 2
+      },
+      "mutation": {
+        "implementationPresent": true,
+        "implementationSyntaxValid": true,
+        "implementationContractPresent": false,
+        "implementationSubstantive": false,
+        "implementationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "solverExecutionPresent": true,
+        "solverSucceeded": false,
+        "selfCheckPresent": false,
+        "selfCheckAllPass": false,
+        "candidateStatusPresent": false,
+        "candidateAllPass": false,
+        "failedCheckCount": 2
+      },
+      "expected": {
+        "promoted": false,
+        "reason": "objective-evidence-regression"
+      }
+    }
+  ]
+}
