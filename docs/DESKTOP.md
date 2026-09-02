@@ -69,6 +69,15 @@ task-local unless the user explicitly selects **Keep in private memory** or
 - activity and plain-language proof visibility; and
 - model-independent company operation.
 
+### Mission notifications
+
+Each Mission chooses where its updates go when it is created. The bounded
+`notifications` contract supports in-app, SMS, WhatsApp, and Discord channels
+and is carried through both Mission compilation and creation. Desktop disables
+channels that the user has not configured and verified, links to Settings for
+setup, and never sends to an unavailable channel silently. Mission detail
+shows per-channel delivery status and evidence reported by the Platform.
+
 ### Universal input
 
 - file picker and drag/drop;

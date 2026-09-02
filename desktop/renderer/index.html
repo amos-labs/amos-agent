@@ -1039,6 +1039,61 @@
                   <button id="resetCollaborationProfileButton" class="button ghost" type="button">Reset preferences</button>
                 </div>
               </section>
+              <section id="notificationSettingsCard" class="collaboration-profile-card notification-settings-card" aria-labelledby="notificationSettingsTitle">
+                <span class="eyebrow">MISSION UPDATES</span>
+                <h2 id="notificationSettingsTitle">Notifications</h2>
+                <p>Where Mission updates go by default. Each Mission can still choose its own channels when you create it. A phone number must be verified before AMOS texts it; nothing here changes what a Mission is allowed to do.</p>
+                <div id="notificationSettingsUnavailable" class="notification-settings-note hidden" role="status"></div>
+                <div id="notificationSettingsBody" class="notification-settings-body">
+                  <div class="notification-channel-rows">
+                    <label class="notification-channel-row">
+                      <input id="notificationInAppInput" type="checkbox" checked />
+                      <span class="notification-channel-copy"><strong>In-app</strong><small>Always available in Missions and the attention rail.</small></span>
+                    </label>
+                    <label class="notification-channel-row">
+                      <input id="notificationSmsInput" type="checkbox" />
+                      <span class="notification-channel-copy"><strong>SMS</strong><small id="notificationSmsStatus">Add and verify a phone number below.</small></span>
+                    </label>
+                    <label class="notification-channel-row">
+                      <input id="notificationWhatsappInput" type="checkbox" />
+                      <span class="notification-channel-copy"><strong>WhatsApp</strong><small id="notificationWhatsappNote">Coming with the platform update.</small></span>
+                    </label>
+                    <label class="notification-channel-row">
+                      <input id="notificationDiscordInput" type="checkbox" />
+                      <span class="notification-channel-copy"><strong>Discord</strong><small id="notificationDiscordNote">Coming with the platform update.</small></span>
+                    </label>
+                  </div>
+                  <div class="notification-settings-grid">
+                    <label class="field">
+                      <span>Phone number</span>
+                      <input id="notificationSmsNumberInput" type="tel" maxlength="24" autocomplete="tel" placeholder="+15551234567" />
+                    </label>
+                    <label id="notificationDiscordTargetField" class="field hidden">
+                      <span>Discord target</span>
+                      <input id="notificationDiscordTargetInput" type="text" maxlength="200" autocomplete="off" placeholder="Channel or user AMOS may message" />
+                    </label>
+                    <label class="field">
+                      <span>Quiet hours start</span>
+                      <input id="notificationQuietStartInput" type="time" step="60" />
+                    </label>
+                    <label class="field">
+                      <span>Quiet hours end</span>
+                      <input id="notificationQuietEndInput" type="time" step="60" />
+                    </label>
+                  </div>
+                  <div id="notificationVerifyField" class="notification-verify hidden">
+                    <label class="field">
+                      <span>Verification code</span>
+                      <input id="notificationVerifyCodeInput" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="6-digit code" />
+                    </label>
+                    <button id="notificationVerifyButton" class="button secondary" type="button">Verify phone</button>
+                  </div>
+                  <div id="notificationStatus" class="notification-settings-note hidden" role="status" aria-live="polite"></div>
+                  <div class="collaboration-profile-actions">
+                    <button id="notificationSaveButton" class="button secondary" type="button">Save notifications</button>
+                  </div>
+                </div>
+              </section>
               <div id="settingsError" class="inline-error hidden"></div>
               <div id="intelligenceTestStatus" class="intelligence-test-status hidden" role="status" aria-live="polite">
                 <span id="intelligenceTestIcon" class="intelligence-test-icon" aria-hidden="true">•</span>
@@ -1273,6 +1328,15 @@
             <option value="60">Ask whether to continue after 1 hour</option>
           </select>
         </label>
+        <fieldset id="missionChannelsField" class="connection-field mission-channels-field">
+          <legend>Send Mission updates to</legend>
+          <div id="missionChannelOptions" class="mission-channels" role="group" aria-label="Mission update channels"></div>
+          <label id="missionDiscordTargetField" class="mission-discord-target hidden">
+            <span>Discord target</span>
+            <input id="missionDiscordTargetInput" type="text" maxlength="200" autocomplete="off" placeholder="Verified Discord channel or user" />
+          </label>
+          <small id="missionChannelsNote">In-app updates always appear in Missions. SMS, WhatsApp, and Discord need to be set up in Settings first.</small>
+        </fieldset>
         <p id="missionBoundaryNote" class="project-modal-note">Hosted Missions keep running in AMOS Platform. AMOS will show the exact bounded contract for approval before execution.</p>
         <div id="missionModalError" class="connection-modal-error hidden" role="alert"></div>
         <div class="connection-modal-actions">

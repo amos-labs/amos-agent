@@ -113,6 +113,15 @@ import {
 } from "./relationshipProfile.js";
 import { profileOwnerScope } from "./relationshipProfileStore.js";
 import {
+  assertMissionChannelsConfigured,
+  defaultMissionChannels,
+  emptyNotificationPreferences,
+  hasSavedNotificationPreference,
+  MISSION_CHANNEL_LABELS,
+  missionChannelsLabel,
+  normalizeMissionNotificationChoice
+} from "./missionNotifications.js";
+import {
   portableScratchpadFromTask,
   scratchpadHasWork,
   shouldReplaceScratchpad
@@ -230,6 +239,9 @@ export class DesktopController {
     // disappears from activeRuns when it ends, so the Missions page correlates its skeleton
     // card with the create_mission result through this bounded record instead of a timer.
     this.missionCompileOutcomes = new Map();
+    // This user's saved Mission notification defaults (get_notification_preferences). Missing or
+    // unsupported means "not configured": external channels stay disabled until Settings sets them up.
+    this.notificationPreferences = emptyNotificationPreferences();
     this.userDataPath = userDataPath;
     this.taskEpisodeStore = taskEpisodeStore || new DesktopTaskEpisodeStore({
       rootPath: join(userDataPath, "learning-episodes")
@@ -442,6 +454,7 @@ export class DesktopController {
       conversationCapabilities: tasks.activeForkCapability,
       projects: structuredClone(this.projects),
       missions: structuredClone(this.missions || emptyMissionsState()),
+      notificationPreferences: structuredClone(this.notificationPreferences || emptyNotificationPreferences()),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -1562,6 +1575,7 @@ export class DesktopController {
       this.tasks = { supported: false, tasks: [], contract: null };
       this.projects = emptyProjectsState();
       this.missions = emptyMissionsState();
+      this.notificationPreferences = emptyNotificationPreferences();
       this.remoteStatus = {
         syncing: false,
         lastSyncedAt: this.remoteStatus.lastSyncedAt,
@@ -1596,6 +1610,7 @@ export class DesktopController {
       this.tasks = { supported: false, tasks: [], contract: null };
       this.projects = emptyProjectsState();
       this.missions = emptyMissionsState();
+      this.notificationPreferences = emptyNotificationPreferences();
       this.companies = { currentTenantId: null, tenants: [] };
       this.workingContinuity = null;
       this.onlineRelationshipProfile = null;
@@ -1625,7 +1640,8 @@ export class DesktopController {
       automationTemplatesResult,
       tasksResult,
       projectsResult,
-      missionsResult
+      missionsResult,
+      notificationPreferencesResult
     ] = await Promise.allSettled([
       remote.identity(),
       remote.approvals(),
@@ -1640,7 +1656,8 @@ export class DesktopController {
       remote.automationTemplateCatalog(),
       remote.tasksLibrary(),
       remote.projectsLibrary(),
-      remote.missionsLibrary()
+      remote.missionsLibrary(),
+      remote.getNotificationPreferences()
     ]);
 
     const errors = [];
@@ -1814,6 +1831,16 @@ export class DesktopController {
         collaborationProfileResult.reason?.message
           || "Could not load collaboration preferences"
       );
+    }
+
+    if (notificationPreferencesResult.status === "fulfilled") {
+      this.notificationPreferences = notificationPreferencesResult.value;
+    } else {
+      // A failed read must never look like a verified channel: fall back to "not configured".
+      this.notificationPreferences = {
+        ...emptyNotificationPreferences(),
+        error: String(notificationPreferencesResult.reason?.message || "Could not load notification preferences")
+      };
     }
 
     this.remoteStatus = {
@@ -2371,7 +2398,8 @@ export class DesktopController {
       missionCreation: input?.missionCreation === true,
       missionCreationType: input?.missionCreationType === "optimization"
         ? "optimization"
-        : "finite"
+        : "finite",
+      missionNotifications: normalizeMissionNotificationChoice(input?.missionNotifications)
     }, async () => {
       if (input?.taskRecordId) this.activeTaskRecordId = input.taskRecordId;
       if (task?.contextKey) this.activeContextKey = task.contextKey;
@@ -4190,6 +4218,16 @@ export class DesktopController {
       throw new Error("Connect your AMOS company before creating a hosted Mission");
     }
     const missionCreationType = input.missionKind === "optimization" ? "optimization" : "finite";
+    // Where this Mission's updates go. Absent a choice the user's saved defaults apply; a channel
+    // the user has not set up and verified is refused here, never silently sent.
+    const notifications = missionCreationType === "finite"
+      ? assertMissionChannelsConfigured(
+        input.notifications === undefined || input.notifications === null
+          ? { channels: defaultMissionChannels(this.notificationPreferences) }
+          : input.notifications,
+        this.notificationPreferences
+      )
+      : null;
     const builderTitle = missionCreationType === "optimization"
       ? "Create Optimization Mission"
       : "Create Mission";
@@ -4214,7 +4252,8 @@ export class DesktopController {
       wait: false,
       isolate: true,
       missionCreation: true,
-      missionCreationType
+      missionCreationType,
+      missionNotifications: notifications
     });
     this.record("mission", `Compiling hosted Mission: ${conversationTitle(objective)}`, {
       project_id: projectId || null,
@@ -4222,6 +4261,7 @@ export class DesktopController {
       run_id: started.runId || null,
       execution_location: "hosted",
       mission_kind: missionCreationType,
+      notification_channels: notifications?.channels || null,
       conversation_opened: false
     });
     return {
@@ -4230,6 +4270,7 @@ export class DesktopController {
       missionKind: missionCreationType,
       objective,
       projectId: projectId || "",
+      notifications,
       taskId: taskRecordId,
       builderTaskId: taskRecordId,
       runId: started.runId,
@@ -4504,6 +4545,88 @@ export class DesktopController {
     if (url.protocol !== "https:") throw new Error("AMOS blocked an invalid Mission resume link");
     await this.openBrowser(url.href);
     return { opened: true, missionId: mission.id };
+  }
+
+  // ---- Mission notification channels ----
+
+  async getNotificationPreferences() {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "reading notification preferences");
+    this.notificationPreferences = await remote.getNotificationPreferences();
+    await this.sendRemoteState();
+    return structuredClone(this.notificationPreferences);
+  }
+
+  /**
+   * Save this user's defaults. A new phone number comes back unverified with a pending code; the
+   * renderer then collects the code for verifyNotificationPhone. Nothing here changes Mission authority.
+   */
+  async setNotificationPreferences(input = {}) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "saving notification preferences");
+    const result = await remote.setNotificationPreferences(input);
+    this.notificationPreferences = result.preferences;
+    this.record("mission", "Notification preferences saved", {
+      channels: result.preferences.channels,
+      sms_verification: result.verification?.sms_verification || null
+    });
+    await this.sendRemoteState();
+    return {
+      preferences: structuredClone(this.notificationPreferences),
+      verification: result.verification
+    };
+  }
+
+  async verifyNotificationPhone(code) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "verifying your phone number");
+    const result = await remote.verifyNotificationPhone(code);
+    this.notificationPreferences = result.preferences;
+    this.record("mission", result.verified ? "Notification phone number verified" : "Notification phone verification failed");
+    await this.sendRemoteState();
+    return { verified: result.verified, preferences: structuredClone(this.notificationPreferences) };
+  }
+
+  /** Per-channel delivery evidence for one Mission (list_mission_notifications). */
+  async getMissionNotifications(id) {
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "loading this Mission's notification delivery");
+    const result = await remote.missionNotifications(id);
+    const missions = Array.isArray(this.missions?.missions) ? this.missions.missions : [];
+    if (result.supported) {
+      this.missions = {
+        ...this.missions,
+        missions: missions.map((mission) => mission.id === id
+          ? { ...mission, notificationDelivery: result.delivery }
+          : mission)
+      };
+    }
+    return structuredClone(result);
+  }
+
+  /**
+   * Change where an existing Mission's updates go. The chosen channels must be set up for this
+   * user; a Platform without the verb yet surfaces as a plain "not available yet" error (code
+   * "unsupported") rather than a silent no-op.
+   */
+  async setMissionNotificationChannels(id, notifications) {
+    const settings = await this.settingsStore.read();
+    const choice = assertMissionChannelsConfigured(notifications, this.notificationPreferences);
+    const remote = await this.personalRemote(settings, "changing this Mission's channels");
+    const result = await remote.setMissionNotificationChannels(id, choice);
+    const missions = Array.isArray(this.missions?.missions) ? this.missions.missions : [];
+    this.missions = {
+      ...this.missions,
+      missions: missions.map((mission) => mission.id === id
+        ? { ...mission, notifications: result.notifications }
+        : mission)
+    };
+    this.record("mission", `Mission channels changed: ${missionChannelsLabel(result.notifications)}`, {
+      mission_id: id,
+      notification_channels: result.notifications.channels
+    });
+    await this.sendRemoteState();
+    return { ...structuredClone(result), missions: structuredClone(this.missions) };
   }
 
   async startRunSupervision(settings, abortController) {
@@ -5902,7 +6025,14 @@ export class DesktopController {
                   this.runManager.current()?.missionCreation === true ||
                   isMissionBuilderTask(taskRecord),
                 taskRecord?.projectId,
-                this.runManager.current()?.missionCreationType || missionBuilderKind(taskRecord)
+                this.runManager.current()?.missionCreationType || missionBuilderKind(taskRecord),
+                this.runManager.current()?.missionNotifications || null
+              )}${missionNotificationChannelPrompt(
+                !isOffline && !isPersonal && !credentials?.demo &&
+                  !(this.activeTask?.missionCreation === true ||
+                    this.runManager.current()?.missionCreation === true ||
+                    isMissionBuilderTask(taskRecord)),
+                this.notificationPreferences
               )}${await this.compiledRelationshipProfilePrompt(settings)}${contextOnly
           ? "\n\nThis task is context-only. No local workspace is granted, and local shell, file, code, Git, and document-generation tools are unavailable."
           : ""}`,
@@ -5935,8 +6065,11 @@ export class DesktopController {
       (this.runManager.current()?.missionCreationType || missionBuilderKind(taskRecord)) !== "optimization"
     ) {
       // The Missions-page builder only compiles. The user starts the Mission from the Run
-      // Contract card, so every create_mission the model issues here is forced to a dry run.
-      this.runtime.runtime.loop.amosClient = missionCompileAmosClient(this.runtime.runtime.loop.amosClient);
+      // Contract card, so every create_mission the model issues here is forced to a dry run and
+      // carries the channel choice the user made on the form.
+      this.runtime.runtime.loop.amosClient = missionCompileAmosClient(this.runtime.runtime.loop.amosClient, {
+        notifications: this.runManager.current()?.missionNotifications || null
+      });
     }
     this.bindConversationScratchpad(this.runtime, taskRecord);
     await this.hydrateSessionContinuity(settings, requestedBoundary, this.runtime);
@@ -7572,6 +7705,7 @@ export class DesktopController {
         : {}),
       projects: structuredClone(this.projects),
       missions: structuredClone(this.missions || emptyMissionsState()),
+      notificationPreferences: structuredClone(this.notificationPreferences || emptyNotificationPreferences()),
       companies: {
         currentTenantId: this.companies.currentTenantId,
         tenants: structuredClone(this.companies.tenants)
@@ -8787,7 +8921,29 @@ function autonomousGoalPrompt(enabled) {
   ].join("\n");
 }
 
-function hostedMissionCreationPrompt(enabled, projectId = "", kind = "finite") {
+/**
+ * One line for chat-created Missions: where updates go. With a saved preference the model passes
+ * it; without one it asks the user once before create_mission. Missions-page compiles skip this
+ * because the form already chose, and Desktop injects that choice into create_mission itself.
+ */
+function missionNotificationChannelPrompt(enabled, preferences) {
+  if (!enabled) return "";
+  if (hasSavedNotificationPreference(preferences)) {
+    const channels = defaultMissionChannels(preferences);
+    return [
+      "",
+      `Mission updates: unless the user names a channel, pass notifications: { channels: ${JSON.stringify(channels)} } (${channels.map((channel) => MISSION_CHANNEL_LABELS[channel]).join(", ")}, the user's saved preference) in create_mission. Only in_app, sms, whatsapp, and discord exist; a channel the user has not set up and verified in Settings cannot be used, so say so instead of sending it.`,
+      ""
+    ].join("\n");
+  }
+  return [
+    "",
+    "Mission updates: this user has no saved notification preference. Before the first create_mission of a conversation, if they have not said where updates should go, ask once in plain words: \"Where do you want updates for this Mission?\" (In-app, SMS, WhatsApp, or Discord), then pass their answer as notifications: { channels: [...] } using in_app, sms, whatsapp, discord. Do not ask again in the same conversation. A channel they have not set up and verified in Settings cannot be used; say so instead of sending it.",
+    ""
+  ].join("\n");
+}
+
+function hostedMissionCreationPrompt(enabled, projectId = "", kind = "finite", notifications = null) {
   if (!enabled) return "";
   if (kind === "optimization") {
     return [
@@ -8814,6 +8970,9 @@ function hostedMissionCreationPrompt(enabled, projectId = "", kind = "finite") {
     projectId
       ? `- Associate the Mission with this exact user-private Project context using project_id: ${projectId}`
       : "- Do not associate a Project unless the user selected one.",
+    ...(normalizeMissionNotificationChoice(notifications)
+      ? [`- The user chose where Mission updates go on the form: ${missionChannelsLabel(notifications)}. Pass notifications: ${JSON.stringify(normalizeMissionNotificationChoice(notifications))} in create_mission; Desktop enforces it. Do not ask about channels.`]
+      : []),
     "- Never tell the user the Mission exists unless create_mission returned a pending approval or mission_id; a compiled contract has not started.",
     ""
   ].join("\n");
@@ -8998,6 +9157,7 @@ function compiledRunContract(result) {
     boundResources: boundedStringList(pick("bound_resources"), (entry) =>
       typeof entry === "string" ? entry : entry?.name || entry?.id || entry?.type || ""
     ),
+    notifications: normalizeMissionNotificationChoice(pick("notifications", "notification_channels")),
     expiresAt: String(pick("expires_at") || "").slice(0, 64)
   };
 }
@@ -9055,8 +9215,11 @@ function missionLimitEdits(limits) {
  * The Missions page owns the real call (startCompiledMission); a server without dry_run support
  * ignores the flag and behaves exactly as before.
  */
-export function missionCompileAmosClient(client) {
+export function missionCompileAmosClient(client, { notifications = null } = {}) {
   if (!client || typeof client.callTool !== "function") return client;
+  // The user's channel choice from the form rides on every create_mission (dry run included) so
+  // the Platform persists it with the Mission; the model cannot drop or replace it.
+  const choice = normalizeMissionNotificationChoice(notifications);
   return new Proxy(client, {
     get(target, property, receiver) {
       if (property === "callTool") {
@@ -9066,6 +9229,7 @@ export function missionCompileAmosClient(client) {
           if (isMissionCreationTool(tool, "finite")) {
             nextArgs = { ...(args && typeof args === "object" ? args : {}), dry_run: true };
             delete nextArgs.confirmation_token;
+            if (choice) nextArgs.notifications = structuredClone(choice);
           } else if (
             tool === "call_engine_tool" &&
             isMissionCreationTool(args?.tool, "finite") &&
@@ -9073,6 +9237,7 @@ export function missionCompileAmosClient(client) {
           ) {
             const inner = { ...(args.arguments && typeof args.arguments === "object" ? args.arguments : {}), dry_run: true };
             delete inner.confirmation_token;
+            if (choice) inner.notifications = structuredClone(choice);
             nextArgs = { ...args, arguments: inner };
           }
           return target.callTool(name, nextArgs, options);

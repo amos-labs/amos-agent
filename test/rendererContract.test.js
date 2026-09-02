@@ -1182,8 +1182,8 @@ test("a Missions-page compile dry-runs create_mission and the user starts the co
 
   // Dry run first: the compile lane's AMOS client forces dry_run on every create_mission, and
   // the builder prompt says so.
-  assert.match(controller, /this\.runtime\.runtime\.loop\.amosClient = missionCompileAmosClient\(this\.runtime\.runtime\.loop\.amosClient\)/);
-  assert.match(controller, /export function missionCompileAmosClient\(client\)/);
+  assert.match(controller, /this\.runtime\.runtime\.loop\.amosClient = missionCompileAmosClient\(this\.runtime\.runtime\.loop\.amosClient, \{\s*notifications: this\.runManager\.current\(\)\?\.missionNotifications \|\| null\s*\}\)/);
+  assert.match(controller, /export function missionCompileAmosClient\(client, \{ notifications = null \} = \{\}\)/);
   assert.match(controller, /nextArgs = \{ \.\.\.\(args && typeof args === "object" \? args : \{\}\), dry_run: true \};/);
   assert.match(controller, /Call it with dry_run: true; Desktop forces the dry run here\./);
   assert.match(controller, /if \(result\.status === "compiled" \|\| result\.status === "compiled_awaiting_confirmation"\) \{/);
@@ -1344,4 +1344,195 @@ test("Mission detail shows status reason, current step, effective limits, open q
   assert.match(card, /controlHostedMission\(mission, "cancel", cancel\)/);
   assert.match(card, /answer\.addEventListener\("click", \(\) => focusMission\(mission\.id\)\)/);
   assert.doesNotMatch(card, /showView\("decisions"\)/);
+});
+
+test("Mission creation chooses where updates go and passes notifications through dry-run and Start", async () => {
+  const [javascript, html, css, controller, remoteState, helpers, main, preload] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/missionNotifications.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8")
+  ]);
+
+  // The platform vocabulary is exact: in_app | sms | whatsapp | discord, plus an optional discord_target.
+  assert.match(helpers, /export const MISSION_NOTIFICATION_CHANNELS = Object\.freeze\(\["in_app", "sms", "whatsapp", "discord"\]\);/);
+  assert.match(helpers, /return channels\.includes\("discord"\) && target\s*\? \{ channels, discord_target: target \}\s*: \{ channels \};/);
+
+  // The form: a "Send Mission updates to" multi-select whose defaults come from the saved preferences.
+  assert.match(html, /<fieldset id="missionChannelsField" class="connection-field mission-channels-field">\s*<legend>Send Mission updates to<\/legend>/);
+  assert.match(html, /<div id="missionChannelOptions" class="mission-channels"/);
+  assert.match(html, /<input id="missionDiscordTargetInput"/);
+  const open = javascript.match(/function openMissionModal\(project = null\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(open, /renderMissionChannelChoices\(defaultMissionChannels\(state\?\.notificationPreferences\)\)/);
+  const choices = javascript.match(/function renderMissionChannelChoices\([\s\S]*?\n\}\n/)?.[0];
+  assert.match(choices, /for \(const channel of MISSION_NOTIFICATION_CHANNELS\)/);
+  // An unconfigured channel is disabled with a "Set up in Settings" link, never silently sent.
+  const option = javascript.match(/function missionChannelOption\(channel[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(option, "missionChannelOption must exist");
+  assert.match(option, /const availability = channelAvailability\(channel, preferences\);/);
+  assert.match(option, /input\.disabled = !availability\.configured;/);
+  assert.match(option, /input\.checked = availability\.configured && checked;/);
+  assert.match(option, /if \(availability\.fix === "setup"\) copy\.append\(missionChannelSetupLink\(\)\);/);
+  assert.match(javascript, /link\.textContent = "Set up in Settings";/);
+  assert.match(javascript, /elements\.missionChannelsField\.classList\.toggle\("hidden", local \|\| optimization\);/);
+  assert.match(css, /\.mission-channel-option\.disabled \{/);
+  assert.match(css, /\.mission-channel-setup-link \{/);
+
+  // Submit sends `notifications` for hosted finite Missions and refuses an empty choice.
+  const submit = javascript.match(/async function submitMission\(event\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(submit, /const notifications = hostedFinite \? missionChannelChoiceFromForm\(\) : null;/);
+  assert.match(submit, /Choose at least one place to send Mission updates\./);
+  assert.match(submit, /\.\.\.\(notifications \? \{ notifications \} : \{\}\)/);
+  const fromForm = javascript.match(/function missionChannelChoiceFromForm\(\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(fromForm, /channels: chosenChannelsIn\(elements\.missionChannelOptions\),\s*discord_target: elements\.missionDiscordTargetInput\.value\.trim\(\)/);
+  assert.match(javascript, /notifications: normalizeMissionNotificationChoice\(response\.notifications\),/);
+
+  // Controller: the choice is validated against preferences, rides the compile lane, and Desktop
+  // injects it into every create_mission the model issues (the dry run), so the captured spec —
+  // and therefore Start — carries it.
+  const hosted = controller.match(/async startHostedMission\(input = \{\}\) \{[\s\S]*?\n  \}\n/)?.[0];
+  assert.ok(hosted);
+  assert.match(hosted, /assertMissionChannelsConfigured\(\s*input\.notifications === undefined \|\| input\.notifications === null\s*\? \{ channels: defaultMissionChannels\(this\.notificationPreferences\) \}\s*: input\.notifications,\s*this\.notificationPreferences\s*\)/);
+  assert.match(hosted, /missionNotifications: notifications\s*\}\);/);
+  assert.match(hosted, /notifications,\s*taskId: taskRecordId,/);
+  assert.match(controller, /missionNotifications: normalizeMissionNotificationChoice\(input\?\.missionNotifications\)/);
+  assert.match(controller, /if \(choice\) nextArgs\.notifications = structuredClone\(choice\);/);
+  assert.match(controller, /if \(choice\) inner\.notifications = structuredClone\(choice\);/);
+  assert.match(controller, /if \(key === "dry_run" \|\| key === "confirmation_token" \|\| value === undefined\) continue;/);
+  assert.match(remoteState, /const args = \{ \.\.\.missionSpecArgs\(spec\), dry_run: true \};/);
+  assert.match(controller, /notifications: normalizeMissionNotificationChoice\(pick\("notifications", "notification_channels"\)\),/);
+
+  // Run Contract card shows "Updates: In-app, SMS".
+  const contractCard = javascript.match(/function missionRunContractCard\(compile, outcome\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(contractCard, /outcome\?\.spec\?\.notifications \|\| contract\.notifications \|\| compile\.notifications/);
+  assert.match(contractCard, /if \(updates\) addRow\("Updates", updates\);/);
+  assert.match(javascript, /if \(updates\) rows\.push\(\["Updates", updates\]\);/);
+  assert.match(helpers, /return normalized\.channels\.map\(\(channel\) => MISSION_CHANNEL_LABELS\[channel\] \|\| channel\)\.join\(", "\);/);
+
+  // Preferences ride on remote state; failures read as "not configured", never as verified.
+  assert.match(controller, /remote\.getNotificationPreferences\(\)\s*\]\);/);
+  assert.match(controller, /notificationPreferences: structuredClone\(this\.notificationPreferences \|\| emptyNotificationPreferences\(\)\)/);
+  assert.match(controller, /this\.notificationPreferences = \{\s*\.\.\.emptyNotificationPreferences\(\),\s*error:/);
+
+  // Chat-origin Missions: the compact receipt gains "Updates: …" and the model asks once when the
+  // user has no saved preference. No extra UI for that path.
+  const receipt = javascript.match(/function missionCreationReceipt\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(receipt, /const channels = missionChannelsLabel\(approval\.args\?\.notifications\);/);
+  assert.match(receipt, /updates\.textContent = `Updates: \$\{channels\}`;/);
+  assert.match(controller, /function missionNotificationChannelPrompt\(enabled, preferences\)/);
+  assert.match(controller, /if \(hasSavedNotificationPreference\(preferences\)\) \{/);
+  assert.match(controller, /ask once in plain words: \\"Where do you want updates for this Mission\?\\" \(In-app, SMS, WhatsApp, or Discord\)/);
+  assert.match(controller, /Do not ask again in the same conversation\./);
+  assert.match(controller, /\}\$\{missionNotificationChannelPrompt\(\s*!isOffline && !isPersonal && !credentials\?\.demo &&/);
+  assert.match(controller, /The user chose where Mission updates go on the form: \$\{missionChannelsLabel\(notifications\)\}/);
+
+  // IPC surface.
+  assert.match(main, /ipcMain\.handle\("desktop:set-mission-notification-channels", \(_event, input\) =>\s*controller\.setMissionNotificationChannels\(input\?\.id, input\?\.notifications\)/);
+  assert.match(main, /ipcMain\.handle\("desktop:get-mission-notifications", \(_event, id\) =>\s*controller\.getMissionNotifications\(id\)/);
+  assert.match(preload, /setMissionNotificationChannels: \(id, notifications\) =>\s*ipcRenderer\.invoke\("desktop:set-mission-notification-channels", \{ id, notifications \}\)/);
+  assert.match(preload, /getMissionNotifications: \(id\) => ipcRenderer\.invoke\("desktop:get-mission-notifications", id\)/);
+});
+
+test("Mission detail renders per-channel delivery state and a guarded Change channels action", async () => {
+  const [javascript, remoteState, controller] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
+  ]);
+  const detail = javascript.match(/function renderMissionActivity\(mission, container\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(detail, /container\.append\(\.\.\.missionNotificationSection\(mission, container\)\);/);
+  const section = javascript.match(/function missionNotificationSection\(mission, container\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(section, "missionNotificationSection must exist");
+  assert.match(section, /heading\.textContent = "Mission updates";/);
+  assert.match(section, /const channels = missionChannelsLabel\(mission\.notifications\);/);
+  assert.match(section, /\? `Updates: \$\{channels\}`/);
+  assert.match(section, /item\.className = `mission-delivery-row \$\{String\(row\.status \|\| "pending"\)\.toLowerCase\(\)\}`;/);
+  assert.match(section, /meta\.textContent = missionDeliveryStatusLabel\(row\);/);
+  assert.match(section, /Delivery evidence is not available on this AMOS company yet\./);
+  assert.match(section, /actionButton\("Change channels", "ghost"\)/);
+  assert.match(section, /\["authorized", "running", "waiting_decision", "paused"\]\.includes\(mission\.status\)/);
+  // status, delivered_at, and last_error are all rendered.
+  const status = javascript.match(/function missionDeliveryStatusLabel\(row\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(status, /const status = String\(row\.status \|\| "pending"\)\.toLowerCase\(\);/);
+  assert.match(status, /relativeTime\(row\.deliveredAt\)/);
+  assert.match(status, /Failed\$\{row\.lastError \? ` · \$\{row\.lastError\}` : ""\}/);
+  // Detail loads the Mission and its delivery evidence together.
+  const toggle = javascript.match(/async function toggleMissionDetail\(mission, button, panel\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(toggle, /api\.getMission\(mission\.id\),\s*api\.getMissionNotifications\(mission\.id\)\.catch\(\(\) => null\)/);
+  assert.match(toggle, /notificationDeliverySupported: notifications \? notifications\.supported === true : null/);
+  // Change channels reuses the same option renderer (disabled when unconfigured) and degrades to a toast
+  // while the Platform verb is still being added.
+  const editor = javascript.match(/function renderMissionChannelEditor\(editor, mission, container\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(editor, /missionChannelOption\(channel, \{\s*checked: chosen\.has\(channel\),\s*preferences,/);
+  const change = javascript.match(/async function changeMissionChannels\(mission, editor, button, container\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(change);
+  assert.match(change, /await api\.setMissionNotificationChannels\(mission\.id, notifications\)/);
+  assert.match(change, /error\?\.code === "unsupported" \|\| \/not available yet\/i\.test\(String\(error\?\.message \|\| ""\)\)/);
+  assert.match(change, /Changing a Mission's channels is not available yet\. It arrives with the platform update/);
+  assert.doesNotMatch(change, /showView\("operator"\)|addMessage\(/);
+  // Remote verbs: list_mission_notifications (#727) and set_mission_notification_channels (guarded).
+  assert.match(remoteState, /"list_mission_notifications",\s*\{ mission_id: requiredUuid\(id, "Mission"\) \}/);
+  assert.match(remoteState, /delivery: normalizeMissionNotificationDelivery\(payload\?\.notification_delivery\)/);
+  assert.match(remoteState, /"set_mission_notification_channels",\s*\{ mission_id: requiredUuid\(id, "Mission"\), notifications: choice \}/);
+  assert.match(remoteState, /unsupported\.code = "unsupported";/);
+  assert.match(remoteState, /notifications: normalizeMissionNotificationChoice\(\s*value\.notifications \?\? value\.notification_channels \?\? contract\.notifications \?\? null\s*\)/);
+  const setChannels = controller.match(/async setMissionNotificationChannels\(id, notifications\) \{[\s\S]*?\n  \}\n/)?.[0];
+  assert.match(setChannels, /const choice = assertMissionChannelsConfigured\(notifications, this\.notificationPreferences\);/);
+  assert.match(setChannels, /await remote\.setMissionNotificationChannels\(id, choice\)/);
+});
+
+test("Settings has a Notifications section with phone verification, quiet hours, and channel toggles", async () => {
+  const [javascript, html, controller, remoteState, main, preload] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8")
+  ]);
+  assert.match(html, /<section id="notificationSettingsCard" class="collaboration-profile-card notification-settings-card"/);
+  for (const id of [
+    "notificationInAppInput", "notificationSmsInput", "notificationWhatsappInput", "notificationDiscordInput",
+    "notificationSmsNumberInput", "notificationVerifyCodeInput", "notificationVerifyButton",
+    "notificationQuietStartInput", "notificationQuietEndInput", "notificationSaveButton"
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`), `${id} must exist in the Settings HTML`);
+  }
+  // WhatsApp and Discord rows are present now and marked as coming until the server reports them.
+  assert.match(html, /<small id="notificationWhatsappNote">Coming with the platform update\.<\/small>/);
+  assert.match(html, /<small id="notificationDiscordNote">Coming with the platform update\.<\/small>/);
+  const render = javascript.match(/function renderNotificationSettings\(\{ force = false \} = \{\}\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(render, "renderNotificationSettings must exist");
+  assert.match(render, /elements\.notificationWhatsappInput\.disabled = !whatsapp;/);
+  assert.match(render, /elements\.notificationDiscordInput\.disabled = !discord;/);
+  assert.match(render, /: "Coming with the platform update\.";/);
+  assert.match(render, /elements\.notificationVerifyField\.classList\.toggle\("hidden", !\(prefs\.smsNumber && !prefs\.smsNumberVerified\)\);/);
+  assert.match(render, /is waiting for its verification code\. Nothing is texted until it is verified\./);
+  // Save sends only what changed; a new number triggers the code flow; verification confirms it.
+  const save = javascript.match(/async function saveNotificationSettings\(\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(save);
+  assert.match(save, /if \(number !== \(prefs\.smsNumber \|\| ""\)\) payload\.smsNumber = number;/);
+  assert.match(save, /quietHours: start && end \? \{ start, end \} : null,/);
+  assert.match(save, /utcOffsetMinutes: -new Date\(\)\.getTimezoneOffset\(\),/);
+  assert.match(save, /await api\.setNotificationPreferences\(payload\)/);
+  assert.match(save, /We texted a 6-digit code to \$\{saved\.smsNumber\}/);
+  const verify = javascript.match(/async function verifyNotificationPhone\(\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(verify);
+  assert.match(verify, /if \(!\/\^\\d\{6\}\$\/\.test\(code\)\)/);
+  assert.match(verify, /await api\.verifyNotificationPhone\(code\)/);
+  assert.match(javascript, /elements\.notificationSaveButton\.addEventListener\("click", saveNotificationSettings\);/);
+  assert.match(javascript, /elements\.notificationVerifyButton\.addEventListener\("click", verifyNotificationPhone\);/);
+  // Controller and remote verbs from platform PR #727.
+  assert.match(controller, /async setNotificationPreferences\(input = \{\}\) \{/);
+  assert.match(controller, /async verifyNotificationPhone\(code\) \{/);
+  assert.match(remoteState, /this\.mcp\.callTool\("get_notification_preferences", \{\}, \{ signal \}\)/);
+  assert.match(remoteState, /this\.mcp\.callTool\("set_notification_preferences", args, \{ signal \}\)/);
+  assert.match(remoteState, /this\.mcp\.callTool\("verify_notification_phone", \{ code: digits \}, \{ signal \}\)/);
+  assert.match(main, /ipcMain\.handle\("desktop:verify-notification-phone", \(_event, input\) =>\s*controller\.verifyNotificationPhone\(input\?\.code\)/);
+  assert.match(preload, /verifyNotificationPhone: \(code\) =>\s*ipcRenderer\.invoke\("desktop:verify-notification-phone", \{ code \}\)/);
+  assert.match(preload, /setNotificationPreferences: \(input\) =>\s*ipcRenderer\.invoke\("desktop:set-notification-preferences", input\)/);
 });

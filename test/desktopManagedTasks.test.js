@@ -9,6 +9,12 @@ import {
   missionCompileAmosClient,
   missionCreationOutcome
 } from "../src/desktop/controller.js";
+import {
+  channelAvailability,
+  defaultMissionChannels,
+  emptyNotificationPreferences,
+  normalizeNotificationPreferences
+} from "../src/desktop/missionNotifications.js";
 import { continuityScope, SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
 import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
 
@@ -928,4 +934,214 @@ test("a local Mission accepts optional Project context and requires an outcome",
     }),
     /Resume the Project/
   );
+});
+
+// ---- Per-Mission notification channels ----
+
+function verifiedSmsPreferences() {
+  return normalizeNotificationPreferences({
+    preferences: {
+      channels: { desktop_inapp: true, sms: true, secure_mobile_web: false },
+      sms_number: "+15551234567",
+      sms_number_verified: true,
+      quiet_hours: null,
+      timezone: "America/Chicago",
+      utc_offset_minutes: -300
+    },
+    channels_available: ["desktop_inapp", "sms", "secure_mobile_web"]
+  });
+}
+
+test("the Missions-page form's channel choice rides the compile lane, every dry-run create_mission, and Start", async () => {
+  const { controller } = await hostedMissionController("amos-mission-channels-");
+  controller.notificationPreferences = verifiedSmsPreferences();
+  const seen = [];
+  controller.executeRun = async () => {
+    const lane = controller.runManager.current();
+    assert.deepEqual(lane.missionNotifications, { channels: ["in_app", "sms"] });
+    // The compile lane wraps its AMOS client exactly like ensureRuntime does; the model's own
+    // create_mission args never carry the choice, Desktop injects it.
+    const client = missionCompileAmosClient(
+      { async callTool(name, args) { seen.push({ name, args }); return compiledDryRun; } },
+      { notifications: lane.missionNotifications }
+    );
+    const result = await client.callTool("amos_create_mission", { ...missionSpec, notifications: { channels: ["discord"] } });
+    controller.observeMissionCreationEvent({ type: "tool_end", name: "amos_create_mission", result });
+    controller.attachMissionCompileSpec({ name: "amos_create_mission", args: seen[0].args, result, failed: false });
+    return { answer: "Compiled", taskEventId: "run:mission" };
+  };
+  const started = await controller.startHostedMission({
+    objective: "Build 500 qualified VAR/MSP prospects",
+    notifications: { channels: ["in_app", "sms"] }
+  });
+  assert.deepEqual(started.notifications, { channels: ["in_app", "sms"] });
+  await settled();
+
+  assert.equal(seen.length, 1);
+  assert.deepEqual(seen[0].args, { ...missionSpec, dry_run: true, notifications: { channels: ["in_app", "sms"] } });
+  const [record] = controller.missionCompileState();
+  assert.equal(record.kind, "compiled");
+  assert.deepEqual(record.spec, { ...missionSpec, notifications: { channels: ["in_app", "sms"] } });
+
+  // Start passes the same spec, so create_mission receives notifications unchanged.
+  const calls = [];
+  controller.personalRemote = async () => ({
+    async compileMission() { throw new Error("no re-compile expected"); },
+    async createMission(spec, token) {
+      calls.push({ spec, token });
+      return { ok: true, mission_id: "66666666-6666-4666-8666-666666666666" };
+    }
+  });
+  controller.refreshMissions = async () => ({ supported: true, missions: [], count: 0 });
+  const response = await controller.startCompiledMission({ builderTaskId: started.builderTaskId, limits: {} });
+  assert.equal(response.outcome.kind, "authorized");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].spec.notifications, { channels: ["in_app", "sms"] });
+  assert.equal(calls[0].token, "tok-1");
+});
+
+test("a channel the user has not set up is refused before any compile starts, pointing at Settings", async () => {
+  const { controller } = await hostedMissionController("amos-mission-channels-unconfigured-");
+  controller.notificationPreferences = normalizeNotificationPreferences({
+    preferences: { channels: { desktop_inapp: true, sms: true }, sms_number: "+15551234567", sms_number_verified: false },
+    channels_available: ["desktop_inapp", "sms"]
+  });
+  let runs = 0;
+  controller.executeRun = async () => { runs += 1; return { answer: "", taskEventId: "run:x" }; };
+  await assert.rejects(
+    controller.startHostedMission({ objective: "Build prospects", notifications: { channels: ["in_app", "sms"] } }),
+    /SMS: Verify your phone number\. Set it up in Settings → Notifications/
+  );
+  await assert.rejects(
+    controller.startHostedMission({ objective: "Build prospects", notifications: { channels: ["discord"] } }),
+    /Discord: Coming with the platform update\./
+  );
+  await assert.rejects(
+    controller.startHostedMission({ objective: "Build prospects", notifications: { channels: ["fax"] } }),
+    /Choose at least one place to send Mission updates/
+  );
+  assert.equal(runs, 0, "no compile run may start for an unusable channel choice");
+});
+
+test("without an explicit choice a hosted Mission takes the user's saved defaults, and In-app alone without any", async () => {
+  const { controller } = await hostedMissionController("amos-mission-channels-defaults-");
+  controller.executeRun = async () => ({ answer: "", taskEventId: "run:x" });
+  controller.notificationPreferences = verifiedSmsPreferences();
+  const withDefaults = await controller.startHostedMission({ objective: "Build prospects" });
+  assert.deepEqual(withDefaults.notifications, { channels: ["in_app", "sms"] });
+  await settled();
+
+  controller.notificationPreferences = emptyNotificationPreferences();
+  const bare = await controller.startHostedMission({ objective: "Build more prospects" });
+  assert.deepEqual(bare.notifications, { channels: ["in_app"] });
+  // Optimization Missions are create_goal, not create_mission: no channel contract is sent.
+  const optimization = await controller.startHostedMission({ objective: "Raise reply rate", missionKind: "optimization" });
+  assert.equal(optimization.notifications, null);
+});
+
+test("Change channels validates against preferences and reports a Platform without the verb as not available yet", async () => {
+  const { controller } = await hostedMissionController("amos-mission-channels-change-");
+  controller.notificationPreferences = verifiedSmsPreferences();
+  const missionId = "77777777-7777-4777-8777-777777777777";
+  controller.missions = {
+    supported: true,
+    missions: [{ id: missionId, name: "Prospects", objective: "Build prospects", status: "running", notifications: { channels: ["in_app"] } }],
+    optimizationMissions: [], templates: [], count: 1, scheduler: null, stale: false, refreshError: ""
+  };
+  let sent = null;
+  controller.personalRemote = async () => ({
+    async setMissionNotificationChannels(id, notifications) {
+      sent = { id, notifications };
+      if (notifications.channels.includes("sms") && notifications.channels.length === 2) {
+        return { missionId: id, notifications };
+      }
+      const unsupported = new Error("Changing a Mission's channels is not available yet on this AMOS company");
+      unsupported.code = "unsupported";
+      throw unsupported;
+    }
+  });
+  await assert.rejects(
+    controller.setMissionNotificationChannels(missionId, { channels: ["in_app", "discord"] }),
+    /Discord: Coming with the platform update\./
+  );
+  assert.equal(sent, null, "an unconfigured channel never reaches the Platform");
+
+  const changed = await controller.setMissionNotificationChannels(missionId, { channels: ["sms", "in_app"] });
+  assert.deepEqual(sent, { id: missionId, notifications: { channels: ["sms", "in_app"] } });
+  assert.deepEqual(changed.notifications, { channels: ["sms", "in_app"] });
+  assert.deepEqual(changed.missions.missions[0].notifications, { channels: ["sms", "in_app"] });
+
+  await assert.rejects(
+    controller.setMissionNotificationChannels(missionId, { channels: ["in_app"] }),
+    (error) => error.code === "unsupported" && /not available yet/.test(error.message)
+  );
+});
+
+test("Settings saves notification preferences and walks the phone verification flow without granting authority", async () => {
+  const { controller } = await hostedMissionController("amos-notification-settings-");
+  let remoteState = 0;
+  controller.sendRemoteState = async () => { remoteState += 1; };
+  const calls = [];
+  const unverified = {
+    preferences: {
+      channels: { desktop_inapp: true, sms: true, secure_mobile_web: false },
+      sms_number: "+15551234567",
+      sms_number_verified: false,
+      quiet_hours: { start: "22:00", end: "07:00" },
+      timezone: "America/Chicago",
+      utc_offset_minutes: -300
+    },
+    channels_available: ["desktop_inapp", "sms", "secure_mobile_web"]
+  };
+  controller.personalRemote = async () => ({
+    async setNotificationPreferences(input) {
+      calls.push({ tool: "set_notification_preferences", input });
+      return { preferences: normalizeNotificationPreferences(unverified), verification: { sms_verification: "code_sent" } };
+    },
+    async verifyNotificationPhone(code) {
+      calls.push({ tool: "verify_notification_phone", code });
+      if (code !== "123456") throw new Error("that code is wrong or expired; set sms_number again to receive a new one");
+      return {
+        verified: true,
+        preferences: normalizeNotificationPreferences({
+          ...unverified,
+          preferences: { ...unverified.preferences, sms_number_verified: true }
+        })
+      };
+    },
+    async getNotificationPreferences() {
+      calls.push({ tool: "get_notification_preferences" });
+      return normalizeNotificationPreferences(unverified);
+    }
+  });
+
+  const saved = await controller.setNotificationPreferences({
+    channels: { in_app: true, sms: true },
+    smsNumber: "+1 (555) 123-4567",
+    quietHours: { start: "22:00", end: "07:00" },
+    utcOffsetMinutes: -300,
+    timezone: "America/Chicago"
+  });
+  assert.deepEqual(saved.verification, { sms_verification: "code_sent" });
+  assert.equal(saved.preferences.smsNumber, "+15551234567");
+  assert.equal(saved.preferences.smsNumberVerified, false);
+  assert.deepEqual(saved.preferences.quietHours, { start: "22:00", end: "07:00" });
+  // Unverified: SMS is still not a usable Mission channel.
+  assert.equal(channelAvailability("sms", controller.notificationPreferences).configured, false);
+  assert.deepEqual(defaultMissionChannels(controller.notificationPreferences), ["in_app"]);
+
+  await assert.rejects(controller.verifyNotificationPhone("000000"), /wrong or expired/);
+  const verified = await controller.verifyNotificationPhone("123456");
+  assert.equal(verified.verified, true);
+  assert.equal(controller.notificationPreferences.smsNumberVerified, true);
+  assert.equal(channelAvailability("sms", controller.notificationPreferences).configured, true);
+  assert.deepEqual(defaultMissionChannels(controller.notificationPreferences), ["in_app", "sms"]);
+  assert.deepEqual(calls.map((call) => call.tool), [
+    "set_notification_preferences", "verify_notification_phone", "verify_notification_phone"
+  ]);
+  assert.ok(remoteState >= 2, "the renderer learns about every preference change");
+
+  const fresh = await controller.getNotificationPreferences();
+  assert.equal(fresh.available, true);
+  assert.equal(calls.at(-1).tool, "get_notification_preferences");
 });
