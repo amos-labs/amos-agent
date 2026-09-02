@@ -703,6 +703,20 @@ html[data-platform="win32"] .sidebar-toggle {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
+.automatic-intelligence-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid rgba(59,213,143,.32);
+  border-radius: 12px;
+  background: rgba(59,213,143,.08);
+}
+.automatic-intelligence-card > div { display: grid; gap: 5px; min-width: 0; }
+.automatic-intelligence-card strong { font-size: 15px; }
+.automatic-intelligence-card p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.automatic-intelligence-card .button { flex: 0 0 auto; }
 .onboarding-picker,
 .onboarding-follow-on {
   display: grid;
@@ -4428,6 +4442,7 @@ html[data-platform="win32"] .sidebar-toggle {
   .connect-systems-push { flex-direction: column; }
   .onboarding-choice-grid,
   .northwind-intelligence-options { grid-template-columns: 1fr; }
+  .automatic-intelligence-card { align-items: stretch; flex-direction: column; }
   .operator-grid { grid-template-columns: minmax(0, 1fr); }
   .operator-grid.has-context { grid-template-columns: minmax(430px, 1fr) 6px minmax(360px, var(--context-width, 46%)); }
   .settings-layout { grid-template-columns: 1fr; }
