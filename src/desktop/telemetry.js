@@ -13,6 +13,11 @@ const QUEUED_MILESTONES = new Set([
   "desktop_first_task_started",
   "desktop_first_verified_outcome"
 ]);
+// The only event that may carry a credential. It is sent with the Northwind
+// demo session's bearer token so the platform can attribute demo value to the
+// demo tenant. Every other event is anonymous: no bearer is ever attached, even
+// when it is flushed in the same batch as an authenticated event.
+const AUTHENTICATED_EVENTS = new Set(["northwind_demo_value_reached"]);
 
 export class DesktopTelemetry {
   constructor({
@@ -107,7 +112,9 @@ export class DesktopTelemetry {
       release_channel: this.releaseChannel,
       occurred_at: new Date().toISOString(),
       context: safeContext(context),
-      onceKey
+      onceKey,
+      // A flag only; the token itself is never written to disk.
+      authenticated: Boolean(accessToken) && AUTHENTICATED_EVENTS.has(eventType)
     });
     state.pending = state.pending.slice(-MAX_PENDING);
     await this.write(state);
@@ -167,7 +174,9 @@ export class DesktopTelemetry {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
+            ...(accessToken && event.authenticated === true
+              ? { Authorization: `Bearer ${accessToken}` }
+              : {})
           },
           body: JSON.stringify(publicEvent(event)),
           signal: controller.signal
@@ -258,7 +267,7 @@ function endpointFor(mcpUrl) {
 }
 
 function publicEvent(event) {
-  const { onceKey: _onceKey, ...payload } = event;
+  const { onceKey: _onceKey, authenticated: _authenticated, ...payload } = event;
   return payload;
 }
 

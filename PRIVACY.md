@@ -17,18 +17,28 @@ platform (`/api/v1/desktop/events`, stored as `desktop_acquisition_events`):
 - `desktop_onboarding_completed` — first-run finished
 - `desktop_first_task_started` — the first Desktop task began
 - `northwind_demo_value_reached` — a completed, tool-backed Northwind demo task
+  (**not anonymous**; see below)
 
 Each event includes a random installation UUID, app version, operating system,
 architecture, release channel, and a small non-content context object. The
 UUID is not derived from hardware, an advertising identifier, or an email
 address.
 
+All events except one are sent with no credential of any kind. The exception is
+`northwind_demo_value_reached`: Desktop sends it with the Northwind demo
+session's access token in the `Authorization` header so the platform can
+attribute demo value to the demo tenant. That means the platform can link this
+installation UUID to the demo account. Desktop never attaches a token to any
+other event, even when one is sent in the same batch, and the token is never
+written to disk by telemetry.
+
 ## What Desktop does not send
 
 - Access tokens, refresh tokens, or API keys
 - Prompts, completions, files, or attachments
 - Company data, receipts, or local workspace contents
-- A name, email, or account identifier on these public events
+- A name, email, or account identifier on the anonymous events. The
+  `northwind_demo_value_reached` event is authenticated as described above.
 
 Telemetry is never used for authentication, billing, policy, or authorization.
 

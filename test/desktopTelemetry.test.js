@@ -125,6 +125,50 @@ test("Desktop telemetry retains transient failures and never persists bearer tok
   assert.equal(JSON.parse(raw).pending.length, 0);
 });
 
+test("anonymous events never carry a bearer token, even when flushed with an authenticated event", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-desktop-telemetry-anon-"));
+  const requests = [];
+  let failFirst = true;
+  const telemetry = new DesktopTelemetry({
+    filePath: join(directory, "telemetry.json"),
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      requests.push({ event_type: body.event_type, authorization: options.headers.Authorization || null, body });
+      if (failFirst) {
+        failFirst = false;
+        return { ok: false, status: 503 };
+      }
+      return { ok: true, status: 202 };
+    }
+  });
+  telemetry.setEnabled(true);
+
+  // An anonymous event is retained after a transient failure...
+  await telemetry.record("desktop_first_task_started", { mcpUrl: "https://app.amoslabs.com/mcp" });
+  // ...a token offered for a non-demo event is ignored...
+  await telemetry.record("desktop_onboarding_completed", {
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    accessToken: "should-not-be-sent"
+  });
+  // ...and the demo event flushes the whole batch with a bearer available.
+  await telemetry.record("northwind_demo_value_reached", {
+    mcpUrl: "https://app.amoslabs.com/mcp",
+    accessToken: "demo-secret",
+    once: true
+  });
+
+  const sent = requests.filter((request) => request.authorization !== null);
+  assert.deepEqual(sent.map((request) => request.event_type), ["northwind_demo_value_reached"]);
+  assert.equal(sent[0].authorization, "Bearer demo-secret");
+  for (const request of requests) {
+    if (request.event_type !== "northwind_demo_value_reached") assert.equal(request.authorization, null, request.event_type);
+    assert.equal("authenticated" in request.body, false, "the flag never leaves the device");
+  }
+  const raw = await readFile(join(directory, "telemetry.json"), "utf8");
+  assert.ok(!raw.includes("demo-secret"));
+  assert.ok(!raw.includes("should-not-be-sent"));
+});
+
 test("Desktop records first verified value only for a completed tool-backed task", async () => {
   const calls = [];
   const controller = new DesktopController({
