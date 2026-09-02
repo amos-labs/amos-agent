@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { SYSTEM_PROMPT } from "./prompts.js";
 import { isAbortError, throwIfAborted } from "./util/abort.js";
+import { unwrapToolResult, wrapToolResult } from "./util/toolResultEnvelope.js";
 import {
   applyWorkflowToModelContent,
   selectTaskWorkflow
@@ -49,6 +50,7 @@ import {
   assertValidModelToolArguments,
   canonicalizeMessageToolCalls
 } from "./model/protocol.js";
+import { boundedInteger } from "./util/validate.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
 const MAX_LIVE_TRANSCRIPT_MESSAGES = 800;
@@ -94,7 +96,6 @@ export class AgentLoop {
   constructor({
     config,
     modelClient,
-    kimiClient,
     registry,
     approvals,
     amosClient,
@@ -106,7 +107,7 @@ export class AgentLoop {
     onScratchpadChange = null
   }) {
     this.config = config;
-    this.modelClient = modelClient || kimiClient;
+    this.modelClient = modelClient;
     this.registry = registry;
     this.approvals = approvals;
     this.amosClient = amosClient;
@@ -810,7 +811,7 @@ export class AgentLoop {
           this.messages.push({
             role: "tool",
             tool_call_id: call.id,
-            content: JSON.stringify(result)
+            content: wrapToolResult(name, JSON.stringify(result))
           });
           outcomes.push({ name, rawArgs, args, failed, result });
         }
@@ -2310,11 +2311,6 @@ function isBulkyAssistantProse(block) {
     && modelContentLength(first.content) > 4_000;
 }
 
-function boundedInteger(value, fallback, minimum, maximum) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
-}
 
 function finiteOrNull(value) {
   const parsed = Number(value);
@@ -2538,7 +2534,7 @@ function compactHistoryBlock(block) {
 }
 
 function truncateHistoryContent(value, limit) {
-  const encoded = typeof value === "string" ? value : JSON.stringify(value);
+  const encoded = typeof value === "string" ? unwrapToolResult(value) : JSON.stringify(value);
   const content = encoded == null ? "" : encoded;
   if (content.length <= limit) return content;
   return `${content.slice(0, limit - 1)}…`;

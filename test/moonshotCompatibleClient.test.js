@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { KimiClient } from "../src/model/kimiClient.js";
+import { OpenAICompatibleClient } from "../src/model/openAiCompatibleClient.js";
 
-test("KimiClient sends K3 reasoning effort and tool definitions", async () => {
+test("OpenAICompatibleClient sends Kimi K3 reasoning effort and tool definitions to Moonshot", async () => {
   let captured;
   const fetchImpl = async (url, options) => {
     captured = { url, options, body: JSON.parse(options.body) };
@@ -19,7 +19,7 @@ test("KimiClient sends K3 reasoning effort and tool definitions", async () => {
     };
   };
 
-  const client = new KimiClient(
+  const client = new OpenAICompatibleClient(
     {
       apiKey: "test",
       baseUrl: "https://api.moonshot.ai/v1",

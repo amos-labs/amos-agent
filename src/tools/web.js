@@ -2,6 +2,7 @@ import { truncateText } from "../util/pathSafety.js";
 import { fetchCompat } from "../util/fetchCompat.js";
 import { linkAbortSignal } from "../util/abort.js";
 import { assertPublicUrl } from "../util/publicUrl.js";
+import { boundedNumber } from "../util/validate.js";
 
 export { assertPublicUrl, isPrivateAddress } from "../util/publicUrl.js";
 
@@ -129,11 +130,6 @@ async function readBoundedText(response, maxBytes) {
   return Buffer.concat(chunks, bytes).toString("utf8");
 }
 
-function boundedNumber(value, fallback, min, max) {
-  const number = Number(value ?? fallback);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(Math.max(Math.floor(number), min), max);
-}
 
 function htmlToText(html) {
   return html

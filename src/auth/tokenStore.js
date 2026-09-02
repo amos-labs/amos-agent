@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { clean } from "../util/validate.js";
 
 const ACCOUNT_STORE_VERSION = 1;
 
@@ -283,9 +284,6 @@ function sanitizeProfile(value = {}) {
   };
 }
 
-function clean(value, limit) {
-  return String(value || "").trim().slice(0, limit);
-}
 
 function newestAccountId(accounts, open) {
   return accounts

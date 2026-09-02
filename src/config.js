@@ -28,8 +28,6 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
 
   return {
     model,
-    // Compatibility for the 0.1 CLI API. Remove after downstream consumers migrate.
-    kimi: model,
     amos: {
       mcpUrl: env.AMOS_MCP_URL || "https://app.amoslabs.com/mcp",
       apiKey: env.AMOS_API_KEY || env.AMOS_TOKEN || "",
@@ -90,5 +88,5 @@ export function defaultShellPath(platformName = process.platform) {
 }
 
 export function validateConfig(config) {
-  return validateModelConfig(config.model || config.kimi);
+  return validateModelConfig(config.model);
 }

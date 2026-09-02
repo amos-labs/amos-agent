@@ -8,6 +8,7 @@ import {
   DEFAULT_HYBRID_ROUTING,
   sanitizeHybridRouting
 } from "../model/hybridRouting.js";
+import { clean } from "../util/validate.js";
 
 const VERSION = 1;
 const PROVIDER_IDS = new Set([
@@ -346,8 +347,4 @@ function isoOrEmpty(value) {
   if (!cleaned) return "";
   const parsed = Date.parse(cleaned);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : "";
-}
-
-function clean(value, maxLength) {
-  return String(value || "").trim().slice(0, maxLength);
 }

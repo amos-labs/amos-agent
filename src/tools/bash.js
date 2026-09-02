@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { basename } from "node:path";
 import { resolveWorkspacePath } from "../util/pathSafety.js";
 import { resolveDefaultWorkspacePath } from "../util/workspaceFocus.js";
+import { boundedNumber } from "../util/validate.js";
 
 export function createBashTool() {
   return {
@@ -244,10 +245,4 @@ function boundedCollector(maxBytes) {
       return total > kept ? `${value}\n...[truncated ${total - kept} bytes]` : value;
     }
   };
-}
-
-function boundedNumber(value, fallback, min, max) {
-  const number = Number(value ?? fallback);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(Math.max(Math.floor(number), min), max);
 }

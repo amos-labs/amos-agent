@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { clean } from "../util/validate.js";
 
 export const MEMORY_CONTRACT_VERSION = "1";
 export const CAPSULE_FORMAT = "amos-memory-capsule";
@@ -253,8 +254,4 @@ function isoTimestamp(value) {
 function nullableClean(value, maxLength) {
   if (value === null || value === undefined || value === "") return null;
   return clean(value, maxLength);
-}
-
-function clean(value, maxLength) {
-  return String(value || "").trim().slice(0, maxLength);
 }

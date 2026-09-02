@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import {
   approvalReviewUrl,
-  DesktopRemoteStateClient,
+  DesktopRemoteStateClient as BaseDesktopRemoteStateClient,
   missionDecisionReviewUrl,
   parseMcpJson
 } from "../src/desktop/remoteState.js";
@@ -23,6 +23,30 @@ function response(status, payload) {
       return JSON.stringify(payload);
     }
   };
+}
+
+// The MCP client negotiates the MCP lifecycle lazily on its first call. The
+// fakes in this file model AMOS tool verbs, so answer that handshake here and
+// keep each fake focused on the verbs under test.
+function withMcpLifecycle(fetchImpl) {
+  return async (url, options) => {
+    const body = typeof options?.body === "string" ? JSON.parse(options.body) : null;
+    if (body?.method === "initialize") {
+      return response(200, {
+        jsonrpc: "2.0",
+        id: body.id,
+        result: { protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "fake-amos", version: "0" } }
+      });
+    }
+    if (body?.method === "notifications/initialized") return response(202, "");
+    return fetchImpl(url, options);
+  };
+}
+
+class DesktopRemoteStateClient extends BaseDesktopRemoteStateClient {
+  constructor(options, fetchImpl) {
+    super(options, withMcpLifecycle(fetchImpl));
+  }
 }
 
 test("Desktop remote state resolves the signed-in user and their approvals", async () => {

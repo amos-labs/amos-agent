@@ -11,6 +11,7 @@ import {
   workspaceFocusPath
 } from "../util/workspaceFocus.js";
 import { safeChildEnvironment } from "./bash.js";
+import { boundedNumber } from "../util/validate.js";
 
 const IGNORED = new Set([".git", "node_modules", "dist", "coverage", ".amos-agent", ".next", "target", "vendor"]);
 
@@ -569,10 +570,4 @@ export function runProgram(command, args, { cwd, input = "", timeoutMs, maxOutpu
       resolve(result);
     }
   });
-}
-
-function boundedNumber(value, fallback, min, max) {
-  const number = Number(value ?? fallback);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(Math.max(Math.floor(number), min), max);
 }

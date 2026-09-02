@@ -10,6 +10,7 @@ import {
   INTELLIGENCE_ROUTER_MODEL
 } from "../model/intelligenceRouter.js";
 import { MTPLX_SERVED_MODEL_ID } from "./mtplxRuntimeManifest.js";
+import { clean } from "../util/validate.js";
 
 const OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 const REQUEST_TIMEOUT_MS = 5_000;
@@ -1028,9 +1029,6 @@ function nanosecondsToMilliseconds(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed / 1_000_000) : null;
 }
 
-function clean(value, maximum) {
-  return String(value || "").trim().slice(0, maximum);
-}
 
 async function sha256File(filePath) {
   const hash = createHash("sha256");

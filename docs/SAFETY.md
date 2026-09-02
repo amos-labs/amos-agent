@@ -38,28 +38,76 @@ The core rules are:
 - User cancellation terminates the active process group and propagates to model,
   MCP, and web requests.
 
-## Child-process environment
+## Shell commands
 
-Commands receive a small allowlist of normal process values. AMOS credentials,
-provider keys, database URLs, cloud secrets, and desktop OAuth tokens are
-removed.
+Shell commands are the most powerful local surface, and they are **not
+sandboxed**. This section states exactly which controls apply to `run_bash`
+(`src/tools/bash.js`) and which do not, so nobody has to infer it.
 
-In ask-first mode, approval applies to the exact proposed local action. It is
-not a blanket grant for later commands. In trusted-workspace mode, file tools
-remain bounded to the selected workspace, but shell commands are not an OS
-sandbox: they start in the workspace with a scrubbed environment and retain the
-local user's process permissions. Desktop explains that distinction before it
-stores the grant.
+What is enforced:
+
+- **Approval gate.** Every command is shown to the user with its exact text,
+  starting directory, and the model's stated reason, and waits for an explicit
+  approval choice. Approval applies to that one command; it is not a blanket
+  grant for later commands. The gate is skipped only when the user stored an
+  auto-approve grant (all local work, or the shell request class, or the current
+  task) or when `AMOS_AGENT_AUTO_APPROVE_BASH=true` is set.
+- **Environment scrub.** The child process receives an allowlist of ordinary
+  process variables (`PATH`, `HOME`, `USER`, `SHELL`, `TMPDIR`, `LANG`, `TERM`,
+  `LC_*`, and the Windows equivalents such as `SYSTEMROOT`, `APPDATA`, and
+  `PROGRAMFILES`). Everything else in Desktop's own environment — AMOS
+  credentials, provider keys, database URLs, cloud secrets, desktop OAuth
+  tokens — is not passed through.
+- **Starting directory.** The optional `workdir` is resolved inside the granted
+  workspace and traversal outside it is rejected (unless
+  `AMOS_AGENT_ALLOW_OUTSIDE_WORKSPACE=true`). This fixes only where the command
+  *starts*.
+- **Bounded output and lifetime.** stdout and stderr are capped at
+  `AMOS_AGENT_MAX_OUTPUT_BYTES`; the command is killed with SIGTERM then SIGKILL
+  at `AMOS_AGENT_BASH_TIMEOUT_MS`; the whole process group is terminated on
+  timeout or user cancellation, and cancellation also aborts in-flight model,
+  MCP, and web requests.
+
+What is **not** enforced — an approved command runs with the local user's full
+permissions:
+
+- There is no container, macOS seatbelt, AppArmor/SELinux profile, seccomp
+  filter, or any other OS isolation.
+- The workspace boundary does not confine the command. `cd /`, absolute paths,
+  and `..` all work; the command can read, modify, or delete anything the local
+  user can, anywhere on the machine.
+- The file-tool protections do not apply. The credential-file denylist that
+  keeps `~/.ssh`, cloud configuration, and `.env` files away from `read_file`
+  does nothing for `cat ~/.ssh/id_rsa` in a shell.
+- There is no network policy. A command can reach any host, including private
+  networks and cloud metadata endpoints that `web_fetch` blocks.
+- The environment scrub is best-effort. On macOS and Linux the command runs
+  through `bash -lc`, which sources the user's login profile; anything that
+  profile exports (including secrets) is available to the command. On Windows
+  PowerShell runs with `-NoProfile`.
+- Detached children (`nohup`, `setsid`, `disown`) can outlive the timeout and
+  cancellation, which only terminate the original process group.
+
+The approval prompt is therefore the control. Before accepting an
+**Auto-approve local work** or **Always allow shell** grant, Desktop explains
+that file tools stay bounded to the workspace while shell commands do not.
+
+### `AMOS_AGENT_AUTO_APPROVE_BASH`
+
+Setting `AMOS_AGENT_AUTO_APPROVE_BASH=true` removes exactly one thing: the
+per-command approval prompt. Nothing replaces it. The environment scrub,
+starting directory, output cap, and timeout remain, and no isolation is added.
+With it set, the model can run arbitrary commands as the local user with no
+human in the loop — including outside the workspace, against credential files
+the file tools refuse, and across the network. Use it only in a deliberately
+isolated, disposable automation environment. It never grants company
+authority: AMOS operations still pass through Platform identity, tenant scope,
+RBAC, policy, approval, idempotency, execution, and proof.
 
 The ask-first ceremony is non-blocking at the UI layer: it is shown inline in
 the conversation and parks the requested tool call, while the task composer
 continues accepting user direction. Typing does not authorize the parked action;
 one of the explicit approval choices is still required.
-
-Local auto-approve never grants company authority. AMOS company operations,
-connected-application writes, and governed decisions still pass independently
-through Platform identity, tenant scope, RBAC, policy, approval, idempotency,
-execution, and proof.
 
 ## Company actions
 
@@ -279,7 +327,9 @@ AMOS_AGENT_MAX_OUTPUT_BYTES=24000
 ```
 
 These controls are for deliberately isolated automation environments. They are
-not recommended for normal interactive Desktop use.
+not recommended for normal interactive Desktop use. `AMOS_AGENT_AUTO_APPROVE_BASH`
+only removes the approval prompt; see [Shell commands](#shell-commands) for what
+still applies and what never did.
 
 Productive work has no fixed cycle ceiling. Two progress safeguards remain
 configurable for unusual deployments:

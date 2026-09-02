@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { parseToolResult } from "../src/util/toolResultEnvelope.js";
 import { AgentLoop } from "../src/agentLoop.js";
 import { OpenAIResponsesClient } from "../src/model/openAiResponsesClient.js";
 import { AnthropicMessagesClient } from "../src/model/anthropicMessagesClient.js";
@@ -68,7 +69,7 @@ test("the agent loop executes and continues an OpenAI Responses tool turn", asyn
     assert.ok(body.input.some((item) =>
       item.type === "function_call_output" &&
       item.call_id === "call_1" &&
-      JSON.parse(item.output).score === 92
+      parseToolResult(item.output).score === 92
     ));
     return Response.json({
       output: [{
@@ -120,7 +121,7 @@ test("the agent loop executes and continues an Anthropic Messages tool turn", as
       message.role === "user" && message.content.some((block) => block.type === "tool_result")
     );
     assert.equal(result.content[0].tool_use_id, "toolu_1");
-    assert.equal(JSON.parse(result.content[0].content).score, 92);
+    assert.equal(parseToolResult(result.content[0].content).score, 92);
     return Response.json({ content: [{ type: "text", text: "Austin scored 92." }] });
   };
   const modelClient = new AnthropicMessagesClient({
@@ -165,7 +166,7 @@ test("qualified Bedrock Responses and Messages profiles complete native tool tur
       assert.ok(body.input.some((item) =>
         item.type === "function_call_output" &&
         item.call_id === "call_bedrock_1" &&
-        JSON.parse(item.output).score === 92
+        parseToolResult(item.output).score === 92
       ));
       return Response.json({
         output: [{
@@ -205,7 +206,7 @@ test("qualified Bedrock Responses and Messages profiles complete native tool tur
       const result = body.messages.find((message) =>
         message.role === "user" && message.content.some((block) => block.type === "tool_result")
       );
-      assert.equal(JSON.parse(result.content[0].content).score, 92);
+      assert.equal(parseToolResult(result.content[0].content).score, 92);
       return Response.json({ content: [{ type: "text", text: "Austin scored 92." }] });
     });
     assert.equal(await loop(modelClient, "bedrock").run("Score Austin"), "Austin scored 92.");
