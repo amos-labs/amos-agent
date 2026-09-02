@@ -389,6 +389,77 @@ test("a Project goal starts in the background without stealing Operator", async 
   assert.equal(runCalls, 1);
 });
 
+test("a hosted Mission compiles in the background without creating or opening a conversation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-hosted-mission-"));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-09-02T12:00:00.000Z")
+  });
+  const settings = settingsStore(root);
+  await settings.write({ ...(await settings.read()), operatingMode: "online" });
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeContextKey: controller.activeContextKey,
+    activeTaskRecordId: controller.activeTaskRecordId
+  });
+  controller.identity = { principal_type: "user", tenant_id: "tenant", sub: "user" };
+  controller.personalRemote = async () => {
+    throw new Error("Platform offline in this test");
+  };
+
+  const opened = await controller.startNewConversation({ kind: "general" });
+  const selectedId = controller.activeTaskRecordId;
+  const selectedKey = controller.activeContextKey;
+  assert.ok(opened.launch.taskId);
+
+  const runInputs = [];
+  controller.executeRun = async (input) => {
+    runInputs.push(input);
+    assert.notEqual(controller.activeTaskRecordId, selectedId);
+    return { answer: "Proposed a Run Contract", taskEventId: "run:mission" };
+  };
+
+  const started = await controller.startHostedMission({
+    objective: "Build 500 qualified VAR/MSP prospects",
+    missionKind: "finite"
+  });
+
+  assert.equal(started.started, true);
+  assert.equal(started.executionLocation, "hosted");
+  assert.equal(started.conversationOpened, false);
+  assert.equal(started.missionKind, "finite");
+  assert.ok(started.builderTaskId);
+  // Operator's selected conversation is untouched.
+  assert.equal(controller.activeTaskRecordId, selectedId);
+  assert.equal(controller.activeContextKey, selectedKey);
+  assert.notEqual(started.builderTaskId, selectedId);
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runInputs.length, 1);
+  assert.equal(runInputs[0].select, false);
+  assert.equal(runInputs[0].isolate, true);
+  assert.equal(runInputs[0].missionCreation, true);
+
+  // The compiler run is retained as internal evidence, not offered as a conversation.
+  const library = await controller.tasksState();
+  const builder = library.tasks.find((task) => task.id === started.builderTaskId);
+  assert.ok(builder);
+  assert.equal(builder.missionBuilder, true);
+  assert.equal(builder.active, false);
+  assert.match(builder.title, /^Create Mission:/);
+  const conversation = library.tasks.find((task) => task.id === selectedId);
+  assert.equal(conversation.missionBuilder, false);
+  assert.equal(conversation.active, true);
+});
+
 test("a local Mission accepts optional Project context and requires an outcome", async () => {
   const root = await mkdtemp(join(tmpdir(), "amos-autonomous-goal-guard-"));
   const tasks = new DesktopTaskStore({

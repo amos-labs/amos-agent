@@ -247,7 +247,8 @@ test("routine approval review stays inside Desktop", async () => {
   assert.doesNotMatch(javascript, /for \(const receipt of receipts\.slice/);
   assert.match(javascript, /function decisionSummary\([\s\S]*?structuredTail/);
   assert.match(javascript, /function missionDecisionCard\(/);
-  assert.match(javascript, /function renderInlineMissionDecision\(/);
+  assert.doesNotMatch(javascript, /function renderInlineMissionDecision\(/);
+  assert.match(javascript, /function renderMissionAttentionRail\(/);
   assert.match(javascript, /Retry the same mission/);
   assert.match(javascript, /Add optional guidance/);
   assert.match(javascript, /function missionContractSummary\(/);
@@ -257,7 +258,7 @@ test("routine approval review stays inside Desktop", async () => {
   assert.match(javascript, /inside its existing authority/);
   assert.match(javascript, /Choose an action below\. Only type guidance if neither choice says what you want/);
   assert.match(javascript, /Optional guidance/);
-  assert.match(javascript, /Mission has been stopped and its Run Contract revoked/);
+  assert.match(javascript, /has been stopped and its Run Contract revoked/);
   assert.match(javascript, /Authorize “\$\{missionName\}”/);
   assert.doesNotMatch(javascript, /decided by \$\{approval\.decided_by\}/);
   assert.match(javascript, /Revalidate & reopen/);
@@ -1052,4 +1053,155 @@ test("first-run funnel events fire only after telemetry opt-in", async () => {
   assert.match(javascript, /operatorView\.prepend\(elements\.telemetryConsent\)/);
   assert.match(javascript, /find broken flows and improve Desktop faster/);
   assert.match(javascript, /never send prompts, responses, files, company data, credentials, or tokens/i);
+});
+
+test("hosted Mission creation stays in the Missions control center and never opens a conversation", async () => {
+  const [javascript, controller] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
+  ]);
+  const submit = javascript.match(/async function submitMission\(event\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(submit, "submitMission must exist");
+  assert.match(submit, /showView\("missions"\)/);
+  assert.doesNotMatch(submit, /showView\("operator"\)/);
+  assert.doesNotMatch(submit, /promptInput\.focus|addMessage\(/);
+  assert.match(submit, /trackMissionCompile\(response\)/);
+
+  const hosted = controller.match(/async startHostedMission\(input = \{\}\) \{[\s\S]*?\n  \}\n/)?.[0];
+  assert.ok(hosted, "startHostedMission must exist");
+  assert.match(hosted, /select: false/);
+  assert.doesNotMatch(hosted, /select: true/);
+  assert.match(hosted, /isolate: true/);
+  assert.match(hosted, /missionCreation: true/);
+  assert.match(hosted, /conversationOpened: false/);
+  assert.match(hosted, /this\.record\("mission", `Compiling hosted Mission/);
+  assert.match(controller, /missionBuilder: isMissionBuilderTask\(task\)/);
+  assert.match(javascript, /task\.kind !== "goal_pursuit" && !task\.missionBuilder/);
+
+  // Compile progress and Run Contract authorization render inside Missions, not Operator.
+  assert.match(javascript, /function missionCompileCard\(compile\)/);
+  assert.match(javascript, /function missionAuthorizationCard\(approval\)/);
+  assert.match(javascript, /RUN CONTRACT · WAITING FOR YOUR AUTHORIZATION/);
+  assert.match(
+    javascript,
+    /for \(const compile of compiles\) elements\.missionList\.append\(missionCompileCard\(compile\)\)/
+  );
+  assert.match(javascript, /elements\.missionList\.append\(missionAuthorizationCard\(approval\)\)/);
+  // After approval the user lands on Mission detail.
+  assert.match(javascript, /if \(missionApproval && review\?\.decision !== "deny"\) \{\s*\/\/[^\n]*\n\s*await revealAuthorizedMission\(missionApproval\)/);
+  const reveal = javascript.match(/async function revealAuthorizedMission\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(reveal);
+  assert.match(reveal, /focusMission\(mission\?\.id \|\| ""\)/);
+  assert.doesNotMatch(reveal, /showView\("operator"\)|addMessage\(/);
+  const focus = javascript.match(/function focusMission\(missionId[\s\S]*?\n\}\n/)?.[0];
+  assert.match(focus, /showView\("missions"\)/);
+});
+
+test("a chat-originated Mission leaves exactly one compact receipt in the transcript", async () => {
+  const javascript = await readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8");
+  assert.match(
+    javascript,
+    /function renderInlineCompanyApproval\(approval\) \{\s*if \(!approval\?\.id \|\| approval\.status !== "pending"\) return null;\s*if \(isMissionApproval\(approval\)\) return renderMissionCreationReceipt\(approval\);/
+  );
+  const receipt = javascript.match(/function missionCreationReceipt\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(receipt);
+  assert.match(receipt, /label\.textContent = `Mission created: \$\{name\}`/);
+  assert.match(receipt, /view\.textContent = "View Mission"/);
+  assert.match(receipt, /line\.append\(label, " · ", status, " · ", view\)/);
+  assert.match(javascript, /pending: "Waiting for approval"/);
+  const render = javascript.match(/function renderMissionCreationReceipt\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(render);
+  // Exactly one node per approval id, and none at all for a Missions-page compile.
+  assert.match(render, /if \(existing\) return existing;/);
+  assert.match(render, /if \(surfacedCompanyApprovalIds\.has\(approval\.id\)\) return null;/);
+  assert.match(render, /if \(missionsPageCompileInProgress\(\)\) return null;/);
+  assert.doesNotMatch(render, /decisionCard\(|showView\(|scrollIntoView|\.focus\(/);
+  // Mission outcomes never stream into the conversation.
+  assert.match(javascript, /if \(isMissionApprovalOutcome\(outcome\)\) \{\s*settleMissionAuthorization\(outcome, "approved"\);\s*return;/);
+  const settle = javascript.match(/function settleMissionAuthorization\(outcome, status\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.doesNotMatch(settle, /addMessage\(|showView\("operator"\)/);
+  const answer = javascript.match(/async function answerMissionDecision\(decision, answer, button\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(answer);
+  assert.doesNotMatch(answer, /addMessage\(/);
+});
+
+test("Mission attention lives outside the transcript and never disturbs streaming or focus", async () => {
+  const [javascript, html, css] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+  ]);
+  // The rail is a sibling of #messages next to the composer, not inside the transcript.
+  const messagesStart = html.indexOf('<div id="messages" class="messages">');
+  const chatRunStatus = html.indexOf('id="chatRunStatus"');
+  const rail = html.indexOf('id="missionAttentionRail"');
+  const composer = html.indexOf('<form id="promptForm" class="composer">');
+  assert.ok(messagesStart > 0 && chatRunStatus > messagesStart);
+  assert.ok(rail > chatRunStatus && rail < composer, "rail sits between the run status row and the composer");
+  assert.match(html, /<aside id="missionAttentionRail" class="mission-attention-rail hidden"/);
+  assert.match(css, /\.mission-attention-rail \{[\s\S]*?flex: 0 0 auto;/);
+
+  // Decision cards are no longer inserted into the message list.
+  assert.doesNotMatch(javascript, /missionDecisionCard\(decision, \{ inline: true \}\)/);
+  assert.doesNotMatch(javascript, /elements\.messages\.append\(card\);\s*showView\("operator"\);\s*renderConversationChrome\(\);\s*card\.scrollIntoView[\s\S]{0,200}mission/);
+  assert.match(javascript, /renderMissionAttentionRail\(\);\s*const pendingApprovalIds/);
+
+  const railCode = javascript.match(/function renderMissionAttentionRail\(\) \{[\s\S]*?\n\}\n/)?.[0];
+  const itemCode = javascript.match(/function missionAttentionItem\(decision[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(railCode && itemCode);
+  for (const code of [railCode, itemCode]) {
+    assert.doesNotMatch(code, /showView\("operator"\)/, "never force-open Operator");
+    assert.doesNotMatch(code, /\.focus\(/, "never steal focus from a text input");
+    assert.doesNotMatch(code, /scrollIntoView|scrollTop/, "never move the transcript");
+    assert.doesNotMatch(code, /elements\.messages/, "never touch transcript ordering");
+    assert.doesNotMatch(code, /addMessage\(/);
+  }
+  assert.match(railCode, /rail\.replaceChildren\(\)/);
+  assert.match(itemCode, /severity\.textContent = authority \? "Authority" : "Question"/);
+  assert.match(itemCode, /secureReview \? "Review authority" : mission \? "Answer" : "View Mission"/);
+  assert.match(itemCode, /actionButton\("Hide from chat"/);
+  assert.match(itemCode, /actionButton\("Stop Mission"/);
+  assert.match(itemCode, /details\.open = !authority && expanded/);
+  assert.match(itemCode, /\["authorized", "running", "waiting_decision", "paused"\]\.includes\(mission\.status\)/);
+
+  // Hide from chat is presentation-only, persisted by decision id, and leaves badges intact.
+  assert.match(javascript, /const HIDDEN_MISSION_DECISIONS_KEY = "amos\.desktop\.hidden-mission-decisions\.v1"/);
+  const hide = javascript.match(/function hideMissionDecisionFromChat\(decisionId\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(hide);
+  assert.match(hide, /localStorage\.setItem\(HIDDEN_MISSION_DECISIONS_KEY/);
+  assert.doesNotMatch(hide, /api\./, "hiding never calls the Platform");
+  assert.doesNotMatch(hide, /answerMissionDecision|cancelMission|pauseMission|resumeMission|openMissionDecision/);
+  assert.match(javascript, /hidden\.has\(String\(decision\.id\)\)/);
+  assert.match(
+    javascript,
+    /const waitingCount = pending\.length \+ missionDecisions\.length \+ proposals\.length \+ pendingInputs\.length/
+  );
+  assert.match(javascript, /const attention = missions\.filter\(\(mission\) => missionStatusBucket\(mission\) === "attention"\)\.length\s*\+ pendingMissionApprovalList\(\)\.length/);
+});
+
+test("Mission detail shows status reason, current step, effective limits, open questions, and controls", async () => {
+  const javascript = await readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8");
+  assert.match(javascript, /function missionStatusExplanation\(mission\)/);
+  assert.match(javascript, /Paused until you answer its open question/);
+  assert.match(javascript, /function latestMissionStep\(mission\)/);
+  assert.match(javascript, /`Current step · \$\{currentStep\}`/);
+  const chips = javascript.match(/function missionLimitChips\(mission\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(chips);
+  assert.match(chips, /tool calls/);
+  assert.match(chips, /cost`/);
+  assert.match(chips, /provider credits/);
+  assert.match(chips, /wall-time limit/);
+  assert.match(chips, /open question/);
+  assert.match(chips, /human decision/);
+  const detail = javascript.match(/function renderMissionActivity\(mission, container\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(detail);
+  assert.match(detail, /Open questions and authority changes/);
+  assert.match(detail, /questionList\.append\(missionDecisionCard\(decision\)\)/);
+  assert.match(detail, /Progress against effective limits/);
+  const card = javascript.match(/function missionCard\(mission\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(card, /controlHostedMission\(mission, "pause", pause\)/);
+  assert.match(card, /controlHostedMission\(mission, "resume", resume\)/);
+  assert.match(card, /controlHostedMission\(mission, "cancel", cancel\)/);
+  assert.match(card, /answer\.addEventListener\("click", \(\) => focusMission\(mission\.id\)\)/);
+  assert.doesNotMatch(card, /showView\("decisions"\)/);
 });
