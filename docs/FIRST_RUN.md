@@ -78,16 +78,24 @@ Copy states why, automations first:
 - Connect the systems you already run so AMOS is not guessing from chat.
 - Keep durable company memory, policy, approvals, and receipts.
 
-The commercial boundary is a 14-day trial of the paid operating layer and
-plans starting at $99/month. The trial starts when the person first asks for a
-paid capability, not when Desktop is downloaded. Skipping it never blocks
-foreground Desktop work.
+The commercial boundary is free-to-start foreground Desktop work, followed by
+the paid operating layer when the person needs more hosted usage or asks AMOS
+to keep working across systems, people, and time. Desktop does not hard-code a
+trial length or price; the account and website surfaces own current commercial
+terms. Skipping an upgrade never blocks eligible foreground Desktop work.
 
 The membership should be expressed in customer terms: it includes a pool of
 verified automated outcomes. AMOS may count an outcome only after its checker
 passes, its receipt is durable, and any required approval is complete. Model
 tokens, thinking time, retries, partial work, failed runs, and a model saying
 "done" are never outcomes and must never be billed as if they were.
+
+For an ordinary foreground Desktop task, "verified" means authoritative tool
+evidence or a successful OperationReceipt proves what actually happened. A
+Mission is stronger: its explicit completion contract must also pass the
+registered checker. The first useful outcome does not need to be forced through
+a Mission merely to earn the word; the UI must remain honest about which proof
+level it has.
 
 The outcome catalog should stay legible to the customer—examples include a
 reconciled period, a qualified prospect, a completed follow-up, an approved

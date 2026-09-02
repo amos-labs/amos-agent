@@ -148,9 +148,11 @@ test("AMOS Intelligence is one automatic experience with infrastructure controls
   ]);
 
   assert.match(html, /AMOS Intelligence routes automatically/);
-  assert.match(html, /AMOS Intelligence is available with an AMOS company subscription: 14-day free trial, then plans starting at \$99\/month/);
-  assert.match(html, /AMOS company subscription required/);
+  assert.match(html, /AMOS Intelligence is ready automatically/);
+  assert.match(html, /Free to start · run real missions/);
+  assert.match(html, /Upgrade for more hosted usage/);
   assert.match(html, /AMOS Local and BYOK require no AMOS subscription/);
+  assert.doesNotMatch(html, /14-day free trial|Plans start at \$99\/month/);
   assert.match(html, /id="managedProfileField" class="amos-routing-card hidden"/);
   assert.match(html, /id="hybridRoutingEnabled" type="checkbox"/);
   assert.match(html, /Off keeps the proven AMOS Hosted automatic path exactly as-is/);
