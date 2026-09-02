@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { DesktopController } from "../src/desktop/controller.js";
+import { DesktopController, missionCreationOutcome } from "../src/desktop/controller.js";
 import { continuityScope, SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
 import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
 
@@ -458,6 +458,220 @@ test("a hosted Mission compiles in the background without creating or opening a 
   const conversation = library.tasks.find((task) => task.id === selectedId);
   assert.equal(conversation.missionBuilder, false);
   assert.equal(conversation.active, true);
+});
+
+async function hostedMissionController(prefix) {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  const tasks = new DesktopTaskStore({
+    filePath: join(root, "tasks.json"),
+    ...codec(),
+    now: () => new Date("2026-09-02T12:00:00.000Z")
+  });
+  const settings = settingsStore(root);
+  await settings.write({ ...(await settings.read()), operatingMode: "online" });
+  const emitted = [];
+  const controller = new DesktopController({
+    userDataPath: root,
+    settingsStore: settings,
+    taskStore: tasks,
+    openBrowser() {},
+    emit(channel, payload) { emitted.push({ channel, payload }); }
+  });
+  controller.sendRemoteState = async () => {};
+  controller.state = async () => ({
+    activeContextKey: controller.activeContextKey,
+    activeTaskRecordId: controller.activeTaskRecordId
+  });
+  controller.identity = { principal_type: "user", tenant_id: "tenant", sub: "user" };
+  controller.personalRemote = async () => {
+    throw new Error("Platform offline in this test");
+  };
+  await controller.startNewConversation({ kind: "general" });
+  return { controller, emitted };
+}
+
+async function settled() {
+  for (let index = 0; index < 5; index += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+test("an owner-authorized create_mission result replaces the compile with the Mission id, keyed by builder task", async () => {
+  const { controller, emitted } = await hostedMissionController("amos-hosted-mission-authorized-");
+  const compilation = {
+    objective: "Build 500 qualified VAR/MSP prospects",
+    allowed_operations: [{ verb: "search_prospects" }, { verb: "enrich_contact" }],
+    prohibitions: ["send_email"],
+    effective_limits: { max_tool_calls: 120, max_cost_usd: 25 },
+    limit_sources: { max_tool_calls: "project_cap" },
+    admission: { decision: "admitted" },
+    bound_resources: [{ name: "Apollo connector" }]
+  };
+  controller.executeRun = async () => {
+    // A create_mission that executed immediately (platform PR #706): no pending approval exists.
+    controller.observeMissionCreationEvent({ type: "tool_start", name: "amos_create_mission" });
+    controller.observeMissionCreationEvent({
+      type: "tool_end",
+      name: "amos_create_mission",
+      result: {
+        ok: true,
+        mission_id: "33333333-3333-4333-8333-333333333333",
+        name: "VAR/MSP prospect list",
+        contract_id: "contract-1",
+        contract_sha256: "abc123",
+        expires_at: "2026-09-09T12:00:00.000Z",
+        _amos_mission_compilation: compilation
+      }
+    });
+    return { answer: "Mission created", taskEventId: "run:mission" };
+  };
+
+  const started = await controller.startHostedMission({
+    objective: "Build 500 qualified VAR/MSP prospects",
+    missionKind: "finite"
+  });
+  await settled();
+
+  const outcomes = controller.missionCompileState();
+  assert.equal(outcomes.length, 1);
+  const [outcome] = outcomes;
+  assert.equal(outcome.builderTaskId, started.builderTaskId);
+  assert.equal(outcome.runId, started.runId);
+  assert.equal(outcome.kind, "authorized");
+  assert.equal(outcome.missionId, "33333333-3333-4333-8333-333333333333");
+  assert.equal(outcome.missionName, "VAR/MSP prospect list");
+  assert.equal(outcome.contractId, "contract-1");
+  assert.equal(outcome.expiresAt, "2026-09-09T12:00:00.000Z");
+  assert.equal(outcome.contract.source, "compilation");
+  assert.deepEqual(outcome.contract.operations, ["search_prospects", "enrich_contact"]);
+  assert.deepEqual(outcome.contract.prohibitions, ["send_email"]);
+  assert.deepEqual(outcome.contract.effectiveLimits, { max_tool_calls: 120, max_cost_usd: 25 });
+  assert.deepEqual(outcome.contract.limitSources, { max_tool_calls: "project_cap" });
+  assert.deepEqual(outcome.contract.admission, { decision: "admitted" });
+  assert.deepEqual(outcome.contract.boundResources, ["Apollo connector"]);
+
+  // The renderer learns the outcome from the run lane while it is alive and from the bounded
+  // record afterwards; neither depends on elapsed time.
+  const laneUpdate = emitted.find((event) =>
+    event.channel === "desktop-runs:changed" &&
+    event.payload.some((lane) => lane.taskRecordId === started.builderTaskId && lane.missionOutcome)
+  );
+  assert.ok(laneUpdate, "the compile lane carries its outcome while it is still running");
+  const lane = laneUpdate.payload.find((item) => item.taskRecordId === started.builderTaskId);
+  assert.equal(lane.missionOutcome.kind, "authorized");
+  assert.equal(lane.missionOutcome.missionId, "33333333-3333-4333-8333-333333333333");
+  const pushed = emitted.filter((event) => event.channel === "mission-compiles:changed");
+  assert.equal(pushed.length, 1);
+  assert.equal(pushed[0].payload[0].kind, "authorized");
+  // The lane's later completion does not overwrite the authorized outcome with "ended".
+  assert.equal(controller.missionCompileState()[0].kind, "authorized");
+  assert.equal(controller.runManager.active().length, 0);
+});
+
+test("a parked create_mission keeps the authorization path, and a compiler rejection surfaces its corrective message", async () => {
+  const { controller: pendingController } = await hostedMissionController("amos-hosted-mission-pending-");
+  pendingController.executeRun = async () => {
+    pendingController.observeMissionCreationEvent({
+      type: "tool_end",
+      name: "amos_create_mission",
+      result: {
+        ok: true,
+        status: "pending_approval",
+        pending_id: "pending-77",
+        approval_url: "https://app.amoslabs.com/approvals/pending-77",
+        review_summary: "Create Mission: 500 prospects",
+        allowed_operations: [{ verb: "search_prospects" }],
+        max_tool_calls: 80
+      }
+    });
+    return { answer: "Proposed a Run Contract", taskEventId: "run:mission" };
+  };
+  const pending = await pendingController.startHostedMission({ objective: "Build 500 prospects" });
+  await settled();
+  const [parked] = pendingController.missionCompileState();
+  assert.equal(parked.builderTaskId, pending.builderTaskId);
+  assert.equal(parked.kind, "pending_approval");
+  assert.equal(parked.pendingId, "pending-77");
+  assert.equal(parked.approvalUrl, "https://app.amoslabs.com/approvals/pending-77");
+  assert.equal(parked.missionId, "");
+  assert.equal(parked.contract.source, "result");
+  assert.deepEqual(parked.contract.operations, ["search_prospects"]);
+  assert.deepEqual(parked.contract.effectiveLimits, { max_tool_calls: 80 });
+
+  const { controller: failedController } = await hostedMissionController("amos-hosted-mission-failed-");
+  const rejection = "InvalidParams: The Run Contract is not executable: no allowed operation can advance it. No Mission was created.";
+  failedController.executeRun = async () => {
+    // The MCP client normalizes an isError result into { ok: false, error }, which the agent loop
+    // reports as a failed tool_end; the controller reads the message straight from it.
+    failedController.observeMissionCreationEvent({
+      type: "tool_end",
+      name: "amos_create_mission",
+      result: { ok: false, error: rejection }
+    });
+    return { answer: "I could not create the Mission", taskEventId: "run:mission" };
+  };
+  const failed = await failedController.startHostedMission({ objective: "Do something impossible" });
+  await settled();
+  const [rejected] = failedController.missionCompileState();
+  assert.equal(rejected.builderTaskId, failed.builderTaskId);
+  assert.equal(rejected.kind, "failed");
+  assert.equal(rejected.message, rejection);
+  assert.equal(rejected.missionId, "");
+  assert.equal(rejected.pendingId, "");
+});
+
+test("a compile run that dies without any create_mission result settles as ended with its last error", async () => {
+  const { controller, emitted } = await hostedMissionController("amos-hosted-mission-ended-");
+  controller.executeRun = async () => {
+    controller.observeMissionCreationEvent({
+      type: "tool_end",
+      name: "amos_list_missions",
+      result: { ok: true, missions: [] }
+    });
+    throw new Error("Model provider returned 502");
+  };
+  const started = await controller.startHostedMission({ objective: "Build 500 prospects" });
+  await settled();
+  const [outcome] = controller.missionCompileState();
+  assert.equal(outcome.builderTaskId, started.builderTaskId);
+  assert.equal(outcome.kind, "ended");
+  assert.equal(outcome.runStatus, "failed");
+  assert.equal(outcome.message, "Model provider returned 502");
+  assert.ok(emitted.some((event) => event.channel === "mission-compiles:changed"));
+  // An ordinary conversation run never produces a Mission outcome record.
+  assert.equal(controller.missionCompileState().length, 1);
+});
+
+test("missionCreationOutcome classifies create_mission results without consulting time", () => {
+  assert.equal(missionCreationOutcome({ type: "tool_end", name: "amos_search", result: { ok: true } }), null);
+  assert.equal(missionCreationOutcome({ type: "tool_start", name: "amos_create_mission" }), null);
+  assert.deepEqual(
+    missionCreationOutcome({ type: "tool_error", name: "create_mission", error: "boom" }),
+    { kind: "failed", message: "boom" }
+  );
+  assert.equal(
+    missionCreationOutcome({ type: "tool_end", name: "amos_create_mission", result: { ok: true, status: "pending_approval", pending_id: "p1" } }).kind,
+    "pending_approval"
+  );
+  const authorized = missionCreationOutcome({
+    type: "tool_end",
+    name: "amos_create_mission",
+    result: { ok: true, mission_id: "m1", contract_id: "c1", expires_at: "2026-09-09T00:00:00Z" }
+  });
+  assert.equal(authorized.kind, "authorized");
+  assert.equal(authorized.missionId, "m1");
+  assert.equal(authorized.contractId, "c1");
+  // A result that is neither parked nor a Mission leaves the lane to settle as "ended".
+  assert.equal(
+    missionCreationOutcome({ type: "tool_end", name: "amos_create_mission", result: { ok: true, text: "noted" } }),
+    null
+  );
+  // Optimization Missions correlate on create_goal instead.
+  assert.equal(missionCreationOutcome({ type: "tool_end", name: "amos_create_goal", result: { ok: true, goal_id: "g1" } }, "finite"), null);
+  assert.equal(
+    missionCreationOutcome({ type: "tool_end", name: "amos_create_goal", result: { ok: true, goal_id: "g1" } }, "optimization").missionId,
+    "g1"
+  );
 });
 
 test("a local Mission accepts optional Project context and requires an outcome", async () => {

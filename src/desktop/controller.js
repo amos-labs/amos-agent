@@ -226,6 +226,10 @@ export class DesktopController {
     createRuntime: createRuntimeImpl = createRuntime
   }) {
     this.runManager = new DesktopRunManager();
+    // Outcomes of hidden Mission compile runs, keyed by builder task id. The compile lane
+    // disappears from activeRuns when it ends, so the Missions page correlates its skeleton
+    // card with the create_mission result through this bounded record instead of a timer.
+    this.missionCompileOutcomes = new Map();
     this.userDataPath = userDataPath;
     this.taskEpisodeStore = taskEpisodeStore || new DesktopTaskEpisodeStore({
       rootPath: join(userDataPath, "learning-episodes")
@@ -484,7 +488,8 @@ export class DesktopController {
             usage: this.activeTask.usage || null
           }
         : null,
-      activeRuns: this.runManager.active()
+      activeRuns: this.runManager.active(),
+      missionCompiles: this.missionCompileState()
     };
   }
 
@@ -2391,6 +2396,7 @@ export class DesktopController {
           this.adoptRunSurface(launched.lane);
           this.runManager.select(null);
         }
+        this.settleMissionCompileLane(launched.lane);
         this.runManager.delete(launched.lane.id);
         this.send("desktop-runs:changed", this.runManager.active());
       }
@@ -2690,6 +2696,7 @@ export class DesktopController {
         onEvent: (event) => {
           const safeEvent = this.annotateUsageEvent(event, this.activeTask);
           this.runManager.current()?.supervisor?.observe(safeEvent);
+          this.observeMissionCreationEvent(safeEvent);
           this.send("agent:event", safeEvent);
           if (safeEvent.type !== "assistant_delta") {
             receiptEvents.push(receiptEvent(safeEvent));
@@ -5301,6 +5308,63 @@ export class DesktopController {
     return checkpoint;
   }
 
+  // ---- Hosted Mission compile correlation ----
+  //
+  // The compile run started by startHostedMission is hidden internal evidence. Its create_mission
+  // result decides what the Missions page shows next, so the outcome is keyed on the builder task
+  // id and carried on the lane and in a bounded controller record; no timer guesses the outcome.
+
+  observeMissionCreationEvent(event) {
+    const lane = this.runManager.current();
+    if (!lane || lane.missionCreation !== true || lane.missionOutcome) return;
+    const outcome = missionCreationOutcome(event, lane.missionCreationType);
+    if (!outcome) return;
+    if (outcome.kind !== "failed" && this.activeTask) this.activeTask.missionCreationObserved = true;
+    this.recordMissionCompileOutcome(lane, outcome);
+  }
+
+  settleMissionCompileLane(lane) {
+    if (!lane || lane.missionCreation !== true || lane.missionOutcome) return;
+    const cancelled = lane.status === "cancelled";
+    this.recordMissionCompileOutcome(lane, {
+      kind: cancelled ? "cancelled" : "ended",
+      message: cancelled
+        ? "The compile was stopped before it created a Mission."
+        : lane.status === "failed"
+          ? String(lane.summary || "").trim()
+          : ""
+    });
+  }
+
+  recordMissionCompileOutcome(lane, outcome) {
+    const record = publicMissionOutcome({
+      ...outcome,
+      builderTaskId: lane.taskRecordId,
+      runId: lane.id,
+      runStatus: lane.status,
+      observedAt: new Date().toISOString()
+    });
+    lane.missionOutcome = record;
+    this.missionCompileOutcomes.delete(record.builderTaskId);
+    this.missionCompileOutcomes.set(record.builderTaskId, record);
+    while (this.missionCompileOutcomes.size > MISSION_COMPILE_OUTCOME_LIMIT) {
+      this.missionCompileOutcomes.delete(this.missionCompileOutcomes.keys().next().value);
+    }
+    this.record("mission", missionOutcomeSummary(record), {
+      builder_task_id: record.builderTaskId,
+      run_id: record.runId,
+      outcome: record.kind,
+      mission_id: record.missionId || null,
+      pending_id: record.pendingId || null
+    });
+    this.send("desktop-runs:changed", this.runManager.active());
+    this.send("mission-compiles:changed", this.missionCompileState());
+  }
+
+  missionCompileState() {
+    return [...this.missionCompileOutcomes.values()].map((record) => structuredClone(record));
+  }
+
   captureTaskProgress(event) {
     const active = this.activeTask;
     const lane = this.runManager.current();
@@ -7338,12 +7402,13 @@ export class DesktopController {
     if (
       lane?.detached &&
       channel !== "desktop-runs:changed" &&
+      channel !== "mission-compiles:changed" &&
       channel !== "task-checkpoints:changed" &&
       !(channel === "agent:status" && payload?.running === false)
     ) {
       return;
     }
-    if (!lane || channel === "desktop-runs:changed") {
+    if (!lane || channel === "desktop-runs:changed" || channel === "mission-compiles:changed") {
       this.emit(channel, payload);
       return;
     }
@@ -8681,6 +8746,170 @@ function emptyMissionsState() {
     stale: false,
     refreshError: ""
   };
+}
+
+const MISSION_COMPILE_OUTCOME_LIMIT = 32;
+const MISSION_OUTCOME_KINDS = new Set(["pending_approval", "authorized", "failed", "ended", "cancelled"]);
+
+function isMissionCreationTool(name, kind) {
+  const tool = String(name || "");
+  return kind === "optimization"
+    ? /(^|_)create_goal$/.test(tool)
+    : /(^|_)create_mission$/.test(tool);
+}
+
+/**
+ * Classify one compile-lane tool event into a Mission outcome:
+ *   pending_approval — the Platform parked create_mission behind a pending approval;
+ *   authorized       — an owner-requested create_mission executed immediately and returned a
+ *                      Mission id (platform PR #706), so nothing is left to authorize;
+ *   failed           — the compiler rejected the Run Contract (for example the executability
+ *                      error from platform PR #709) and no Mission was created.
+ */
+export function missionCreationOutcome(event, kind = "finite") {
+  if (!event || !isMissionCreationTool(event.name, kind)) return null;
+  if (event.type === "tool_error") {
+    return { kind: "failed", message: String(event.error || "create_mission failed") };
+  }
+  if (event.type !== "tool_end") return null;
+  const result = event.result && typeof event.result === "object" && !Array.isArray(event.result)
+    ? event.result
+    : null;
+  if (!result) return null;
+  if (result.ok === false) {
+    return {
+      kind: "failed",
+      message: String(result.error?.message || result.error || result.message || "create_mission failed")
+    };
+  }
+  const pendingId = String(
+    result.pending_id || result.pendingId || result.pending_operation?.id || result.pendingOperation?.id || ""
+  ).trim();
+  if (result.status === "pending_approval" || result.status === "pending" || pendingId) {
+    return {
+      kind: "pending_approval",
+      pendingId,
+      approvalUrl: String(result.approval_url || result.approvalUrl || ""),
+      reviewSummary: String(result.review_summary || result.reviewSummary || ""),
+      contract: compiledRunContract(result)
+    };
+  }
+  const missionId = String(
+    result.mission_id || result.missionId || result.mission?.id || result.goal_id || result.goal?.id || ""
+  ).trim();
+  if (missionId) {
+    return {
+      kind: "authorized",
+      missionId,
+      missionName: String(result.name || result.mission?.name || result.goal?.name || ""),
+      contractId: String(result.contract_id || result.contract?.id || ""),
+      contractSha256: String(result.contract_sha256 || result.contract?.sha256 || ""),
+      expiresAt: String(result.expires_at || result.contract?.expires_at || ""),
+      contract: compiledRunContract(result)
+    };
+  }
+  return null;
+}
+
+function compiledRunContract(result) {
+  // Prefer the compiler's own record of what it bound (platform PR #709 adds effective_limits,
+  // limit_sources, admission, bound_resources); otherwise show what the result itself carries.
+  const compilation = result?._amos_mission_compilation;
+  const source = compilation && typeof compilation === "object" ? compilation : result || {};
+  const contract = source.contract && typeof source.contract === "object" ? source.contract : {};
+  const pick = (...keys) => {
+    for (const key of keys) {
+      const value = source[key] ?? contract[key] ?? result?.[key];
+      if (value !== undefined && value !== null && value !== "") return value;
+    }
+    return undefined;
+  };
+  const operations = boundedStringList(pick("allowed_operations", "operations"), (entry) =>
+    typeof entry === "string" ? entry : entry?.verb || entry?.operation || entry?.name || ""
+  );
+  const prohibitions = boundedStringList(pick("prohibitions", "prohibited_operations"), (entry) =>
+    typeof entry === "string" ? entry : entry?.verb || entry?.operation || entry?.description || ""
+  );
+  const effectiveLimits = boundedScalarRecord(pick("effective_limits", "limits"));
+  const legacyLimits = boundedScalarRecord({
+    max_tool_calls: pick("max_tool_calls"),
+    max_cost_usd: pick("max_cost_usd", "budget_usd"),
+    max_duration_minutes: pick("max_duration_minutes")
+  });
+  return {
+    source: compilation && typeof compilation === "object" ? "compilation" : "result",
+    objective: String(pick("objective", "outcome", "goal") || "").slice(0, 1_000),
+    operations,
+    prohibitions,
+    effectiveLimits: Object.keys(effectiveLimits).length > 0 ? effectiveLimits : legacyLimits,
+    limitSources: boundedScalarRecord(pick("limit_sources")),
+    admission: boundedScalarRecord(pick("admission")),
+    boundResources: boundedStringList(pick("bound_resources"), (entry) =>
+      typeof entry === "string" ? entry : entry?.name || entry?.id || entry?.type || ""
+    ),
+    expiresAt: String(pick("expires_at") || "").slice(0, 64)
+  };
+}
+
+function boundedStringList(value, project) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => String(project(entry) || "").trim().slice(0, 160))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
+function boundedScalarRecord(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const record = {};
+  for (const [key, entry] of Object.entries(value).slice(0, 16)) {
+    if (entry === null || entry === undefined) continue;
+    if (["string", "number", "boolean"].includes(typeof entry)) {
+      record[String(key).slice(0, 80)] = typeof entry === "string" ? entry.slice(0, 200) : entry;
+    } else if (typeof entry === "object" && !Array.isArray(entry)) {
+      const scalar = entry.value ?? entry.limit ?? entry.max ?? entry.source;
+      if (["string", "number", "boolean"].includes(typeof scalar)) {
+        record[String(key).slice(0, 80)] = typeof scalar === "string" ? scalar.slice(0, 200) : scalar;
+      }
+    }
+  }
+  return record;
+}
+
+function publicMissionOutcome(value) {
+  const kind = MISSION_OUTCOME_KINDS.has(value?.kind) ? value.kind : "ended";
+  return {
+    kind,
+    builderTaskId: String(value?.builderTaskId || ""),
+    runId: String(value?.runId || ""),
+    runStatus: String(value?.runStatus || ""),
+    observedAt: String(value?.observedAt || ""),
+    missionId: String(value?.missionId || "").slice(0, 160),
+    missionName: String(value?.missionName || "").slice(0, 200),
+    pendingId: String(value?.pendingId || "").slice(0, 160),
+    approvalUrl: String(value?.approvalUrl || "").slice(0, 2_000),
+    reviewSummary: String(value?.reviewSummary || "").slice(0, 1_000),
+    contractId: String(value?.contractId || "").slice(0, 160),
+    contractSha256: String(value?.contractSha256 || "").slice(0, 128),
+    expiresAt: String(value?.expiresAt || "").slice(0, 64),
+    message: String(value?.message || "").slice(0, 2_000),
+    contract: value?.contract && typeof value.contract === "object" ? value.contract : null
+  };
+}
+
+function missionOutcomeSummary(record) {
+  switch (record.kind) {
+    case "authorized":
+      return `Mission created: ${record.missionName || record.missionId}`;
+    case "pending_approval":
+      return "Run Contract proposed; waiting for authorization";
+    case "failed":
+      return `Mission compile rejected: ${record.message}`;
+    case "cancelled":
+      return "Mission compile stopped";
+    default:
+      return "Mission compile ended without creating a Mission";
+  }
 }
 
 function runStatusForEvent(event) {
