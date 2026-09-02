@@ -7,6 +7,7 @@ import {
 } from "../src/agentLoop.js";
 import { ToolRegistry } from "../src/tools/registry.js";
 import { attachModelEvidence } from "../src/model/evidence.js";
+import { parseToolResult } from "../src/util/toolResultEnvelope.js";
 
 test("usage events keep OpenAI-compatible prompt and completion token names", async () => {
   const events = [];
@@ -2503,7 +2504,7 @@ test("successful AMOS results receive a short-lived desktop canvas reference", a
             }
           };
         }
-        const toolResult = JSON.parse(messages.at(-1).content);
+        const toolResult = parseToolResult(messages.at(-1).content);
         assert.equal(toolResult.desktop_result_ref, "result-1");
         return { message: { role: "assistant", content: "Company view is ready." } };
       }

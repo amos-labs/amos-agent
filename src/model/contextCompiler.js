@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { canonicalJson } from "../util/canonicalJson.js";
+import { unwrapToolResult } from "../util/toolResultEnvelope.js";
 import { formatScratchpadCard } from "./conversationScratchpad.js";
 
 const DEFAULT_CONTEXT_TOKENS = 131_072;
@@ -338,7 +339,7 @@ function compactBlock(block, limit) {
     .slice(-8)
     .map((message) => {
       const name = toolNames.get(message.tool_call_id) || "tool";
-      return `- ${name}: ${truncateText(String(message.content || ""), 800)}`;
+      return `- ${name}: ${truncateText(unwrapToolResult(String(message.content || "")), 800)}`;
     });
   const content = summaries.length > 0
     ? ["Earlier tool evidence was compacted to fit this model's context window.", ...summaries].join("\n")

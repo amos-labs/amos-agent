@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { SYSTEM_PROMPT } from "./prompts.js";
 import { isAbortError, throwIfAborted } from "./util/abort.js";
+import { unwrapToolResult, wrapToolResult } from "./util/toolResultEnvelope.js";
 import {
   applyWorkflowToModelContent,
   selectTaskWorkflow
@@ -810,7 +811,7 @@ export class AgentLoop {
           this.messages.push({
             role: "tool",
             tool_call_id: call.id,
-            content: JSON.stringify(result)
+            content: wrapToolResult(name, JSON.stringify(result))
           });
           outcomes.push({ name, rawArgs, args, failed, result });
         }
@@ -2538,7 +2539,7 @@ function compactHistoryBlock(block) {
 }
 
 function truncateHistoryContent(value, limit) {
-  const encoded = typeof value === "string" ? value : JSON.stringify(value);
+  const encoded = typeof value === "string" ? unwrapToolResult(value) : JSON.stringify(value);
   const content = encoded == null ? "" : encoded;
   if (content.length <= limit) return content;
   return `${content.slice(0, limit - 1)}…`;

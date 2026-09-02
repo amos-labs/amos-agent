@@ -6,6 +6,7 @@ import {
   readSseEvents
 } from "./protocol.js";
 import { mergeThoughtDelta } from "./thoughtDelta.js";
+import { unwrapToolResult } from "../util/toolResultEnvelope.js";
 
 const PROTOCOL = "anthropic-messages";
 
@@ -162,7 +163,7 @@ function parseArguments(value) {
 
 function toolResultFailed(content) {
   try {
-    const payload = typeof content === "string" ? JSON.parse(content) : content;
+    const payload = typeof content === "string" ? JSON.parse(unwrapToolResult(content)) : content;
     return payload?.ok === false || Boolean(payload?.error);
   } catch {
     return false;
