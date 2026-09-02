@@ -40,7 +40,6 @@ test("model provider defaults to Kimi while preserving legacy environment names"
   assert.equal(config.model.apiKey, "moonshot-key");
   assert.equal(config.model.model, "kimi-k3");
   assert.equal(config.model.baseUrl, "https://legacy.moonshot.example/v1");
-  assert.equal(config.kimi, config.model);
 });
 
 test("Bedrock resolves a qualified model to its native regional endpoint", () => {

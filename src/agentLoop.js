@@ -95,7 +95,6 @@ export class AgentLoop {
   constructor({
     config,
     modelClient,
-    kimiClient,
     registry,
     approvals,
     amosClient,
@@ -107,7 +106,7 @@ export class AgentLoop {
     onScratchpadChange = null
   }) {
     this.config = config;
-    this.modelClient = modelClient || kimiClient;
+    this.modelClient = modelClient;
     this.registry = registry;
     this.approvals = approvals;
     this.amosClient = amosClient;

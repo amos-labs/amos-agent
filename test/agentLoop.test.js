@@ -16,7 +16,7 @@ test("usage events keep OpenAI-compatible prompt and completion token names", as
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         return {
           message: { role: "assistant", content: "done" },
@@ -41,7 +41,7 @@ test("local prompt budget learns toward the configured prefill latency target", 
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "done" } }) }
+    modelClient: { chat: async () => ({ message: { role: "assistant", content: "done" } }) }
   });
 
   assert.equal(loop.preferredInputTokenBudget(), 8_192);
@@ -72,7 +72,7 @@ test("role handoff waits until after the current tool result", async () => {
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         seen.push(messages.map((message) => message.role));
@@ -111,7 +111,7 @@ test("a completion gate prevents a coding role from silently ending", async () =
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         seen.push(messages);
@@ -198,7 +198,7 @@ test("each coding role gets a fresh structured-result retry after a valid stage 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         return { message: responses[turn++] };
       }
@@ -235,7 +235,7 @@ test("malformed tool JSON from any model is corrected and never executes", async
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         requests.push(input);
         turn += 1;
@@ -288,7 +288,7 @@ test("alternating capability catalog calls stop when they add no usable operatio
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         requests.push(input);
         turn += 1;
@@ -358,7 +358,7 @@ test("a successful state-changing tool resets the capability discovery streak", 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         modelCalls += 1;
         const sequence = [
@@ -399,7 +399,7 @@ test("an output-limited model response is explained and retried automatically", 
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         requests.push(input);
         if (requests.length === 1) {
@@ -443,7 +443,7 @@ test("transient visual tool evidence reaches the next model turn but not public 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         observed.push(messages);
@@ -480,7 +480,7 @@ test("custom operating prompt survives a cleared session", () => {
     approvals: {},
     amosClient: {},
     systemPrompt: "LOCAL ONLY",
-    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "" } }) }
+    modelClient: { chat: async () => ({ message: { role: "assistant", content: "" } }) }
   });
   loop.messages.push({ role: "user", content: "test" });
   loop.clear();
@@ -494,7 +494,7 @@ test("encrypted continuity can rehydrate an otherwise fresh loop only once", () 
     approvals: {},
     amosClient: {},
     systemPrompt: "LOCAL ONLY",
-    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "" } }) }
+    modelClient: { chat: async () => ({ message: { role: "assistant", content: "" } }) }
   });
   assert.equal(loop.restoreContinuity("Previous safe milestone"), true);
   assert.deepEqual(loop.messages, [
@@ -516,7 +516,7 @@ test("compiled continuity uses the same standard message contract across provide
       registry: new ToolRegistry(),
       approvals: {},
       amosClient: {},
-      kimiClient: {
+      modelClient: {
         async chat({ messages }) {
           assert.deepEqual(messages.map((message) => message.role), [
             "system",
@@ -547,7 +547,7 @@ test("restored continuity keeps follow-up model transcripts user-first", async (
     approvals: {},
     amosClient: {},
     systemPrompt: "LOCAL ONLY",
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         observed.push(messages);
         assert.equal(messages[0].role, "system");
@@ -582,7 +582,7 @@ test("completed approval outcomes join the next real user turn once without repl
     approvals: {},
     amosClient: {},
     systemPrompt: "LOCAL ONLY",
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         observed.push(messages);
         return { message: { role: "assistant", content: `Answer ${observed.length}` } };
@@ -630,7 +630,7 @@ test("ordinary chat defers canvas schemas while an explicit canvas request is ho
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         assert.deepEqual(toolNames(tools), ["read_data"]);
         return { message: { role: "assistant", content: "A concise answer." } };
@@ -650,7 +650,7 @@ test("ordinary chat defers canvas schemas while an explicit canvas request is ho
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         turn += 1;
         if (turn === 1) {
@@ -689,7 +689,7 @@ test("an already-open Desktop canvas supports natural cross-turn updates", async
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         assert.deepEqual(toolNames(tools), ["read_data", "desktop_update_canvas"]);
         return { message: { role: "assistant", content: "Updated it." } };
@@ -724,7 +724,7 @@ test("the model can request a work surface semantically without English regex in
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         turn += 1;
         if (turn === 1) {
@@ -776,7 +776,7 @@ test("explicit code, app, and course preview requests reveal the canvas safely",
       registry,
       approvals: {},
       amosClient: {},
-      kimiClient: {
+      modelClient: {
         async chat({ tools }) {
           assert.ok(toolNames(tools).includes("desktop_present_canvas"), prompt);
           return { message: { role: "assistant", content: "Preview ready." } };
@@ -815,7 +815,7 @@ test("dense captured company results progressively reveal only the deterministic
     onToolResult: ({ name }) => name.startsWith("amos_")
       ? { result_ref: "result-1" }
       : null,
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         turn += 1;
         if (turn === 1) {
@@ -857,7 +857,7 @@ test("a live user request for a canvas reveals the presentation tool at the safe
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         turn += 1;
         if (turn === 1) {
@@ -893,7 +893,7 @@ test("agent selects a visible skill-backed workflow and injects bounded guidance
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         const prompt = messages.at(-1);
         assert.equal(prompt.role, "user");
@@ -941,7 +941,7 @@ test("agent loop streams tool-turn narration and cancels an active tool", async 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ onDelta }) {
         turn += 1;
         onDelta("Working", "Working");
@@ -986,7 +986,7 @@ test("gather hops request lower reasoning effort than the configured synthesis d
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ reasoningEffortOverride }) {
         efforts.push(reasoningEffortOverride);
         return { message: { role: "assistant", content: "done" } };
@@ -1038,7 +1038,7 @@ test("parallel-safe read-only tools execute concurrently and preserve transcript
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         turn += 1;
         return turn === 1
@@ -1075,7 +1075,7 @@ test("task routing is reused across continuation turns", async () => {
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ preclassifiedRouting }) {
         routed.push(preclassifiedRouting);
         turn += 1;
@@ -1106,7 +1106,7 @@ test("older raw tool evidence is compacted while the two newest result blocks re
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         turn += 1;
         return turn <= 3
@@ -1145,7 +1145,7 @@ test("raw tool evidence defers compaction when one future turn cannot repay the 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         turn += 1;
         return turn <= 3
@@ -1191,7 +1191,7 @@ test("agent turns reuse one opaque prompt session and expose prefix telemetry", 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         requests.push(input);
         turn += 1;
@@ -1245,7 +1245,7 @@ test("changing or omitting a prompt session clears stale prefix state", () => {
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: { chat: async () => ({ message: { role: "assistant", content: "done" } }) }
+    modelClient: { chat: async () => ({ message: { role: "assistant", content: "done" } }) }
   });
   loop.configurePromptSession({ key: "first", tenantBoundary: { id: "one" } });
   loop.lastPromptCacheState = { contractSha256: "cached", messages: [] };
@@ -1282,7 +1282,7 @@ test("productive work continues beyond the former eight-cycle limit", async () =
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         turn += 1;
         if (turn <= 10) {
@@ -1324,7 +1324,7 @@ test("a model timeout after completed tools exposes recoverable progress", async
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ onDelta }) {
         turn += 1;
         if (turn === 1) {
@@ -1378,7 +1378,7 @@ test("a hosted timeout after tool progress continues remaining work once", async
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         if (turn === 1) {
@@ -1431,7 +1431,7 @@ test("a stalled empty model response retries the same turn without replaying com
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         turn += 1;
         if (turn === 1) {
@@ -1480,7 +1480,7 @@ test("invalid streamed tool arguments are explained to the model and retried wit
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         requests.push(input);
         if (requests.length === 1) {
@@ -1562,7 +1562,7 @@ test("a repeated empty response after tool progress falls back to low-reasoning 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         requests.push(input);
         turn += 1;
@@ -1628,7 +1628,7 @@ test("a timed research checkpoint lets the user synthesize without another tool 
     },
     amosClient: {},
     now: () => now,
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         requests.push(input);
         if (input.messages.some((message) =>
@@ -1695,7 +1695,7 @@ test("research checkpoint synthesis retries a transient provider failure without
     },
     amosClient: {},
     now: () => now,
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         request += 1;
         if (request === 1) {
@@ -1758,7 +1758,7 @@ test("a work-step checkpoint prevents varied tools from running indefinitely", a
     },
     amosClient: {},
     now: () => 0,
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         if (input.messages.some((message) =>
           String(message.content || "").includes("amos_research_checkpoint_assessment")
@@ -1828,7 +1828,7 @@ test("a research checkpoint can extend work or remove later timed interruptions"
     },
     amosClient: {},
     now: () => now,
-    kimiClient: {
+    modelClient: {
       async chat(input) {
         if (input.messages.some((message) =>
           String(message.content || "").includes("amos_research_checkpoint_assessment")
@@ -1878,7 +1878,7 @@ test("internal compaction evidence cannot masquerade as the completed user resul
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         if (turn === 1) {
@@ -1938,7 +1938,7 @@ test("a recover-the-thread announcement is not a completed answer", async () => 
       currentJob: "Update tax_behavior to inclusive on these three Stripe prices",
       jobs: [{ title: "Update tax_behavior to inclusive on these three Stripe prices", status: "current" }]
     },
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         if (turn === 1) {
@@ -1997,7 +1997,7 @@ test("a long reframe-the-plan recap is not a completed answer", async () => {
       jobs: [{ title: "Fix tax_behavior on the three Stripe prices", status: "current" }],
       notes: "LANDED POST /v1/prices/price_1Tn0fPGlkubafVtvDNckoZPh → 200 tax_behavior=exclusive"
     },
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         if (turn === 1) {
@@ -2039,7 +2039,7 @@ test("a denied company decision is injected into an active turn without hopping 
       currentJob: "Fix tax_behavior on the three Stripe prices",
       jobs: [{ title: "Fix tax_behavior on the three Stripe prices", status: "current" }]
     },
-    kimiClient: {
+    modelClient: {
       async chat() {
         return { message: { role: "assistant", content: "waiting" } };
       }
@@ -2092,7 +2092,7 @@ test("a successful Stripe write is remembered and the identical call is not sent
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         if (phase === "first") {
           phase = "replay";
@@ -2169,7 +2169,7 @@ test("message-limit compaction keeps tool evidence from before the latest follow
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         if (phase === "seed") {
           return { message: { role: "assistant", content: "ack" } };
@@ -2226,7 +2226,7 @@ test("exhausted transient retries after progress surface recoverable progress", 
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         turn += 1;
         if (turn === 1) {
@@ -2260,7 +2260,7 @@ test("a user cancel still stops immediately and does not retry", async () => {
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         const error = new Error("Task canceled");
         error.name = "AbortError";
@@ -2284,7 +2284,7 @@ test("completed task history stays below the provider message ceiling", async ()
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         observedLengths.push(messages.length);
         assert.ok(messages.length <= 12);
@@ -2318,7 +2318,7 @@ test("a follow-up turn still sees the original conversation objective", async ()
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         seen.push(messages.map((message) => String(message.content || "")));
         return {
@@ -2359,7 +2359,7 @@ test("a conversation scratch pad tracks job hops and is always in the model wind
     approvals: {},
     amosClient: {},
     onScratchpadChange: (pad) => persisted.push(structuredClone(pad)),
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         seen.push(messages.map((message) => String(message.content || "")).join("\n"));
         return { message: { role: "assistant", content: `ack ${seen.length}` } };
@@ -2389,7 +2389,7 @@ test("a conversation scratch pad tracks job hops and is always in the model wind
     approvals: {},
     amosClient: {},
     scratchpad: persisted.at(-1),
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         restoredSeen.push(messages.map((message) => String(message.content || "")).join("\n"));
         return {
@@ -2430,7 +2430,7 @@ test("an active tool-heavy task keeps its objective and complete recent tool blo
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         assert.ok(messages.length <= 12);
         assert.equal(messages[0].role, "system");
@@ -2489,7 +2489,7 @@ test("successful AMOS results receive a short-lived desktop canvas reference", a
       assert.equal(result.revenue, 125000);
       return { result_ref: "result-1" };
     },
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         if (turn === 1) {
@@ -2536,7 +2536,7 @@ test("queued steering is applied to the same task at a safe tool boundary", asyn
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         if (turn === 1) {
@@ -2584,7 +2584,7 @@ test("steering received during a final model response continues the active task"
     registry: new ToolRegistry(),
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages }) {
         turn += 1;
         if (turn === 1) {
@@ -2626,7 +2626,7 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ messages, tools }) {
         calls += 1;
         if (tools.length === 0) {
@@ -2692,7 +2692,7 @@ test("an identical read-only status request synthesizes despite changing receipt
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         modelCalls += 1;
         if (tools.length === 0) {
@@ -2766,7 +2766,7 @@ test("a scratchpad update cannot replace a live campaign status answer", async (
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat() {
         modelCalls += 1;
         if (modelCalls === 1) {
@@ -2852,7 +2852,7 @@ test("paraphrased read-only discovery cannot evade the guard and synthesis route
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools, preclassifiedRouting }) {
         modelCalls += 1;
         if (tools.length === 0) {
@@ -2911,7 +2911,7 @@ test("an unclassified repeated request cannot evade the loop guard with changing
     registry,
     approvals: {},
     amosClient: {},
-    kimiClient: {
+    modelClient: {
       async chat({ tools }) {
         modelCalls += 1;
         if (tools.length === 0) {
