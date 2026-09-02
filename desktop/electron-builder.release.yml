@@ -9,6 +9,12 @@ files:
   - desktop/**/*
   - "!desktop/vendor/**/*"
   - src/**/*
+  # Research, evals, tests and docs are not part of the shipped Desktop app.
+  - "!src/research/**"
+  - "!src/evals/**"
+  - "!src/**/*.test.js"
+  - "!src/**/__tests__/**"
+  - "!src/**/*.md"
   - package.json
   - LICENSE
   # @napi-rs/canvas loads its native binding from a per-platform optional

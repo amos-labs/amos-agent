@@ -1,5 +1,0 @@
-Slide 5: Rewrite title and top-row labels to make AMOS Desktop visible and to reinforce that Desktop is the first-party cockpit while the governed brain remains portable across Claude, GPT, Codex, open models, and MCP clients.
-
-Slide 11: Replace prior launch-example copy with founder-provided August 2026 status: $2,200 current MRR added last month, 8+ SMB companies, an active deal pipeline already in the millions, a large-enterprise pilot, early-stage UT and life-sciences conversations, active partners across divisions, and Nuvola's government-contracting wedge in law-enforcement training. Current revenue, active pilot, and early-stage conversations remain explicitly distinct.
-
-Slide 14: Restyle the final AMOS Sovereign marker to the same Arial 16, centered, green #26B47E treatment as the other AMOS native markers.

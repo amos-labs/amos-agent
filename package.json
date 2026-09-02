@@ -81,6 +81,11 @@
     "files": [
       "desktop/**/*",
       "src/**/*",
+      "!src/research/**",
+      "!src/evals/**",
+      "!src/**/*.test.js",
+      "!src/**/__tests__/**",
+      "!src/**/*.md",
       "package.json",
       "LICENSE"
     ],

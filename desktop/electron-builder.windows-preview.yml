@@ -8,6 +8,12 @@ extraMetadata:
 files:
   - desktop/**/*
   - src/**/*
+  # Research, evals, tests and docs are not part of the shipped Desktop app.
+  - "!src/research/**"
+  - "!src/evals/**"
+  - "!src/**/*.test.js"
+  - "!src/**/__tests__/**"
+  - "!src/**/*.md"
   - package.json
   - LICENSE
 
