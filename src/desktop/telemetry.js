@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fetchCompat } from "../util/fetchCompat.js";
+import { clean } from "../util/validate.js";
 
 const VERSION = 1;
 const MAX_PENDING = 100;
@@ -275,8 +276,4 @@ function safeContext(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const encoded = JSON.stringify(value);
   return encoded.length <= 8_000 ? value : { truncated: true };
-}
-
-function clean(value, maxLength) {
-  return String(value || "").trim().slice(0, maxLength);
 }

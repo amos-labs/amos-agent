@@ -1,4 +1,5 @@
 import { normalizeIntelligenceRole } from "./intelligenceRoles.js";
+import { clean } from "../util/validate.js";
 
 export const CODING_LIFECYCLE_OUTCOMES = Object.freeze([
   "plan_ready",
@@ -191,9 +192,6 @@ export function codingVerificationPendingNote(state, detail = "") {
   ].filter(Boolean).join(" ");
 }
 
-function clean(value, max) {
-  return String(value || "").trim().slice(0, max);
-}
 
 function cleanEvidence(value) {
   return (Array.isArray(value) ? value : [])

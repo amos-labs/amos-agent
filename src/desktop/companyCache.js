@@ -6,6 +6,7 @@ import {
 } from "node:crypto";
 import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { clean } from "../util/validate.js";
 
 export const COMPANY_CACHE_AUDIENCE = "amos-desktop-company-cache";
 export const COMPANY_CACHE_FORMAT = "amos-company-cache";
@@ -392,8 +393,4 @@ function sameText(left, right) {
   const a = Buffer.from(String(left || ""), "utf8");
   const b = Buffer.from(String(right || ""), "utf8");
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-function clean(value, maxLength) {
-  return String(value || "").trim().slice(0, maxLength);
 }

@@ -50,6 +50,7 @@ import {
   assertValidModelToolArguments,
   canonicalizeMessageToolCalls
 } from "./model/protocol.js";
+import { boundedInteger } from "./util/validate.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
 const MAX_LIVE_TRANSCRIPT_MESSAGES = 800;
@@ -2310,11 +2311,6 @@ function isBulkyAssistantProse(block) {
     && modelContentLength(first.content) > 4_000;
 }
 
-function boundedInteger(value, fallback, minimum, maximum) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
-}
 
 function finiteOrNull(value) {
   const parsed = Number(value);

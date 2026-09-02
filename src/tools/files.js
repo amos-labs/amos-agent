@@ -2,6 +2,7 @@ import { mkdir, open, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, relative } from "node:path";
 import { assertSafeAgentPath } from "../util/pathSafety.js";
 import { resolveDefaultWorkspacePath } from "../util/workspaceFocus.js";
+import { boundedNumber } from "../util/validate.js";
 
 const DEFAULT_IGNORES = new Set([".git", "node_modules", "dist", "coverage", ".amos-agent", ".ssh", ".aws", ".gnupg"]);
 
@@ -148,10 +149,4 @@ async function walk(dir, root, files, maxResults) {
       });
     }
   }
-}
-
-function boundedNumber(value, fallback, min, max) {
-  const number = Number(value ?? fallback);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.min(Math.max(Math.floor(number), min), max);
 }

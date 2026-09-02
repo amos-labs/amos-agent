@@ -18,6 +18,7 @@ import {
   normalizePortableScratchpads,
   PORTABLE_SCRATCHPAD_KIND
 } from "../model/conversationScratchpad.js";
+import { clean } from "../util/validate.js";
 
 export const ENCRYPTED_CAPSULE_FORMAT = "amos-encrypted-memory-capsule";
 export const ENCRYPTED_CAPSULE_VERSION = "1";
@@ -424,9 +425,6 @@ function boundedNumber(value) {
   return parsed;
 }
 
-function clean(value, maxLength) {
-  return String(value || "").trim().slice(0, maxLength);
-}
 
 export const memoryCapsuleLimits = Object.freeze({
   maxCapsuleBytes: MAX_CAPSULE_BYTES,

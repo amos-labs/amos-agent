@@ -1,3 +1,4 @@
+import { clean } from "../util/validate.js";
 export const INTELLIGENCE_ROLES = Object.freeze(["planner", "implementer", "checker"]);
 
 export const DEFAULT_INTELLIGENCE_ROLES = Object.freeze({
@@ -120,9 +121,6 @@ function sanitizeRoleSelection(input, fallback) {
   return { provider, model };
 }
 
-function clean(value, max) {
-  return String(value || "").trim().slice(0, max);
-}
 
 function sanitizeScope(value) {
   return value === "all" ? "all" : "coding";

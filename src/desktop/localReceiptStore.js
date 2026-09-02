@@ -5,6 +5,7 @@ import {
   EVIDENCE_PACK_SCHEMA,
   MAX_PLATFORM_EVIDENCE_ITEMS
 } from "./memoryContract.js";
+import { clean } from "../util/validate.js";
 
 const VERSION = 1;
 const MAX_RECEIPTS = 500;
@@ -723,8 +724,4 @@ function boundedCount(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 0;
   return Math.min(Math.trunc(parsed), 100_000_000);
-}
-
-function clean(value, limit) {
-  return String(value || "").trim().slice(0, limit);
 }

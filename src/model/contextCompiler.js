@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { canonicalJson } from "../util/canonicalJson.js";
 import { unwrapToolResult } from "../util/toolResultEnvelope.js";
 import { formatScratchpadCard } from "./conversationScratchpad.js";
+import { boundedInteger } from "../util/validate.js";
 
 const DEFAULT_CONTEXT_TOKENS = 131_072;
 const DEFAULT_OUTPUT_TOKENS = 8_192;
@@ -408,11 +409,6 @@ function hasToolCalls(message) {
   return Array.isArray(message?.tool_calls) && message.tool_calls.length > 0;
 }
 
-function boundedInteger(value, fallback, minimum, maximum) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(maximum, Math.max(minimum, Math.trunc(parsed)));
-}
 
 function optionalBoundedInteger(value, minimum, maximum) {
   if (value == null) return null;

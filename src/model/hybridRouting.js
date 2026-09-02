@@ -1,4 +1,5 @@
 import { INTELLIGENCE_ROUTER_CLASSES } from "./intelligenceRouter.js";
+import { clean } from "../util/validate.js";
 
 export const HYBRID_ROUTING_STRATEGIES = Object.freeze([
   "managed",
@@ -466,9 +467,6 @@ function nullableNonNegative(value) {
   return nonNegative(value);
 }
 
-function clean(value, maximum) {
-  return String(value || "").trim().slice(0, maximum);
-}
 
 function plainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);

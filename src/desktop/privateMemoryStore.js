@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createSyncJournalEntry, memoryClassSpec } from "./memoryContract.js";
+import { clean } from "../util/validate.js";
 
 const STORE_VERSION = 1;
 const MAX_ITEMS = 250;
@@ -439,9 +440,6 @@ function timestamp(value) {
   return parsed.toISOString();
 }
 
-function clean(value, maxLength) {
-  return String(value || "").trim().slice(0, maxLength);
-}
 
 function validateEnvelope(envelope) {
   if (typeof envelope?.id !== "string" || !envelope.id) {
