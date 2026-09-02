@@ -552,6 +552,9 @@ function registerIpc() {
   ipcMain.handle("desktop:start-mission", (_event, input) =>
     controller.startMission(input)
   );
+  ipcMain.handle("desktop:start-compiled-mission", (_event, input) =>
+    controller.startCompiledMission(input)
+  );
   ipcMain.handle("desktop:open-task", (_event, id) => controller.openTask(id));
   ipcMain.handle("desktop:update-task", (_event, input) =>
     controller.updateTaskResource(input?.id, input?.changes)

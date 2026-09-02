@@ -1,4 +1,4 @@
-import { AmosMcpClient, extractMcpText } from "../mcp/amosMcpClient.js";
+import { AmosMcpClient, extractMcpText, normalizeMcpToolResult } from "../mcp/amosMcpClient.js";
 import { fetchCompat } from "../util/fetchCompat.js";
 import {
   DEFAULT_COMPANY_CACHE_TTL_SECONDS,
@@ -577,6 +577,20 @@ export class DesktopRemoteStateClient {
         stateDetail: String(goalsPayload.state_detail || "").slice(0, 1_000)
       } : null
     };
+  }
+
+  /** Compile a Run Contract without creating anything (create_mission dry_run). */
+  async compileMission(spec, { signal = null } = {}) {
+    const args = { ...missionSpecArgs(spec), dry_run: true };
+    return normalizeMcpToolResult(await this.callCompanyTool("create_mission", args, { signal }));
+  }
+
+  /** The one deliberate create_mission call; the token confirms a budget AMOS guessed. */
+  async createMission(spec, confirmationToken = "", { signal = null } = {}) {
+    const args = missionSpecArgs(spec);
+    const token = String(confirmationToken || "").trim();
+    if (token) args.confirmation_token = token;
+    return normalizeMcpToolResult(await this.callCompanyTool("create_mission", args, { signal }));
   }
 
   async mission(id, { signal = null } = {}) {
@@ -1961,6 +1975,16 @@ function normalizeMission(value) {
     startedAt: safeTimestamp(value.started_at || value.startedAt),
     finishedAt: safeTimestamp(value.finished_at || value.finishedAt)
   };
+}
+
+function missionSpecArgs(spec) {
+  if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
+    throw new Error("A Mission needs a compiled Run Contract specification");
+  }
+  const args = { ...spec };
+  delete args.dry_run;
+  delete args.confirmation_token;
+  return args;
 }
 
 function normalizeProject(value) {
