@@ -1,9 +1,0 @@
-Communication job: By the end, venture investors should see that AMOS has a differentiated, portable product architecture and early commercial proof, while clearly separating current revenue from enterprise and public-sector pipeline.
-
-Source structure: 16-slide, 16:9 investor deck. Each output slide maps one-to-one to its source slide. Existing masters, layouts, page numbers, footers, typography, and visual language remain intact.
-
-Typography and spacing: Arial dominates audience-facing content, with dark navy #0B1020, purple #7A3FF2, blue #5B8DEF, coral #FF6B4A, and green #26B47E. Titles use approximately 28 px bold. Eyebrows use approximately 14.67 px bold. Body copy uses the inherited source sizing and insets.
-
-Insertion contract: Only inherited elements on slides 5, 11, and 14 are edited. No new primitives, overlays, images, charts, or external assets are added. Slide 5 preserves the three-layer architecture and names AMOS Desktop as the first-party cockpit while retaining external clients. Slide 11 preserves the three proof columns and bottom scan line but updates them with founder-provided commercial status. Slide 14 changes only the final AMOS marker style.
-
-Placeholders: The source deck uses slide-local text and shapes rather than empty content placeholders on the affected slides. Footer and page-number objects are retained.
