@@ -127,6 +127,9 @@ const missionDecisionDrafts = new Map();
 // Missions-page compiles in flight, keyed by the internal builder task id. They render as
 // compile skeletons inside the Missions control center; no conversation is opened for them.
 const missionCompiles = new Map();
+// Builder task ids whose authorized Mission has already been revealed, so a re-render never
+// refreshes or refocuses twice.
+const revealedMissionCompiles = new Set();
 const missionDetailCache = new Map();
 let focusedMissionId = "";
 let focusedMissionApprovalId = "";
@@ -589,6 +592,11 @@ function bindEvents() {
     renderMissions();
     renderTasks();
     restoreInteractiveState(interaction);
+  });
+  api.on("mission-compiles:changed", (compiles) => {
+    if (!state) return;
+    state.missionCompiles = Array.isArray(compiles) ? compiles : [];
+    renderMissions();
   });
   api.on("activity:changed", (activity) => {
     const envelope = Array.isArray(activity) ? { items: activity } : activity || {};
@@ -4307,6 +4315,10 @@ function applyMissionFocus() {
 }
 
 // ---- Hosted Mission compile progress (Missions-page origin) ----
+//
+// A Missions-page compile is a hidden builder run. Its create_mission result is the only thing
+// that decides what replaces the compile skeleton, and that result reaches the renderer keyed by
+// the builder task id (state.missionCompiles / activeRuns[].missionOutcome). No timer guesses.
 
 function trackMissionCompile(response) {
   const taskId = String(response?.builderTaskId || response?.taskId || "").trim();
@@ -4314,11 +4326,13 @@ function trackMissionCompile(response) {
   missionCompiles.set(taskId, {
     taskId,
     runId: String(response.runId || ""),
+    projectId: String(response.projectId || elements.missionProjectInput.value || ""),
     objective: String(response.objective || elements.missionObjectiveInput.value || "").trim(),
     missionKind: response.missionKind === "optimization" ? "optimization" : "finite",
     startedAt: new Date().toISOString(),
     finishedAt: "",
-    run: null
+    run: null,
+    outcome: null
   });
 }
 
@@ -4334,44 +4348,197 @@ function missionsPageCompileInProgress() {
   return runs.some((lane) => lane.missionCreation === true && lane.taskRecordId !== activeTaskId);
 }
 
+// Fallback only for a compile whose lane vanished without any recorded outcome (for example a
+// Desktop restart mid-compile). It never decides the outcome when a create_mission result exists.
 const MISSION_COMPILE_SYNC_GRACE_MS = 90_000;
+
+function missionCompileOutcome(compile) {
+  const recorded = Array.isArray(state?.missionCompiles) ? state.missionCompiles : [];
+  return compile.run?.missionOutcome ||
+    recorded.find((record) => record.builderTaskId === compile.taskId) ||
+    null;
+}
+
+function missionCompileApproval(outcome) {
+  const pending = pendingMissionApprovalList();
+  if (outcome?.pendingId) return pending.find((approval) => approval.id === outcome.pendingId) || null;
+  return pending[0] || null;
+}
 
 function missionCompileEntries() {
   const runs = Array.isArray(state?.activeRuns) ? state.activeRuns : [];
-  const proposed = pendingMissionApprovalList().length > 0;
   const entries = [];
   for (const compile of missionCompiles.values()) {
-    const run = runs.find((lane) => lane.taskRecordId === compile.taskId) || null;
-    compile.run = run;
-    if (!run && !compile.finishedAt) {
-      compile.finishedAt = new Date().toISOString();
-      window.setTimeout(() => renderMissions(), MISSION_COMPILE_SYNC_GRACE_MS + 1_000);
+    compile.run = runs.find((lane) => lane.taskRecordId === compile.taskId) || null;
+    compile.outcome = missionCompileOutcome(compile);
+    if (!compile.run && !compile.finishedAt) compile.finishedAt = new Date().toISOString();
+    const outcome = compile.outcome;
+    if (outcome?.kind === "authorized") {
+      // create_mission executed immediately for this owner: the real Mission replaces the card.
+      missionCompiles.delete(compile.taskId);
+      if (!revealedMissionCompiles.has(compile.taskId)) {
+        revealedMissionCompiles.add(compile.taskId);
+        void revealCompiledMission(compile, outcome);
+      }
+      continue;
     }
-    if (compile.finishedAt && proposed) {
+    if (outcome?.kind === "pending_approval" && missionCompileApproval(outcome)) {
       // The compiler proposed a Run Contract; the authorization card replaces this skeleton.
       missionCompiles.delete(compile.taskId);
       continue;
+    }
+    if (outcome?.kind === "cancelled") {
+      missionCompiles.delete(compile.taskId);
+      continue;
+    }
+    if (!compile.run && !outcome && compile.finishedAt && !compile.fallbackScheduled) {
+      compile.fallbackScheduled = true;
+      window.setTimeout(() => renderMissions(), MISSION_COMPILE_SYNC_GRACE_MS + 1_000);
     }
     entries.push(compile);
   }
   return entries;
 }
 
+function missionCompilePresentation(compile) {
+  const run = compile.run;
+  const outcome = compile.outcome;
+  if (outcome?.kind === "failed") {
+    return {
+      tone: "attention",
+      status: "NEEDS CHANGES",
+      statusClass: "waiting",
+      progress: `${outcome.message || "The compiler could not turn this outcome into a Run Contract."} ` +
+        "Edit the outcome and retry.",
+      actions: ["retry", "details", "dismiss"]
+    };
+  }
+  if (outcome?.kind === "ended") {
+    return {
+      tone: "attention",
+      status: "COMPILE ENDED",
+      statusClass: "failed",
+      progress: outcome.message
+        ? `The compile run ended without creating a Mission. Last error: ${outcome.message}`
+        : "The compile run ended without creating a Mission.",
+      actions: ["retry", "details", "dismiss"]
+    };
+  }
+  if (outcome?.kind === "pending_approval") {
+    return {
+      tone: "running",
+      status: "RUN CONTRACT PROPOSED",
+      statusClass: "waiting",
+      progress: "The compiler proposed a Run Contract. Waiting for the authorization request to sync…",
+      actions: run ? ["stop"] : []
+    };
+  }
+  if (run) {
+    return {
+      tone: "running",
+      status: "COMPILING",
+      statusClass: "running",
+      progress: run.summary || "Translating the outcome into a governed Run Contract…",
+      actions: ["stop"]
+    };
+  }
+  const stale = compile.finishedAt &&
+    Date.now() - Date.parse(compile.finishedAt) > MISSION_COMPILE_SYNC_GRACE_MS;
+  if (stale) {
+    return {
+      tone: "attention",
+      status: "COMPILE ENDED",
+      statusClass: "failed",
+      progress: "The compile run ended without creating a Mission. Desktop did not receive a compile result.",
+      actions: ["retry", "details", "dismiss"]
+    };
+  }
+  return {
+    tone: "running",
+    status: "COMPILING",
+    statusClass: "running",
+    progress: "Compile finished. Waiting for the compile result to sync…",
+    actions: []
+  };
+}
+
+function missionCompileContract(contract) {
+  if (!contract || typeof contract !== "object") return null;
+  const rows = [];
+  if (contract.objective) rows.push(["Outcome", contract.objective]);
+  if (Array.isArray(contract.operations) && contract.operations.length > 0) {
+    rows.push(["Operations", contract.operations.join(", ")]);
+  }
+  const limits = contract.effectiveLimits && typeof contract.effectiveLimits === "object"
+    ? Object.entries(contract.effectiveLimits)
+    : [];
+  if (limits.length > 0) {
+    const sources = contract.limitSources && typeof contract.limitSources === "object"
+      ? contract.limitSources
+      : {};
+    rows.push(["Effective limits", limits
+      .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}${sources[key] ? ` (${sources[key]})` : ""}`)
+      .join(" · ")]);
+  }
+  if (Array.isArray(contract.prohibitions) && contract.prohibitions.length > 0) {
+    rows.push(["Prohibitions", contract.prohibitions.join(", ")]);
+  }
+  if (Array.isArray(contract.boundResources) && contract.boundResources.length > 0) {
+    rows.push(["Bound resources", contract.boundResources.join(", ")]);
+  }
+  const admission = contract.admission && typeof contract.admission === "object"
+    ? Object.entries(contract.admission)
+    : [];
+  if (admission.length > 0) {
+    rows.push(["Admission", admission.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")]);
+  }
+  if (contract.expiresAt) rows.push(["Expires", relativeTime(contract.expiresAt)]);
+  if (rows.length === 0) return null;
+  const list = document.createElement("dl");
+  list.className = "mission-contract";
+  for (const [label, value] of rows) {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    detail.textContent = String(value).slice(0, 600);
+    list.append(term, detail);
+  }
+  return list;
+}
+
+function retryMissionCompile(compile) {
+  const projects = Array.isArray(state?.projects?.projects) ? state.projects.projects : [];
+  const project = projects.find((item) => item.id === compile.projectId) || null;
+  missionCompiles.delete(compile.taskId);
+  renderMissions();
+  openMissionModal(project);
+  elements.missionObjectiveInput.value = compile.objective;
+  elements.missionKindInput.value = compile.missionKind;
+  const hosted = elements.missionExecutionInput.querySelector('option[value="hosted"]');
+  if (!hosted?.disabled) elements.missionExecutionInput.value = "hosted";
+  renderMissionExecutionBoundary();
+  if (compile.outcome?.message) {
+    elements.missionModalError.textContent = compile.outcome.message;
+    elements.missionModalError.classList.remove("hidden");
+  }
+  elements.missionObjectiveInput.focus();
+}
+
 function missionCompileCard(compile) {
   const run = compile.run;
-  const stale = !run && compile.finishedAt &&
-    Date.now() - Date.parse(compile.finishedAt) > MISSION_COMPILE_SYNC_GRACE_MS;
+  const view = missionCompilePresentation(compile);
   const card = document.createElement("article");
-  card.className = `task-card mission-card mission-compile-card ${stale ? "attention" : "running"}`;
+  card.className = `task-card mission-card mission-compile-card ${view.tone}`;
   card.dataset.missionCompileTaskId = compile.taskId;
+  if (compile.outcome?.kind) card.dataset.missionOutcome = compile.outcome.kind;
   const heading = document.createElement("div");
   heading.className = "task-card-heading";
   const copy = document.createElement("div");
   const meta = document.createElement("div");
   meta.className = "task-card-kicker";
   const status = document.createElement("span");
-  status.className = `task-status ${stale ? "interrupted" : "running"}`;
-  status.textContent = stale ? "COMPILE STOPPED" : "COMPILING";
+  status.className = `task-status ${view.statusClass}`;
+  status.textContent = view.status;
   const location = document.createElement("span");
   location.className = "task-lineage-chip current";
   location.textContent = "AMOS HOSTED";
@@ -4387,11 +4554,7 @@ function missionCompileCard(compile) {
   heading.append(copy, when);
   const progress = document.createElement("p");
   progress.className = "mission-progress";
-  progress.textContent = run
-    ? (run.summary || "Translating the outcome into a governed Run Contract…")
-    : stale
-      ? "The compiler stopped without proposing a Run Contract. Open the compile details to see why, or start again."
-      : "Compile finished. Waiting for the proposed Run Contract to sync…";
+  progress.textContent = view.progress;
   const details = document.createElement("div");
   details.className = "task-card-details";
   for (const label of ["Run Contract compile", "Internal evidence · not a conversation"]) {
@@ -4399,38 +4562,46 @@ function missionCompileCard(compile) {
     chip.textContent = label;
     details.append(chip);
   }
+  const contract = missionCompileContract(compile.outcome?.contract);
   const actions = document.createElement("div");
   actions.className = "task-card-actions";
-  if (run) {
-    const stop = actionButton("Stop compile", "ghost");
-    stop.addEventListener("click", async () => {
-      setButtonBusy(stop, true, "Stopping…");
-      try {
-        await api.cancelTask(run.id);
-        missionCompiles.delete(compile.taskId);
-        toast("Mission compile stopped. No Run Contract was proposed.");
-        renderMissions();
-      } catch (error) {
-        toast(error.message, true);
-        if (stop.isConnected) setButtonBusy(stop, false, "Stop compile");
-      }
-    });
-    actions.append(stop);
-  } else if (stale) {
-    const builderTask = (state?.tasks?.tasks || []).find((task) => task.id === compile.taskId);
-    if (builderTask) {
+  const builderTask = (state?.tasks?.tasks || []).find((task) => task.id === compile.taskId);
+  for (const action of view.actions) {
+    if (action === "stop" && run) {
+      const stop = actionButton("Stop compile", "ghost");
+      stop.addEventListener("click", async () => {
+        setButtonBusy(stop, true, "Stopping…");
+        try {
+          await api.cancelTask(run.id);
+          missionCompiles.delete(compile.taskId);
+          toast("Mission compile stopped. No Run Contract was proposed.");
+          renderMissions();
+        } catch (error) {
+          toast(error.message, true);
+          if (stop.isConnected) setButtonBusy(stop, false, "Stop compile");
+        }
+      });
+      actions.append(stop);
+    } else if (action === "retry") {
+      const retry = actionButton("Edit and retry", "primary");
+      retry.addEventListener("click", () => retryMissionCompile(compile));
+      actions.append(retry);
+    } else if (action === "details" && builderTask) {
       const open = actionButton("Open compile details", "secondary");
       open.addEventListener("click", () => openManagedTask(builderTask, open));
       actions.append(open);
+    } else if (action === "dismiss") {
+      const dismiss = actionButton("Dismiss", "ghost");
+      dismiss.addEventListener("click", () => {
+        missionCompiles.delete(compile.taskId);
+        renderMissions();
+      });
+      actions.append(dismiss);
     }
-    const dismiss = actionButton("Dismiss", "ghost");
-    dismiss.addEventListener("click", () => {
-      missionCompiles.delete(compile.taskId);
-      renderMissions();
-    });
-    actions.append(dismiss);
   }
-  card.append(heading, progress, details, actions);
+  card.append(heading, progress);
+  if (contract) card.append(contract);
+  card.append(details, actions);
   return card;
 }
 
@@ -4447,8 +4618,9 @@ function missionAuthorizationCard(approval) {
   return card;
 }
 
-async function revealAuthorizedMission(approval) {
+async function revealAuthorizedMission(approval, { missionId = "" } = {}) {
   const name = String(approval?.args?.name || "").trim();
+  const wantedId = String(missionId || "").trim();
   try {
     if (state.connectionMode === "user") {
       state.missions = await api.refreshMissions();
@@ -4457,13 +4629,23 @@ async function revealAuthorizedMission(approval) {
     // The list refreshes on the next sync; the focus below still lands in Missions.
   }
   const missions = Array.isArray(state.missions?.missions) ? state.missions.missions : [];
-  const mission = missions
-    .filter((item) => !name || item.name === name)
-    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")))[0];
-  focusMission(mission?.id || "");
+  const mission = (wantedId && missions.find((item) => item.id === wantedId)) ||
+    missions
+      .filter((item) => !wantedId && (!name || item.name === name))
+      .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")))[0];
+  focusMission(mission?.id || wantedId);
   toast(mission
     ? `Mission authorized. “${mission.name}” is running in AMOS Platform.`
     : "Mission authorized. It will appear in Missions on the next sync.");
+}
+
+async function revealCompiledMission(compile, outcome) {
+  // An owner-requested create_mission executes immediately: there is nothing to authorize, so the
+  // compile skeleton is replaced by the Mission itself, keyed on the Mission id the compiler returned.
+  await revealAuthorizedMission(
+    { args: { name: outcome?.missionName || "" } },
+    { missionId: outcome?.missionId || "" }
+  );
 }
 
 function focusMissionApproval(approvalId) {

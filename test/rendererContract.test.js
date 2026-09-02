@@ -1089,12 +1089,86 @@ test("hosted Mission creation stays in the Missions control center and never ope
   assert.match(javascript, /elements\.missionList\.append\(missionAuthorizationCard\(approval\)\)/);
   // After approval the user lands on Mission detail.
   assert.match(javascript, /if \(missionApproval && review\?\.decision !== "deny"\) \{\s*\/\/[^\n]*\n\s*await revealAuthorizedMission\(missionApproval\)/);
-  const reveal = javascript.match(/async function revealAuthorizedMission\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
+  const reveal = javascript.match(/async function revealAuthorizedMission\(approval, \{ missionId = "" \} = \{\}\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(reveal);
-  assert.match(reveal, /focusMission\(mission\?\.id \|\| ""\)/);
+  assert.match(reveal, /focusMission\(mission\?\.id \|\| wantedId\)/);
   assert.doesNotMatch(reveal, /showView\("operator"\)|addMessage\(/);
   const focus = javascript.match(/function focusMission\(missionId[\s\S]*?\n\}\n/)?.[0];
   assert.match(focus, /showView\("missions"\)/);
+});
+
+test("a Missions-page compile resolves from its create_mission result, keyed by builder task id", async () => {
+  const [javascript, controller, runManager, preload] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/runManager.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8")
+  ]);
+
+  // Controller: the compile lane observes the create_mission tool event, records the outcome on
+  // the lane and in a bounded record keyed by builder task id, and pushes it to the renderer.
+  assert.match(controller, /this\.observeMissionCreationEvent\(safeEvent\);\s*this\.send\("agent:event", safeEvent\)/);
+  assert.match(controller, /this\.settleMissionCompileLane\(launched\.lane\);\s*this\.runManager\.delete\(launched\.lane\.id\)/);
+  assert.match(controller, /missionCompiles: this\.missionCompileState\(\)/);
+  assert.match(controller, /this\.send\("mission-compiles:changed", this\.missionCompileState\(\)\)/);
+  assert.match(controller, /export function missionCreationOutcome\(event, kind = "finite"\)/);
+  assert.match(controller, /kind: "pending_approval",\s*pendingId,/);
+  assert.match(controller, /kind: "authorized",\s*missionId,/);
+  assert.match(controller, /const compilation = result\?\._amos_mission_compilation;/);
+  assert.match(controller, /pick\("effective_limits", "limits"\)/);
+  assert.match(controller, /pick\("limit_sources"\)/);
+  assert.match(controller, /pick\("admission"\)/);
+  assert.match(controller, /pick\("bound_resources"\)/);
+  assert.match(runManager, /missionOutcome: lane\.missionOutcome && typeof lane\.missionOutcome === "object"/);
+  assert.match(preload, /"mission-compiles:changed"/);
+
+  // Renderer: the outcome record, not a timer, decides what replaces the compile skeleton.
+  assert.match(javascript, /api\.on\("mission-compiles:changed", \(compiles\) => \{\s*if \(!state\) return;\s*state\.missionCompiles = /);
+  const entries = javascript.match(/function missionCompileEntries\(\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(entries, "missionCompileEntries must exist");
+  assert.match(entries, /compile\.outcome = missionCompileOutcome\(compile\);/);
+  assert.match(entries, /if \(outcome\?\.kind === "authorized"\) \{[\s\S]*?missionCompiles\.delete\(compile\.taskId\);[\s\S]*?void revealCompiledMission\(compile, outcome\);/);
+  assert.match(entries, /if \(outcome\?\.kind === "pending_approval" && missionCompileApproval\(outcome\)\) \{[\s\S]*?missionCompiles\.delete\(compile\.taskId\);\s*continue;/);
+  // The grace timer is only a fallback for a lane that vanished without any recorded outcome.
+  assert.match(entries, /if \(!compile\.run && !outcome && compile\.finishedAt && !compile\.fallbackScheduled\) \{\s*compile\.fallbackScheduled = true;\s*window\.setTimeout/);
+  assert.doesNotMatch(entries, /finishedAt && proposed/);
+  const lookup = javascript.match(/function missionCompileOutcome\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(lookup, /compile\.run\?\.missionOutcome/);
+  assert.match(lookup, /record\.builderTaskId === compile\.taskId/);
+  const approvalLookup = javascript.match(/function missionCompileApproval\(outcome\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(approvalLookup, /approval\.id === outcome\.pendingId/);
+
+  // Authorized: the real Mission replaces the card and receives focus through the shared reveal path.
+  const revealCompiled = javascript.match(/async function revealCompiledMission\(compile, outcome\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(revealCompiled);
+  assert.match(revealCompiled, /revealAuthorizedMission\([\s\S]*?\{ missionId: outcome\?\.missionId \|\| "" \}/);
+  const reveal = javascript.match(/async function revealAuthorizedMission\(approval, \{ missionId = "" \} = \{\}\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(reveal, /state\.missions = await api\.refreshMissions\(\)/);
+  assert.match(reveal, /missions\.find\(\(item\) => item\.id === wantedId\)/);
+
+  // Compiler rejection: corrective copy plus "Edit and retry", never "Compile stopped".
+  const presentation = javascript.match(/function missionCompilePresentation\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(presentation, "missionCompilePresentation must exist");
+  assert.match(presentation, /if \(outcome\?\.kind === "failed"\) \{[\s\S]*?status: "NEEDS CHANGES"[\s\S]*?Edit the outcome and retry\.[\s\S]*?actions: \["retry", "details", "dismiss"\]/);
+  assert.match(presentation, /if \(outcome\?\.kind === "ended"\) \{[\s\S]*?The compile run ended without creating a Mission\. Last error: \$\{outcome\.message\}/);
+  assert.match(presentation, /if \(outcome\?\.kind === "pending_approval"\) \{[\s\S]*?status: "RUN CONTRACT PROPOSED"/);
+  assert.match(presentation, /The compile run ended without creating a Mission\. Desktop did not receive a compile result\./);
+  assert.doesNotMatch(javascript, /COMPILE STOPPED|Open the compile details to see why, or start again/);
+  const card = javascript.match(/function missionCompileCard\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(card, /actionButton\("Edit and retry", "primary"\)/);
+  assert.match(card, /retryMissionCompile\(compile\)/);
+  assert.match(card, /const contract = missionCompileContract\(compile\.outcome\?\.contract\);/);
+  const retry = javascript.match(/function retryMissionCompile\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(retry, /openMissionModal\(project\)/);
+  assert.match(retry, /elements\.missionObjectiveInput\.value = compile\.objective/);
+  assert.doesNotMatch(retry, /showView\("operator"\)/);
+
+  // The compiled Run Contract renders on the card: outcome, operations, effective limits, prohibitions.
+  const contract = javascript.match(/function missionCompileContract\(contract\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(contract);
+  for (const label of ["Outcome", "Operations", "Effective limits", "Prohibitions", "Bound resources", "Admission"]) {
+    assert.match(contract, new RegExp(`\\["${label}"`));
+  }
 });
 
 test("a chat-originated Mission leaves exactly one compact receipt in the transcript", async () => {

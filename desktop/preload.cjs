@@ -4,6 +4,7 @@ const eventChannels = new Set([
   "agent:event",
   "agent:status",
   "desktop-runs:changed",
+  "mission-compiles:changed",
   "approval:requested",
   "approval:completed",
   "approval:denied",

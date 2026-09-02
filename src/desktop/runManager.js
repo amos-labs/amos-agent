@@ -273,6 +273,9 @@ function publicRun(lane, selected = false) {
     summary: cleanText(lane.summary, 500),
     pendingInputId: cleanText(lane.pendingInputId, 160) || null,
     missionCreation: lane.missionCreation === true,
+    missionOutcome: lane.missionOutcome && typeof lane.missionOutcome === "object"
+      ? structuredClone(lane.missionOutcome)
+      : null,
     objective: cleanText(lane.activeTask?.objective || lane.objective, 6_000),
     codingLifecycle: lane.activeTask?.codingLifecycle?.state?.() || null,
     startedAt: lane.activeTask?.startedAt || lane.createdAt,

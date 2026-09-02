@@ -2416,6 +2416,20 @@ html[data-platform="win32"] .sidebar-toggle {
 .mission-card.focused,
 .mission-authorization.focused { border-color: rgba(109,147,255,.6); box-shadow: 0 0 0 2px rgba(109,147,255,.22); }
 .mission-compile-card .mission-progress { color: var(--muted); }
+.mission-contract {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  margin: 6px 0 2px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.mission-contract dt { color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.mission-contract dd { margin: 0; color: var(--muted-2); overflow-wrap: anywhere; }
 .mission-current-step { margin: -2px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .mission-open-questions { display: grid; gap: 10px; margin: 10px 0 12px; }
 .mission-open-questions .decision-card { grid-template-columns: 1fr; }
