@@ -124,7 +124,16 @@ let continuityConversationRestored = false;
 const transientTaskMessages = new Set();
 const decisionInputDrafts = new Map();
 const missionDecisionDrafts = new Map();
-const surfacedMissionDecisionIds = new Set();
+// Missions-page compiles in flight, keyed by the internal builder task id. They render as
+// compile skeletons inside the Missions control center; no conversation is opened for them.
+const missionCompiles = new Map();
+const missionDetailCache = new Map();
+let focusedMissionId = "";
+let focusedMissionApprovalId = "";
+let missionFocusScrolled = false;
+// Presentation-only acknowledgement of Mission attention items ("Hide from chat"). Persisted by
+// decision id so a hidden notice does not reappear on refresh; the decision itself stays open.
+const sessionHiddenMissionDecisionIds = new Set();
 const surfacedCompanyApprovalIds = new Set();
 let companyApprovalChatScope = "";
 let companyApprovalChatBaseline = null;
@@ -141,6 +150,7 @@ const expandedProjectAccordions = new Set();
 const projectActivityFilters = new Map();
 const NAV_COLLAPSED_KEY = "amos.desktop.nav-collapsed.v1";
 const CONTEXT_WIDTH_KEY = "amos.desktop.context-width.v1";
+const HIDDEN_MISSION_DECISIONS_KEY = "amos.desktop.hidden-mission-decisions.v1";
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
@@ -228,7 +238,7 @@ const elements = Object.fromEntries(
     "missionModal", "missionForm", "missionModalTitle", "missionModalClose",
     "missionObjectiveInput", "missionKindInput", "missionExecutionInput", "missionProjectInput",
     "missionCheckpointField", "missionCheckpointInput", "missionBoundaryNote",
-    "missionModalError", "missionCancelButton", "missionSubmitButton",
+    "missionModalError", "missionCancelButton", "missionSubmitButton", "missionAttentionRail",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
     "capsuleCancelButton", "capsuleContinueButton", "capsulePreview", "capsulePreviewSummary",
@@ -707,6 +717,10 @@ function bindEvents() {
     elements.approvalModal.scrollIntoView({ block: "nearest", behavior: "smooth" });
   });
   api.on("approval:completed", (outcome) => {
+    if (isMissionApprovalOutcome(outcome)) {
+      settleMissionAuthorization(outcome, "approved");
+      return;
+    }
     const encoded = JSON.stringify(outcome?.result, null, 2);
     const result = encoded === undefined
       ? "No structured result was returned."
@@ -731,6 +745,10 @@ function bindEvents() {
     toast("Approved work completed. The original result is now in this task.");
   });
   api.on("approval:denied", (outcome) => {
+    if (isMissionApprovalOutcome(outcome)) {
+      settleMissionAuthorization(outcome, outcome?.status || "denied");
+      return;
+    }
     const status = String(outcome?.status || "denied").replaceAll("_", " ");
     addMessage(
       "assistant",
@@ -3073,7 +3091,8 @@ function renderProjects() {
   const inbox = Array.isArray(library.inbox) ? library.inbox : [];
   const conversations = Array.isArray(state.tasks?.tasks)
     ? state.tasks.tasks.filter((task) => (
-        task.kind !== "goal_pursuit" && task.projectId && !task.archivedAt && !task.archived
+        task.kind !== "goal_pursuit" && !task.missionBuilder &&
+        task.projectId && !task.archivedAt && !task.archived
       ))
     : [];
   const query = elements.projectSearchInput.value.trim().toLowerCase();
@@ -3719,13 +3738,16 @@ async function submitMission(event) {
     if (response.state) Object.assign(state, response.state);
     state.projects = response.projects || state.projects;
     state.tasks = response.tasks || state.tasks;
+    if (executionLocation === "hosted") trackMissionCompile(response);
     closeMissionModal();
     renderProjects();
     renderMissions();
     renderTasks();
-    showView(executionLocation === "hosted" ? "operator" : "missions");
+    // A Mission is durable background work, not a conversation: creation never leaves the
+    // Missions control center and never opens Operator.
+    showView("missions");
     toast(executionLocation === "hosted"
-      ? "AMOS is translating the outcome into a governed Mission. Review the inline contract when it appears."
+      ? "AMOS is compiling the Run Contract. Review and authorize it here when it is ready."
       : "Local Mission started. Progress and questions live in Missions.");
   } catch (error) {
     elements.missionModalError.textContent = error.message;
@@ -3938,8 +3960,13 @@ function renderMissions() {
       (missionStatusFilter === "all" || missionStatusBucket(mission) === missionStatusFilter);
   });
   const page = paginateItems(matching, "missions");
+  const compiles = ["all", "running"].includes(missionStatusFilter) ? missionCompileEntries() : [];
+  const authorizations = ["all", "attention"].includes(missionStatusFilter)
+    ? pendingMissionApprovalList()
+    : [];
   const running = missions.filter((mission) => missionStatusBucket(mission) === "running").length;
-  const attention = missions.filter((mission) => missionStatusBucket(mission) === "attention").length;
+  const attention = missions.filter((mission) => missionStatusBucket(mission) === "attention").length
+    + pendingMissionApprovalList().length;
   const completed = missions.filter((mission) => missionStatusBucket(mission) === "completed").length;
   elements.missionBadge.textContent = String(attention || running);
   elements.missionBadge.classList.toggle("hidden", attention + running === 0);
@@ -3953,7 +3980,10 @@ function renderMissions() {
     state.missions?.supported !== false && !state.missions?.stale
   );
   elements.refreshMissionsButton.disabled = state.connectionMode !== "user" || state.remoteStatus?.syncing;
-  elements.missionEmpty.classList.toggle("hidden", page.total > 0);
+  elements.missionEmpty.classList.toggle(
+    "hidden",
+    page.total + compiles.length + authorizations.length > 0
+  );
   renderMissionStatusFilters(missions);
   elements.missionSummary.replaceChildren();
   for (const [label, value, detail] of [
@@ -3972,7 +4002,12 @@ function renderMissions() {
     elements.missionSummary.append(item);
   }
   elements.missionList.replaceChildren();
+  for (const compile of compiles) elements.missionList.append(missionCompileCard(compile));
+  for (const approval of authorizations) {
+    elements.missionList.append(missionAuthorizationCard(approval));
+  }
   for (const mission of page.items) elements.missionList.append(missionCard(mission));
+  applyMissionFocus();
   renderListPager(elements.missionPager, page, (next) => {
     listPages.missions = next;
     renderMissions();
@@ -4009,6 +4044,8 @@ function renderMissionTemplates() {
 function missionCard(mission) {
   const card = document.createElement("article");
   card.className = `task-card mission-card ${missionStatusBucket(mission)}`;
+  card.dataset.missionId = mission.id;
+  if (mission.id && mission.id === focusedMissionId) card.classList.add("focused");
   const heading = document.createElement("div");
   heading.className = "task-card-heading";
   const copy = document.createElement("div");
@@ -4042,19 +4079,16 @@ function missionCard(mission) {
   objective.textContent = mission.objective;
   const progress = document.createElement("p");
   progress.className = "mission-progress";
-  progress.textContent = mission.statusReason || (
-    missionStatusBucket(mission) === "completed"
-      ? "Mission finished. Its history and proof remain available."
-      : "Waiting for the next recorded progress update."
-  );
+  progress.textContent = missionStatusExplanation(mission);
+  const currentStep = latestMissionStep(mission);
+  const step = document.createElement("p");
+  step.className = "mission-current-step";
+  step.textContent = currentStep ? `Current step · ${currentStep}` : "";
+  step.classList.toggle("hidden", !currentStep);
   const details = document.createElement("div");
   details.className = "task-card-details";
   if (mission.source === "hosted") {
-    for (const label of [
-      `${mission.contract?.usedToolCalls || 0} / ${mission.contract?.maxToolCalls || "—"} tool calls`,
-      `${formatUsdMicros(mission.contract?.usedCostMicrousd)} / ${formatUsdMicros(mission.contract?.maxCostMicrousd)} cost`,
-      mission.contract?.expiresAt ? `Expires ${relativeTime(mission.contract.expiresAt)}` : "Bounded Run Contract"
-    ]) {
+    for (const label of missionLimitChips(mission)) {
       const chip = document.createElement("span");
       chip.textContent = label;
       details.append(chip);
@@ -4124,7 +4158,7 @@ function missionCard(mission) {
     }
     if (mission.status === "waiting_decision") {
       const answer = actionButton("Answer", "primary");
-      answer.addEventListener("click", () => showView("decisions"));
+      answer.addEventListener("click", () => focusMission(mission.id));
       actions.append(answer);
     }
     if (["authorized", "running", "waiting_decision", "paused"].includes(mission.status)) {
@@ -4135,38 +4169,314 @@ function missionCard(mission) {
   }
   const activity = document.createElement("button");
   activity.type = "button";
-  activity.className = "button ghost";
-  activity.textContent = "View activity";
+  activity.className = "button ghost mission-detail-toggle";
+  activity.textContent = "View details";
   const activityPanel = document.createElement("div");
   activityPanel.className = "mission-activity hidden";
-  activity.addEventListener("click", async () => {
-    if (!activityPanel.classList.contains("hidden")) {
-      activityPanel.classList.add("hidden");
-      activity.textContent = "View activity";
-      return;
-    }
-    setButtonBusy(activity, true, "Loading…");
-    try {
-      let detail = mission;
-      if (mission.source === "hosted" && (!mission.steps || mission.steps.length === 0)) {
-        detail = await api.getMission(mission.id);
-      }
-      renderMissionActivity(detail, activityPanel);
-      activityPanel.classList.remove("hidden");
-      activity.textContent = "Hide activity";
-    } catch (error) {
-      toast(error.message, true);
-    } finally {
-      if (activity.isConnected && activityPanel.classList.contains("hidden")) {
-        setButtonBusy(activity, false, "View activity");
-      } else if (activity.isConnected) {
-        setButtonBusy(activity, false, "Hide activity");
-      }
-    }
-  });
+  activity.addEventListener("click", () => toggleMissionDetail(mission, activity, activityPanel));
   actions.prepend(activity);
-  card.append(heading, objective, progress, details, actions, activityPanel);
+  card.append(heading, objective, progress, step, details, actions, activityPanel);
+  if (mission.id && mission.id === focusedMissionId) {
+    // Mission detail is the control surface: a focused Mission opens expanded.
+    const cached = missionDetailCache.get(mission.id);
+    if (cached) {
+      renderMissionActivity({ ...mission, ...cached }, activityPanel);
+      activityPanel.classList.remove("hidden");
+      activity.textContent = "Hide details";
+    } else {
+      void toggleMissionDetail(mission, activity, activityPanel);
+    }
+  }
   return card;
+}
+
+async function toggleMissionDetail(mission, button, panel) {
+  if (!panel.classList.contains("hidden")) {
+    panel.classList.add("hidden");
+    button.textContent = "View details";
+    if (mission.id === focusedMissionId) focusedMissionId = "";
+    return;
+  }
+  setButtonBusy(button, true, "Loading…");
+  try {
+    let detail = mission;
+    if (mission.source === "hosted") {
+      detail = { ...mission, ...(await api.getMission(mission.id)) };
+      missionDetailCache.set(mission.id, detail);
+    }
+    renderMissionActivity(detail, panel);
+    panel.classList.remove("hidden");
+    button.textContent = "Hide details";
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    if (button.isConnected && panel.classList.contains("hidden")) {
+      setButtonBusy(button, false, "View details");
+    } else if (button.isConnected) {
+      setButtonBusy(button, false, "Hide details");
+    }
+  }
+}
+
+function missionStatusExplanation(mission) {
+  if (mission.statusReason) return mission.statusReason;
+  switch (mission.status) {
+    case "waiting_decision":
+      return "Paused until you answer its open question. Nothing runs in the meantime.";
+    case "authorized":
+      return "Authorized. The hosted worker will start inside the approved Run Contract.";
+    case "running":
+    case "active":
+      return "Working inside its Run Contract. Progress and proof are recorded here.";
+    case "paused":
+      return "Paused. Completed actions are kept; resume when you are ready.";
+    case "failed":
+    case "interrupted":
+      return "Stopped before completion. Its history and proof remain available.";
+    case "cancelled":
+      return "Cancelled. Completed actions were not replayed.";
+    default:
+      return missionStatusBucket(mission) === "completed"
+        ? "Mission finished. Its history and proof remain available."
+        : "Waiting for the next recorded progress update.";
+  }
+}
+
+function missionSteps(mission) {
+  const detail = missionDetailCache.get(mission?.id);
+  const steps = Array.isArray(mission?.steps) && mission.steps.length > 0
+    ? mission.steps
+    : Array.isArray(detail?.steps) ? detail.steps : [];
+  return steps.filter((step) => step && typeof step === "object");
+}
+
+function latestMissionStep(mission) {
+  const steps = missionSteps(mission);
+  if (steps.length === 0) return "";
+  const dated = steps
+    .map((step) => ({ step, at: Date.parse(step.created_at || step.createdAt || "") || 0 }));
+  const latest = dated.some((entry) => entry.at > 0)
+    ? dated.sort((left, right) => right.at - left.at)[0].step
+    : steps[steps.length - 1];
+  return String(latest.summary || latest.proposal || latest.status || "").trim().slice(0, 240);
+}
+
+function openMissionDecisions(mission) {
+  const decisions = Array.isArray(state?.missionDecisions) ? state.missionDecisions : [];
+  return decisions.filter((decision) => decision?.mission_id && decision.mission_id === mission?.id);
+}
+
+function missionLimitChips(mission) {
+  const contract = mission.contract || {};
+  const chips = [
+    `${contract.usedToolCalls || 0} / ${contract.maxToolCalls || "—"} tool calls`,
+    `${formatUsdMicros(contract.usedCostMicrousd)} / ${formatUsdMicros(contract.maxCostMicrousd)} cost`
+  ];
+  if (contract.maxProviderCredits) {
+    chips.push(`${contract.usedProviderCredits || 0} / ${contract.maxProviderCredits} provider credits`);
+  }
+  if (contract.maxWallTimeSeconds) {
+    chips.push(`${missionDuration(contract.maxWallTimeSeconds)} wall-time limit`);
+  }
+  chips.push(contract.expiresAt ? `Expires ${relativeTime(contract.expiresAt)}` : "Bounded Run Contract");
+  const questions = openMissionDecisions(mission).length;
+  if (questions > 0) chips.push(`${questions} open question${questions === 1 ? "" : "s"}`);
+  const decided = Array.isArray(mission.decisions) ? mission.decisions.length : 0;
+  if (decided > 0) chips.push(`${decided} human decision${decided === 1 ? "" : "s"}`);
+  return chips;
+}
+
+function focusMission(missionId, { approvalId = "" } = {}) {
+  focusedMissionId = String(missionId || "");
+  focusedMissionApprovalId = String(approvalId || "");
+  missionFocusScrolled = false;
+  showView("missions");
+  renderMissions();
+}
+
+function applyMissionFocus() {
+  if (missionFocusScrolled || (!focusedMissionId && !focusedMissionApprovalId)) return;
+  const card = [...elements.missionList.children].find((item) => (
+    (focusedMissionId && item.dataset.missionId === focusedMissionId) ||
+    (focusedMissionApprovalId && item.dataset.missionApprovalId === focusedMissionApprovalId)
+  ));
+  if (!card) return;
+  missionFocusScrolled = true;
+  card.classList.add("focused");
+  card.scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+// ---- Hosted Mission compile progress (Missions-page origin) ----
+
+function trackMissionCompile(response) {
+  const taskId = String(response?.builderTaskId || response?.taskId || "").trim();
+  if (!taskId) return;
+  missionCompiles.set(taskId, {
+    taskId,
+    runId: String(response.runId || ""),
+    objective: String(response.objective || elements.missionObjectiveInput.value || "").trim(),
+    missionKind: response.missionKind === "optimization" ? "optimization" : "finite",
+    startedAt: new Date().toISOString(),
+    finishedAt: "",
+    run: null
+  });
+}
+
+function pendingMissionApprovalList() {
+  const approvals = Array.isArray(state?.approvals) ? state.approvals : [];
+  return approvals.filter((approval) => approval.status === "pending" && isMissionApproval(approval));
+}
+
+function missionsPageCompileInProgress() {
+  if (missionCompiles.size > 0) return true;
+  const runs = Array.isArray(state?.activeRuns) ? state.activeRuns : [];
+  const activeTaskId = String(state?.activeTaskRecordId || state?.tasks?.activeTaskId || "");
+  return runs.some((lane) => lane.missionCreation === true && lane.taskRecordId !== activeTaskId);
+}
+
+const MISSION_COMPILE_SYNC_GRACE_MS = 90_000;
+
+function missionCompileEntries() {
+  const runs = Array.isArray(state?.activeRuns) ? state.activeRuns : [];
+  const proposed = pendingMissionApprovalList().length > 0;
+  const entries = [];
+  for (const compile of missionCompiles.values()) {
+    const run = runs.find((lane) => lane.taskRecordId === compile.taskId) || null;
+    compile.run = run;
+    if (!run && !compile.finishedAt) {
+      compile.finishedAt = new Date().toISOString();
+      window.setTimeout(() => renderMissions(), MISSION_COMPILE_SYNC_GRACE_MS + 1_000);
+    }
+    if (compile.finishedAt && proposed) {
+      // The compiler proposed a Run Contract; the authorization card replaces this skeleton.
+      missionCompiles.delete(compile.taskId);
+      continue;
+    }
+    entries.push(compile);
+  }
+  return entries;
+}
+
+function missionCompileCard(compile) {
+  const run = compile.run;
+  const stale = !run && compile.finishedAt &&
+    Date.now() - Date.parse(compile.finishedAt) > MISSION_COMPILE_SYNC_GRACE_MS;
+  const card = document.createElement("article");
+  card.className = `task-card mission-card mission-compile-card ${stale ? "attention" : "running"}`;
+  card.dataset.missionCompileTaskId = compile.taskId;
+  const heading = document.createElement("div");
+  heading.className = "task-card-heading";
+  const copy = document.createElement("div");
+  const meta = document.createElement("div");
+  meta.className = "task-card-kicker";
+  const status = document.createElement("span");
+  status.className = `task-status ${stale ? "interrupted" : "running"}`;
+  status.textContent = stale ? "COMPILE STOPPED" : "COMPILING";
+  const location = document.createElement("span");
+  location.className = "task-lineage-chip current";
+  location.textContent = "AMOS HOSTED";
+  const kind = document.createElement("span");
+  kind.className = "task-lineage-chip";
+  kind.textContent = compile.missionKind === "optimization" ? "OPTIMIZATION" : "FINITE";
+  meta.append(status, location, kind);
+  const title = document.createElement("h2");
+  title.textContent = compile.objective.slice(0, 120) || "New Mission";
+  copy.append(meta, title);
+  const when = document.createElement("time");
+  when.textContent = relativeTime(compile.startedAt);
+  heading.append(copy, when);
+  const progress = document.createElement("p");
+  progress.className = "mission-progress";
+  progress.textContent = run
+    ? (run.summary || "Translating the outcome into a governed Run Contract…")
+    : stale
+      ? "The compiler stopped without proposing a Run Contract. Open the compile details to see why, or start again."
+      : "Compile finished. Waiting for the proposed Run Contract to sync…";
+  const details = document.createElement("div");
+  details.className = "task-card-details";
+  for (const label of ["Run Contract compile", "Internal evidence · not a conversation"]) {
+    const chip = document.createElement("span");
+    chip.textContent = label;
+    details.append(chip);
+  }
+  const actions = document.createElement("div");
+  actions.className = "task-card-actions";
+  if (run) {
+    const stop = actionButton("Stop compile", "ghost");
+    stop.addEventListener("click", async () => {
+      setButtonBusy(stop, true, "Stopping…");
+      try {
+        await api.cancelTask(run.id);
+        missionCompiles.delete(compile.taskId);
+        toast("Mission compile stopped. No Run Contract was proposed.");
+        renderMissions();
+      } catch (error) {
+        toast(error.message, true);
+        if (stop.isConnected) setButtonBusy(stop, false, "Stop compile");
+      }
+    });
+    actions.append(stop);
+  } else if (stale) {
+    const builderTask = (state?.tasks?.tasks || []).find((task) => task.id === compile.taskId);
+    if (builderTask) {
+      const open = actionButton("Open compile details", "secondary");
+      open.addEventListener("click", () => openManagedTask(builderTask, open));
+      actions.append(open);
+    }
+    const dismiss = actionButton("Dismiss", "ghost");
+    dismiss.addEventListener("click", () => {
+      missionCompiles.delete(compile.taskId);
+      renderMissions();
+    });
+    actions.append(dismiss);
+  }
+  card.append(heading, progress, details, actions);
+  return card;
+}
+
+function missionAuthorizationCard(approval) {
+  // The effective Run Contract is reviewed and authorized here, inside Missions.
+  const card = decisionCard(approval, true);
+  card.classList.add("mission-authorization");
+  card.dataset.missionApprovalId = approval.id;
+  if (approval.id === focusedMissionApprovalId) card.classList.add("focused");
+  const eyebrow = document.createElement("span");
+  eyebrow.className = "eyebrow warning";
+  eyebrow.textContent = "RUN CONTRACT · WAITING FOR YOUR AUTHORIZATION";
+  card.querySelector(".decision-content")?.prepend(eyebrow);
+  return card;
+}
+
+async function revealAuthorizedMission(approval) {
+  const name = String(approval?.args?.name || "").trim();
+  try {
+    if (state.connectionMode === "user") {
+      state.missions = await api.refreshMissions();
+    }
+  } catch {
+    // The list refreshes on the next sync; the focus below still lands in Missions.
+  }
+  const missions = Array.isArray(state.missions?.missions) ? state.missions.missions : [];
+  const mission = missions
+    .filter((item) => !name || item.name === name)
+    .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || "")))[0];
+  focusMission(mission?.id || "");
+  toast(mission
+    ? `Mission authorized. “${mission.name}” is running in AMOS Platform.`
+    : "Mission authorized. It will appear in Missions on the next sync.");
+}
+
+function focusMissionApproval(approvalId) {
+  const approval = (Array.isArray(state?.approvals) ? state.approvals : [])
+    .find((item) => item.id === approvalId);
+  if (approval?.status === "pending") {
+    focusMission("", { approvalId });
+    return;
+  }
+  const name = String(approval?.args?.name || "").trim();
+  const missions = Array.isArray(state?.missions?.missions) ? state.missions.missions : [];
+  const mission = missions.find((item) => name && item.name === name);
+  focusMission(mission?.id || "");
 }
 
 function renderMissionActivity(mission, container) {
@@ -4174,6 +4484,36 @@ function renderMissionActivity(mission, container) {
   const events = mission.missionKind === "optimization"
     ? (Array.isArray(mission.events) ? mission.events : [])
     : (Array.isArray(mission.steps) ? mission.steps : []);
+  const questions = openMissionDecisions(mission);
+  if (questions.length > 0) {
+    const questionsHeading = document.createElement("strong");
+    questionsHeading.textContent = "Open questions and authority changes";
+    const questionList = document.createElement("div");
+    questionList.className = "mission-open-questions";
+    for (const decision of questions) questionList.append(missionDecisionCard(decision));
+    container.append(questionsHeading, questionList);
+  }
+  if (mission.source === "hosted") {
+    const limitsHeading = document.createElement("strong");
+    limitsHeading.textContent = "Progress against effective limits";
+    const limits = document.createElement("ul");
+    for (const label of missionLimitChips(mission)) {
+      const item = document.createElement("li");
+      const summary = document.createElement("span");
+      summary.textContent = label;
+      item.append(summary);
+      limits.append(item);
+    }
+    const nextStep = latestMissionStep(mission);
+    if (nextStep) {
+      const item = document.createElement("li");
+      const summary = document.createElement("span");
+      summary.textContent = `Current step · ${nextStep}`;
+      item.append(summary);
+      limits.append(item);
+    }
+    container.append(limitsHeading, limits);
+  }
   const heading = document.createElement("strong");
   heading.textContent = "Recorded activity";
   container.append(heading);
@@ -4275,7 +4615,7 @@ function renderTasks() {
   if (!state) return;
   const library = state.tasks || { supported: false, tasks: [] };
   const tasks = Array.isArray(library.tasks)
-    ? library.tasks.filter((task) => task.kind !== "goal_pursuit")
+    ? library.tasks.filter((task) => task.kind !== "goal_pursuit" && !task.missionBuilder)
     : [];
   const checkpoints = Array.isArray(state.taskCheckpoints) ? state.taskCheckpoints : [];
   const query = elements.taskSearchInput.value.trim().toLowerCase();
@@ -7338,13 +7678,12 @@ function renderDecisions() {
     if (card.dataset.inputId && !pendingIds.has(card.dataset.inputId)) card.remove();
   }
   const openMissionDecisionIds = new Set(missionDecisions.map((decision) => decision.id));
-  for (const card of elements.messages.querySelectorAll(".mission-decision.inline-decision")) {
-    if (!openMissionDecisionIds.has(card.dataset.missionDecisionId)) {
-      missionDecisionDrafts.delete(card.dataset.missionDecisionId);
-      card.remove();
-    }
+  for (const id of [...missionDecisionDrafts.keys()]) {
+    if (!openMissionDecisionIds.has(id)) missionDecisionDrafts.delete(id);
   }
-  for (const decision of missionDecisions) renderInlineMissionDecision(decision);
+  // Mission decisions never enter the transcript. They live in the attention rail, in
+  // Decisions, and in Mission detail.
+  renderMissionAttentionRail();
   const pendingApprovalIds = new Set(pending.map((approval) => approval.id));
   const approvalScope = `${state.identity?.tenant_id || ""}:${state.identity?.sub || ""}`;
   if (companyApprovalChatScope !== approvalScope) {
@@ -7361,6 +7700,11 @@ function renderDecisions() {
       surfacedCompanyApprovalIds.delete(card.dataset.approvalId);
       card.remove();
     }
+  }
+  for (const receipt of elements.messages.querySelectorAll(".mission-receipt")) {
+    if (pendingApprovalIds.has(receipt.dataset.approvalId)) continue;
+    const settled = approvals.find((approval) => approval.id === receipt.dataset.approvalId);
+    if (settled) updateMissionReceiptStatus(receipt, settled.status);
   }
   if (companyApprovalChatBaseline) {
     for (const approval of pending) {
@@ -7818,23 +8162,152 @@ function missionDecisionCard(decision, { inline = false } = {}) {
   return card;
 }
 
-function renderInlineMissionDecision(decision) {
-  if (!decision?.id) return null;
-  const existing = Array.from(
-    elements.messages.querySelectorAll(".decision-card.mission-decision.inline-decision")
-  ).find((card) => card.dataset.missionDecisionId === decision.id);
-  if (existing) return existing;
-  if (surfacedMissionDecisionIds.has(decision.id)) return null;
-  surfacedMissionDecisionIds.add(decision.id);
-  const card = missionDecisionCard(decision, { inline: true });
-  elements.messages.append(card);
-  showView("operator");
-  renderConversationChrome();
-  card.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  window.setTimeout(() => {
-    card.querySelector(".decision-input-options .button, textarea, .button")?.focus();
-  }, 0);
-  return card;
+// ---- Mission attention rail ----
+// Lives outside the transcript's scroll and streaming layout (a sibling of #messages, next to
+// the composer). It never opens Operator, never moves focus, never scrolls the transcript, and
+// never inserts a card into message ordering.
+
+function hiddenMissionDecisionIds() {
+  const hidden = new Set(sessionHiddenMissionDecisionIds);
+  try {
+    const parsed = JSON.parse(localStorage.getItem(HIDDEN_MISSION_DECISIONS_KEY) || "[]");
+    if (Array.isArray(parsed)) for (const id of parsed) hidden.add(String(id));
+  } catch {
+    // Storage unavailable: session-only acknowledgement still applies.
+  }
+  return hidden;
+}
+
+function hideMissionDecisionFromChat(decisionId) {
+  // Presentation only. The decision stays open, the Mission stays waiting_decision, and the
+  // Missions/Decisions badges keep counting it until the Platform resolves it.
+  const id = String(decisionId || "");
+  if (!id) return;
+  sessionHiddenMissionDecisionIds.add(id);
+  const hidden = hiddenMissionDecisionIds();
+  try {
+    localStorage.setItem(HIDDEN_MISSION_DECISIONS_KEY, JSON.stringify([...hidden].slice(-200)));
+  } catch {
+    // Storage unavailable: hidden for this session only.
+  }
+  renderMissionAttentionRail();
+}
+
+function missionAttentionReason(decision) {
+  const text = String(decision?.question || "").trim();
+  const sentence = text.match(/^[^.!?\n]+[.!?]?/)?.[0]?.trim() || text;
+  const fallback = decision?.authority_expansion
+    ? "New authority is required before this Mission can continue."
+    : "This Mission needs your direction before it continues.";
+  return (sentence || fallback).slice(0, 200);
+}
+
+function missionForDecision(decision) {
+  return missionEntries().find((mission) => mission.id === decision?.mission_id) || null;
+}
+
+function renderMissionAttentionRail() {
+  const rail = elements.missionAttentionRail;
+  if (!rail || !state) return;
+  const decisions = Array.isArray(state.missionDecisions) ? state.missionDecisions : [];
+  const hidden = hiddenMissionDecisionIds();
+  const visible = decisions.filter((decision) => decision?.id && !hidden.has(String(decision.id)));
+  const expanded = new Set(
+    [...rail.querySelectorAll("details[open]")]
+      .map((details) => details.closest("[data-mission-decision-id]")?.dataset.missionDecisionId)
+      .filter(Boolean)
+  );
+  rail.replaceChildren();
+  rail.classList.toggle("hidden", visible.length === 0);
+  for (const decision of visible) {
+    rail.append(missionAttentionItem(decision, { expanded: expanded.has(decision.id) }));
+  }
+}
+
+function missionAttentionItem(decision, { expanded = false } = {}) {
+  const authority = decision.authority_expansion === true;
+  const item = document.createElement("article");
+  item.className = `mission-attention-item${authority ? " authority" : ""}`;
+  item.dataset.missionDecisionId = decision.id;
+  const summary = document.createElement("div");
+  summary.className = "mission-attention-summary";
+  const severity = document.createElement("span");
+  severity.className = `mission-attention-severity ${authority ? "authority" : "question"}`;
+  severity.textContent = authority ? "Authority" : "Question";
+  const copy = document.createElement("div");
+  copy.className = "mission-attention-copy";
+  const name = document.createElement("strong");
+  name.textContent = decision.mission_name || "Autonomous Mission";
+  const reason = document.createElement("span");
+  reason.textContent = missionAttentionReason(decision);
+  copy.append(name, reason);
+  summary.append(severity, copy);
+
+  const mission = missionForDecision(decision);
+  const actions = document.createElement("div");
+  actions.className = "mission-attention-actions";
+  const viewMission = () => (mission ? focusMission(mission.id) : showView("decisions"));
+  const secureReview = authority || state.approvalDecisionMode !== "desktop";
+  const primary = actionButton(
+    secureReview ? "Review authority" : mission ? "Answer" : "View Mission",
+    "primary compact-button"
+  );
+  primary.addEventListener("click", () => {
+    if (secureReview) openMissionDecision(decision, primary);
+    else viewMission();
+  });
+  actions.append(primary);
+  if (secureReview || mission) {
+    const view = actionButton("View Mission", "secondary compact-button");
+    view.addEventListener("click", viewMission);
+    actions.append(view);
+  }
+  const hide = actionButton("Hide from chat", "ghost compact-button");
+  hide.title = "Hides this notice here only. The Mission keeps waiting and stays in Missions and Decisions.";
+  hide.addEventListener("click", () => hideMissionDecisionFromChat(decision.id));
+  actions.append(hide);
+  if (
+    mission?.source === "hosted" &&
+    ["authorized", "running", "waiting_decision", "paused"].includes(mission.status)
+  ) {
+    const stop = actionButton("Stop Mission", "danger compact-button");
+    stop.addEventListener("click", () => controlHostedMission(mission, "cancel", stop));
+    actions.append(stop);
+  }
+
+  const details = document.createElement("details");
+  details.className = "mission-attention-details";
+  // Authority expansions always start collapsed; other items only reopen if the user had them open.
+  details.open = !authority && expanded;
+  const label = document.createElement("summary");
+  label.textContent = "Details";
+  const body = document.createElement("div");
+  if (decision.objective) {
+    const objective = document.createElement("p");
+    objective.textContent = `Mission: ${decision.objective}`;
+    body.append(objective);
+  }
+  const question = document.createElement("p");
+  question.textContent = decision.question || "";
+  body.append(question);
+  const options = Array.isArray(decision.options) ? decision.options : [];
+  if (options.length > 0) {
+    const list = document.createElement("ul");
+    for (const option of options) {
+      const entry = document.createElement("li");
+      entry.textContent = missionDecisionOptionLabel(option);
+      list.append(entry);
+    }
+    body.append(list);
+  }
+  const when = document.createElement("small");
+  when.textContent = decision.created_at
+    ? `Asked ${relativeTime(decision.created_at)}${authority ? " · needs a replacement Run Contract" : ""}`
+    : "";
+  body.append(when);
+  details.append(label, body);
+  item.append(summary, actions, details);
+  return item;
 }
 
 function removeMissionDecisionCards(id) {
@@ -7879,11 +8352,12 @@ async function answerMissionDecision(decision, answer, button) {
     missionDecisionDrafts.delete(decision.id);
     removeMissionDecisionCards(decision.id);
     const stopped = response?.mission_status === "cancelled";
-    addMessage("assistant", stopped
-      ? `The ${decision.mission_name || "Mission"} Mission has been stopped and its Run Contract revoked.`
-      : `Got it — the ${decision.mission_name || "Mission"} Mission is resuming inside its existing authority. Completed actions will not be replayed.`);
+    // Mission outcomes stay in Missions; nothing is written into the conversation.
     renderDecisions();
-    toast(stopped ? "Mission stopped." : "Direction sent. The Mission has resumed.");
+    renderMissions();
+    toast(stopped
+      ? `${decision.mission_name || "Mission"} has been stopped and its Run Contract revoked.`
+      : `Direction sent. ${decision.mission_name || "The Mission"} is resuming inside its existing authority; completed actions will not be replayed.`);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -8154,6 +8628,7 @@ function approvalActionLabel() {
 
 function renderInlineCompanyApproval(approval) {
   if (!approval?.id || approval.status !== "pending") return null;
+  if (isMissionApproval(approval)) return renderMissionCreationReceipt(approval);
   const existing = Array.from(
     elements.messages.querySelectorAll(".decision-card.company-approval.inline-decision")
   ).find((card) => card.dataset.approvalId === approval.id);
@@ -8169,10 +8644,101 @@ function renderInlineCompanyApproval(approval) {
   return card;
 }
 
+const MISSION_RECEIPT_STATUS = Object.freeze({
+  pending: "Waiting for approval",
+  approved: "Authorized",
+  denied: "Not authorized"
+});
+
+function missionReceiptStatusLabel(status) {
+  const key = String(status || "pending").toLowerCase();
+  if (key === "pending") return MISSION_RECEIPT_STATUS.pending;
+  if (["approved", "executed", "completed"].includes(key)) return MISSION_RECEIPT_STATUS.approved;
+  if (["denied", "rejected", "expired", "cancelled", "revoked"].includes(key)) {
+    return MISSION_RECEIPT_STATUS.denied;
+  }
+  return `${String(status).replaceAll("_", " ")} in Missions`;
+}
+
+function updateMissionReceiptStatus(receipt, status) {
+  const node = receipt?.querySelector(".mission-receipt-status");
+  if (node) node.textContent = missionReceiptStatusLabel(status);
+}
+
+function missionCreationReceipt(approval) {
+  // "Mission created: <name> · Waiting for approval · View Mission"
+  const receipt = document.createElement("div");
+  receipt.className = "message assistant mission-receipt";
+  receipt.dataset.approvalId = approval.id;
+  const name = String(approval.args?.name || "").trim() ||
+    String(approval.args?.objective || "").trim().slice(0, 120) || "Mission";
+  const line = document.createElement("p");
+  const label = document.createElement("strong");
+  label.textContent = `Mission created: ${name}`;
+  const status = document.createElement("span");
+  status.className = "mission-receipt-status";
+  status.textContent = missionReceiptStatusLabel(approval.status);
+  const view = document.createElement("button");
+  view.type = "button";
+  view.className = "mission-receipt-link";
+  view.textContent = "View Mission";
+  view.addEventListener("click", () => focusMissionApproval(approval.id));
+  line.append(label, " · ", status, " · ", view);
+  receipt.append(line);
+  return receipt;
+}
+
+function renderMissionCreationReceipt(approval) {
+  // A Mission is durable background work, not a conversation. A chat-originated Mission leaves
+  // exactly one compact receipt here; compile output, worker activity, and questions live in
+  // Missions. A Missions-page compile never touches the conversation at all.
+  const existing = Array.from(elements.messages.querySelectorAll(".mission-receipt"))
+    .find((node) => node.dataset.approvalId === approval.id);
+  if (existing) return existing;
+  if (surfacedCompanyApprovalIds.has(approval.id)) return null;
+  surfacedCompanyApprovalIds.add(approval.id);
+  if (missionsPageCompileInProgress()) return null;
+  const receipt = missionCreationReceipt(approval);
+  const anchor = elements.approvalModal;
+  if (anchor?.parentNode === elements.messages) elements.messages.insertBefore(receipt, anchor);
+  else elements.messages.append(receipt);
+  renderConversationChrome();
+  return receipt;
+}
+
+function isMissionApprovalOutcome(outcome) {
+  return /(^|_)create_mission$/.test(String(outcome?.verb || ""));
+}
+
+function settleMissionAuthorization(outcome, status) {
+  for (const receipt of elements.messages.querySelectorAll(".mission-receipt")) {
+    if (receipt.dataset.approvalId === String(outcome?.id || "")) {
+      updateMissionReceiptStatus(receipt, status);
+    }
+  }
+  if (status !== "approved") {
+    toast("Mission not authorized. AMOS has the decision and nothing will run.");
+    renderMissions();
+    return;
+  }
+  const result = outcome?.result && typeof outcome.result === "object" ? outcome.result : {};
+  const missionId = String(result.mission_id || result.mission?.id || "");
+  const refresh = state?.connectionMode === "user"
+    ? api.refreshMissions().then((missions) => { state.missions = missions; })
+    : Promise.resolve();
+  refresh.catch(() => {}).then(() => {
+    if (currentView === "missions" && missionId) focusMission(missionId);
+    else renderMissions();
+  });
+  toast("Mission authorized. Follow its progress and proof in Missions.");
+}
+
 async function decideGovernedApproval(id, decision, button) {
   if (!canDecideCompanyApprovalsInDesktop()) {
     return reviewGovernedApproval(id, button);
   }
+  const missionApproval = (Array.isArray(state?.approvals) ? state.approvals : [])
+    .find((approval) => approval.id === id && isMissionApproval(approval)) || null;
   const approved = decision === "approve";
   const confirmed = window.confirm(
     approved
@@ -8193,7 +8759,10 @@ async function decideGovernedApproval(id, decision, button) {
     }
     state = await api.refreshRemote();
     render();
-    if (review?.decision === "deny") {
+    if (missionApproval && review?.decision !== "deny") {
+      // Authorization lands on Mission detail, never in Operator chat.
+      await revealAuthorizedMission(missionApproval);
+    } else if (review?.decision === "deny") {
       toast("Denied. AMOS has the decision and will not treat that write as still pending.");
     } else {
       toast("Approved. The original operation is running once.");

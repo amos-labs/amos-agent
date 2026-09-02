@@ -4189,29 +4189,44 @@ export class DesktopController {
     const title = String(input.title || `${builderTitle}: ${conversationTitle(objective)}`)
       .trim()
       .slice(0, 160);
+    // The compiler run is internal Mission evidence, not a user conversation: it is never
+    // selected, never steals Operator, and is hidden from the Conversations list.
     const opened = await this.startNewConversation({
       kind: "general",
       ...(projectId ? { projectId } : {}),
       objective,
       title,
-      select: true
+      select: false
     });
     const taskRecordId = opened.launch?.taskId || opened.launch?.task?.id || "";
     if (!taskRecordId) throw new Error("AMOS could not open the Mission builder");
     const started = await this.run({
       text: objective,
       taskRecordId,
-      select: true,
+      select: false,
       wait: false,
-      isolate: false,
+      isolate: true,
       missionCreation: true,
       missionCreationType
+    });
+    this.record("mission", `Compiling hosted Mission: ${conversationTitle(objective)}`, {
+      project_id: projectId || null,
+      builder_task_id: taskRecordId,
+      run_id: started.runId || null,
+      execution_location: "hosted",
+      mission_kind: missionCreationType,
+      conversation_opened: false
     });
     return {
       started: true,
       executionLocation: "hosted",
+      missionKind: missionCreationType,
+      objective,
+      projectId: projectId || "",
       taskId: taskRecordId,
+      builderTaskId: taskRecordId,
       runId: started.runId,
+      conversationOpened: false,
       state: await this.state()
     };
   }
@@ -6003,6 +6018,7 @@ export class DesktopController {
           continuityByContext.get(task.contextKey)
         ),
         remote: remoteById.has(task.remoteId || task.id),
+        missionBuilder: isMissionBuilderTask(task),
         active: task.id === this.activeTaskRecordId,
         running: Boolean(run),
         runId: run?.id || "",
@@ -6023,6 +6039,7 @@ export class DesktopController {
         canvasState: { activeCanvasId: null, canvases: [] },
         local: false,
         remote: true,
+        missionBuilder: isMissionBuilderTask(remote),
         active: remote.contextKey === this.activeContextKey,
         running: Boolean(run),
         runId: run?.id || "",

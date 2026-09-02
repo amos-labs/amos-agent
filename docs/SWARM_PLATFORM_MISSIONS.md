@@ -35,6 +35,14 @@ competing learning systems:
   learned HRR world representation.
 - AMOS Desktop is a client and optional local Mission worker. It does not mint
   truth, fitness, or learning attestations.
+- In Desktop, a hosted Mission is durable background work, not a conversation.
+  The Missions control center owns creation, compile progress, Run Contract
+  authorization, status, open questions, and controls. Creating a Mission from
+  Missions never opens Operator; the compiler run is retained as internal
+  evidence hidden from Conversations. A Mission asked for in Operator chat
+  leaves exactly one compact receipt (`Mission created: <name> · Waiting for
+  approval · View Mission`), and Mission questions surface in a compact
+  attention rail beside the composer, never as cards in the transcript.
 
 These components exchange versioned organism contracts. The current Python
 Swarm selector is an explicitly provisional research projection of the

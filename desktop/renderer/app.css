@@ -1614,6 +1614,65 @@ html[data-platform="win32"] .sidebar-toggle {
 .decision-card.inline-decision .decision-card-actions { justify-items: stretch; }
 .decision-card.inline-decision .decision-input-form { width: 100%; }
 
+/* Mission attention rail: a sibling of .messages beside the composer, outside transcript flow. */
+.mission-attention-rail {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: grid;
+  gap: 6px;
+  margin: 0 18px 8px;
+  max-height: 34vh;
+  overflow: auto;
+}
+.mission-attention-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,202,105,.32);
+  border-radius: 11px;
+  background: linear-gradient(120deg, rgba(255,202,105,.07), transparent 55%), var(--panel);
+}
+.mission-attention-item.authority { border-color: rgba(255,117,87,.34); }
+.mission-attention-summary { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.mission-attention-severity {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  background: rgba(255,202,105,.14);
+  color: var(--warning);
+}
+.mission-attention-severity.authority { background: rgba(255,117,87,.14); color: var(--danger-text); }
+.mission-attention-copy { display: grid; gap: 2px; min-width: 0; }
+.mission-attention-copy strong { font-size: 11px; line-height: 1.3; }
+.mission-attention-copy span { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.mission-attention-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mission-attention-details summary { cursor: pointer; color: var(--muted-2); font-size: 9px; }
+.mission-attention-details > div { display: grid; gap: 6px; margin-top: 6px; }
+.mission-attention-details p,
+.mission-attention-details li { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.mission-attention-details ul { margin: 0; padding-left: 16px; }
+.mission-attention-details small { color: var(--muted-2); font-size: 8px; }
+
+/* Compact receipt for a chat-originated Mission: the only Mission node chat ever receives. */
+.message.mission-receipt p { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; font-size: 11px; }
+.message.mission-receipt strong { font-weight: 700; }
+.mission-receipt-status { color: var(--warning); }
+.mission-receipt-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue-2);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-run-dots i,
   .panel-state-badge.working { animation: none; }
@@ -2354,6 +2413,13 @@ html[data-platform="win32"] .sidebar-toggle {
 .task-card.in-project { border-color: rgba(109,147,255,.38); }
 .mission-card.attention { border-color: rgba(255,202,105,.42); }
 .mission-card.running { box-shadow: inset 3px 0 0 var(--green); }
+.mission-card.focused,
+.mission-authorization.focused { border-color: rgba(109,147,255,.6); box-shadow: 0 0 0 2px rgba(109,147,255,.22); }
+.mission-compile-card .mission-progress { color: var(--muted); }
+.mission-current-step { margin: -2px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.mission-open-questions { display: grid; gap: 10px; margin: 10px 0 12px; }
+.mission-open-questions .decision-card { grid-template-columns: 1fr; }
+.mission-list .mission-authorization { margin-bottom: 4px; }
 .mission-progress { margin: -4px 0 0; color: var(--muted-2); font-size: 9px; line-height: 1.5; }
 .mission-activity {
   padding: 13px 15px;
