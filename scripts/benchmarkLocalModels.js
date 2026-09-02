@@ -13,7 +13,7 @@ import {
   requiresVisibleAnswerRecovery,
   visibleAnswerRecoveryMessages,
   withSequentialToolPolicy
-} from "../src/research/modelScaffold.js";
+} from "../src/model/localBenchmarkScaffold.js";
 
 const args = process.argv.slice(2);
 const models = readModels(args);

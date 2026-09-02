@@ -378,6 +378,13 @@ as the AMOS platform grows.
 - [Browser/CUA gap analysis and roadmap](docs/BROWSER_CUA_GAP_ANALYSIS.md)
 - [Contributing](CONTRIBUTING.md)
 
+The Qwen swarm self-learning research (formerly `src/research`, the
+`research:*` scripts, `benchmarks/`, and `infra/aws`) moved to
+[amos-labs/amos-organism](https://github.com/amos-labs/amos-organism) under
+`swarm/`, where it runs and is tested alongside the organism kernel. Desktop
+keeps only its local-model qualification benchmarks
+(`scripts/benchmarkLocalModels.js`, `scripts/benchmarkKnowledgeIntegration.js`).
+
 ## Direction
 
 The near-term product path is:

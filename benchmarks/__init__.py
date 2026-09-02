@@ -1,1 +1,0 @@
-"""AMOS research benchmark adapters."""
