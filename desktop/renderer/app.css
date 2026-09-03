@@ -2431,22 +2431,42 @@ html[data-platform="win32"] .sidebar-toggle {
 .mission-contract dt { color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
 .mission-contract dd { margin: 0; color: var(--muted-2); overflow-wrap: anywhere; }
 .mission-compile-card.ready { box-shadow: inset 3px 0 0 var(--blue-2); }
-.mission-run-contract .mission-contract { margin-top: 4px; }
-.mission-operation-groups { display: grid; gap: 2px; }
-.mission-operation-group strong { color: var(--text); font-weight: 600; }
-.mission-limits { display: grid; gap: 4px; }
-.mission-limit {
+
+/* The plan card: sentences, not a spec sheet. */
+.mission-plan {
   display: grid;
-  grid-template-columns: minmax(90px, max-content) auto auto 1fr;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 6px;
-  border: 1px solid transparent;
-  border-radius: 6px;
+  gap: 8px;
+  margin: 6px 0 2px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  font-size: 10px;
+  line-height: 1.55;
 }
-.mission-limit.default { border-color: rgba(255,202,105,.42); background: rgba(255,202,105,.07); }
-.mission-limit-name { color: var(--text); }
-.mission-limit input {
+.mission-plan p { margin: 0; color: var(--text); }
+.mission-plan-goal { font-weight: 600; }
+.mission-plan-limits { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.mission-plan-limit { color: var(--muted-2); }
+.mission-plan-limit.guessed {
+  padding: 4px 8px;
+  border: 1px solid rgba(255,202,105,.42);
+  border-radius: 6px;
+  background: rgba(255,202,105,.07);
+  color: var(--text);
+}
+.mission-plan-limit-tap {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--warning);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.mission-plan-limit-editor { display: inline-flex; align-items: center; gap: 6px; }
+.mission-plan-limit-editor input {
   width: 92px;
   padding: 2px 6px;
   font: inherit;
@@ -2455,11 +2475,31 @@ html[data-platform="win32"] .sidebar-toggle {
   border: 1px solid var(--line);
   border-radius: 5px;
 }
-.mission-limit-unit { color: var(--muted); }
-.mission-limit-source { color: var(--muted); font-size: 8px; text-align: right; }
-.mission-limit-source.default { color: var(--warning); font-weight: 600; }
+.mission-plan-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue-2);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.mission-plan-channels { display: grid; gap: 8px; }
+.mission-plan-details > summary { cursor: pointer; color: var(--muted); font-size: 9px; }
+.mission-plan-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 3px 12px;
+  margin: 6px 0 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.mission-plan-facts dt { color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.mission-plan-facts dd { margin: 0; color: var(--muted-2); overflow-wrap: anywhere; }
+.mission-progress-line { color: var(--text); font-weight: 600; }
+.mission-goal-field textarea { min-height: 120px; font-size: 13px; line-height: 1.55; }
 
-/* Per-Mission notification channels: creation form, Run Contract card, detail, and the editor. */
+/* Per-Mission notification channels: plan card, detail, and the editor. */
 .mission-channels-field { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .mission-channels-field legend { padding: 0; margin-bottom: 2px; font: inherit; }
 .mission-channels-field small { color: var(--muted); font-size: 9px; line-height: 1.45; }

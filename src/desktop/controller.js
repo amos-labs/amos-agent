@@ -2166,7 +2166,7 @@ export class DesktopController {
     const decision = this.missionDecisions.find((item) => item.id === id);
     if (!decision) throw new Error("That Mission question is no longer available");
     if (decision.authority_expansion) {
-      throw new Error("This answer would expand Mission authority and needs a replacement Run Contract");
+      throw new Error("This answer would let the Mission do more than you approved; it needs a fresh approval in Missions");
     }
     if (this.approvalDecisionMode !== "desktop") {
       return { mode: "hosted", opened: false };
@@ -5477,19 +5477,19 @@ export class DesktopController {
   }
 
   /**
-   * Start a Mission from a compiled Run Contract on the Missions page. The compile run only
-   * dry-ran create_mission; this is the one deliberate call that creates (owner) or parks
-   * (non-owner) it. Edited limits re-run the dry run first so the confirmation token matches
-   * the new contract digest; a server without dry_run support simply creates on that call.
+   * Start a Mission from a compiled plan on the Missions page. The compile run only dry-ran
+   * create_mission; this is the one deliberate call that creates (owner) or parks (non-owner)
+   * it. Edited limits or channels re-run the dry run first so the confirmation token matches
+   * the new plan; a server without dry_run support simply creates on that call.
    */
   async startCompiledMission(input = {}) {
     const builderTaskId = String(input.builderTaskId || "").trim();
     const record = this.missionCompileOutcomes.get(builderTaskId);
     if (!record || record.kind !== "compiled") {
-      throw new Error("That Run Contract is no longer waiting to start");
+      throw new Error("That plan is no longer waiting to start");
     }
     if (!record.spec) {
-      throw new Error("The compiled Run Contract did not carry its specification. Compile the Mission again.");
+      throw new Error("The plan did not carry its details. Ask AMOS to plan the Mission again.");
     }
     const settings = await this.settingsStore.read();
     if (settings.operatingMode !== "online" || this.identity?.principal_type !== "user") {
@@ -5497,9 +5497,17 @@ export class DesktopController {
     }
     const remote = await this.personalRemote(settings, "starting this Mission");
     const edits = missionLimitEdits(input.limits);
-    const spec = { ...record.spec, ...edits };
+    // A channel change on the plan card is validated like the form's choice: a channel the user
+    // has not set up is refused here, never silently sent.
+    const notifications = input.notifications === undefined || input.notifications === null
+      ? null
+      : assertMissionChannelsConfigured(input.notifications, this.notificationPreferences);
+    const spec = { ...record.spec, ...edits, ...(notifications ? { notifications } : {}) };
     const compiledLimits = record.contract?.effectiveLimits || {};
-    const edited = Object.entries(edits).some(([key, value]) => Number(compiledLimits[key]) !== value);
+    const channelsChanged = Boolean(notifications) &&
+      JSON.stringify(notifications) !== JSON.stringify(normalizeMissionNotificationChoice(record.spec.notifications));
+    const edited = channelsChanged ||
+      Object.entries(edits).some(([key, value]) => Number(compiledLimits[key]) !== value);
     const tokenExpired = Boolean(record.confirmationExpiresAt) &&
       Date.parse(record.confirmationExpiresAt) <= Date.now();
     const laneLike = { taskRecordId: builderTaskId, id: record.runId, status: "completed" };
@@ -5512,7 +5520,7 @@ export class DesktopController {
           name: "create_mission",
           result: await remote.compileMission(spec)
         });
-        if (!recompiled) throw new Error("AMOS did not return a compiled Run Contract");
+        if (!recompiled) throw new Error("AMOS did not return a plan");
         if (recompiled.kind !== "compiled") {
           // This server has no dry_run support and already created or parked the Mission.
           return this.finishCompiledMissionStart(remote, laneLike, recompiled, spec);
@@ -8963,8 +8971,9 @@ function hostedMissionCreationPrompt(enabled, projectId = "", kind = "finite", n
     "",
     "Dedicated hosted Mission builder:",
     "- Translate the user's plain-English outcome into one finite, governed AMOS Mission.",
-    "- create_mission is the only successful terminal creation operation for this run. Call it with dry_run: true; Desktop forces the dry run here. The compiled Run Contract is shown to the user in Missions, who starts it themselves.",
-    "- When create_mission returns status compiled, summarize the Run Contract in two or three sentences and finish. Do not call create_mission again, and never pass confirmation_token.",
+    "- create_mission is the only successful terminal creation operation for this run. Call it with dry_run: true; Desktop forces the dry run here. The compiled plan is shown to the user in Missions, who starts it themselves.",
+    "- The user supplied one sentence on purpose. Default everything the goal does not state (ideal customer profile, geography, budgets, batch sizes, completion) from company context; never ask the user for detail you could infer, and never mention contracts, checkers, metrics, admission, families, or digests.",
+    "- When create_mission returns status compiled or compiled_awaiting_confirmation, describe the plan in two or three plain sentences and finish. Do not call create_mission again, and never pass confirmation_token.",
     "- Related tools may be read for context or prerequisites, but a campaign, Project goal, Automation, or ordinary task is not a Mission and cannot replace it.",
     "- Infer conservative contract details. Check mathematical feasibility across target counts, pages, batches, credits, time, and tool-call ceilings before proposing the Mission.",
     projectId
@@ -9153,6 +9162,10 @@ function compiledRunContract(result) {
     prohibitions,
     effectiveLimits: Object.keys(effectiveLimits).length > 0 ? effectiveLimits : legacyLimits,
     limitSources: boundedScalarRecord(pick("limit_sources")),
+    // Limits the compiler filled in because the goal never named them (platform defaulted_limits).
+    defaultedLimits: boundedStringList(pick("defaulted_limits"), (entry) =>
+      typeof entry === "string" ? entry : entry?.key || entry?.limit || entry?.name || ""
+    ),
     admission: boundedScalarRecord(pick("admission")),
     boundResources: boundedStringList(pick("bound_resources"), (entry) =>
       typeof entry === "string" ? entry : entry?.name || entry?.id || entry?.type || ""
@@ -9200,7 +9213,7 @@ function missionLimitEdits(limits) {
   if (!limits || typeof limits !== "object" || Array.isArray(limits)) return {};
   const edits = {};
   for (const [key, raw] of Object.entries(limits)) {
-    if (!MISSION_LIMIT_KEYS.has(key)) throw new Error(`${key} is not an editable Run Contract limit`);
+    if (!MISSION_LIMIT_KEYS.has(key)) throw new Error(`${key.replaceAll("_", " ")} is not a limit you can change here`);
     const value = Number(raw);
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new Error(`${key.replaceAll("_", " ")} must be a positive whole number`);
@@ -9304,18 +9317,18 @@ function missionOutcomeSummary(record) {
   switch (record.kind) {
     case "compiled":
       return record.requiresConfirmation
-        ? "Run Contract compiled; a guessed limit needs your confirmation before it starts"
-        : "Run Contract compiled; ready to start from Missions";
+        ? "Plan ready; a limit AMOS guessed needs your OK before it starts"
+        : "Plan ready to start from Missions";
     case "authorized":
       return `Mission created: ${record.missionName || record.missionId}`;
     case "pending_approval":
-      return "Run Contract proposed; waiting for authorization";
+      return "Plan proposed; waiting for approval";
     case "failed":
-      return `Mission compile rejected: ${record.message}`;
+      return `Mission planning rejected: ${record.message}`;
     case "cancelled":
-      return "Mission compile stopped";
+      return "Mission planning stopped";
     default:
-      return "Mission compile ended without creating a Mission";
+      return "Mission planning ended without creating a Mission";
   }
 }
 

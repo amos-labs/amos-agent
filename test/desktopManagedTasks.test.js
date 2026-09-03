@@ -834,6 +834,58 @@ test("editing a limit re-runs the dry run so the token matches the new contract 
   );
 });
 
+test("changing channels on the plan card re-runs the dry run and Start sends the new choice", async () => {
+  const calls = [];
+  const controller = await compiledMissionController("amos-compiled-channels-", calls, {
+    compile: (spec) => ({ ...compiledDryRun, confirmation_token: "tok-3", contract: { ...compiledDryRun.contract, notifications: spec.notifications } }),
+    create: () => ({ ok: true, mission_id: "77777777-7777-4777-8777-777777777777" })
+  });
+  controller.notificationPreferences = verifiedSmsPreferences();
+  const response = await controller.startCompiledMission({
+    builderTaskId: "builder-1",
+    limits: {},
+    notifications: { channels: ["in_app", "sms"] }
+  });
+  assert.deepEqual(calls.map((call) => call.tool), ["compileMission", "createMission"]);
+  assert.deepEqual(calls[0].spec.notifications, { channels: ["in_app", "sms"] });
+  assert.equal(calls[1].token, "tok-3");
+  assert.deepEqual(calls[1].spec.notifications, { channels: ["in_app", "sms"] });
+  assert.equal(response.outcome.kind, "authorized");
+
+  // A channel the user never set up is refused before anything is called.
+  const refused = [];
+  const strict = await compiledMissionController("amos-compiled-channels-refused-", refused, {});
+  strict.notificationPreferences = emptyNotificationPreferences();
+  await assert.rejects(
+    strict.startCompiledMission({ builderTaskId: "builder-1", notifications: { channels: ["sms"] } }),
+    /SMS/
+  );
+  assert.equal(refused.length, 0);
+});
+
+test("the compiled record keeps the compiler's defaulted_limits so a guess reads as a guess", async () => {
+  const outcome = missionCreationOutcome({
+    type: "tool_end",
+    name: "amos_create_mission",
+    result: {
+      ok: true,
+      status: "compiled_awaiting_confirmation",
+      confirmation_token: "tok-9",
+      contract: {
+        objective: "Get me 500 prospects",
+        effective_limits: { max_provider_credits: 300 },
+        limit_sources: {},
+        defaulted_limits: ["max_provider_credits"]
+      }
+    }
+  });
+  assert.equal(outcome.kind, "compiled");
+  assert.equal(outcome.requiresConfirmation, true);
+  assert.equal(outcome.confirmationToken, "tok-9");
+  assert.deepEqual(outcome.contract.defaultedLimits, ["max_provider_credits"]);
+  assert.deepEqual(outcome.contract.effectiveLimits, { max_provider_credits: 300 });
+});
+
 test("a server without dry_run support creates the Mission on the re-compile call itself", async () => {
   const calls = [];
   const controller = await compiledMissionController("amos-compiled-legacy-", calls, {
