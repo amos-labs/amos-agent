@@ -174,7 +174,7 @@ const elements = Object.fromEntries(
     "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
     "accountMemoryButton", "accountIntelligenceButton",
     "companySwitcherControl", "companySwitcher",
-    "decisionBadge", "privateMemoryBadge", "projectBadge", "missionBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
+    "decisionBadge", "privateMemoryBadge", "missionBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "connectCheck", "providerCheck", "onboardingIntelligenceStatus",
@@ -1215,8 +1215,6 @@ function renderConnections() {
     (provider.provider === "custom" || !connectionsByProvider.has(provider.provider)) &&
     (!freeForegroundAccount || provider.setupMode === "hosted_oauth")
   );
-  elements.connectionBadge.textContent = String(connectedSystems.length);
-  elements.connectionBadge.classList.toggle("hidden", connectedSystems.length === 0);
   elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
     ? freeForegroundAccount
       ? `${connectedSystems.length} of ${state?.accountStatus?.freeConnectionsLimit || 2} free app connections used · safe foreground reads only`
@@ -1403,8 +1401,6 @@ function renderAutomations() {
   );
   const itemCount = automations.length + recipes.length;
 
-  elements.automationBadge.textContent = String(active);
-  elements.automationBadge.classList.toggle("hidden", active === 0);
   elements.automationSummary.classList.toggle("hidden", !supported);
   elements.automationUnavailable.classList.toggle("hidden", supported);
   elements.automationEmpty.classList.toggle("hidden", !supported || itemCount > 0);
@@ -3146,9 +3142,6 @@ function renderProjects() {
   if (selectedProjectId && !projects.some((project) => project.id === selectedProjectId)) {
     selectedProjectId = "";
   }
-  const attentionRuns = liveProjectAttention(inbox);
-  const waitingDecisions = projectDecisionItems().length;
-
   const connectedUser = state.connectionMode === "user";
   const syncing = Boolean(state.remoteStatus?.syncing);
   const syncError = String(state.remoteStatus?.error || "").trim();
@@ -3170,9 +3163,6 @@ function renderProjects() {
   elements.projectUnavailable.classList.toggle("hidden", !notice);
   elements.newProjectButton.disabled = library.supported !== true || !connectedUser;
   elements.refreshProjectsButton.disabled = !connectedUser || syncing;
-  const badgeCount = attentionRuns.length + waitingDecisions;
-  elements.projectBadge.textContent = String(badgeCount);
-  elements.projectBadge.classList.toggle("hidden", badgeCount === 0);
   elements.projectEmpty.classList.toggle("hidden", page.total > 0 || Boolean(notice));
 
   elements.projectList.replaceChildren();
@@ -3974,6 +3964,49 @@ function missionStatusBucket(mission) {
   return "completed";
 }
 
+function localMissionForPendingInput(request, missions = missionEntries()) {
+  const localMissions = missions.filter((mission) => mission.source === "local");
+  return localMissions.find((candidate) => {
+    const taskIds = new Set([
+      candidate.id,
+      candidate.task?.id,
+      candidate.task?.remoteId,
+      candidate.run?.id,
+      candidate.run?.taskRecordId
+    ].map((value) => String(value || "").trim()).filter(Boolean));
+    const requestIds = [request?.taskRecordId, request?.runId]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const sameContext = request?.contextKey && request.contextKey === candidate.task?.contextKey;
+    return sameContext || requestIds.some((id) => taskIds.has(id));
+  }) || null;
+}
+
+function missionActionBadgeCount(missions, compiles) {
+  const required = new Set();
+  const decisions = Array.isArray(state?.missionDecisions) ? state.missionDecisions : [];
+  for (const decision of decisions) {
+    const missionId = String(decision?.mission_id || "").trim();
+    const decisionId = String(decision?.id || "").trim();
+    if (missionId || decisionId) required.add(missionId ? `mission:${missionId}` : `decision:${decisionId}`);
+  }
+
+  const pendingInputs = Array.isArray(state?.pendingInputs) ? state.pendingInputs : [];
+  for (const request of pendingInputs) {
+    const mission = localMissionForPendingInput(request, missions);
+    if (mission) required.add(`mission:${mission.id}`);
+  }
+
+  for (const approval of pendingMissionApprovalList()) required.add(`approval:${approval.id}`);
+  for (const compile of compiles) {
+    const presentation = missionCompilePresentation(compile);
+    if (presentation.actions.some((action) => ["start", "retry"].includes(action))) {
+      required.add(`compile:${compile.taskId}`);
+    }
+  }
+  return required.size;
+}
+
 function renderMissionStatusFilters(missions) {
   const counts = { all: missions.length, running: 0, attention: 0, completed: 0 };
   for (const mission of missions) counts[missionStatusBucket(mission)] += 1;
@@ -4009,7 +4042,8 @@ function renderMissions() {
       (missionStatusFilter === "all" || missionStatusBucket(mission) === missionStatusFilter);
   });
   const page = paginateItems(matching, "missions");
-  const compiles = ["all", "running"].includes(missionStatusFilter) ? missionCompileEntries() : [];
+  const allCompiles = missionCompileEntries();
+  const compiles = ["all", "running"].includes(missionStatusFilter) ? allCompiles : [];
   const authorizations = ["all", "attention"].includes(missionStatusFilter)
     ? pendingMissionApprovalList()
     : [];
@@ -4017,8 +4051,9 @@ function renderMissions() {
   const attention = missions.filter((mission) => missionStatusBucket(mission) === "attention").length
     + pendingMissionApprovalList().length;
   const completed = missions.filter((mission) => missionStatusBucket(mission) === "completed").length;
-  elements.missionBadge.textContent = String(attention || running);
-  elements.missionBadge.classList.toggle("hidden", attention + running === 0);
+  const actionRequired = missionActionBadgeCount(missions, allCompiles);
+  elements.missionBadge.textContent = String(actionRequired);
+  elements.missionBadge.classList.toggle("hidden", actionRequired === 0);
   elements.missionUnavailable.textContent = state.missions?.stale
     ? state.missions.refreshError
     : state.missions?.supported === false
@@ -4393,7 +4428,7 @@ function trackMissionCompile(response) {
 
 function pendingMissionApprovalList() {
   const approvals = Array.isArray(state?.approvals) ? state.approvals : [];
-  return approvals.filter((approval) => approval.status === "pending" && isMissionApproval(approval));
+  return approvals.filter((approval) => approval.status === "pending" && isMissionScopedApproval(approval));
 }
 
 function missionsPageCompileInProgress() {
@@ -4415,7 +4450,7 @@ function missionCompileOutcome(compile) {
 }
 
 function missionCompileApproval(outcome) {
-  const pending = pendingMissionApprovalList();
+  const pending = pendingMissionApprovalList().filter((approval) => isMissionApproval(approval));
   if (outcome?.pendingId) return pending.find((approval) => approval.id === outcome.pendingId) || null;
   return pending[0] || null;
 }
@@ -5099,7 +5134,6 @@ function renderTasks() {
   ));
   const page = paginateItems(visible, "tasks");
   const current = tasks.filter((task) => !task.archivedAt && !task.archived);
-  const waiting = current.filter((task) => task.status === "waiting").length;
   const inProject = current.filter((task) => task.projectId).length;
   const running = current.filter((task) => conversationStatusBucket(task) === "running").length;
   const visibleCheckpoints = taskStatusFilter === "all" || taskStatusFilter === "failed"
@@ -5108,8 +5142,6 @@ function renderTasks() {
       ))
     : [];
 
-  elements.taskBadge.textContent = String(waiting + checkpoints.length || running);
-  elements.taskBadge.classList.toggle("hidden", waiting + running + checkpoints.length === 0);
   elements.taskPlatformNotice.classList.toggle("hidden", library.platformSupported !== false);
   elements.taskEmpty.classList.toggle("hidden", page.total + visibleCheckpoints.length > 0);
   elements.conversationRecovery.classList.toggle("hidden", visibleCheckpoints.length === 0);
@@ -5656,8 +5688,6 @@ function renderCanvas() {
   elements.automationSetupSurface.classList.toggle("hidden", !(canvasVisible && setupVisible));
   elements.canvasSurface.classList.toggle("hidden", !canvasVisible || setupVisible);
 
-  elements.canvasBadge.textContent = String(canvases.length);
-  elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
   elements.panelCanvasCount.textContent = String(canvases.length);
   if (setupVisible && canvasVisible) {
     renderAutomationSetup();
@@ -8060,12 +8090,17 @@ function renderComposerProjectChip() {
 function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
-  const missionDecisions = Array.isArray(state.missionDecisions) ? state.missionDecisions : [];
   const proposals = Array.isArray(state.offlineProposals) ? state.offlineProposals : [];
-  const pendingInputs = Array.isArray(state.pendingInputs) ? state.pendingInputs : [];
-  const pending = approvals.filter((approval) => approval.status === "pending");
-  const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  const waitingCount = pending.length + missionDecisions.length + proposals.length + pendingInputs.length;
+  const missions = missionEntries();
+  const pendingInputs = (Array.isArray(state.pendingInputs) ? state.pendingInputs : [])
+    .filter((request) => !localMissionForPendingInput(request, missions));
+  const pending = approvals.filter((approval) => (
+    approval.status === "pending" && !isMissionScopedApproval(approval)
+  ));
+  const recent = approvals.filter((approval) => (
+    approval.status !== "pending" && !isMissionScopedApproval(approval)
+  )).slice(0, 10);
+  const waitingCount = pending.length + pendingInputs.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
   elements.workDecisionTabCount.textContent = String(waitingCount);
@@ -8109,16 +8144,13 @@ function renderDecisions() {
   }
 
   elements.pendingDecisions.replaceChildren();
-  if (pending.length === 0 && pendingInputs.length === 0 && missionDecisions.length === 0) {
+  if (pending.length === 0 && pendingInputs.length === 0) {
     elements.pendingDecisions.append(
       decisionEmpty(
         sync.syncing ? "Checking for decisions…" : "Nothing is waiting for your decision."
       )
     );
   } else {
-    for (const decision of missionDecisions) {
-      elements.pendingDecisions.append(missionDecisionCard(decision));
-    }
     for (const request of pendingInputs) {
       elements.pendingDecisions.append(decisionInputCard(request));
     }
@@ -8139,12 +8171,15 @@ function renderDecisions() {
   for (const card of elements.messages.querySelectorAll(".decision-card.inline-decision")) {
     if (card.dataset.inputId && !pendingIds.has(card.dataset.inputId)) card.remove();
   }
-  const openMissionDecisionIds = new Set(missionDecisions.map((decision) => decision.id));
+  const openMissionDecisionIds = new Set(
+    (Array.isArray(state.missionDecisions) ? state.missionDecisions : [])
+      .map((decision) => decision.id)
+  );
   for (const id of [...missionDecisionDrafts.keys()]) {
     if (!openMissionDecisionIds.has(id)) missionDecisionDrafts.delete(id);
   }
-  // Mission decisions never enter the transcript. They live in the attention rail, in
-  // Decisions, and in Mission detail.
+  // Mission decisions never enter the transcript or the general Decisions inbox. They live in
+  // the Mission attention rail and Mission detail, so each action has one control-center owner.
   renderMissionAttentionRail();
   const pendingApprovalIds = new Set(pending.map((approval) => approval.id));
   const approvalScope = `${state.identity?.tenant_id || ""}:${state.identity?.sub || ""}`;
@@ -8905,6 +8940,14 @@ function isMissionApproval(approval) {
   return approval?.verb === "create_mission" && approval.args && typeof approval.args === "object";
 }
 
+function isMissionScopedApproval(approval) {
+  if (!approval || typeof approval !== "object") return false;
+  if (isMissionApproval(approval) || approval.verb === "create_goal") return true;
+  if (approval.agency_origin === "goal_pursuit" || approval.goal_id) return true;
+  const args = approval.args && typeof approval.args === "object" ? approval.args : {};
+  return Boolean(args.mission_id || args.missionId || args.goal_id || args.goalId);
+}
+
 function missionConstraintSummary(constraints) {
   if (!constraints || typeof constraints !== "object" || Array.isArray(constraints)) return "";
   const parts = [];
@@ -9091,6 +9134,10 @@ function approvalActionLabel() {
 function renderInlineCompanyApproval(approval) {
   if (!approval?.id || approval.status !== "pending") return null;
   if (isMissionApproval(approval)) return renderMissionCreationReceipt(approval);
+  if (isMissionScopedApproval(approval)) {
+    renderMissions();
+    return null;
+  }
   const existing = Array.from(
     elements.messages.querySelectorAll(".decision-card.company-approval.inline-decision")
   ).find((card) => card.dataset.approvalId === approval.id);
