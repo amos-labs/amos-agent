@@ -540,8 +540,8 @@ test("Projects are context workspaces and Missions own autonomous work", async (
   assert.match(javascript, /function renderProjects\(\)/);
   assert.match(javascript, /function liveProjectAttention\(/);
   assert.match(javascript, /function isProjectDecisionVerb\(/);
-  assert.match(javascript, /attentionRuns\.length \+ waitingDecisions/);
-  assert.doesNotMatch(javascript, /attentionRuns\.length \|\| waitingDecisions/);
+  assert.doesNotMatch(html, /id="projectBadge"/);
+  assert.doesNotMatch(javascript, /elements\.projectBadge/);
   assert.match(javascript, /function projectConversationList\(projectId, conversations\)/);
   assert.match(javascript, /function projectActivityList\(projectId, runs\)/);
   assert.match(javascript, /function projectDecisionList\(/);
@@ -1314,9 +1314,31 @@ test("Mission attention lives outside the transcript and never disturbs streamin
   assert.match(javascript, /hidden\.has\(String\(decision\.id\)\)/);
   assert.match(
     javascript,
-    /const waitingCount = pending\.length \+ missionDecisions\.length \+ proposals\.length \+ pendingInputs\.length/
+    /const waitingCount = pending\.length \+ missionDecisions\.length \+ pendingInputs\.length/
   );
-  assert.match(javascript, /const attention = missions\.filter\(\(mission\) => missionStatusBucket\(mission\) === "attention"\)\.length\s*\+ pendingMissionApprovalList\(\)\.length/);
+  assert.doesNotMatch(javascript, /waitingCount[^\n]*proposals\.length/);
+  assert.match(javascript, /const actionRequired = missionActionBadgeCount\(missions, compiles\)/);
+});
+
+test("sidebar count badges appear only for work that requires a user response", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+  const sidebar = html.match(/<nav class="nav"[\s\S]*?<\/nav>/)?.[0] || "";
+  assert.match(sidebar, /id="missionBadge"/);
+  assert.match(sidebar, /id="decisionBadge"/);
+  for (const id of ["projectBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge"]) {
+    assert.doesNotMatch(sidebar, new RegExp(`id="${id}"`));
+    assert.doesNotMatch(javascript, new RegExp(`elements\\.${id}`));
+  }
+
+  const missionBadge = javascript.match(/function missionActionBadgeCount\(missions, compiles\) \{[\s\S]*?\n\}/)?.[0] || "";
+  assert.match(missionBadge, /state\?\.missionDecisions/);
+  assert.match(missionBadge, /state\?\.pendingInputs/);
+  assert.match(missionBadge, /pendingMissionApprovalList\(\)/);
+  assert.match(missionBadge, /\["start", "retry"\]/);
+  assert.doesNotMatch(missionBadge, /status === "running"|missionStatusBucket/);
 });
 
 test("Mission detail shows status reason, current step, effective limits, open questions, and controls", async () => {

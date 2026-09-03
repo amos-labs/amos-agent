@@ -174,7 +174,7 @@ const elements = Object.fromEntries(
     "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
     "accountMemoryButton", "accountIntelligenceButton",
     "companySwitcherControl", "companySwitcher",
-    "decisionBadge", "privateMemoryBadge", "projectBadge", "missionBadge", "taskBadge", "canvasBadge", "connectionBadge", "automationBadge",
+    "decisionBadge", "privateMemoryBadge", "missionBadge",
     "operatorEyebrow", "operatorTitle", "readyTitle", "readyDescription",
     "appearanceControl", "appearanceToggle", "appearanceInput",
     "connectButton", "connectCheck", "providerCheck", "onboardingIntelligenceStatus",
@@ -1215,8 +1215,6 @@ function renderConnections() {
     (provider.provider === "custom" || !connectionsByProvider.has(provider.provider)) &&
     (!freeForegroundAccount || provider.setupMode === "hosted_oauth")
   );
-  elements.connectionBadge.textContent = String(connectedSystems.length);
-  elements.connectionBadge.classList.toggle("hidden", connectedSystems.length === 0);
   elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
     ? freeForegroundAccount
       ? `${connectedSystems.length} of ${state?.accountStatus?.freeConnectionsLimit || 2} free app connections used · safe foreground reads only`
@@ -1403,8 +1401,6 @@ function renderAutomations() {
   );
   const itemCount = automations.length + recipes.length;
 
-  elements.automationBadge.textContent = String(active);
-  elements.automationBadge.classList.toggle("hidden", active === 0);
   elements.automationSummary.classList.toggle("hidden", !supported);
   elements.automationUnavailable.classList.toggle("hidden", supported);
   elements.automationEmpty.classList.toggle("hidden", !supported || itemCount > 0);
@@ -3146,9 +3142,6 @@ function renderProjects() {
   if (selectedProjectId && !projects.some((project) => project.id === selectedProjectId)) {
     selectedProjectId = "";
   }
-  const attentionRuns = liveProjectAttention(inbox);
-  const waitingDecisions = projectDecisionItems().length;
-
   const connectedUser = state.connectionMode === "user";
   const syncing = Boolean(state.remoteStatus?.syncing);
   const syncError = String(state.remoteStatus?.error || "").trim();
@@ -3170,9 +3163,6 @@ function renderProjects() {
   elements.projectUnavailable.classList.toggle("hidden", !notice);
   elements.newProjectButton.disabled = library.supported !== true || !connectedUser;
   elements.refreshProjectsButton.disabled = !connectedUser || syncing;
-  const badgeCount = attentionRuns.length + waitingDecisions;
-  elements.projectBadge.textContent = String(badgeCount);
-  elements.projectBadge.classList.toggle("hidden", badgeCount === 0);
   elements.projectEmpty.classList.toggle("hidden", page.total > 0 || Boolean(notice));
 
   elements.projectList.replaceChildren();
@@ -3974,6 +3964,45 @@ function missionStatusBucket(mission) {
   return "completed";
 }
 
+function missionActionBadgeCount(missions, compiles) {
+  const required = new Set();
+  const decisions = Array.isArray(state?.missionDecisions) ? state.missionDecisions : [];
+  for (const decision of decisions) {
+    const missionId = String(decision?.mission_id || "").trim();
+    const decisionId = String(decision?.id || "").trim();
+    if (missionId || decisionId) required.add(missionId ? `mission:${missionId}` : `decision:${decisionId}`);
+  }
+
+  const localMissions = missions.filter((mission) => mission.source === "local");
+  const pendingInputs = Array.isArray(state?.pendingInputs) ? state.pendingInputs : [];
+  for (const request of pendingInputs) {
+    const mission = localMissions.find((candidate) => {
+      const taskIds = new Set([
+        candidate.id,
+        candidate.task?.id,
+        candidate.task?.remoteId,
+        candidate.run?.id,
+        candidate.run?.taskRecordId
+      ].map((value) => String(value || "").trim()).filter(Boolean));
+      const requestIds = [request?.taskRecordId, request?.runId]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+      const sameContext = request?.contextKey && request.contextKey === candidate.task?.contextKey;
+      return sameContext || requestIds.some((id) => taskIds.has(id));
+    });
+    if (mission) required.add(`mission:${mission.id}`);
+  }
+
+  for (const approval of pendingMissionApprovalList()) required.add(`approval:${approval.id}`);
+  for (const compile of compiles) {
+    const presentation = missionCompilePresentation(compile);
+    if (presentation.actions.some((action) => ["start", "retry"].includes(action))) {
+      required.add(`compile:${compile.taskId}`);
+    }
+  }
+  return required.size;
+}
+
 function renderMissionStatusFilters(missions) {
   const counts = { all: missions.length, running: 0, attention: 0, completed: 0 };
   for (const mission of missions) counts[missionStatusBucket(mission)] += 1;
@@ -4017,8 +4046,9 @@ function renderMissions() {
   const attention = missions.filter((mission) => missionStatusBucket(mission) === "attention").length
     + pendingMissionApprovalList().length;
   const completed = missions.filter((mission) => missionStatusBucket(mission) === "completed").length;
-  elements.missionBadge.textContent = String(attention || running);
-  elements.missionBadge.classList.toggle("hidden", attention + running === 0);
+  const actionRequired = missionActionBadgeCount(missions, compiles);
+  elements.missionBadge.textContent = String(actionRequired);
+  elements.missionBadge.classList.toggle("hidden", actionRequired === 0);
   elements.missionUnavailable.textContent = state.missions?.stale
     ? state.missions.refreshError
     : state.missions?.supported === false
@@ -5099,7 +5129,6 @@ function renderTasks() {
   ));
   const page = paginateItems(visible, "tasks");
   const current = tasks.filter((task) => !task.archivedAt && !task.archived);
-  const waiting = current.filter((task) => task.status === "waiting").length;
   const inProject = current.filter((task) => task.projectId).length;
   const running = current.filter((task) => conversationStatusBucket(task) === "running").length;
   const visibleCheckpoints = taskStatusFilter === "all" || taskStatusFilter === "failed"
@@ -5108,8 +5137,6 @@ function renderTasks() {
       ))
     : [];
 
-  elements.taskBadge.textContent = String(waiting + checkpoints.length || running);
-  elements.taskBadge.classList.toggle("hidden", waiting + running + checkpoints.length === 0);
   elements.taskPlatformNotice.classList.toggle("hidden", library.platformSupported !== false);
   elements.taskEmpty.classList.toggle("hidden", page.total + visibleCheckpoints.length > 0);
   elements.conversationRecovery.classList.toggle("hidden", visibleCheckpoints.length === 0);
@@ -5656,8 +5683,6 @@ function renderCanvas() {
   elements.automationSetupSurface.classList.toggle("hidden", !(canvasVisible && setupVisible));
   elements.canvasSurface.classList.toggle("hidden", !canvasVisible || setupVisible);
 
-  elements.canvasBadge.textContent = String(canvases.length);
-  elements.canvasBadge.classList.toggle("hidden", canvases.length === 0);
   elements.panelCanvasCount.textContent = String(canvases.length);
   if (setupVisible && canvasVisible) {
     renderAutomationSetup();
@@ -8065,7 +8090,7 @@ function renderDecisions() {
   const pendingInputs = Array.isArray(state.pendingInputs) ? state.pendingInputs : [];
   const pending = approvals.filter((approval) => approval.status === "pending");
   const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  const waitingCount = pending.length + missionDecisions.length + proposals.length + pendingInputs.length;
+  const waitingCount = pending.length + missionDecisions.length + pendingInputs.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
   elements.workDecisionTabCount.textContent = String(waitingCount);
