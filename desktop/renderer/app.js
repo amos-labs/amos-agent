@@ -3964,6 +3964,24 @@ function missionStatusBucket(mission) {
   return "completed";
 }
 
+function localMissionForPendingInput(request, missions = missionEntries()) {
+  const localMissions = missions.filter((mission) => mission.source === "local");
+  return localMissions.find((candidate) => {
+    const taskIds = new Set([
+      candidate.id,
+      candidate.task?.id,
+      candidate.task?.remoteId,
+      candidate.run?.id,
+      candidate.run?.taskRecordId
+    ].map((value) => String(value || "").trim()).filter(Boolean));
+    const requestIds = [request?.taskRecordId, request?.runId]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const sameContext = request?.contextKey && request.contextKey === candidate.task?.contextKey;
+    return sameContext || requestIds.some((id) => taskIds.has(id));
+  }) || null;
+}
+
 function missionActionBadgeCount(missions, compiles) {
   const required = new Set();
   const decisions = Array.isArray(state?.missionDecisions) ? state.missionDecisions : [];
@@ -3973,23 +3991,9 @@ function missionActionBadgeCount(missions, compiles) {
     if (missionId || decisionId) required.add(missionId ? `mission:${missionId}` : `decision:${decisionId}`);
   }
 
-  const localMissions = missions.filter((mission) => mission.source === "local");
   const pendingInputs = Array.isArray(state?.pendingInputs) ? state.pendingInputs : [];
   for (const request of pendingInputs) {
-    const mission = localMissions.find((candidate) => {
-      const taskIds = new Set([
-        candidate.id,
-        candidate.task?.id,
-        candidate.task?.remoteId,
-        candidate.run?.id,
-        candidate.run?.taskRecordId
-      ].map((value) => String(value || "").trim()).filter(Boolean));
-      const requestIds = [request?.taskRecordId, request?.runId]
-        .map((value) => String(value || "").trim())
-        .filter(Boolean);
-      const sameContext = request?.contextKey && request.contextKey === candidate.task?.contextKey;
-      return sameContext || requestIds.some((id) => taskIds.has(id));
-    });
+    const mission = localMissionForPendingInput(request, missions);
     if (mission) required.add(`mission:${mission.id}`);
   }
 
@@ -4038,7 +4042,8 @@ function renderMissions() {
       (missionStatusFilter === "all" || missionStatusBucket(mission) === missionStatusFilter);
   });
   const page = paginateItems(matching, "missions");
-  const compiles = ["all", "running"].includes(missionStatusFilter) ? missionCompileEntries() : [];
+  const allCompiles = missionCompileEntries();
+  const compiles = ["all", "running"].includes(missionStatusFilter) ? allCompiles : [];
   const authorizations = ["all", "attention"].includes(missionStatusFilter)
     ? pendingMissionApprovalList()
     : [];
@@ -4046,7 +4051,7 @@ function renderMissions() {
   const attention = missions.filter((mission) => missionStatusBucket(mission) === "attention").length
     + pendingMissionApprovalList().length;
   const completed = missions.filter((mission) => missionStatusBucket(mission) === "completed").length;
-  const actionRequired = missionActionBadgeCount(missions, compiles);
+  const actionRequired = missionActionBadgeCount(missions, allCompiles);
   elements.missionBadge.textContent = String(actionRequired);
   elements.missionBadge.classList.toggle("hidden", actionRequired === 0);
   elements.missionUnavailable.textContent = state.missions?.stale
@@ -4423,7 +4428,7 @@ function trackMissionCompile(response) {
 
 function pendingMissionApprovalList() {
   const approvals = Array.isArray(state?.approvals) ? state.approvals : [];
-  return approvals.filter((approval) => approval.status === "pending" && isMissionApproval(approval));
+  return approvals.filter((approval) => approval.status === "pending" && isMissionScopedApproval(approval));
 }
 
 function missionsPageCompileInProgress() {
@@ -4445,7 +4450,7 @@ function missionCompileOutcome(compile) {
 }
 
 function missionCompileApproval(outcome) {
-  const pending = pendingMissionApprovalList();
+  const pending = pendingMissionApprovalList().filter((approval) => isMissionApproval(approval));
   if (outcome?.pendingId) return pending.find((approval) => approval.id === outcome.pendingId) || null;
   return pending[0] || null;
 }
@@ -8085,12 +8090,17 @@ function renderComposerProjectChip() {
 function renderDecisions() {
   if (!state) return;
   const approvals = Array.isArray(state.approvals) ? state.approvals : [];
-  const missionDecisions = Array.isArray(state.missionDecisions) ? state.missionDecisions : [];
   const proposals = Array.isArray(state.offlineProposals) ? state.offlineProposals : [];
-  const pendingInputs = Array.isArray(state.pendingInputs) ? state.pendingInputs : [];
-  const pending = approvals.filter((approval) => approval.status === "pending");
-  const recent = approvals.filter((approval) => approval.status !== "pending").slice(0, 10);
-  const waitingCount = pending.length + missionDecisions.length + pendingInputs.length;
+  const missions = missionEntries();
+  const pendingInputs = (Array.isArray(state.pendingInputs) ? state.pendingInputs : [])
+    .filter((request) => !localMissionForPendingInput(request, missions));
+  const pending = approvals.filter((approval) => (
+    approval.status === "pending" && !isMissionScopedApproval(approval)
+  ));
+  const recent = approvals.filter((approval) => (
+    approval.status !== "pending" && !isMissionScopedApproval(approval)
+  )).slice(0, 10);
+  const waitingCount = pending.length + pendingInputs.length;
   elements.decisionBadge.textContent = String(waitingCount);
   elements.decisionBadge.classList.toggle("hidden", waitingCount === 0);
   elements.workDecisionTabCount.textContent = String(waitingCount);
@@ -8134,16 +8144,13 @@ function renderDecisions() {
   }
 
   elements.pendingDecisions.replaceChildren();
-  if (pending.length === 0 && pendingInputs.length === 0 && missionDecisions.length === 0) {
+  if (pending.length === 0 && pendingInputs.length === 0) {
     elements.pendingDecisions.append(
       decisionEmpty(
         sync.syncing ? "Checking for decisions…" : "Nothing is waiting for your decision."
       )
     );
   } else {
-    for (const decision of missionDecisions) {
-      elements.pendingDecisions.append(missionDecisionCard(decision));
-    }
     for (const request of pendingInputs) {
       elements.pendingDecisions.append(decisionInputCard(request));
     }
@@ -8164,12 +8171,15 @@ function renderDecisions() {
   for (const card of elements.messages.querySelectorAll(".decision-card.inline-decision")) {
     if (card.dataset.inputId && !pendingIds.has(card.dataset.inputId)) card.remove();
   }
-  const openMissionDecisionIds = new Set(missionDecisions.map((decision) => decision.id));
+  const openMissionDecisionIds = new Set(
+    (Array.isArray(state.missionDecisions) ? state.missionDecisions : [])
+      .map((decision) => decision.id)
+  );
   for (const id of [...missionDecisionDrafts.keys()]) {
     if (!openMissionDecisionIds.has(id)) missionDecisionDrafts.delete(id);
   }
-  // Mission decisions never enter the transcript. They live in the attention rail, in
-  // Decisions, and in Mission detail.
+  // Mission decisions never enter the transcript or the general Decisions inbox. They live in
+  // the Mission attention rail and Mission detail, so each action has one control-center owner.
   renderMissionAttentionRail();
   const pendingApprovalIds = new Set(pending.map((approval) => approval.id));
   const approvalScope = `${state.identity?.tenant_id || ""}:${state.identity?.sub || ""}`;
@@ -8930,6 +8940,14 @@ function isMissionApproval(approval) {
   return approval?.verb === "create_mission" && approval.args && typeof approval.args === "object";
 }
 
+function isMissionScopedApproval(approval) {
+  if (!approval || typeof approval !== "object") return false;
+  if (isMissionApproval(approval) || approval.verb === "create_goal") return true;
+  if (approval.agency_origin === "goal_pursuit" || approval.goal_id) return true;
+  const args = approval.args && typeof approval.args === "object" ? approval.args : {};
+  return Boolean(args.mission_id || args.missionId || args.goal_id || args.goalId);
+}
+
 function missionConstraintSummary(constraints) {
   if (!constraints || typeof constraints !== "object" || Array.isArray(constraints)) return "";
   const parts = [];
@@ -9116,6 +9134,10 @@ function approvalActionLabel() {
 function renderInlineCompanyApproval(approval) {
   if (!approval?.id || approval.status !== "pending") return null;
   if (isMissionApproval(approval)) return renderMissionCreationReceipt(approval);
+  if (isMissionScopedApproval(approval)) {
+    renderMissions();
+    return null;
+  }
   const existing = Array.from(
     elements.messages.querySelectorAll(".decision-card.company-approval.inline-decision")
   ).find((card) => card.dataset.approvalId === approval.id);

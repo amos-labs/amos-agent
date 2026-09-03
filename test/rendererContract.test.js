@@ -1314,10 +1314,11 @@ test("Mission attention lives outside the transcript and never disturbs streamin
   assert.match(javascript, /hidden\.has\(String\(decision\.id\)\)/);
   assert.match(
     javascript,
-    /const waitingCount = pending\.length \+ missionDecisions\.length \+ pendingInputs\.length/
+    /const waitingCount = pending\.length \+ pendingInputs\.length/
   );
   assert.doesNotMatch(javascript, /waitingCount[^\n]*proposals\.length/);
-  assert.match(javascript, /const actionRequired = missionActionBadgeCount\(missions, compiles\)/);
+  assert.doesNotMatch(javascript, /waitingCount[^\n]*missionDecisions\.length/);
+  assert.match(javascript, /const actionRequired = missionActionBadgeCount\(missions, allCompiles\)/);
 });
 
 test("sidebar count badges appear only for work that requires a user response", async () => {
@@ -1339,6 +1340,15 @@ test("sidebar count badges appear only for work that requires a user response", 
   assert.match(missionBadge, /pendingMissionApprovalList\(\)/);
   assert.match(missionBadge, /\["start", "retry"\]/);
   assert.doesNotMatch(missionBadge, /status === "running"|missionStatusBucket/);
+
+  // A Mission action has exactly one control-center owner. It remains visible in Missions but is
+  // excluded from the general Decisions inbox and its badge.
+  assert.match(javascript, /function isMissionScopedApproval\(approval\)/);
+  assert.match(javascript, /pendingMissionApprovalList\(\)[\s\S]*?isMissionScopedApproval\(approval\)/);
+  assert.match(javascript, /approval\.status === "pending" && !isMissionScopedApproval\(approval\)/);
+  assert.match(javascript, /approval\.status !== "pending" && !isMissionScopedApproval\(approval\)/);
+  assert.match(javascript, /filter\(\(request\) => !localMissionForPendingInput\(request, missions\)\)/);
+  assert.doesNotMatch(javascript, /elements\.pendingDecisions\.append\(missionDecisionCard/);
 });
 
 test("Mission detail shows status reason, current step, effective limits, open questions, and controls", async () => {
