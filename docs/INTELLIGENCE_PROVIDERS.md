@@ -155,8 +155,23 @@ OpenAI uses its native Responses protocol:
 ```dotenv
 AMOS_MODEL_PROVIDER=openai
 OPENAI_API_KEY=...
-AMOS_MODEL=gpt-5.6-terra
+AMOS_MODEL=gpt-6-astra
 ```
+
+The direct OpenAI catalog includes
+[GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra) with
+native streaming, image input, function calling, structured outputs, and reasoning efforts
+`low`/`medium`/`high`/`xhigh`/`max`. OpenAI is rolling account access out
+gradually, so the provider may return an access error until the selected API
+project is eligible. Desktop preserves an existing supported reasoning effort;
+legacy `none` or `minimal` settings normalize to `low` for Astra.
+
+GPT-6 Astra is not yet present in
+[AWS's published Bedrock catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html)
+or the live Mantle model lists for AMOS's qualified US regions as of September 4, 2026.
+Desktop therefore does not advertise a guessed Bedrock model ID. Bedrock stays
+fail-closed until AWS exposes the official ID and it passes the repeatable live
+qualification described below.
 
 Anthropic uses its native Messages protocol:
 

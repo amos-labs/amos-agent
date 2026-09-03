@@ -32,6 +32,17 @@ Representative end-to-end scenarios also passed:
 - a SigV4-signed invalid request returned a structured provider error; and
 - no credential value appeared in request bodies or qualification output.
 
+## GPT-6 Astra availability
+
+On September 4, 2026, GPT-6 Astra was absent from both
+[AWS's published Bedrock model catalog](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html)
+and authenticated Mantle `/v1/models` responses in `us-east-1`,
+`us-east-2`, and `us-west-2`. Desktop supports Astra through the direct OpenAI
+Responses API, but intentionally does not invent a Bedrock model identifier or
+show an option that cannot run. Once AWS publishes the identifier and regions,
+add a model-qualified descriptor and require this live harness to pass before
+making the Bedrock option selectable.
+
 ## Data-retention boundary
 
 The tested account's effective retention mode was `default`. GPT-5.6, GPT OSS,

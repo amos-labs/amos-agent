@@ -2,6 +2,11 @@ const USD_PER_MILLION = 1_000_000;
 const MICROUSD_PER_USD = 1_000_000;
 
 const RATES = Object.freeze({
+  "gpt-6-astra": rate(10, 50, 1, {
+    longContextAt: 272_000,
+    inputLongContextMultiplier: 2,
+    outputLongContextMultiplier: 1.5
+  }),
   "gpt-5.6-sol": rate(5, 30, 0.5),
   "gpt-5.6-terra": rate(2, 12, 0.2),
   "gpt-5.6-luna": rate(0.2, 1.2, 0.02),
@@ -52,13 +57,13 @@ export function estimateUsageCost({
       estimated: false
     };
   }
-  const multiplier = pricing.longContextAt && input >= pricing.longContextAt
-    ? pricing.longContextMultiplier
-    : 1;
+  const longContext = pricing.longContextAt && input >= pricing.longContextAt;
+  const inputMultiplier = longContext ? pricing.inputLongContextMultiplier : 1;
+  const outputMultiplier = longContext ? pricing.outputLongContextMultiplier : 1;
   const costUsedMicrousd = Math.round(
     (uncached * pricing.inputMicrousdPerToken +
-      cached * pricing.cachedInputMicrousdPerToken +
-      output * pricing.outputMicrousdPerToken) * multiplier
+      cached * pricing.cachedInputMicrousdPerToken) * inputMultiplier +
+      output * pricing.outputMicrousdPerToken * outputMultiplier
   );
   return {
     model: String(model || ""),
@@ -174,7 +179,12 @@ function rate(inputUsdPerMillion, outputUsdPerMillion, cachedUsdPerMillion = nul
       cachedUsdPerMillion == null ? inputUsdPerMillion * 0.1 : cachedUsdPerMillion
     ),
     longContextAt: Number(options.longContextAt) || 0,
-    longContextMultiplier: Number(options.longContextMultiplier) || 1
+    inputLongContextMultiplier: Number(
+      options.inputLongContextMultiplier ?? options.longContextMultiplier
+    ) || 1,
+    outputLongContextMultiplier: Number(
+      options.outputLongContextMultiplier ?? options.longContextMultiplier
+    ) || 1
   });
 }
 
