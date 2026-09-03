@@ -143,6 +143,14 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   cancelMission: (id) => ipcRenderer.invoke("desktop:cancel-mission", id),
   setOptimizationMissionStatus: (id, status) =>
     ipcRenderer.invoke("desktop:set-optimization-mission-status", { id, status }),
+  getNotificationPreferences: () => ipcRenderer.invoke("desktop:get-notification-preferences"),
+  setNotificationPreferences: (input) =>
+    ipcRenderer.invoke("desktop:set-notification-preferences", input),
+  verifyNotificationPhone: (code) =>
+    ipcRenderer.invoke("desktop:verify-notification-phone", { code }),
+  getMissionNotifications: (id) => ipcRenderer.invoke("desktop:get-mission-notifications", id),
+  setMissionNotificationChannels: (id, notifications) =>
+    ipcRenderer.invoke("desktop:set-mission-notification-channels", { id, notifications }),
   removeSavedView: (id) => ipcRenderer.invoke("desktop:remove-saved-view", id),
   chooseAttachments: () => ipcRenderer.invoke("desktop:choose-attachments"),
   addAttachmentPaths: (paths) => ipcRenderer.invoke("desktop:add-attachment-paths", paths),

@@ -11,6 +11,14 @@ import {
   selectJourneyStarterActions
 } from "../../src/desktop/journeyStarterActions.js";
 import { collapseThoughtStream } from "../../src/model/thoughtDelta.js";
+import {
+  channelAvailability,
+  defaultMissionChannels,
+  MISSION_CHANNEL_LABELS,
+  MISSION_NOTIFICATION_CHANNELS,
+  missionChannelsLabel,
+  normalizeMissionNotificationChoice
+} from "../../src/desktop/missionNotifications.js";
 
 const api = window.amosDesktop;
 
@@ -202,6 +210,13 @@ const elements = Object.fromEntries(
     "settingsBackButton", "settingsError", "intelligenceTestStatus", "intelligenceTestIcon",
     "intelligenceTestTitle", "intelligenceTestDetail", "collaborationProfileCard", "collaborationProfileFields",
     "resetCollaborationProfileButton",
+    "notificationSettingsCard", "notificationSettingsUnavailable", "notificationSettingsBody",
+    "notificationInAppInput", "notificationSmsInput", "notificationWhatsappInput", "notificationDiscordInput",
+    "notificationSmsStatus", "notificationWhatsappNote", "notificationDiscordNote",
+    "notificationSmsNumberInput", "notificationDiscordTargetField", "notificationDiscordTargetInput",
+    "notificationQuietStartInput", "notificationQuietEndInput",
+    "notificationVerifyField", "notificationVerifyCodeInput", "notificationVerifyButton",
+    "notificationStatus", "notificationSaveButton",
     "testButton", "systemCard", "approvalModal", "approvalMessage",
     "approveButton", "denyButton", "taskApproveButton", "alwaysApproveButton", "autoApproveFolderButton", "approvalPersistence",
     "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
@@ -243,6 +258,8 @@ const elements = Object.fromEntries(
     "missionModal", "missionForm", "missionModalTitle", "missionModalClose",
     "missionObjectiveInput", "missionKindInput", "missionExecutionInput", "missionProjectInput",
     "missionCheckpointField", "missionCheckpointInput", "missionBoundaryNote",
+    "missionChannelsField", "missionChannelOptions", "missionDiscordTargetField", "missionDiscordTargetInput",
+    "missionChannelsNote",
     "missionModalError", "missionCancelButton", "missionSubmitButton", "missionAttentionRail",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
@@ -367,6 +384,14 @@ function bindActions() {
   });
   elements.promptForm.addEventListener("drop", handleDrop);
   elements.settingsForm.addEventListener("submit", saveSettings);
+  elements.notificationSaveButton.addEventListener("click", saveNotificationSettings);
+  elements.notificationVerifyButton.addEventListener("click", verifyNotificationPhone);
+  elements.notificationVerifyCodeInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void verifyNotificationPhone();
+    }
+  });
   elements.resetCollaborationProfileButton.addEventListener("click", async () => {
     try {
       state.relationshipProfile = await api.resetRelationshipProfile({
@@ -667,6 +692,7 @@ function bindEvents() {
     renderHistory();
     renderCanvas();
     renderStarterActions();
+    renderNotificationSettings();
     restoreConversationFromContinuity();
     restoreInteractiveState(interaction);
   });
@@ -3703,6 +3729,9 @@ function openMissionModal(project = null) {
   elements.missionExecutionInput.value = hosted.disabled ? "local" : "hosted";
   elements.missionModalError.textContent = "";
   elements.missionModalError.classList.add("hidden");
+  // Channel defaults come from the user's saved notification preferences; unconfigured channels
+  // render disabled with a Settings link rather than being sent silently.
+  renderMissionChannelChoices(defaultMissionChannels(state?.notificationPreferences));
   renderMissionExecutionBoundary();
   elements.missionModal.classList.remove("hidden");
   elements.missionObjectiveInput.focus();
@@ -3722,6 +3751,8 @@ function renderMissionExecutionBoundary() {
   if (optimization) elements.missionExecutionInput.value = "hosted";
   const local = elements.missionExecutionInput.value === "local";
   elements.missionCheckpointField.classList.toggle("hidden", !local);
+  // Notification channels are a hosted finite-Mission contract (create_mission notifications).
+  elements.missionChannelsField.classList.toggle("hidden", local || optimization);
   elements.missionBoundaryNote.textContent = optimization
     ? "Optimization Missions run in AMOS Platform. AMOS will infer a measurable goal contract, cadence, bounded actions, and proof, then show the exact authority change for approval."
     : local
@@ -3736,6 +3767,13 @@ async function submitMission(event) {
   const missionKind = elements.missionKindInput.value;
   const executionLocation = elements.missionExecutionInput.value;
   const researchCheckpointMinutes = Number(elements.missionCheckpointInput.value);
+  const hostedFinite = executionLocation === "hosted" && missionKind === "finite";
+  const notifications = hostedFinite ? missionChannelChoiceFromForm() : null;
+  if (hostedFinite && !notifications) {
+    elements.missionModalError.textContent = "Choose at least one place to send Mission updates.";
+    elements.missionModalError.classList.remove("hidden");
+    return;
+  }
   setButtonBusy(elements.missionSubmitButton, true, "Starting…");
   try {
     const response = await api.startMission({
@@ -3743,7 +3781,8 @@ async function submitMission(event) {
       objective,
       missionKind,
       executionLocation,
-      researchCheckpointMinutes
+      researchCheckpointMinutes,
+      ...(notifications ? { notifications } : {})
     });
     if (response.state) Object.assign(state, response.state);
     state.projects = response.projects || state.projects;
@@ -4211,7 +4250,20 @@ async function toggleMissionDetail(mission, button, panel) {
   try {
     let detail = mission;
     if (mission.source === "hosted") {
-      detail = { ...mission, ...(await api.getMission(mission.id)) };
+      // The Mission read and its per-channel delivery evidence (list_mission_notifications) load
+      // together; a Platform without the notifications verb leaves delivery unsupported, not empty.
+      const [remote, notifications] = await Promise.all([
+        api.getMission(mission.id),
+        api.getMissionNotifications(mission.id).catch(() => null)
+      ]);
+      detail = {
+        ...mission,
+        ...remote,
+        notificationDelivery: notifications?.supported
+          ? notifications.delivery
+          : (remote?.notificationDelivery || []),
+        notificationDeliverySupported: notifications ? notifications.supported === true : null
+      };
       missionDetailCache.set(mission.id, detail);
     }
     renderMissionActivity(detail, panel);
@@ -4331,6 +4383,7 @@ function trackMissionCompile(response) {
     projectId: String(response.projectId || elements.missionProjectInput.value || ""),
     objective: String(response.objective || elements.missionObjectiveInput.value || "").trim(),
     missionKind: response.missionKind === "optimization" ? "optimization" : "finite",
+    notifications: normalizeMissionNotificationChoice(response.notifications),
     startedAt: new Date().toISOString(),
     finishedAt: "",
     run: null,
@@ -4380,6 +4433,7 @@ function seedCompiledMissionCards() {
       projectId: String(record.spec?.project_id || ""),
       objective: String(record.contract?.objective || record.spec?.objective || "").trim(),
       missionKind: "finite",
+      notifications: normalizeMissionNotificationChoice(record.spec?.notifications || record.contract?.notifications),
       startedAt: record.observedAt || new Date().toISOString(),
       finishedAt: record.observedAt || new Date().toISOString(),
       run: null,
@@ -4528,6 +4582,8 @@ function missionCompileContract(contract) {
   if (admission.length > 0) {
     rows.push(["Admission", admission.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")]);
   }
+  const updates = missionChannelsLabel(contract.notifications);
+  if (updates) rows.push(["Updates", updates]);
   if (contract.expiresAt) rows.push(["Expires", relativeTime(contract.expiresAt)]);
   if (rows.length === 0) return null;
   const list = document.createElement("dl");
@@ -4658,6 +4714,11 @@ function missionRunContractCard(compile, outcome) {
   if (admission.length > 0) {
     addRow("Admission", admission.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · "));
   }
+  // "Updates: In-app, SMS" — the channel choice that rides on create_mission with this contract.
+  const updates = missionChannelsLabel(
+    outcome?.spec?.notifications || contract.notifications || compile.notifications
+  );
+  if (updates) addRow("Updates", updates);
   if (contract.contractSha256) addRow("Contract digest", contract.contractSha256.slice(0, 16));
   root.append(list);
   return root;
@@ -4716,6 +4777,9 @@ function retryMissionCompile(compile) {
   elements.missionKindInput.value = compile.missionKind;
   const hosted = elements.missionExecutionInput.querySelector('option[value="hosted"]');
   if (!hosted?.disabled) elements.missionExecutionInput.value = "hosted";
+  if (compile.notifications?.channels) {
+    renderMissionChannelChoices(compile.notifications.channels, compile.notifications.discord_target || "");
+  }
   renderMissionExecutionBoundary();
   if (compile.outcome?.message) {
     elements.missionModalError.textContent = compile.outcome.message;
@@ -4910,6 +4974,7 @@ function renderMissionActivity(mission, container) {
       limits.append(item);
     }
     container.append(limitsHeading, limits);
+    container.append(...missionNotificationSection(mission, container));
   }
   const heading = document.createElement("strong");
   heading.textContent = "Recorded activity";
@@ -9081,6 +9146,14 @@ function missionCreationReceipt(approval) {
   view.textContent = "View Mission";
   view.addEventListener("click", () => focusMissionApproval(approval.id));
   line.append(label, " · ", status, " · ", view);
+  // "Updates: In-app, SMS" — the channels create_mission carried for this chat-created Mission.
+  const channels = missionChannelsLabel(approval.args?.notifications);
+  if (channels) {
+    const updates = document.createElement("span");
+    updates.className = "mission-receipt-updates";
+    updates.textContent = `Updates: ${channels}`;
+    line.append(" · ", updates);
+  }
   receipt.append(line);
   return receipt;
 }
@@ -9404,6 +9477,7 @@ function renderSettings() {
     text(state.system.localRecommendation)
   );
   renderCollaborationProfile();
+  renderNotificationSettings();
 }
 
 function renderCollaborationProfile() {
@@ -9465,6 +9539,348 @@ async function saveCollaborationPreference(key, value) {
     renderCollaborationProfile();
   } catch (error) {
     toast(error.message, true);
+  }
+}
+
+// ---- Mission notification channels ----
+//
+// A Mission chooses where its updates go when it is created: In-app (always available), SMS,
+// WhatsApp, Discord. Defaults come from get_notification_preferences; a channel the user has not
+// set up and verified renders disabled with a Settings link and is never sent silently.
+
+function missionChannelSetupLink() {
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "mission-channel-setup-link";
+  link.textContent = "Set up in Settings";
+  link.addEventListener("click", () => {
+    if (!elements.missionModal.classList.contains("hidden")) closeMissionModal();
+    showView("settings");
+    elements.notificationSettingsCard?.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
+  return link;
+}
+
+function missionChannelOption(channel, { checked = false, preferences = null, name = "mission-channel", onChange = null } = {}) {
+  const availability = channelAvailability(channel, preferences);
+  const option = document.createElement("label");
+  option.className = `mission-channel-option${availability.configured ? "" : " disabled"}`;
+  option.dataset.channel = channel;
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.name = name;
+  input.value = channel;
+  input.dataset.channel = channel;
+  input.disabled = !availability.configured;
+  input.checked = availability.configured && checked;
+  const copy = document.createElement("span");
+  copy.className = "mission-channel-copy";
+  const label = document.createElement("strong");
+  label.textContent = MISSION_CHANNEL_LABELS[channel] || channel;
+  copy.append(label);
+  if (!availability.configured) {
+    const reason = document.createElement("small");
+    reason.textContent = availability.reason;
+    copy.append(reason);
+    if (availability.fix === "setup") copy.append(missionChannelSetupLink());
+  }
+  if (onChange) input.addEventListener("change", onChange);
+  option.append(input, copy);
+  return option;
+}
+
+function renderMissionChannelChoices(channels = ["in_app"], discordTarget = "") {
+  const preferences = state?.notificationPreferences || null;
+  const chosen = new Set(Array.isArray(channels) && channels.length > 0 ? channels : ["in_app"]);
+  elements.missionChannelOptions.replaceChildren();
+  for (const channel of MISSION_NOTIFICATION_CHANNELS) {
+    elements.missionChannelOptions.append(missionChannelOption(channel, {
+      checked: chosen.has(channel),
+      preferences,
+      onChange: syncMissionDiscordTargetField
+    }));
+  }
+  elements.missionDiscordTargetInput.value = discordTarget || preferences?.discordTarget || "";
+  syncMissionDiscordTargetField();
+}
+
+function syncMissionDiscordTargetField() {
+  const discord = elements.missionChannelOptions.querySelector('input[data-channel="discord"]');
+  elements.missionDiscordTargetField.classList.toggle("hidden", !(discord?.checked && !discord.disabled));
+}
+
+function chosenChannelsIn(root) {
+  return [...root.querySelectorAll("input[data-channel]")]
+    .filter((input) => input.checked && !input.disabled)
+    .map((input) => input.dataset.channel);
+}
+
+/** `{ channels: ["in_app", "sms"], discord_target? }` from the creation form, or null when nothing is chosen. */
+function missionChannelChoiceFromForm() {
+  return normalizeMissionNotificationChoice({
+    channels: chosenChannelsIn(elements.missionChannelOptions),
+    discord_target: elements.missionDiscordTargetInput.value.trim()
+  });
+}
+
+function missionDeliveryStatusLabel(row) {
+  const status = String(row.status || "pending").toLowerCase();
+  if (status === "delivered") return `Delivered${row.deliveredAt ? ` ${relativeTime(row.deliveredAt)}` : ""}`;
+  if (status === "failed") return `Failed${row.lastError ? ` · ${row.lastError}` : ""}`;
+  if (status === "suppressed") return `Held${row.lastError ? ` · ${row.lastError}` : " · quiet hours or channel off"}`;
+  return `Pending${row.attempts > 0 ? ` · ${row.attempts} attempt${row.attempts === 1 ? "" : "s"}` : ""}`;
+}
+
+/** Mission detail: the chosen channels, per-channel delivery evidence, and Change channels. */
+function missionNotificationSection(mission, container) {
+  const nodes = [];
+  const heading = document.createElement("strong");
+  heading.textContent = "Mission updates";
+  nodes.push(heading);
+  const summary = document.createElement("p");
+  summary.className = "mission-updates-summary";
+  const channels = missionChannelsLabel(mission.notifications);
+  summary.textContent = channels
+    ? `Updates: ${channels}`
+    : "Updates: your saved notification preferences (this Mission recorded no channel choice).";
+  nodes.push(summary);
+  const delivery = Array.isArray(mission.notificationDelivery) ? mission.notificationDelivery : [];
+  if (delivery.length > 0) {
+    const list = document.createElement("ul");
+    list.className = "mission-delivery";
+    for (const row of [...delivery].reverse().slice(0, 12)) {
+      const item = document.createElement("li");
+      item.className = `mission-delivery-row ${String(row.status || "pending").toLowerCase()}`;
+      item.dataset.channel = row.channel;
+      const label = document.createElement("span");
+      label.textContent = `${MISSION_CHANNEL_LABELS[row.channel] || row.channel}${
+        row.eventKind ? ` · ${String(row.eventKind).replaceAll("_", " ")}` : ""
+      }`;
+      const meta = document.createElement("small");
+      meta.textContent = missionDeliveryStatusLabel(row);
+      item.append(label, meta);
+      list.append(item);
+    }
+    nodes.push(list);
+  } else {
+    const empty = document.createElement("p");
+    empty.textContent = mission.notificationDeliverySupported === false
+      ? "Delivery evidence is not available on this AMOS company yet."
+      : "No updates have been sent for this Mission yet.";
+    nodes.push(empty);
+  }
+  if (["authorized", "running", "waiting_decision", "paused"].includes(mission.status)) {
+    const change = actionButton("Change channels", "ghost");
+    change.classList.add("mission-change-channels");
+    const editor = document.createElement("div");
+    editor.className = "mission-channel-editor hidden";
+    change.addEventListener("click", () => {
+      if (editor.classList.contains("hidden")) {
+        renderMissionChannelEditor(editor, mission, container);
+        editor.classList.remove("hidden");
+      } else {
+        editor.classList.add("hidden");
+      }
+    });
+    nodes.push(change, editor);
+  }
+  return nodes;
+}
+
+function renderMissionChannelEditor(editor, mission, container) {
+  editor.replaceChildren();
+  const preferences = state?.notificationPreferences || null;
+  const chosen = new Set(mission.notifications?.channels || defaultMissionChannels(preferences));
+  const options = document.createElement("div");
+  options.className = "mission-channels";
+  const discordField = document.createElement("label");
+  discordField.className = "mission-discord-target hidden";
+  const discordLabel = document.createElement("span");
+  discordLabel.textContent = "Discord target";
+  const discordInput = document.createElement("input");
+  discordInput.type = "text";
+  discordInput.maxLength = 200;
+  discordInput.dataset.discordTarget = "true";
+  discordInput.value = mission.notifications?.discord_target || preferences?.discordTarget || "";
+  discordField.append(discordLabel, discordInput);
+  const sync = () => {
+    const discord = options.querySelector('input[data-channel="discord"]');
+    discordField.classList.toggle("hidden", !(discord?.checked && !discord.disabled));
+  };
+  for (const channel of MISSION_NOTIFICATION_CHANNELS) {
+    options.append(missionChannelOption(channel, {
+      checked: chosen.has(channel),
+      preferences,
+      name: `mission-channel-${mission.id}`,
+      onChange: sync
+    }));
+  }
+  const save = actionButton("Save channels", "primary");
+  save.addEventListener("click", () => changeMissionChannels(mission, editor, save, container));
+  editor.append(options, discordField, save);
+  sync();
+}
+
+async function changeMissionChannels(mission, editor, button, container) {
+  const notifications = normalizeMissionNotificationChoice({
+    channels: chosenChannelsIn(editor),
+    discord_target: editor.querySelector("input[data-discord-target]")?.value.trim() || ""
+  });
+  if (!notifications) {
+    toast("Choose at least one place to send Mission updates.", true);
+    return;
+  }
+  setButtonBusy(button, true, "Saving…");
+  try {
+    const result = await api.setMissionNotificationChannels(mission.id, notifications);
+    if (result?.missions) state.missions = result.missions;
+    const next = {
+      ...(missionDetailCache.get(mission.id) || mission),
+      notifications: normalizeMissionNotificationChoice(result?.notifications) || notifications
+    };
+    missionDetailCache.set(mission.id, next);
+    renderMissionActivity(next, container);
+    toast(`Mission updates now go to ${missionChannelsLabel(next.notifications)}.`);
+  } catch (error) {
+    // The Platform verb set_mission_notification_channels is still being added; say so plainly.
+    if (error?.code === "unsupported" || /not available yet/i.test(String(error?.message || ""))) {
+      toast("Changing a Mission's channels is not available yet. It arrives with the platform update; the channels chosen at creation still apply.", true);
+    } else {
+      toast(error.message, true);
+    }
+    if (button.isConnected) setButtonBusy(button, false, "Save channels");
+  }
+}
+
+// ---- Settings → Notifications (get/set_notification_preferences, verify_notification_phone) ----
+
+function renderNotificationSettings({ force = false } = {}) {
+  if (!elements.notificationSettingsBody) return;
+  const body = elements.notificationSettingsBody;
+  // Never clobber an edit in progress; a save or verification re-renders explicitly.
+  if (!force && body.contains(document.activeElement) && document.activeElement !== document.body) return;
+  const prefs = state?.notificationPreferences || null;
+  const connected = state?.connectionMode === "user";
+  const unavailable = !connected
+    ? "Connect your AMOS company to choose where Mission updates go."
+    : prefs?.error
+      ? `Notification preferences could not be loaded: ${prefs.error}`
+      : prefs && prefs.available !== true
+        ? "This AMOS company does not store notification preferences yet. Mission updates stay in-app."
+        : "";
+  elements.notificationSettingsUnavailable.textContent = unavailable;
+  elements.notificationSettingsUnavailable.classList.toggle("hidden", !unavailable);
+  body.classList.toggle("hidden", !connected || prefs?.available !== true);
+  if (!prefs) return;
+  elements.notificationInAppInput.checked = prefs.channels?.in_app !== false;
+  elements.notificationSmsInput.checked = prefs.channels?.sms === true;
+  elements.notificationWhatsappInput.checked = prefs.channels?.whatsapp === true;
+  elements.notificationDiscordInput.checked = prefs.channels?.discord === true;
+  elements.notificationSmsInput.disabled = prefs.platformChannels?.sms === false;
+  elements.notificationSmsStatus.textContent = prefs.smsNumber
+    ? prefs.smsNumberVerified
+      ? `Verified ${prefs.smsNumber}${prefs.smsNumberVerifiedAt ? ` · ${relativeTime(prefs.smsNumberVerifiedAt)}` : ""}`
+      : `${prefs.smsNumber} is waiting for its verification code. Nothing is texted until it is verified.`
+    : "Add and verify a phone number below.";
+  // WhatsApp and Discord rows are present now; they unlock when the Platform reports the channel.
+  const whatsapp = prefs.platformChannels?.whatsapp === true;
+  elements.notificationWhatsappInput.disabled = !whatsapp;
+  elements.notificationWhatsappNote.textContent = whatsapp
+    ? channelAvailability("whatsapp", prefs).configured
+      ? "Uses your verified phone number."
+      : "Verify your phone number below."
+    : "Coming with the platform update.";
+  const discord = prefs.platformChannels?.discord === true;
+  elements.notificationDiscordInput.disabled = !discord;
+  elements.notificationDiscordNote.textContent = discord
+    ? prefs.discordTarget
+      ? prefs.discordTargetVerified
+        ? `Verified target ${prefs.discordTarget}`
+        : `${prefs.discordTarget} is not verified yet.`
+      : "Add the Discord channel or user AMOS may message."
+    : "Coming with the platform update.";
+  elements.notificationDiscordTargetField.classList.toggle("hidden", !discord);
+  elements.notificationSmsNumberInput.value = prefs.smsNumber || "";
+  elements.notificationDiscordTargetInput.value = prefs.discordTarget || "";
+  elements.notificationQuietStartInput.value = prefs.quietHours?.start || "";
+  elements.notificationQuietEndInput.value = prefs.quietHours?.end || "";
+  elements.notificationVerifyField.classList.toggle("hidden", !(prefs.smsNumber && !prefs.smsNumberVerified));
+}
+
+function showNotificationStatus(message, error = false) {
+  elements.notificationStatus.textContent = message;
+  elements.notificationStatus.classList.toggle("error", error);
+  elements.notificationStatus.classList.toggle("hidden", !message);
+}
+
+async function saveNotificationSettings() {
+  const prefs = state?.notificationPreferences || {};
+  const start = elements.notificationQuietStartInput.value;
+  const end = elements.notificationQuietEndInput.value;
+  if ((start && !end) || (!start && end)) {
+    showNotificationStatus("Quiet hours need both a start and an end time.", true);
+    return;
+  }
+  const payload = {
+    channels: {
+      in_app: elements.notificationInAppInput.checked,
+      sms: elements.notificationSmsInput.checked,
+      ...(prefs.platformChannels?.whatsapp ? { whatsapp: elements.notificationWhatsappInput.checked } : {}),
+      ...(prefs.platformChannels?.discord ? { discord: elements.notificationDiscordInput.checked } : {})
+    },
+    quietHours: start && end ? { start, end } : null,
+    utcOffsetMinutes: -new Date().getTimezoneOffset(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || ""
+  };
+  const number = elements.notificationSmsNumberInput.value.trim();
+  if (number !== (prefs.smsNumber || "")) payload.smsNumber = number;
+  if (prefs.platformChannels?.discord) {
+    const target = elements.notificationDiscordTargetInput.value.trim();
+    if (target !== (prefs.discordTarget || "")) payload.discordTarget = target;
+  }
+  setButtonBusy(elements.notificationSaveButton, true, "Saving…");
+  showNotificationStatus("");
+  try {
+    const result = await api.setNotificationPreferences(payload);
+    state.notificationPreferences = result.preferences;
+    renderNotificationSettings({ force: true });
+    const saved = result.preferences || {};
+    if (payload.smsNumber && saved.smsNumber && !saved.smsNumberVerified) {
+      // The Platform stored the number unverified and texted a one-time code.
+      showNotificationStatus(`We texted a 6-digit code to ${saved.smsNumber}. Enter it below to verify the number.`);
+      elements.notificationVerifyField.classList.remove("hidden");
+      elements.notificationVerifyCodeInput.focus();
+    } else if (payload.smsNumber === "" ) {
+      showNotificationStatus("Phone number removed. Mission updates stay in-app until you add another.");
+    } else {
+      showNotificationStatus("Notification preferences saved.");
+    }
+  } catch (error) {
+    showNotificationStatus(error.message, true);
+  } finally {
+    setButtonBusy(elements.notificationSaveButton, false, "Save notifications");
+  }
+}
+
+async function verifyNotificationPhone() {
+  const code = elements.notificationVerifyCodeInput.value.trim();
+  if (!/^\d{6}$/.test(code)) {
+    showNotificationStatus("Enter the 6-digit code you were texted.", true);
+    return;
+  }
+  setButtonBusy(elements.notificationVerifyButton, true, "Verifying…");
+  try {
+    const result = await api.verifyNotificationPhone(code);
+    state.notificationPreferences = result.preferences;
+    elements.notificationVerifyCodeInput.value = "";
+    renderNotificationSettings({ force: true });
+    showNotificationStatus(result.verified
+      ? "Phone number verified. SMS updates can now be chosen for Missions."
+      : "That code was not accepted. Save the number again to receive a new one.", !result.verified);
+  } catch (error) {
+    showNotificationStatus(error.message, true);
+  } finally {
+    setButtonBusy(elements.notificationVerifyButton, false, "Verify phone");
   }
 }
 

@@ -8,6 +8,13 @@ import {
 } from "./companyCache.js";
 import { createAbortError, linkAbortSignal } from "../util/abort.js";
 import {
+  emptyNotificationPreferences,
+  normalizeMissionNotificationChoice,
+  normalizeMissionNotificationDelivery,
+  normalizeNotificationPreferences,
+  notificationPreferenceArgs
+} from "./missionNotifications.js";
+import {
   emptyRelationshipProfile,
   normalizeRelationshipProfile
 } from "./relationshipProfile.js";
@@ -605,6 +612,122 @@ export class DesktopRemoteStateClient {
     const mission = normalizeMission(payload);
     if (!mission) throw new Error("AMOS Mission returned an invalid response");
     return mission;
+  }
+
+  // ---- Mission notification channels (platform PR #727 and the per-Mission channel contract) ----
+
+  /** This user's saved defaults; a server without the verb reports "not configured" for everything. */
+  async getNotificationPreferences({ signal = null } = {}) {
+    try {
+      const result = await this.mcp.callTool("get_notification_preferences", {}, { signal });
+      return normalizeNotificationPreferences(parseMcpJson(result, "AMOS notification preferences"));
+    } catch (error) {
+      if (isUnknownTool(error, "get_notification_preferences")) {
+        return { ...emptyNotificationPreferences(), available: false, supported: false };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * set_notification_preferences. A new sms_number is stored unverified and texted a code; the
+   * returned `verification` says whether a code is pending, already verified, or cleared.
+   */
+  async setNotificationPreferences(input, { signal = null } = {}) {
+    const args = notificationPreferenceArgs(input);
+    if (Object.keys(args).length === 0) throw new Error("Nothing to change in notification preferences");
+    try {
+      const payload = parseMcpJson(
+        await this.mcp.callTool("set_notification_preferences", args, { signal }),
+        "AMOS notification preferences"
+      );
+      return {
+        preferences: normalizeNotificationPreferences(payload),
+        verification: payload?.verification && typeof payload.verification === "object"
+          ? boundedJsonValue(payload.verification)
+          : null
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "set_notification_preferences")) {
+        throw new Error("This AMOS company does not yet store notification preferences");
+      }
+      throw error;
+    }
+  }
+
+  /** verify_notification_phone with the 6-digit code the user was texted. */
+  async verifyNotificationPhone(code, { signal = null } = {}) {
+    const digits = String(code || "").replaceAll(/\s+/g, "");
+    if (!/^\d{6}$/.test(digits)) throw new Error("Enter the 6-digit code you were texted");
+    try {
+      const payload = parseMcpJson(
+        await this.mcp.callTool("verify_notification_phone", { code: digits }, { signal }),
+        "AMOS phone verification"
+      );
+      return {
+        verified: payload?.verified === true,
+        preferences: normalizeNotificationPreferences(payload)
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "verify_notification_phone")) {
+        throw new Error("This AMOS company does not yet verify notification phone numbers");
+      }
+      throw error;
+    }
+  }
+
+  /** list_mission_notifications: every outbox row for one Mission with status, delivered_at, last_error. */
+  async missionNotifications(id, { signal = null } = {}) {
+    try {
+      const payload = parseMcpJson(
+        await this.mcp.callTool(
+          "list_mission_notifications",
+          { mission_id: requiredUuid(id, "Mission") },
+          { signal }
+        ),
+        "AMOS Mission notifications"
+      );
+      return {
+        supported: true,
+        missionId: validUuidOrEmpty(payload?.mission_id) || String(id),
+        delivery: normalizeMissionNotificationDelivery(payload?.notification_delivery)
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "list_mission_notifications")) {
+        return { supported: false, missionId: String(id), delivery: [] };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * set_mission_notification_channels(mission_id, notifications). The verb is being added to the
+   * Platform; until it exists the error carries code "unsupported" so Desktop can say so plainly.
+   */
+  async setMissionNotificationChannels(id, notifications, { signal = null } = {}) {
+    const choice = normalizeMissionNotificationChoice(notifications);
+    if (!choice) throw new Error("Choose at least one place to send Mission updates");
+    try {
+      const payload = parseMcpJson(
+        await this.callCompanyTool(
+          "set_mission_notification_channels",
+          { mission_id: requiredUuid(id, "Mission"), notifications: choice },
+          { signal }
+        ),
+        "AMOS Mission notification channels"
+      );
+      return {
+        missionId: validUuidOrEmpty(payload?.mission_id) || String(id),
+        notifications: normalizeMissionNotificationChoice(payload?.notifications) || choice
+      };
+    } catch (error) {
+      if (isUnknownTool(error, "set_mission_notification_channels")) {
+        const unsupported = new Error("Changing a Mission's channels is not available yet on this AMOS company");
+        unsupported.code = "unsupported";
+        throw unsupported;
+      }
+      throw error;
+    }
   }
 
   async setOptimizationMissionStatus(id, status, { signal = null } = {}) {
@@ -1971,6 +2094,13 @@ function normalizeMission(value) {
     steps: Array.isArray(value.steps) ? boundedJsonValue(value.steps) : [],
     verification: Array.isArray(value.verification) ? boundedJsonValue(value.verification) : [],
     decisions: Array.isArray(value.decisions) ? boundedJsonValue(value.decisions) : [],
+    // The channel choice persisted with the Mission, and any delivery evidence the full read embeds.
+    notifications: normalizeMissionNotificationChoice(
+      value.notifications ?? value.notification_channels ?? contract.notifications ?? null
+    ),
+    notificationDelivery: normalizeMissionNotificationDelivery(
+      value.notification_delivery ?? value.notificationDelivery
+    ),
     createdAt: safeTimestamp(value.created_at || value.createdAt),
     startedAt: safeTimestamp(value.started_at || value.startedAt),
     finishedAt: safeTimestamp(value.finished_at || value.finishedAt)

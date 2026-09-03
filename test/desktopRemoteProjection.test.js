@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DesktopController } from "../src/desktop/controller.js";
+import { emptyNotificationPreferences } from "../src/desktop/missionNotifications.js";
 import { profileCatalog } from "../src/desktop/relationshipProfile.js";
 
 import {
@@ -92,6 +93,7 @@ test("remote state events project every refreshed platform surface into Desktop"
       stale: false,
       refreshError: ""
     },
+    notificationPreferences: emptyNotificationPreferences(),
     companies: controller.companies,
     accounts: { currentAccountId: "legacy", accounts: [] },
     workingContinuity: null,

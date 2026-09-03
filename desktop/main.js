@@ -606,6 +606,21 @@ function registerIpc() {
   ipcMain.handle("desktop:set-optimization-mission-status", (_event, input) =>
     controller.setOptimizationMissionStatus(input?.id, input?.status)
   );
+  ipcMain.handle("desktop:get-notification-preferences", () =>
+    controller.getNotificationPreferences()
+  );
+  ipcMain.handle("desktop:set-notification-preferences", (_event, input) =>
+    controller.setNotificationPreferences(input)
+  );
+  ipcMain.handle("desktop:verify-notification-phone", (_event, input) =>
+    controller.verifyNotificationPhone(input?.code)
+  );
+  ipcMain.handle("desktop:get-mission-notifications", (_event, id) =>
+    controller.getMissionNotifications(id)
+  );
+  ipcMain.handle("desktop:set-mission-notification-channels", (_event, input) =>
+    controller.setMissionNotificationChannels(input?.id, input?.notifications)
+  );
   ipcMain.handle("desktop:remove-saved-view", (_event, id) => controller.removeSavedView(id));
   ipcMain.handle("desktop:add-attachment-paths", (_event, paths) => controller.addAttachmentPaths(paths));
   ipcMain.handle("desktop:add-pasted-image", (_event, input) => controller.addPastedImage({
