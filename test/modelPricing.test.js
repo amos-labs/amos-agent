@@ -63,6 +63,24 @@ test("Grok long-context rates double once the prompt reaches 200k tokens", () =>
   assert.equal(long.costUsedMicrousd, 812_000);
 });
 
+test("GPT-6 Astra pricing applies its asymmetric long-context rates", () => {
+  const base = estimateUsageCost({
+    model: "gpt-6-astra",
+    inputTokens: 1_000_000,
+    outputTokens: 1_000_000
+  });
+  assert.equal(base.costUsedMicrousd, 95_000_000);
+  assert.equal(base.estimated, true);
+
+  const cached = estimateUsageCost({
+    model: "gpt-6-astra",
+    inputTokens: 272_000,
+    cachedInputTokens: 100_000,
+    outputTokens: 1_000
+  });
+  assert.equal(cached.costUsedMicrousd, 3_715_000);
+});
+
 test("usage accumulation retains wall speed and local runtime fallback evidence", () => {
   const first = accumulateUsage({}, {
     inputTokens: 1_000,

@@ -22,7 +22,12 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   assert.ok(providers.some((provider) => provider.id === "anthropic" && provider.protocol === "anthropic-messages"));
   assert.deepEqual(
     providers.find((provider) => provider.id === "openai").models.map((model) => model.id),
-    ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]
+    ["gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]
+  );
+  assert.deepEqual(
+    providers.find((provider) => provider.id === "openai").models
+      .find((model) => model.id === "gpt-6-astra").supportedReasoningEfforts,
+    ["low", "medium", "high", "xhigh", "max"]
   );
   assert.deepEqual(
     providers.find((provider) => provider.id === "anthropic").models.map((model) => model.id),
@@ -150,6 +155,17 @@ test("AMOS Intelligence exposes one automatic route without exposing routed mode
 });
 
 test("reasoning effort is normalized to each provider or model contract", () => {
+  const astra = resolveModelConfig({
+    AMOS_MODEL_PROVIDER: "openai",
+    AMOS_MODEL: "gpt-6-astra",
+    OPENAI_API_KEY: "test-key",
+    AMOS_MODEL_REASONING_EFFORT: "none"
+  });
+  assert.equal(astra.protocol, "openai-responses");
+  assert.equal(astra.model, "gpt-6-astra");
+  assert.equal(astra.reasoningEffort, "low");
+  assert.deepEqual(astra.supportedReasoningEfforts, ["low", "medium", "high", "xhigh", "max"]);
+
   const kimi = resolveModelConfig({
     AMOS_MODEL_PROVIDER: "kimi",
     AMOS_MODEL_API_KEY: "test-key",

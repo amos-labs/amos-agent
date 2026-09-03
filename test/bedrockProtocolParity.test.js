@@ -91,6 +91,14 @@ test("Bedrock fails closed for unqualified models, regions, and credential origi
   assert.throws(
     () => resolveModelConfig({
       AMOS_MODEL_PROVIDER: "bedrock",
+      AMOS_MODEL: "openai.gpt-6-astra",
+      AWS_BEARER_TOKEN_BEDROCK: "bedrock-test-key"
+    }),
+    /not qualified/
+  );
+  assert.throws(
+    () => resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "bedrock",
       AMOS_MODEL: "unknown.future-model",
       AWS_BEARER_TOKEN_BEDROCK: "bedrock-test-key"
     }),
