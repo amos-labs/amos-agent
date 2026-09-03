@@ -586,7 +586,7 @@ export class DesktopRemoteStateClient {
     };
   }
 
-  /** Compile a Run Contract without creating anything (create_mission dry_run). */
+  /** Compile a Mission plan without creating anything (create_mission dry_run). */
   async compileMission(spec, { signal = null } = {}) {
     const args = { ...missionSpecArgs(spec), dry_run: true };
     return normalizeMcpToolResult(await this.callCompanyTool("create_mission", args, { signal }));
@@ -2091,6 +2091,9 @@ function normalizeMission(value) {
       maxWallTimeSeconds: boundedCount(budgets.max_wall_time_seconds),
       expiresAt: safeTimestamp(contract.expires_at || contract.expiresAt)
     },
+    // "212 of 500 so far": whatever the Platform reports as done against the goal's target, with
+    // the completion target as a fallback. Absent fields stay null so the renderer can skip them.
+    progress: normalizeMissionProgress(value),
     steps: Array.isArray(value.steps) ? boundedJsonValue(value.steps) : [],
     verification: Array.isArray(value.verification) ? boundedJsonValue(value.verification) : [],
     decisions: Array.isArray(value.decisions) ? boundedJsonValue(value.decisions) : [],
@@ -2107,9 +2110,29 @@ function normalizeMission(value) {
   };
 }
 
+function normalizeMissionProgress(value) {
+  const raw = value.progress && typeof value.progress === "object" && !Array.isArray(value.progress)
+    ? value.progress
+    : {};
+  const completion = value.completion_condition && typeof value.completion_condition === "object"
+    ? value.completion_condition
+    : {};
+  const count = (candidate) => {
+    const number = Number(candidate);
+    return candidate !== null && candidate !== undefined && candidate !== "" && Number.isFinite(number)
+      ? Math.max(0, Math.round(number))
+      : null;
+  };
+  const done = count(raw.done ?? raw.current ?? raw.completed ?? raw.count ?? value.progress_count ?? value.metric_value ?? value.current_value);
+  const target = count(raw.target ?? raw.total ?? raw.goal ?? value.progress_target ?? completion.target);
+  const unit = String(raw.unit || raw.label || "").trim().slice(0, 40);
+  if (done === null && target === null) return null;
+  return { done, target, unit };
+}
+
 function missionSpecArgs(spec) {
   if (!spec || typeof spec !== "object" || Array.isArray(spec)) {
-    throw new Error("A Mission needs a compiled Run Contract specification");
+    throw new Error("A Mission needs a compiled plan to start from");
   }
   const args = { ...spec };
   delete args.dry_run;

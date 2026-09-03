@@ -252,13 +252,13 @@ test("routine approval review stays inside Desktop", async () => {
   assert.match(javascript, /Retry the same mission/);
   assert.match(javascript, /Add optional guidance/);
   assert.match(javascript, /function missionContractSummary\(/);
-  assert.match(javascript, /Read-only authority · no writes/);
+  assert.match(javascript, /Looks things up only · changes nothing/);
   assert.match(javascript, /if \(isMissionApproval\(approval\)\)/);
   assert.match(javascript, /api\.answerMissionDecision\(decision\.id, exactAnswer\)/);
   assert.match(javascript, /inside its existing authority/);
   assert.match(javascript, /Choose an action below\. Only type guidance if neither choice says what you want/);
   assert.match(javascript, /Optional guidance/);
-  assert.match(javascript, /has been stopped and its Run Contract revoked/);
+  assert.match(javascript, /has been stopped\. Nothing more will run\./);
   assert.match(javascript, /Authorize “\$\{missionName\}”/);
   assert.doesNotMatch(javascript, /decided by \$\{approval\.decided_by\}/);
   assert.match(javascript, /Revalidate & reopen/);
@@ -555,11 +555,11 @@ test("Projects are context workspaces and Missions own autonomous work", async (
   assert.match(html, /id="missionsView"/);
   assert.match(html, /Start from a Mission template/);
   assert.match(html, /id="missionObjectiveInput"/);
-  assert.match(html, /id="missionExecutionInput"/);
-  assert.match(html, /id="missionProjectInput"/);
-  assert.match(html, /id="missionCheckpointInput"/);
-  assert.match(html, /Keep working; ask only when a real decision is needed/);
-  assert.match(html, /Create Mission/);
+  // The one-sentence rule: no execution, Project, checkpoint, or kind controls on the form.
+  assert.doesNotMatch(html, /id="missionExecutionInput"|id="missionProjectInput"|id="missionCheckpointInput"|id="missionKindInput"/);
+  // Local check-ins follow the Settings default rather than a per-Mission field.
+  assert.match(javascript, /researchCheckpointMinutes: Number\(state\?\.settings\?\.autonomousCheckpointMinutes \?\? 0\)/);
+  assert.match(html, /What do you want done\?/);
   assert.match(javascript, /api\.startMission\(/);
   assert.match(javascript, /function renderMissions\(\)/);
   assert.match(javascript, /executionLocation === "local" \? "THIS COMPUTER" : "AMOS HOSTED"/);
@@ -581,7 +581,7 @@ test("Projects are context workspaces and Missions own autonomous work", async (
   assert.match(main, /controller\.getMission/);
   assert.match(main, /controller\.setOptimizationMissionStatus/);
   assert.match(css, /\.list-filter\s*\{/);
-  assert.match(html, /id="missionKindInput"/);
+  assert.match(javascript, /missionDraft\.missionKind = template\.kind === "optimization" \? "optimization" : "finite";/);
   assert.match(controller, /isolate: true/);
   assert.match(javascript, /function decisionInputCard\(/);
   assert.match(javascript, /request\.decisionType === "research-checkpoint"/);
@@ -1081,7 +1081,7 @@ test("hosted Mission creation stays in the Missions control center and never ope
   // Compile progress and Run Contract authorization render inside Missions, not Operator.
   assert.match(javascript, /function missionCompileCard\(compile\)/);
   assert.match(javascript, /function missionAuthorizationCard\(approval\)/);
-  assert.match(javascript, /RUN CONTRACT · WAITING FOR YOUR AUTHORIZATION/);
+  assert.match(javascript, /eyebrow\.textContent = "WAITING FOR YOUR OK";/);
   assert.match(
     javascript,
     /for \(const compile of compiles\) elements\.missionList\.append\(missionCompileCard\(compile\)\)/
@@ -1146,32 +1146,27 @@ test("a Missions-page compile resolves from its create_mission result, keyed by 
   assert.match(reveal, /state\.missions = await api\.refreshMissions\(\)/);
   assert.match(reveal, /missions\.find\(\(item\) => item\.id === wantedId\)/);
 
-  // Compiler rejection: corrective copy plus "Edit and retry", never "Compile stopped".
+  // Compiler rejection: one plain sentence plus "Edit goal", never "Compile stopped".
   const presentation = javascript.match(/function missionCompilePresentation\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(presentation, "missionCompilePresentation must exist");
-  assert.match(presentation, /if \(outcome\?\.kind === "failed"\) \{[\s\S]*?status: "NEEDS CHANGES"[\s\S]*?Edit the outcome and retry\.[\s\S]*?actions: \["retry", "details", "dismiss"\]/);
-  assert.match(presentation, /if \(outcome\?\.kind === "ended"\) \{[\s\S]*?The compile run ended without creating a Mission\. Last error: \$\{outcome\.message\}/);
-  assert.match(presentation, /if \(outcome\?\.kind === "pending_approval"\) \{[\s\S]*?status: "RUN CONTRACT PROPOSED"/);
-  assert.match(presentation, /The compile run ended without creating a Mission\. Desktop did not receive a compile result\./);
+  assert.match(presentation, /if \(outcome\?\.kind === "failed"\) \{[\s\S]*?status: "NEEDS A CLEARER GOAL"[\s\S]*?progress: missionCompileProblem\(outcome\.message\)[\s\S]*?actions: \["retry", "details", "dismiss"\]/);
+  assert.match(presentation, /if \(outcome\?\.kind === "ended"\) \{[\s\S]*?AMOS stopped planning before a Mission was created\. Last error: \$\{outcome\.message\}/);
+  assert.match(presentation, /if \(outcome\?\.kind === "pending_approval"\) \{[\s\S]*?status: "WAITING FOR YOUR OK"/);
+  assert.match(presentation, /AMOS stopped planning before a Mission was created\. Desktop did not receive a result\./);
   assert.doesNotMatch(javascript, /COMPILE STOPPED|Open the compile details to see why, or start again/);
   const card = javascript.match(/function missionCompileCard\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(card, /actionButton\("Edit and retry", "primary"\)/);
+  assert.match(card, /actionButton\("Edit goal", "primary"\)/);
   assert.match(card, /retryMissionCompile\(compile\)/);
-  assert.match(card, /: missionCompileContract\(compile\.outcome\?\.contract\);/);
+  assert.match(card, /\? missionPlanCard\(compile, compile\.outcome, \{ interactive: false \}\)/);
+  // The user's words come back untouched in the text box, with the problem as one sentence.
   const retry = javascript.match(/function retryMissionCompile\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.match(retry, /openMissionModal\(project\)/);
   assert.match(retry, /elements\.missionObjectiveInput\.value = compile\.objective/);
+  assert.match(retry, /elements\.missionModalError\.textContent = missionCompileProblem\(compile\.outcome\.message\);/);
   assert.doesNotMatch(retry, /showView\("operator"\)/);
-
-  // The compiled Run Contract renders on the card: outcome, operations, effective limits, prohibitions.
-  const contract = javascript.match(/function missionCompileContract\(contract\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.ok(contract);
-  for (const label of ["Outcome", "Operations", "Effective limits", "Prohibitions", "Bound resources", "Admission"]) {
-    assert.match(contract, new RegExp(`\\["${label}"`));
-  }
 });
 
-test("a Missions-page compile dry-runs create_mission and the user starts the compiled Run Contract", async () => {
+test("a Missions-page compile dry-runs create_mission and the user starts the compiled plan", async () => {
   const [javascript, controller, remoteState, main, preload] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
@@ -1204,32 +1199,32 @@ test("a Missions-page compile dry-runs create_mission and the user starts the co
   assert.match(main, /ipcMain\.handle\("desktop:start-compiled-mission", \(_event, input\) =>\s*controller\.startCompiledMission\(input\)/);
   assert.match(preload, /startCompiledMission: \(input\) => ipcRenderer\.invoke\("desktop:start-compiled-mission", input\)/);
 
-  // The compile card becomes a Run Contract card with one primary Start Mission button.
+  // The compile card becomes a plan card with one primary Start button; no second prompt.
   const presentation = javascript.match(/function missionCompilePresentation\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(presentation, /if \(outcome\?\.kind === "compiled"\) \{[\s\S]*?status: outcome\.requiresConfirmation \? "CONFIRM LIMITS TO START" : "RUN CONTRACT READY"[\s\S]*?actions: \["start", "details", "discard"\]/);
+  assert.match(presentation, /if \(outcome\?\.kind === "compiled"\) \{[\s\S]*?status: outcome\.requiresConfirmation \? "ONE THING TO CHECK" : "READY TO START"[\s\S]*?actions: \["start", "discard"\]/);
   const card = javascript.match(/function missionCompileCard\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(card, /compile\.outcome\?\.kind === "compiled"\s*\? missionRunContractCard\(compile, compile\.outcome\)/);
-  assert.match(card, /actionButton\("Start Mission", "primary"\)/);
+  assert.match(card, /compile\.outcome\?\.kind === "compiled"\s*\? missionPlanCard\(compile, compile\.outcome\)/);
+  assert.match(card, /const start = actionButton\("Start", "primary"\);\s*start\.dataset\.missionStart = "true";/);
   assert.match(card, /startCompiledMission\(compile, card, start\)/);
-  assert.doesNotMatch(card, /actionButton\("Start Mission", "secondary"\)/);
-  const contractCard = javascript.match(/function missionRunContractCard\(compile, outcome\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.ok(contractCard, "missionRunContractCard must exist");
-  assert.match(contractCard, /addRow\("Outcome"/);
-  assert.match(contractCard, /addRow\("Done when", missionCompletionSummary\(contract\.completionCondition\)\)/);
-  assert.match(contractCard, /\["Advancing", groups\.advancing\],\s*\["Observing", groups\.observing\],\s*\["Control", groups\.control\]/);
-  assert.match(contractCard, /addRow\("Prohibitions"/);
-  assert.match(contractCard, /addRow\("Bound resources"/);
-  // Defaulted limits are flagged and editable; stated limits are display-only with their source.
-  assert.match(contractCard, /const guessed = source === "default";/);
-  assert.match(contractCard, /row\.className = `mission-limit\$\{guessed \? " default" : ""\}`/);
-  assert.match(contractCard, /"AMOS guessed · confirm or edit"/);
-  assert.match(contractCard, /if \(guessed && MISSION_LIMIT_FIELDS\[key\]\) \{[\s\S]*?input\.dataset\.limitKey = key;/);
-  assert.match(contractCard, /`from \$\{source\.replaceAll\("_", " "\)\}`/);
+  assert.match(card, /if \(start\) start\.textContent = missionPlanStartLabel\(card\);/);
+  assert.equal((card.match(/actionButton\([^)]*"primary"\)/g) || []).length, 2, "Start (compiled) and Edit goal (failed) are the only primary actions");
+  const planCard = javascript.match(/function missionPlanCard\(compile, outcome, \{ interactive = true \} = \{\}\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(planCard, "missionPlanCard must exist");
+  assert.match(planCard, /const copy = missionPlanCopy\(\{[\s\S]*?contract: outcome\?\.contract,[\s\S]*?\}\);/);
+  assert.match(planCard, /goal\.textContent = copy\.using \? `\$\{copy\.goal\} \$\{copy\.using\}` : copy\.goal;/);
+  assert.match(planCard, /for \(const limit of copy\.limits\) limits\.append\(missionPlanLimitRow\(limit, root, \{ interactive \}\)\);/);
+  // Guessed limits are a tappable sentence that swaps in an inline field; stated limits are plain text.
+  const limitRow = javascript.match(/function missionPlanLimitRow\(limit, card, \{ interactive \}\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(limitRow, /item\.className = `mission-plan-limit \$\{limit\.guessed \? "guessed" : "stated"\}`;/);
+  assert.match(limitRow, /if \(!limit\.guessed \|\| !limit\.editable \|\| !interactive\) \{\s*item\.textContent = limit\.sentence;\s*return item;/);
+  assert.match(limitRow, /tap\.textContent = limit\.sentence;/);
+  assert.match(limitRow, /input\.dataset\.limitKey = limit\.key;/);
+  assert.match(limitRow, /start\.textContent = missionPlanStartLabel\(/);
   const edits = javascript.match(/function missionLimitEditsFrom\(card\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.match(edits, /if \(value !== Number\(input\.dataset\.limitOriginal\)\) limits\[input\.dataset\.limitKey\] = value;/);
   const startFlow = javascript.match(/async function startCompiledMission\(compile, card, button\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(startFlow);
-  assert.match(startFlow, /api\.startCompiledMission\(\{ builderTaskId: compile\.taskId, limits \}\)/);
+  assert.match(startFlow, /api\.startCompiledMission\(\{\s*builderTaskId: compile\.taskId,\s*limits,\s*\.\.\.\(notifications \? \{ notifications \} : \{\}\)\s*\}\)/);
   assert.match(startFlow, /state\.missionCompiles = response\.missionCompiles/);
   assert.doesNotMatch(startFlow, /showView\("operator"\)|addMessage\(/);
   assert.match(javascript, /function seedCompiledMissionCards\(\)/);
@@ -1245,10 +1240,13 @@ test("a chat-originated Mission leaves exactly one compact receipt in the transc
   );
   const receipt = javascript.match(/function missionCreationReceipt\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(receipt);
-  assert.match(receipt, /label\.textContent = `Mission created: \$\{name\}`/);
+  // "Mission started: <name> · updates via SMS · View Mission"
+  assert.match(javascript, /if \(label === MISSION_RECEIPT_STATUS\.approved\) return `Mission started: \$\{name\}`;/);
+  assert.match(receipt, /status\.textContent = missionReceiptHeadline\(name, approval\.status\);/);
+  assert.match(receipt, /updates\.textContent = `updates via \$\{missionChannelsPhrase\(approval\.args\?\.notifications\)\}`;/);
   assert.match(receipt, /view\.textContent = "View Mission"/);
-  assert.match(receipt, /line\.append\(label, " · ", status, " · ", view\)/);
-  assert.match(javascript, /pending: "Waiting for approval"/);
+  assert.match(receipt, /line\.append\(status, " · ", updates, " · ", view\)/);
+  assert.match(javascript, /pending: "waiting for your OK"/);
   const render = javascript.match(/function renderMissionCreationReceipt\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(render);
   // Exactly one node per approval id, and none at all for a Missions-page compile.
@@ -1351,26 +1349,34 @@ test("sidebar count badges appear only for work that requires a user response", 
   assert.doesNotMatch(javascript, /elements\.pendingDecisions\.append\(missionDecisionCard/);
 });
 
-test("Mission detail shows status reason, current step, effective limits, open questions, and controls", async () => {
+test("Mission detail shows a status-text summary, current step, limits, open questions, and controls", async () => {
   const javascript = await readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8");
   assert.match(javascript, /function missionStatusExplanation\(mission\)/);
   assert.match(javascript, /Paused until you answer its open question/);
   assert.match(javascript, /function latestMissionStep\(mission\)/);
   assert.match(javascript, /`Current step · \$\{currentStep\}`/);
+  // "212 of 500 so far, 140 credits used, about three hours in" leads; the plain-English reason follows.
+  const summary = javascript.match(/function missionSummaryLine\(mission\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(summary, "missionSummaryLine must exist");
+  assert.match(summary, /const line = missionProgressLine\(mission\);/);
+  assert.match(summary, /if \(!line\) return missionStatusExplanation\(mission\);/);
+  const card = javascript.match(/function missionCard\(mission\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(card, /progress\.textContent = missionSummaryLine\(mission\);/);
   const chips = javascript.match(/function missionLimitChips\(mission\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(chips);
-  assert.match(chips, /tool calls/);
-  assert.match(chips, /cost`/);
-  assert.match(chips, /provider credits/);
-  assert.match(chips, /wall-time limit/);
+  assert.match(chips, /of \$\{limits\.maxProviderCredits\} credits/);
+  assert.match(chips, /spent`/);
+  assert.match(chips, /actions`/);
+  assert.match(chips, /Stops after/);
   assert.match(chips, /open question/);
-  assert.match(chips, /human decision/);
+  assert.match(chips, /decision\$\{decided === 1 \? "" : "s"\} made/);
+  assert.doesNotMatch(chips, /tool calls|wall-time|Run Contract/);
   const detail = javascript.match(/function renderMissionActivity\(mission, container\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(detail);
-  assert.match(detail, /Open questions and authority changes/);
+  assert.match(detail, /questionsHeading\.textContent = "Open questions";/);
   assert.match(detail, /questionList\.append\(missionDecisionCard\(decision\)\)/);
-  assert.match(detail, /Progress against effective limits/);
-  const card = javascript.match(/function missionCard\(mission\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(detail, /limitsHeading\.textContent = "Where it stands";/);
+  assert.match(detail, /summary\.className = "mission-progress-line";/);
   assert.match(card, /controlHostedMission\(mission, "pause", pause\)/);
   assert.match(card, /controlHostedMission\(mission, "resume", resume\)/);
   assert.match(card, /controlHostedMission\(mission, "cancel", cancel\)/);
@@ -1394,14 +1400,20 @@ test("Mission creation chooses where updates go and passes notifications through
   assert.match(helpers, /export const MISSION_NOTIFICATION_CHANNELS = Object\.freeze\(\["in_app", "sms", "whatsapp", "discord"\]\);/);
   assert.match(helpers, /return channels\.includes\("discord"\) && target\s*\? \{ channels, discord_target: target \}\s*: \{ channels \};/);
 
-  // The form: a "Send Mission updates to" multi-select whose defaults come from the saved preferences.
-  assert.match(html, /<fieldset id="missionChannelsField" class="connection-field mission-channels-field">\s*<legend>Send Mission updates to<\/legend>/);
-  assert.match(html, /<div id="missionChannelOptions" class="mission-channels"/);
-  assert.match(html, /<input id="missionDiscordTargetInput"/);
+  // The form asks nothing about channels; the plan card shows the saved default with a "change"
+  // link that reveals the picker.
+  assert.doesNotMatch(html, /id="missionChannelsField"|id="missionChannelOptions"|id="missionDiscordTargetInput"/);
   const open = javascript.match(/function openMissionModal\(project = null\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(open, /renderMissionChannelChoices\(defaultMissionChannels\(state\?\.notificationPreferences\)\)/);
-  const choices = javascript.match(/function renderMissionChannelChoices\([\s\S]*?\n\}\n/)?.[0];
-  assert.match(choices, /for \(const channel of MISSION_NOTIFICATION_CHANNELS\)/);
+  assert.doesNotMatch(open, /channel/i);
+  const picker = javascript.match(/function missionChannelPicker\(choice, \{ name = "mission-channel" \} = \{\}\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(picker, "missionChannelPicker must exist");
+  assert.match(picker, /const chosen = new Set\(normalized\?\.channels \|\| defaultMissionChannels\(preferences\)\);/);
+  assert.match(picker, /for \(const channel of MISSION_NOTIFICATION_CHANNELS\)/);
+  const planCard = javascript.match(/function missionPlanCard\(compile, outcome, \{ interactive = true \} = \{\}\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(planCard, /\|\| \{ channels: defaultMissionChannels\(state\?\.notificationPreferences\) \};/);
+  assert.match(planCard, /change\.textContent = "change";/);
+  assert.match(planCard, /picker\.root\.classList\.add\("mission-plan-channels", "hidden"\);/);
+  assert.match(planCard, /change\.addEventListener\("click", \(\) => \{\s*picker\.root\.classList\.toggle\("hidden"\);/);
   // An unconfigured channel is disabled with a "Set up in Settings" link, never silently sent.
   const option = javascript.match(/function missionChannelOption\(channel[\s\S]*?\n\}\n/)?.[0];
   assert.ok(option, "missionChannelOption must exist");
@@ -1410,18 +1422,23 @@ test("Mission creation chooses where updates go and passes notifications through
   assert.match(option, /input\.checked = availability\.configured && checked;/);
   assert.match(option, /if \(availability\.fix === "setup"\) copy\.append\(missionChannelSetupLink\(\)\);/);
   assert.match(javascript, /link\.textContent = "Set up in Settings";/);
-  assert.match(javascript, /elements\.missionChannelsField\.classList\.toggle\("hidden", local \|\| optimization\);/);
   assert.match(css, /\.mission-channel-option\.disabled \{/);
   assert.match(css, /\.mission-channel-setup-link \{/);
 
-  // Submit sends `notifications` for hosted finite Missions and refuses an empty choice.
+  // Submit sends the goal; a channel choice rides along only when a plan being edited carried one.
+  // The controller defaults to the saved preferences otherwise.
   const submit = javascript.match(/async function submitMission\(event\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(submit, /const notifications = hostedFinite \? missionChannelChoiceFromForm\(\) : null;/);
-  assert.match(submit, /Choose at least one place to send Mission updates\./);
+  assert.match(submit, /normalizeMissionNotificationChoice\(missionDraft\.notifications\)/);
   assert.match(submit, /\.\.\.\(notifications \? \{ notifications \} : \{\}\)/);
-  const fromForm = javascript.match(/function missionChannelChoiceFromForm\(\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(fromForm, /channels: chosenChannelsIn\(elements\.missionChannelOptions\),\s*discord_target: elements\.missionDiscordTargetInput\.value\.trim\(\)/);
   assert.match(javascript, /notifications: normalizeMissionNotificationChoice\(response\.notifications\),/);
+  // Start carries a changed choice; an unchanged picker sends nothing.
+  const channelEdits = javascript.match(/function missionPlanChannelEdits\(card, current\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(channelEdits, "missionPlanChannelEdits must exist");
+  assert.match(channelEdits, /if \(!picker\) return null;/);
+  assert.match(channelEdits, /return same \? null : chosen;/);
+  const start = controller.match(/async startCompiledMission\(input = \{\}\) \{[\s\S]*?\n  \}\n/)?.[0];
+  assert.match(start, /: assertMissionChannelsConfigured\(input\.notifications, this\.notificationPreferences\);/);
+  assert.match(start, /const edited = channelsChanged \|\|/);
 
   // Controller: the choice is validated against preferences, rides the compile lane, and Desktop
   // injects it into every create_mission the model issues (the dry run), so the captured spec —
@@ -1438,11 +1455,9 @@ test("Mission creation chooses where updates go and passes notifications through
   assert.match(remoteState, /const args = \{ \.\.\.missionSpecArgs\(spec\), dry_run: true \};/);
   assert.match(controller, /notifications: normalizeMissionNotificationChoice\(pick\("notifications", "notification_channels"\)\),/);
 
-  // Run Contract card shows "Updates: In-app, SMS".
-  const contractCard = javascript.match(/function missionRunContractCard\(compile, outcome\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(contractCard, /outcome\?\.spec\?\.notifications \|\| contract\.notifications \|\| compile\.notifications/);
-  assert.match(contractCard, /if \(updates\) addRow\("Updates", updates\);/);
-  assert.match(javascript, /if \(updates\) rows\.push\(\["Updates", updates\]\);/);
+  // The plan card says "Updates go to In-app and SMS." from the spec the dry run carried.
+  assert.match(planCard, /outcome\?\.spec\?\.notifications \|\| outcome\?\.contract\?\.notifications \|\| compile\.notifications/);
+  assert.match(planCard, /updatesText\.textContent = copy\.updates;/);
   assert.match(helpers, /return normalized\.channels\.map\(\(channel\) => MISSION_CHANNEL_LABELS\[channel\] \|\| channel\)\.join\(", "\);/);
 
   // Preferences ride on remote state; failures read as "not configured", never as verified.
@@ -1450,11 +1465,10 @@ test("Mission creation chooses where updates go and passes notifications through
   assert.match(controller, /notificationPreferences: structuredClone\(this\.notificationPreferences \|\| emptyNotificationPreferences\(\)\)/);
   assert.match(controller, /this\.notificationPreferences = \{\s*\.\.\.emptyNotificationPreferences\(\),\s*error:/);
 
-  // Chat-origin Missions: the compact receipt gains "Updates: …" and the model asks once when the
+  // Chat-origin Missions: the compact receipt says "updates via …" and the model asks once when the
   // user has no saved preference. No extra UI for that path.
   const receipt = javascript.match(/function missionCreationReceipt\(approval\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(receipt, /const channels = missionChannelsLabel\(approval\.args\?\.notifications\);/);
-  assert.match(receipt, /updates\.textContent = `Updates: \$\{channels\}`;/);
+  assert.match(receipt, /updates\.textContent = `updates via \$\{missionChannelsPhrase\(approval\.args\?\.notifications\)\}`;/);
   assert.match(controller, /function missionNotificationChannelPrompt\(enabled, preferences\)/);
   assert.match(controller, /if \(hasSavedNotificationPreference\(preferences\)\) \{/);
   assert.match(controller, /ask once in plain words: \\"Where do you want updates for this Mission\?\\" \(In-app, SMS, WhatsApp, or Discord\)/);
@@ -1499,7 +1513,8 @@ test("Mission detail renders per-channel delivery state and a guarded Change cha
   // Change channels reuses the same option renderer (disabled when unconfigured) and degrades to a toast
   // while the Platform verb is still being added.
   const editor = javascript.match(/function renderMissionChannelEditor\(editor, mission, container\) \{[\s\S]*?\n\}\n/)?.[0];
-  assert.match(editor, /missionChannelOption\(channel, \{\s*checked: chosen\.has\(channel\),\s*preferences,/);
+  assert.match(editor, /const picker = missionChannelPicker\(mission\.notifications, \{ name: `mission-channel-\$\{mission\.id\}` \}\);/);
+  assert.match(javascript, /options\.append\(missionChannelOption\(channel, \{\s*checked: chosen\.has\(channel\),\s*preferences,\s*name,/);
   const change = javascript.match(/async function changeMissionChannels\(mission, editor, button, container\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.ok(change);
   assert.match(change, /await api\.setMissionNotificationChannels\(mission\.id, notifications\)/);
@@ -1567,4 +1582,90 @@ test("Settings has a Notifications section with phone verification, quiet hours,
   assert.match(main, /ipcMain\.handle\("desktop:verify-notification-phone", \(_event, input\) =>\s*controller\.verifyNotificationPhone\(input\?\.code\)/);
   assert.match(preload, /verifyNotificationPhone: \(code\) =>\s*ipcRenderer\.invoke\("desktop:verify-notification-phone", \{ code \}\)/);
   assert.match(preload, /setNotificationPreferences: \(input\) =>\s*ipcRenderer\.invoke\("desktop:set-notification-preferences", input\)/);
+});
+
+test("the Mission form is one sentence and Start", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+  const form = html.match(/<form id="missionForm"[\s\S]*?<\/form>/)?.[0];
+  assert.ok(form, "the Mission form must exist");
+  // Exactly one required field, and it is the goal; nothing else to fill in.
+  assert.equal((form.match(/\brequired\b/g) || []).length, 1);
+  assert.match(form, /<textarea id="missionObjectiveInput"[^>]*\brequired\b[^>]*placeholder="Get me 500 VAR and MSP prospects in the US and Canada, no more than 700 credits"/);
+  assert.match(form, /<span>What do you want done\?<\/span>/);
+  assert.doesNotMatch(form, /<select|<fieldset|type="checkbox"|type="radio"|<input\b/);
+  assert.equal((form.match(/<textarea/g) || []).length, 1);
+  // Start is the only primary action.
+  assert.equal((form.match(/button primary/g) || []).length, 1);
+  assert.match(form, /<button id="missionSubmitButton" class="button primary" type="submit">Start <span>→<\/span><\/button>/);
+  assert.doesNotMatch(form, /Run Contract|contract|checker|metric|admission|family|digest/i);
+
+  // Submit: the goal goes straight to startMission (the hosted dry run) and the compile is tracked.
+  const submit = javascript.match(/async function submitMission\(event\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(submit, /const objective = elements\.missionObjectiveInput\.value\.trim\(\);/);
+  assert.match(submit, /const executionLocation = missionExecutionLocation\(\);/);
+  assert.match(submit, /await api\.startMission\(\{[\s\S]*?objective,[\s\S]*?executionLocation,/);
+  assert.match(submit, /if \(executionLocation === "hosted"\) trackMissionCompile\(response\);/);
+  assert.match(submit, /AMOS is working out the plan\. You'll start it here when it's ready\./);
+  assert.doesNotMatch(submit, /Run Contract|contract/i);
+  // Hosted when connected, this computer otherwise: a rule, not a field.
+  assert.match(javascript, /function missionExecutionLocation\(\) \{[\s\S]*?return state\?\.connectionMode === "user" \? "hosted" : "local";/);
+  // A refusal keeps the user's words in the text box; a compiler rejection comes back through
+  // retryMissionCompile as one sentence.
+  assert.match(submit, /elements\.missionModalError\.textContent = error\.message;/);
+  assert.doesNotMatch(submit, /missionObjectiveInput\.value = ""/);
+});
+
+test("the plan card renders the one question inline and hides internal vocabulary behind a collapsed disclosure", async () => {
+  const [javascript, controller] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
+  ]);
+  const functionSource = (name) =>
+    javascript.match(new RegExp(`\\n(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}\\n`))?.[0];
+  const defaultViewFunctions = [
+    "submitMission", "openMissionModal", "renderMissionModalContext", "missionCompilePresentation",
+    "missionPlanCard", "missionPlanLimitRow", "missionPlanStartLabel", "startCompiledMission",
+    "retryMissionCompile", "missionCompileCard", "missionAuthorizationCard", "missionCard",
+    "missionSummaryLine", "missionStatusExplanation", "missionLimitChips", "renderMissionActivity",
+    "missionCreationReceipt", "missionReceiptHeadline", "missionNotificationSection"
+  ];
+  const banned = /\b(run contract|contracts?|digests?|famil(?:y|ies)|checkers?|metrics?|admission)\b/i;
+  for (const name of defaultViewFunctions) {
+    const source = functionSource(name);
+    assert.ok(source, `${name} must exist`);
+    // Only what a user can read: string and template literals, with code identifiers ignored.
+    const literals = [...source.matchAll(/"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)]
+      .map((match) => (match[1] ?? match[2]).replace(/\$\{[^}]*\}/g, ""))
+      .filter((text) => !/^[a-z0-9-]+$/i.test(text) && !/^[.#[\]]/.test(text));
+    for (const literal of literals) {
+      assert.doesNotMatch(literal, banned, `${name} shows internal vocabulary: ${literal}`);
+    }
+  }
+  // Awaiting confirmation: the guessed budget is inline on the card and the Start label carries it.
+  const presentation = functionSource("missionCompilePresentation");
+  assert.match(presentation, /status: outcome\.requiresConfirmation \? "ONE THING TO CHECK" : "READY TO START"/);
+  // No string a user reads asks a question or tells them to confirm: the Start label is the question.
+  assert.doesNotMatch(presentation, /"[^"\n]*(\?|[Cc]onfirm)[^"\n]*"/);
+  const startLabel = functionSource("missionPlanStartLabel");
+  assert.match(startLabel, /\.mission-plan-limit\.guessed input\[data-limit-key\]/);
+  assert.match(startLabel, /if \(guessed\.length > 0\) return missionStartLabel\(guessed\);/);
+  // Start carries the dry-run token through the controller; a changed limit re-runs the dry run.
+  const start = controller.match(/async startCompiledMission\(input = \{\}\) \{[\s\S]*?\n  \}\n/)?.[0];
+  assert.match(start, /await remote\.createMission\(spec, requiresConfirmation \? token : ""\)/);
+  // The disclosure exists, is collapsed (never `open`), and is titled for the curious.
+  const details = functionSource("missionPlanDetails");
+  assert.ok(details, "missionPlanDetails must exist");
+  assert.match(details, /details\.className = "mission-plan-details";/);
+  assert.match(details, /summary\.textContent = "Details for the curious";/);
+  assert.doesNotMatch(details, /details\.open|setAttribute\("open"/);
+  assert.match(functionSource("missionPlanCard"), /if \(copy\.details\.length > 0\) root\.append\(missionPlanDetails\(copy\.details\)\);/);
+  // The compiler's defaulted_limits list reaches the renderer alongside limit_sources.
+  assert.match(controller, /defaultedLimits: boundedStringList\(pick\("defaulted_limits"\)/);
+  // Progress-line inputs come off the projected Mission.
+  const remoteState = await readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8");
+  assert.match(remoteState, /progress: normalizeMissionProgress\(value\),/);
+  assert.match(remoteState, /function normalizeMissionProgress\(value\) \{[\s\S]*?completion\.target/);
 });

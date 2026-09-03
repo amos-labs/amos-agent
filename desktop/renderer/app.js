@@ -19,6 +19,16 @@ import {
   missionChannelsLabel,
   normalizeMissionNotificationChoice
 } from "../../src/desktop/missionNotifications.js";
+import {
+  MISSION_LIMIT_FIELDS,
+  missionChannelsPhrase,
+  missionCompileProblem,
+  missionCompletionSentence,
+  missionNameFromObjective,
+  missionPlanCopy,
+  missionProgressLine,
+  missionStartLabel
+} from "../../src/desktop/missionPlan.js";
 
 const api = window.amosDesktop;
 
@@ -256,10 +266,7 @@ const elements = Object.fromEntries(
     "missionSummary", "missionTemplateList", "missionSearchInput", "missionStatusFilters", "missionUnavailable",
     "missionEmpty", "missionList", "missionPager", "refreshMissionsButton", "newMissionButton",
     "missionModal", "missionForm", "missionModalTitle", "missionModalClose",
-    "missionObjectiveInput", "missionKindInput", "missionExecutionInput", "missionProjectInput",
-    "missionCheckpointField", "missionCheckpointInput", "missionBoundaryNote",
-    "missionChannelsField", "missionChannelOptions", "missionDiscordTargetField", "missionDiscordTargetInput",
-    "missionChannelsNote",
+    "missionObjectiveInput", "missionModalContext",
     "missionModalError", "missionCancelButton", "missionSubmitButton", "missionAttentionRail",
     "capsuleModal", "capsulePassphraseForm", "capsuleModalTitle", "capsuleModalMessage",
     "capsulePassphraseInput", "capsuleConfirmField", "capsuleConfirmInput", "capsuleError",
@@ -478,8 +485,6 @@ function bindActions() {
   elements.missionForm.addEventListener("submit", submitMission);
   elements.missionModalClose.addEventListener("click", closeMissionModal);
   elements.missionCancelButton.addEventListener("click", closeMissionModal);
-  elements.missionKindInput.addEventListener("change", renderMissionExecutionBoundary);
-  elements.missionExecutionInput.addEventListener("change", renderMissionExecutionBoundary);
   elements.missionModal.addEventListener("click", (event) => {
     if (event.target === elements.missionModal) closeMissionModal();
   });
@@ -3697,32 +3702,24 @@ async function updateProject(project, changes, button) {
   }
 }
 
+// What the one-sentence form does not ask: the Project context it was opened from, the kind a
+// template chose, and a channel choice carried over from a plan the user is editing. None of it
+// is a field; the user types the goal and presses Start.
+const missionDraft = { projectId: "", missionKind: "finite", notifications: null };
+
+function missionExecutionLocation() {
+  // Hosted when the user's AMOS company is connected; otherwise the Mission runs on this computer.
+  return state?.connectionMode === "user" ? "hosted" : "local";
+}
+
 function openMissionModal(project = null) {
-  const projects = Array.isArray(state?.projects?.projects) ? state.projects.projects : [];
-  elements.missionProjectInput.replaceChildren();
-  const none = document.createElement("option");
-  none.value = "";
-  none.textContent = "No Project";
-  elements.missionProjectInput.append(none);
-  for (const item of projects.filter((candidate) => !candidate.archived)) {
-    const option = document.createElement("option");
-    option.value = item.id;
-    option.textContent = item.name;
-    elements.missionProjectInput.append(option);
-  }
-  elements.missionProjectInput.value = project?.id || "";
+  missionDraft.projectId = project?.id || "";
+  missionDraft.missionKind = "finite";
+  missionDraft.notifications = null;
   elements.missionObjectiveInput.value = "";
-  elements.missionKindInput.value = "finite";
-  elements.missionCheckpointInput.value = String(state?.settings?.autonomousCheckpointMinutes ?? 0);
-  const hosted = elements.missionExecutionInput.querySelector('option[value="hosted"]');
-  hosted.disabled = state?.connectionMode !== "user";
-  elements.missionExecutionInput.value = hosted.disabled ? "local" : "hosted";
   elements.missionModalError.textContent = "";
   elements.missionModalError.classList.add("hidden");
-  // Channel defaults come from the user's saved notification preferences; unconfigured channels
-  // render disabled with a Settings link rather than being sent silently.
-  renderMissionChannelChoices(defaultMissionChannels(state?.notificationPreferences));
-  renderMissionExecutionBoundary();
+  renderMissionModalContext();
   elements.missionModal.classList.remove("hidden");
   elements.missionObjectiveInput.focus();
 }
@@ -3734,44 +3731,40 @@ function closeMissionModal() {
   elements.missionModalError.classList.add("hidden");
 }
 
-function renderMissionExecutionBoundary() {
-  const optimization = elements.missionKindInput.value === "optimization";
-  const localOption = elements.missionExecutionInput.querySelector('option[value="local"]');
-  localOption.disabled = optimization;
-  if (optimization) elements.missionExecutionInput.value = "hosted";
-  const local = elements.missionExecutionInput.value === "local";
-  elements.missionCheckpointField.classList.toggle("hidden", !local);
-  // Notification channels are a hosted finite-Mission contract (create_mission notifications).
-  elements.missionChannelsField.classList.toggle("hidden", local || optimization);
-  elements.missionBoundaryNote.textContent = optimization
-    ? "Optimization Missions run in AMOS Platform. AMOS will infer a measurable goal contract, cadence, bounded actions, and proof, then show the exact authority change for approval."
-    : local
-    ? "This Mission runs in Desktop and pauses if the app quits. It uses current intelligence, local approvals, and the selected Project's context and dollar cap when present."
-    : "Hosted Missions keep running in AMOS Platform. AMOS will infer a finite Run Contract and show its exact limits for approval before execution.";
+function renderMissionModalContext() {
+  const projects = Array.isArray(state?.projects?.projects) ? state.projects.projects : [];
+  const project = projects.find((item) => item.id === missionDraft.projectId) || null;
+  const notes = [];
+  if (project) notes.push(`Uses what AMOS knows from the ${project.name} Project.`);
+  if (missionExecutionLocation() === "local") {
+    notes.push("Runs on this computer until you connect your AMOS company; it pauses if the app quits.");
+  }
+  elements.missionModalContext.textContent = notes.join(" ");
+  elements.missionModalContext.classList.toggle("hidden", notes.length === 0);
 }
 
 async function submitMission(event) {
   event.preventDefault();
-  const projectId = elements.missionProjectInput.value;
   const objective = elements.missionObjectiveInput.value.trim();
-  const missionKind = elements.missionKindInput.value;
-  const executionLocation = elements.missionExecutionInput.value;
-  const researchCheckpointMinutes = Number(elements.missionCheckpointInput.value);
-  const hostedFinite = executionLocation === "hosted" && missionKind === "finite";
-  const notifications = hostedFinite ? missionChannelChoiceFromForm() : null;
-  if (hostedFinite && !notifications) {
-    elements.missionModalError.textContent = "Choose at least one place to send Mission updates.";
+  if (!objective) {
+    elements.missionModalError.textContent = "Say what you want done.";
     elements.missionModalError.classList.remove("hidden");
+    elements.missionObjectiveInput.focus();
     return;
   }
+  const executionLocation = missionExecutionLocation();
+  const missionKind = missionDraft.missionKind;
+  const notifications = executionLocation === "hosted" && missionKind === "finite"
+    ? normalizeMissionNotificationChoice(missionDraft.notifications)
+    : null;
   setButtonBusy(elements.missionSubmitButton, true, "Starting…");
   try {
     const response = await api.startMission({
-      projectId,
+      projectId: missionDraft.projectId,
       objective,
       missionKind,
       executionLocation,
-      researchCheckpointMinutes,
+      researchCheckpointMinutes: Number(state?.settings?.autonomousCheckpointMinutes ?? 0),
       ...(notifications ? { notifications } : {})
     });
     if (response.state) Object.assign(state, response.state);
@@ -3786,13 +3779,14 @@ async function submitMission(event) {
     // Missions control center and never opens Operator.
     showView("missions");
     toast(executionLocation === "hosted"
-      ? "AMOS is compiling the Run Contract. Review and authorize it here when it is ready."
-      : "Local Mission started. Progress and questions live in Missions.");
+      ? "AMOS is working out the plan. You'll start it here when it's ready."
+      : "Mission started on this computer. Progress and questions live in Missions.");
   } catch (error) {
+    // Desktop's own refusals are already plain English (and may point at Settings); show them whole.
     elements.missionModalError.textContent = error.message;
     elements.missionModalError.classList.remove("hidden");
   } finally {
-    setButtonBusy(elements.missionSubmitButton, false, "Create Mission →");
+    setButtonBusy(elements.missionSubmitButton, false, "Start →");
   }
 }
 
@@ -4116,9 +4110,8 @@ function renderMissionTemplates() {
     card.append(eyebrow, title, detail);
     card.addEventListener("click", () => {
       openMissionModal();
-      elements.missionKindInput.value = template.kind === "optimization" ? "optimization" : "finite";
+      missionDraft.missionKind = template.kind === "optimization" ? "optimization" : "finite";
       elements.missionObjectiveInput.value = template.objective;
-      renderMissionExecutionBoundary();
       elements.missionObjectiveInput.focus();
     });
     elements.missionTemplateList.append(card);
@@ -4163,7 +4156,7 @@ function missionCard(mission) {
   objective.textContent = mission.objective;
   const progress = document.createElement("p");
   progress.className = "mission-progress";
-  progress.textContent = missionStatusExplanation(mission);
+  progress.textContent = missionSummaryLine(mission);
   const currentStep = latestMissionStep(mission);
   const step = document.createElement("p");
   step.className = "mission-current-step";
@@ -4179,8 +4172,8 @@ function missionCard(mission) {
     }
   } else if (mission.source === "optimization") {
     for (const label of [
-      mission.metric ? `Metric · ${mission.metric}` : "Metric not connected",
-      mission.cadence ? `Cadence · ${mission.cadence}` : "Cadence pending",
+      mission.metric ? `Measuring · ${mission.metric}` : "Nothing measured yet",
+      mission.cadence ? `Every ${mission.cadence}` : "Cadence pending",
       `${mission.cycles || 0} learning cycle${mission.cycles === 1 ? "" : "s"}`,
       mission.latestValue ? `Latest · ${mission.latestValue}` : "Awaiting measurement"
     ]) {
@@ -4315,16 +4308,25 @@ async function toggleMissionDetail(mission, button, panel) {
   }
 }
 
+// "212 of 500 so far, 140 credits used, about three hours in · Paused until you answer." The
+// status-text line comes first; the plain-English reason follows only when there is one to add.
+function missionSummaryLine(mission) {
+  const line = missionProgressLine(mission);
+  if (!line) return missionStatusExplanation(mission);
+  const plainlyWorking = ["running", "active"].includes(mission.status) && !mission.statusReason;
+  return plainlyWorking ? line : `${line} · ${missionStatusExplanation(mission)}`;
+}
+
 function missionStatusExplanation(mission) {
   if (mission.statusReason) return mission.statusReason;
   switch (mission.status) {
     case "waiting_decision":
       return "Paused until you answer its open question. Nothing runs in the meantime.";
     case "authorized":
-      return "Authorized. The hosted worker will start inside the approved Run Contract.";
+      return "Approved. AMOS is about to start.";
     case "running":
     case "active":
-      return "Working inside its Run Contract. Progress and proof are recorded here.";
+      return "Working. Progress and proof are recorded here.";
     case "paused":
       return "Paused. Completed actions are kept; resume when you are ready.";
     case "failed":
@@ -4364,22 +4366,21 @@ function openMissionDecisions(mission) {
 }
 
 function missionLimitChips(mission) {
-  const contract = mission.contract || {};
-  const chips = [
-    `${contract.usedToolCalls || 0} / ${contract.maxToolCalls || "—"} tool calls`,
-    `${formatUsdMicros(contract.usedCostMicrousd)} / ${formatUsdMicros(contract.maxCostMicrousd)} cost`
-  ];
-  if (contract.maxProviderCredits) {
-    chips.push(`${contract.usedProviderCredits || 0} / ${contract.maxProviderCredits} provider credits`);
+  const limits = mission.contract || {};
+  const chips = [];
+  if (limits.maxProviderCredits) {
+    chips.push(`${limits.usedProviderCredits || 0} of ${limits.maxProviderCredits} credits`);
   }
-  if (contract.maxWallTimeSeconds) {
-    chips.push(`${missionDuration(contract.maxWallTimeSeconds)} wall-time limit`);
+  if (limits.maxCostMicrousd) {
+    chips.push(`${formatUsdMicros(limits.usedCostMicrousd)} of ${formatUsdMicros(limits.maxCostMicrousd)} spent`);
   }
-  chips.push(contract.expiresAt ? `Expires ${relativeTime(contract.expiresAt)}` : "Bounded Run Contract");
+  if (limits.maxToolCalls) chips.push(`${limits.usedToolCalls || 0} of ${limits.maxToolCalls} actions`);
+  if (limits.maxWallTimeSeconds) chips.push(`Stops after ${missionDuration(limits.maxWallTimeSeconds)}`);
+  if (limits.expiresAt) chips.push(`Expires ${relativeTime(limits.expiresAt)}`);
   const questions = openMissionDecisions(mission).length;
   if (questions > 0) chips.push(`${questions} open question${questions === 1 ? "" : "s"}`);
   const decided = Array.isArray(mission.decisions) ? mission.decisions.length : 0;
-  if (decided > 0) chips.push(`${decided} human decision${decided === 1 ? "" : "s"}`);
+  if (decided > 0) chips.push(`${decided} decision${decided === 1 ? "" : "s"} made`);
   return chips;
 }
 
@@ -4415,7 +4416,7 @@ function trackMissionCompile(response) {
   missionCompiles.set(taskId, {
     taskId,
     runId: String(response.runId || ""),
-    projectId: String(response.projectId || elements.missionProjectInput.value || ""),
+    projectId: String(response.projectId || missionDraft.projectId || ""),
     objective: String(response.objective || elements.missionObjectiveInput.value || "").trim(),
     missionKind: response.missionKind === "optimization" ? "optimization" : "finite",
     notifications: normalizeMissionNotificationChoice(response.notifications),
@@ -4517,53 +4518,52 @@ function missionCompilePresentation(compile) {
   const run = compile.run;
   const outcome = compile.outcome;
   if (outcome?.kind === "failed") {
+    // One sentence and an "Edit goal" action; the user's words stay in the text box.
     return {
       tone: "attention",
-      status: "NEEDS CHANGES",
+      status: "NEEDS A CLEARER GOAL",
       statusClass: "waiting",
-      progress: `${outcome.message || "The compiler could not turn this outcome into a Run Contract."} ` +
-        "Edit the outcome and retry.",
+      progress: missionCompileProblem(outcome.message),
       actions: ["retry", "details", "dismiss"]
     };
   }
   if (outcome?.kind === "ended") {
     return {
       tone: "attention",
-      status: "COMPILE ENDED",
+      status: "PLANNING ENDED",
       statusClass: "failed",
       progress: outcome.message
-        ? `The compile run ended without creating a Mission. Last error: ${outcome.message}`
-        : "The compile run ended without creating a Mission.",
+        ? `AMOS stopped planning before a Mission was created. Last error: ${outcome.message}`
+        : "AMOS stopped planning before a Mission was created.",
       actions: ["retry", "details", "dismiss"]
     };
   }
   if (outcome?.kind === "pending_approval") {
     return {
       tone: "running",
-      status: "RUN CONTRACT PROPOSED",
+      status: "WAITING FOR YOUR OK",
       statusClass: "waiting",
-      progress: "The compiler proposed a Run Contract. Waiting for the authorization request to sync…",
+      progress: "The plan is ready. Waiting for the approval request to sync…",
       actions: run ? ["stop"] : []
     };
   }
   if (outcome?.kind === "compiled") {
-    // Dry run finished: nothing has started. The user reviews the contract and starts it here.
+    // Dry run finished: nothing has started. The plan below is the whole review; a guessed budget
+    // is the one question, asked inline by the Start button.
     return {
       tone: outcome.requiresConfirmation ? "attention" : "ready",
-      status: outcome.requiresConfirmation ? "CONFIRM LIMITS TO START" : "RUN CONTRACT READY",
+      status: outcome.requiresConfirmation ? "ONE THING TO CHECK" : "READY TO START",
       statusClass: outcome.requiresConfirmation ? "waiting" : "authorized",
-      progress: outcome.requiresConfirmation
-        ? "AMOS guessed at least one budget you never stated (flagged below). Adjust or confirm it, then start the Mission. Nothing has started yet."
-        : (outcome.aiNextStep || "AMOS compiled this Run Contract from your outcome. Nothing has started yet; review it and start the Mission."),
-      actions: ["start", "details", "discard"]
+      progress: "Here's the plan. Nothing has started yet.",
+      actions: ["start", "discard"]
     };
   }
   if (run) {
     return {
       tone: "running",
-      status: "COMPILING",
+      status: "PLANNING",
       statusClass: "running",
-      progress: run.summary || "Translating the outcome into a governed Run Contract…",
+      progress: run.summary || "Working out the plan…",
       actions: ["stop"]
     };
   }
@@ -4572,57 +4572,132 @@ function missionCompilePresentation(compile) {
   if (stale) {
     return {
       tone: "attention",
-      status: "COMPILE ENDED",
+      status: "PLANNING ENDED",
       statusClass: "failed",
-      progress: "The compile run ended without creating a Mission. Desktop did not receive a compile result.",
+      progress: "AMOS stopped planning before a Mission was created. Desktop did not receive a result.",
       actions: ["retry", "details", "dismiss"]
     };
   }
   return {
     tone: "running",
-    status: "COMPILING",
+    status: "PLANNING",
     statusClass: "running",
-    progress: "Compile finished. Waiting for the compile result to sync…",
+    progress: "Planning finished. Waiting for the result to sync…",
     actions: []
   };
 }
 
-function missionCompileContract(contract) {
-  if (!contract || typeof contract !== "object") return null;
-  const rows = [];
-  if (contract.objective) rows.push(["Outcome", contract.objective]);
-  if (Array.isArray(contract.operations) && contract.operations.length > 0) {
-    rows.push(["Operations", contract.operations.join(", ")]);
+/**
+ * The plan card: what AMOS will do, using what, where it stops, and where updates go, as
+ * sentences. A limit AMOS guessed says so and can be tapped to change; channels default to the
+ * saved preferences with a "change" link that reveals the picker. Everything the compiler bound
+ * beyond that sits behind a collapsed "Details for the curious" disclosure.
+ */
+function missionPlanCard(compile, outcome, { interactive = true } = {}) {
+  const notifications = normalizeMissionNotificationChoice(
+    outcome?.spec?.notifications || outcome?.contract?.notifications || compile.notifications
+  ) || { channels: defaultMissionChannels(state?.notificationPreferences) };
+  const copy = missionPlanCopy({
+    objective: compile.objective,
+    contract: outcome?.contract,
+    notifications,
+    aiNextStep: outcome?.aiNextStep
+  });
+  const root = document.createElement("div");
+  root.className = "mission-plan";
+  root.dataset.missionPlan = "true";
+  const goal = document.createElement("p");
+  goal.className = "mission-plan-goal";
+  goal.textContent = copy.using ? `${copy.goal} ${copy.using}` : copy.goal;
+  root.append(goal);
+  if (copy.limits.length > 0) {
+    const limits = document.createElement("ul");
+    limits.className = "mission-plan-limits";
+    for (const limit of copy.limits) limits.append(missionPlanLimitRow(limit, root, { interactive }));
+    root.append(limits);
   }
-  const limits = contract.effectiveLimits && typeof contract.effectiveLimits === "object"
-    ? Object.entries(contract.effectiveLimits)
-    : [];
-  if (limits.length > 0) {
-    const sources = contract.limitSources && typeof contract.limitSources === "object"
-      ? contract.limitSources
-      : {};
-    rows.push(["Effective limits", limits
-      .map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}${sources[key] ? ` (${sources[key]})` : ""}`)
-      .join(" · ")]);
+  const updates = document.createElement("p");
+  updates.className = "mission-plan-updates";
+  const updatesText = document.createElement("span");
+  updatesText.textContent = copy.updates;
+  updates.append(updatesText);
+  root.append(updates);
+  if (interactive) {
+    const change = document.createElement("button");
+    change.type = "button";
+    change.className = "mission-plan-link";
+    change.textContent = "change";
+    const picker = missionChannelPicker(notifications, { name: `plan-channel-${compile.taskId}` });
+    picker.root.classList.add("mission-plan-channels", "hidden");
+    picker.root.dataset.planChannels = "true";
+    picker.onChange(() => {
+      const chosen = picker.read();
+      updatesText.textContent = chosen
+        ? `Updates go to ${missionChannelsPhrase(chosen)}.`
+        : "Choose at least one place for updates.";
+    });
+    change.addEventListener("click", () => {
+      picker.root.classList.toggle("hidden");
+      change.textContent = picker.root.classList.contains("hidden") ? "change" : "done";
+    });
+    updates.append(" ", change);
+    root.append(picker.root);
   }
-  if (Array.isArray(contract.prohibitions) && contract.prohibitions.length > 0) {
-    rows.push(["Prohibitions", contract.prohibitions.join(", ")]);
+  if (copy.details.length > 0) root.append(missionPlanDetails(copy.details));
+  return root;
+}
+
+function missionPlanLimitRow(limit, card, { interactive }) {
+  const item = document.createElement("li");
+  item.className = `mission-plan-limit ${limit.guessed ? "guessed" : "stated"}`;
+  item.dataset.limitKey = limit.key;
+  if (!limit.guessed || !limit.editable || !interactive) {
+    item.textContent = limit.sentence;
+    return item;
   }
-  if (Array.isArray(contract.boundResources) && contract.boundResources.length > 0) {
-    rows.push(["Bound resources", contract.boundResources.join(", ")]);
-  }
-  const admission = contract.admission && typeof contract.admission === "object"
-    ? Object.entries(contract.admission)
-    : [];
-  if (admission.length > 0) {
-    rows.push(["Admission", admission.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · ")]);
-  }
-  const updates = missionChannelsLabel(contract.notifications);
-  if (updates) rows.push(["Updates", updates]);
-  if (contract.expiresAt) rows.push(["Expires", relativeTime(contract.expiresAt)]);
-  if (rows.length === 0) return null;
+  // "AMOS picked a 300-credit ceiling because you didn't name one — tap to change": the sentence
+  // is the button; tapping swaps in the inline number field.
+  const tap = document.createElement("button");
+  tap.type = "button";
+  tap.className = "mission-plan-limit-tap";
+  tap.textContent = limit.sentence;
+  const editor = document.createElement("label");
+  editor.className = "mission-plan-limit-editor hidden";
+  const lead = document.createElement("span");
+  lead.textContent = limit.key === "max_cost_microusd" ? "Spend no more than $" : "Stop at";
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = String(MISSION_LIMIT_FIELDS[limit.key].step);
+  input.step = String(MISSION_LIMIT_FIELDS[limit.key].step);
+  input.value = limit.inputValue;
+  input.dataset.limitKey = limit.key;
+  input.dataset.limitScale = String(MISSION_LIMIT_FIELDS[limit.key].scale);
+  input.dataset.limitOriginal = String(Number(limit.value));
+  input.setAttribute("aria-label", `${limit.label} in ${limit.unit}`);
+  const unit = document.createElement("span");
+  unit.textContent = limit.key === "max_cost_microusd" ? "" : limit.unit;
+  editor.append(lead, input, unit);
+  input.addEventListener("input", () => {
+    const start = card.closest(".mission-compile-card")?.querySelector("[data-mission-start]");
+    if (start && !start.disabled) start.textContent = missionPlanStartLabel(card.closest(".mission-compile-card"));
+  });
+  tap.addEventListener("click", () => {
+    tap.classList.add("hidden");
+    editor.classList.remove("hidden");
+    input.focus();
+    input.select();
+  });
+  item.append(tap, editor);
+  return item;
+}
+
+function missionPlanDetails(rows) {
+  const details = document.createElement("details");
+  details.className = "mission-plan-details";
+  const summary = document.createElement("summary");
+  summary.textContent = "Details for the curious";
   const list = document.createElement("dl");
-  list.className = "mission-contract";
+  list.className = "mission-plan-facts";
   for (const [label, value] of rows) {
     const term = document.createElement("dt");
     term.textContent = label;
@@ -4630,133 +4705,21 @@ function missionCompileContract(contract) {
     detail.textContent = String(value).slice(0, 600);
     list.append(term, detail);
   }
-  return list;
+  details.append(summary, list);
+  return details;
 }
 
-// Limits the user may adjust on a compiled Run Contract, shown in human units and sent back in
-// the Platform's units.
-const MISSION_LIMIT_FIELDS = Object.freeze({
-  max_provider_credits: { label: "Provider credits", unit: "credits", scale: 1, step: 1 },
-  max_cost_microusd: { label: "Spend", unit: "USD", scale: 1_000_000, step: 0.01 },
-  max_wall_time_seconds: { label: "Wall time", unit: "minutes", scale: 60, step: 1 },
-  max_tool_calls: { label: "Tool calls", unit: "calls", scale: 1, step: 1 },
-  max_decisions: { label: "Human decisions", unit: "decisions", scale: 1, step: 1 }
-});
-
-function missionLimitDisplay(key, value) {
-  const field = MISSION_LIMIT_FIELDS[key];
-  const number = Number(value);
-  if (!field || !Number.isFinite(number)) return String(value);
-  const scaled = number / field.scale;
-  const text = field.scale === 1_000_000 ? scaled.toFixed(2) : String(Math.round(scaled * 100) / 100);
-  return `${text} ${field.unit}`;
-}
-
-function missionRunContractCard(compile, outcome) {
-  const contract = outcome?.contract || {};
-  const root = document.createElement("div");
-  root.className = "mission-run-contract";
-  const list = document.createElement("dl");
-  list.className = "mission-contract";
-  const addRow = (label, value) => {
-    const term = document.createElement("dt");
-    term.textContent = label;
-    const detail = document.createElement("dd");
-    if (value instanceof Node) detail.append(value);
-    else detail.textContent = String(value).slice(0, 600);
-    list.append(term, detail);
-    return detail;
-  };
-  addRow("Outcome", contract.objective || compile.objective || "—");
-  addRow("Done when", missionCompletionSummary(contract.completionCondition));
-  const groups = contract.operationGroups || {};
-  const grouped = [
-    ["Advancing", groups.advancing],
-    ["Observing", groups.observing],
-    ["Control", groups.control]
-  ].filter(([, verbs]) => Array.isArray(verbs) && verbs.length > 0);
-  if (grouped.length > 0) {
-    const operations = document.createElement("div");
-    operations.className = "mission-operation-groups";
-    for (const [label, verbs] of grouped) {
-      const group = document.createElement("span");
-      group.className = `mission-operation-group ${label.toLowerCase()}`;
-      const name = document.createElement("strong");
-      name.textContent = `${label}: `;
-      group.append(name, document.createTextNode(verbs.map((verb) => humanizeTool(verb)).join(", ")));
-      operations.append(group);
-    }
-    addRow("Operations", operations);
-  } else {
-    addRow("Operations", (contract.operations || []).map((verb) => humanizeTool(verb)).join(", ") || "None supplied");
-  }
-  const limits = contract.effectiveLimits && typeof contract.effectiveLimits === "object"
-    ? Object.entries(contract.effectiveLimits)
-    : [];
-  const sources = contract.limitSources && typeof contract.limitSources === "object" ? contract.limitSources : {};
-  if (limits.length > 0) {
-    const table = document.createElement("div");
-    table.className = "mission-limits";
-    for (const [key, value] of limits) {
-      const source = String(sources[key] || "");
-      const guessed = source === "default";
-      const row = document.createElement("label");
-      row.className = `mission-limit${guessed ? " default" : ""}`;
-      const name = document.createElement("span");
-      name.className = "mission-limit-name";
-      name.textContent = MISSION_LIMIT_FIELDS[key]?.label || key.replaceAll("_", " ");
-      const origin = document.createElement("span");
-      origin.className = `mission-limit-source${guessed ? " default" : ""}`;
-      origin.textContent = guessed ? "AMOS guessed · confirm or edit" : source ? `from ${source.replaceAll("_", " ")}` : "";
-      row.append(name);
-      if (guessed && MISSION_LIMIT_FIELDS[key]) {
-        const field = MISSION_LIMIT_FIELDS[key];
-        const input = document.createElement("input");
-        input.type = "number";
-        input.min = String(field.step);
-        input.step = String(field.step);
-        input.value = field.scale === 1_000_000
-          ? (Number(value) / field.scale).toFixed(2)
-          : String(Number(value) / field.scale);
-        input.dataset.limitKey = key;
-        input.dataset.limitScale = String(field.scale);
-        input.dataset.limitOriginal = String(Number(value));
-        input.setAttribute("aria-label", `${field.label} in ${field.unit}`);
-        const unit = document.createElement("span");
-        unit.className = "mission-limit-unit";
-        unit.textContent = field.unit;
-        row.append(input, unit);
-      } else {
-        const shown = document.createElement("span");
-        shown.className = "mission-limit-value";
-        shown.textContent = missionLimitDisplay(key, value);
-        row.append(shown);
-      }
-      row.append(origin);
-      table.append(row);
-    }
-    addRow("Effective limits", table);
-  }
-  if (Array.isArray(contract.prohibitions) && contract.prohibitions.length > 0) {
-    addRow("Prohibitions", contract.prohibitions.map((verb) => humanizeTool(verb)).join(", "));
-  }
-  if (Array.isArray(contract.boundResources) && contract.boundResources.length > 0) {
-    addRow("Bound resources", contract.boundResources.join(", "));
-  }
-  const admission = contract.admission && typeof contract.admission === "object"
-    ? Object.entries(contract.admission)
-    : [];
-  if (admission.length > 0) {
-    addRow("Admission", admission.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · "));
-  }
-  // "Updates: In-app, SMS" — the channel choice that rides on create_mission with this contract.
-  const updates = missionChannelsLabel(
-    outcome?.spec?.notifications || contract.notifications || compile.notifications
-  );
-  if (updates) addRow("Updates", updates);
-  if (contract.contractSha256) addRow("Contract digest", contract.contractSha256.slice(0, 16));
-  root.append(list);
-  return root;
+// Live Start label: "Start with a 300-credit limit" follows the guessed field as the user edits it.
+function missionPlanStartLabel(card) {
+  const guessed = [...(card?.querySelectorAll(".mission-plan-limit.guessed input[data-limit-key]") || [])]
+    .map((input) => ({
+      key: input.dataset.limitKey,
+      value: Math.round(Number(input.value) * Number(input.dataset.limitScale || 1))
+    }))
+    .filter((limit) => Number.isFinite(limit.value) && limit.value > 0);
+  if (guessed.length > 0) return missionStartLabel(guessed);
+  const flagged = [...(card?.querySelectorAll(".mission-plan-limit.guessed") || [])].length;
+  return flagged > 1 ? "Start with these limits" : "Start";
 }
 
 function missionLimitEditsFrom(card) {
@@ -4772,32 +4735,56 @@ function missionLimitEditsFrom(card) {
   return limits;
 }
 
+// The channel choice from the plan card's picker when the user opened it; null means "unchanged".
+function missionPlanChannelEdits(card, current) {
+  const picker = card.querySelector("[data-plan-channels]");
+  if (!picker) return null;
+  const chosen = normalizeMissionNotificationChoice({
+    channels: chosenChannelsIn(picker),
+    discord_target: picker.querySelector("input[data-discord-target]")?.value.trim() || ""
+  });
+  if (!chosen) throw new Error("Choose at least one place to send Mission updates");
+  const same = JSON.stringify(chosen) === JSON.stringify(normalizeMissionNotificationChoice(current));
+  return same ? null : chosen;
+}
+
 async function startCompiledMission(compile, card, button) {
   let limits;
+  let notifications;
   try {
     limits = missionLimitEditsFrom(card);
+    notifications = missionPlanChannelEdits(
+      card,
+      compile.outcome?.spec?.notifications || compile.outcome?.contract?.notifications || compile.notifications
+    );
   } catch (error) {
     toast(error.message, true);
     return;
   }
-  setButtonBusy(button, true, Object.keys(limits).length > 0 ? "Re-compiling…" : "Starting…");
+  const label = button.textContent;
+  setButtonBusy(button, true, Object.keys(limits).length > 0 || notifications ? "Updating the plan…" : "Starting…");
   try {
-    // Edited limits re-run the dry run inside the controller so the confirmation token matches the
-    // new contract digest; the outcome then flows through the same correlation record.
-    const response = await api.startCompiledMission({ builderTaskId: compile.taskId, limits });
+    // Edited limits or channels re-run the dry run inside the controller so the confirmation
+    // token matches the new plan; the outcome then flows through the same correlation record.
+    const response = await api.startCompiledMission({
+      builderTaskId: compile.taskId,
+      limits,
+      ...(notifications ? { notifications } : {})
+    });
     if (Array.isArray(response?.missionCompiles)) state.missionCompiles = response.missionCompiles;
     if (response?.missions) state.missions = response.missions;
     const outcome = response?.outcome;
     if (outcome?.kind === "pending_approval") {
-      toast("Run Contract proposed. Authorize it here in Missions when it syncs.");
+      toast("Plan sent for approval. Approve it here in Missions when it syncs.");
     } else if (outcome?.kind === "compiled") {
-      toast("AMOS re-compiled the Run Contract. Confirm the limits to start the Mission.");
+      toast("AMOS updated the plan. Check the limit, then start the Mission.");
     } else if (outcome?.kind === "failed") {
-      toast(outcome.message || "AMOS could not create the Mission", true);
+      toast(missionCompileProblem(outcome.message), true);
     }
     renderMissions();
   } catch (error) {
-    toast(error.message, true);
+    toast(missionCompileProblem(error.message), true);
+    if (button.isConnected) setButtonBusy(button, false, label);
     renderMissions();
   }
 }
@@ -4808,16 +4795,12 @@ function retryMissionCompile(compile) {
   missionCompiles.delete(compile.taskId);
   renderMissions();
   openMissionModal(project);
+  // The user's own words come back untouched, with the plan's channel choice carried along.
+  missionDraft.missionKind = compile.missionKind;
+  missionDraft.notifications = normalizeMissionNotificationChoice(compile.notifications);
   elements.missionObjectiveInput.value = compile.objective;
-  elements.missionKindInput.value = compile.missionKind;
-  const hosted = elements.missionExecutionInput.querySelector('option[value="hosted"]');
-  if (!hosted?.disabled) elements.missionExecutionInput.value = "hosted";
-  if (compile.notifications?.channels) {
-    renderMissionChannelChoices(compile.notifications.channels, compile.notifications.discord_target || "");
-  }
-  renderMissionExecutionBoundary();
   if (compile.outcome?.message) {
-    elements.missionModalError.textContent = compile.outcome.message;
+    elements.missionModalError.textContent = missionCompileProblem(compile.outcome.message);
     elements.missionModalError.classList.remove("hidden");
   }
   elements.missionObjectiveInput.focus();
@@ -4841,54 +4824,59 @@ function missionCompileCard(compile) {
   const location = document.createElement("span");
   location.className = "task-lineage-chip current";
   location.textContent = "AMOS HOSTED";
-  const kind = document.createElement("span");
-  kind.className = "task-lineage-chip";
-  kind.textContent = compile.missionKind === "optimization" ? "OPTIMIZATION" : "FINITE";
-  meta.append(status, location, kind);
+  meta.append(status, location);
+  if (compile.missionKind === "optimization") {
+    const kind = document.createElement("span");
+    kind.className = "task-lineage-chip";
+    kind.textContent = "KEEPS IMPROVING";
+    meta.append(kind);
+  }
   const title = document.createElement("h2");
-  title.textContent = compile.objective.slice(0, 120) || "New Mission";
+  // The name comes from the goal's first clause until the compiler names it.
+  title.textContent = compile.outcome?.contract?.name || compile.outcome?.missionName ||
+    missionNameFromObjective(compile.objective);
   copy.append(meta, title);
   const when = document.createElement("time");
   when.textContent = relativeTime(compile.startedAt);
   heading.append(copy, when);
+  const objective = document.createElement("p");
+  objective.className = "task-card-objective";
+  objective.textContent = compile.objective;
   const progress = document.createElement("p");
   progress.className = "mission-progress";
   progress.textContent = view.progress;
-  const details = document.createElement("div");
-  details.className = "task-card-details";
-  for (const label of ["Run Contract compile", "Internal evidence · not a conversation"]) {
-    const chip = document.createElement("span");
-    chip.textContent = label;
-    details.append(chip);
-  }
-  const contract = compile.outcome?.kind === "compiled"
-    ? missionRunContractCard(compile, compile.outcome)
-    : missionCompileContract(compile.outcome?.contract);
+  const plan = compile.outcome?.kind === "compiled"
+    ? missionPlanCard(compile, compile.outcome)
+    : compile.outcome?.contract
+      ? missionPlanCard(compile, compile.outcome, { interactive: false })
+      : null;
   const actions = document.createElement("div");
   actions.className = "task-card-actions";
   const builderTask = (state?.tasks?.tasks || []).find((task) => task.id === compile.taskId);
   for (const action of view.actions) {
     if (action === "stop" && run) {
-      const stop = actionButton("Stop compile", "ghost");
+      const stop = actionButton("Stop planning", "ghost");
       stop.addEventListener("click", async () => {
         setButtonBusy(stop, true, "Stopping…");
         try {
           await api.cancelTask(run.id);
           missionCompiles.delete(compile.taskId);
-          toast("Mission compile stopped. No Run Contract was proposed.");
+          toast("Planning stopped. Nothing was started.");
           renderMissions();
         } catch (error) {
           toast(error.message, true);
-          if (stop.isConnected) setButtonBusy(stop, false, "Stop compile");
+          if (stop.isConnected) setButtonBusy(stop, false, "Stop planning");
         }
       });
       actions.append(stop);
     } else if (action === "retry") {
-      const retry = actionButton("Edit and retry", "primary");
+      const retry = actionButton("Edit goal", "primary");
       retry.addEventListener("click", () => retryMissionCompile(compile));
       actions.append(retry);
     } else if (action === "start") {
-      const start = actionButton("Start Mission", "primary");
+      // The one question, when there is one: "Start with a 300-credit limit".
+      const start = actionButton("Start", "primary");
+      start.dataset.missionStart = "true";
       start.addEventListener("click", () => startCompiledMission(compile, card, start));
       actions.append(start);
     } else if (action === "discard") {
@@ -4896,12 +4884,12 @@ function missionCompileCard(compile) {
       discard.addEventListener("click", () => {
         dismissedMissionCompiles.add(compile.taskId);
         missionCompiles.delete(compile.taskId);
-        toast("Run Contract discarded. Nothing was started.");
+        toast("Plan discarded. Nothing was started.");
         renderMissions();
       });
       actions.append(discard);
     } else if (action === "details" && builderTask) {
-      const open = actionButton("Open compile details", "secondary");
+      const open = actionButton("See how AMOS planned this", "secondary");
       open.addEventListener("click", () => openManagedTask(builderTask, open));
       actions.append(open);
     } else if (action === "dismiss") {
@@ -4913,21 +4901,23 @@ function missionCompileCard(compile) {
       actions.append(dismiss);
     }
   }
-  card.append(heading, progress);
-  if (contract) card.append(contract);
-  card.append(details, actions);
+  card.append(heading, objective, progress);
+  if (plan) card.append(plan);
+  card.append(actions);
+  const start = actions.querySelector("[data-mission-start]");
+  if (start) start.textContent = missionPlanStartLabel(card);
   return card;
 }
 
 function missionAuthorizationCard(approval) {
-  // The effective Run Contract is reviewed and authorized here, inside Missions.
+  // The plan is reviewed and approved here, inside Missions.
   const card = decisionCard(approval, true);
   card.classList.add("mission-authorization");
   card.dataset.missionApprovalId = approval.id;
   if (approval.id === focusedMissionApprovalId) card.classList.add("focused");
   const eyebrow = document.createElement("span");
   eyebrow.className = "eyebrow warning";
-  eyebrow.textContent = "RUN CONTRACT · WAITING FOR YOUR AUTHORIZATION";
+  eyebrow.textContent = "WAITING FOR YOUR OK";
   card.querySelector(".decision-content")?.prepend(eyebrow);
   return card;
 }
@@ -4983,7 +4973,7 @@ function renderMissionActivity(mission, container) {
   const questions = openMissionDecisions(mission);
   if (questions.length > 0) {
     const questionsHeading = document.createElement("strong");
-    questionsHeading.textContent = "Open questions and authority changes";
+    questionsHeading.textContent = "Open questions";
     const questionList = document.createElement("div");
     questionList.className = "mission-open-questions";
     for (const decision of questions) questionList.append(missionDecisionCard(decision));
@@ -4991,8 +4981,17 @@ function renderMissionActivity(mission, container) {
   }
   if (mission.source === "hosted") {
     const limitsHeading = document.createElement("strong");
-    limitsHeading.textContent = "Progress against effective limits";
+    limitsHeading.textContent = "Where it stands";
     const limits = document.createElement("ul");
+    const line = missionProgressLine(mission);
+    if (line) {
+      const item = document.createElement("li");
+      const summary = document.createElement("span");
+      summary.className = "mission-progress-line";
+      summary.textContent = line;
+      item.append(summary);
+      limits.append(item);
+    }
     for (const label of missionLimitChips(mission)) {
       const item = document.createElement("li");
       const summary = document.createElement("span");
@@ -8602,7 +8601,7 @@ function missionDecisionCard(decision, { inline = false } = {}) {
     textarea.required = !hasOptions;
     textarea.placeholder = hasOptions
       ? "Only add context if AMOS should handle the retry differently…"
-      : "Answer in plain English. AMOS will continue inside the unchanged Run Contract…";
+      : "Answer in plain English. AMOS will continue inside the same limits…";
     textarea.value = missionDecisionDrafts.get(decision.id) || "";
     textarea.addEventListener("input", () => {
       missionDecisionDrafts.set(decision.id, textarea.value);
@@ -8799,7 +8798,7 @@ function missionAttentionItem(decision, { expanded = false } = {}) {
   }
   const when = document.createElement("small");
   when.textContent = decision.created_at
-    ? `Asked ${relativeTime(decision.created_at)}${authority ? " · needs a replacement Run Contract" : ""}`
+    ? `Asked ${relativeTime(decision.created_at)}${authority ? " · would let the Mission do more than you approved" : ""}`
     : "";
   body.append(when);
   details.append(label, body);
@@ -8853,7 +8852,7 @@ async function answerMissionDecision(decision, answer, button) {
     renderDecisions();
     renderMissions();
     toast(stopped
-      ? `${decision.mission_name || "Mission"} has been stopped and its Run Contract revoked.`
+      ? `${decision.mission_name || "Mission"} has been stopped. Nothing more will run.`
       : `Direction sent. ${decision.mission_name || "The Mission"} is resuming inside its existing authority; completed actions will not be replayed.`);
   } catch (error) {
     toast(error.message, true);
@@ -8980,13 +8979,7 @@ function missionDuration(seconds) {
 }
 
 function missionCompletionSummary(condition) {
-  const kind = String(condition?.kind || "");
-  if (kind === "work_exhausted") return "Complete when the approved work is exhausted";
-  if (kind === "owner_acceptance") return "Complete after owner acceptance";
-  if (kind === "metric_threshold") {
-    return `Complete when ${humanizeTool(String(condition.metric || "metric"))} ${condition.operator || "reaches"} ${condition.target ?? "its target"}`;
-  }
-  return "Completion is checked against the approved Run Contract";
+  return missionCompletionSentence(condition).replace(/\.$/, "");
 }
 
 function missionContractSummary(args) {
@@ -8997,8 +8990,8 @@ function missionContractSummary(args) {
   const safety = document.createElement("strong");
   safety.className = `mission-contract-safety${readOnly ? " read-only" : ""}`;
   safety.textContent = readOnly
-    ? "Read-only authority · no writes"
-    : "Bounded authority · every action still passes AMOS policy";
+    ? "Looks things up only · changes nothing"
+    : "Stays inside the limits below · every action still passes AMOS policy";
   summary.append(safety);
 
   const rows = [
@@ -9154,9 +9147,9 @@ function renderInlineCompanyApproval(approval) {
 }
 
 const MISSION_RECEIPT_STATUS = Object.freeze({
-  pending: "Waiting for approval",
-  approved: "Authorized",
-  denied: "Not authorized"
+  pending: "waiting for your OK",
+  approved: "started",
+  denied: "not approved"
 });
 
 function missionReceiptStatusLabel(status) {
@@ -9169,38 +9162,41 @@ function missionReceiptStatusLabel(status) {
   return `${String(status).replaceAll("_", " ")} in Missions`;
 }
 
+// "Mission started: <name>" once approved; "Mission ready: <name> · waiting for your OK" before.
+function missionReceiptHeadline(name, status) {
+  const label = missionReceiptStatusLabel(status);
+  if (label === MISSION_RECEIPT_STATUS.approved) return `Mission started: ${name}`;
+  if (label === MISSION_RECEIPT_STATUS.denied) return `Mission not approved: ${name}`;
+  return `Mission ready: ${name} · ${label}`;
+}
+
 function updateMissionReceiptStatus(receipt, status) {
   const node = receipt?.querySelector(".mission-receipt-status");
-  if (node) node.textContent = missionReceiptStatusLabel(status);
+  if (node) node.textContent = missionReceiptHeadline(node.dataset.missionName || "Mission", status);
 }
 
 function missionCreationReceipt(approval) {
-  // "Mission created: <name> · Waiting for approval · View Mission"
+  // One line: "Mission started: <name> · updates via SMS · View Mission"
   const receipt = document.createElement("div");
   receipt.className = "message assistant mission-receipt";
   receipt.dataset.approvalId = approval.id;
   const name = String(approval.args?.name || "").trim() ||
-    String(approval.args?.objective || "").trim().slice(0, 120) || "Mission";
+    missionNameFromObjective(approval.args?.objective);
   const line = document.createElement("p");
-  const label = document.createElement("strong");
-  label.textContent = `Mission created: ${name}`;
-  const status = document.createElement("span");
+  const status = document.createElement("strong");
   status.className = "mission-receipt-status";
-  status.textContent = missionReceiptStatusLabel(approval.status);
+  status.dataset.missionName = name;
+  status.textContent = missionReceiptHeadline(name, approval.status);
   const view = document.createElement("button");
   view.type = "button";
   view.className = "mission-receipt-link";
   view.textContent = "View Mission";
   view.addEventListener("click", () => focusMissionApproval(approval.id));
-  line.append(label, " · ", status, " · ", view);
-  // "Updates: In-app, SMS" — the channels create_mission carried for this chat-created Mission.
-  const channels = missionChannelsLabel(approval.args?.notifications);
-  if (channels) {
-    const updates = document.createElement("span");
-    updates.className = "mission-receipt-updates";
-    updates.textContent = `Updates: ${channels}`;
-    line.append(" · ", updates);
-  }
+  // "updates via SMS" — the channels create_mission carried for this chat-created Mission.
+  const updates = document.createElement("span");
+  updates.className = "mission-receipt-updates";
+  updates.textContent = `updates via ${missionChannelsPhrase(approval.args?.notifications)}`;
+  line.append(status, " · ", updates, " · ", view);
   receipt.append(line);
   return receipt;
 }
@@ -9636,38 +9632,58 @@ function missionChannelOption(channel, { checked = false, preferences = null, na
   return option;
 }
 
-function renderMissionChannelChoices(channels = ["in_app"], discordTarget = "") {
+/**
+ * A channel picker (checkboxes plus the Discord target field) for the plan card and Mission
+ * detail. `read()` returns the normalized choice or null when nothing usable is checked.
+ */
+function missionChannelPicker(choice, { name = "mission-channel" } = {}) {
   const preferences = state?.notificationPreferences || null;
-  const chosen = new Set(Array.isArray(channels) && channels.length > 0 ? channels : ["in_app"]);
-  elements.missionChannelOptions.replaceChildren();
+  const normalized = normalizeMissionNotificationChoice(choice);
+  const chosen = new Set(normalized?.channels || defaultMissionChannels(preferences));
+  const root = document.createElement("div");
+  root.className = "mission-channel-editor";
+  const options = document.createElement("div");
+  options.className = "mission-channels";
+  const discordField = document.createElement("label");
+  discordField.className = "mission-discord-target hidden";
+  const discordLabel = document.createElement("span");
+  discordLabel.textContent = "Discord target";
+  const discordInput = document.createElement("input");
+  discordInput.type = "text";
+  discordInput.maxLength = 200;
+  discordInput.dataset.discordTarget = "true";
+  discordInput.value = normalized?.discord_target || preferences?.discordTarget || "";
+  discordField.append(discordLabel, discordInput);
+  const listeners = [];
+  const sync = () => {
+    const discord = options.querySelector('input[data-channel="discord"]');
+    discordField.classList.toggle("hidden", !(discord?.checked && !discord.disabled));
+    for (const listener of listeners) listener();
+  };
   for (const channel of MISSION_NOTIFICATION_CHANNELS) {
-    elements.missionChannelOptions.append(missionChannelOption(channel, {
+    options.append(missionChannelOption(channel, {
       checked: chosen.has(channel),
       preferences,
-      onChange: syncMissionDiscordTargetField
+      name,
+      onChange: sync
     }));
   }
-  elements.missionDiscordTargetInput.value = discordTarget || preferences?.discordTarget || "";
-  syncMissionDiscordTargetField();
-}
-
-function syncMissionDiscordTargetField() {
-  const discord = elements.missionChannelOptions.querySelector('input[data-channel="discord"]');
-  elements.missionDiscordTargetField.classList.toggle("hidden", !(discord?.checked && !discord.disabled));
+  root.append(options, discordField);
+  sync();
+  return {
+    root,
+    read: () => normalizeMissionNotificationChoice({
+      channels: chosenChannelsIn(options),
+      discord_target: discordInput.value.trim()
+    }),
+    onChange: (listener) => listeners.push(listener)
+  };
 }
 
 function chosenChannelsIn(root) {
   return [...root.querySelectorAll("input[data-channel]")]
     .filter((input) => input.checked && !input.disabled)
     .map((input) => input.dataset.channel);
-}
-
-/** `{ channels: ["in_app", "sms"], discord_target? }` from the creation form, or null when nothing is chosen. */
-function missionChannelChoiceFromForm() {
-  return normalizeMissionNotificationChoice({
-    channels: chosenChannelsIn(elements.missionChannelOptions),
-    discord_target: elements.missionDiscordTargetInput.value.trim()
-  });
 }
 
 function missionDeliveryStatusLabel(row) {
@@ -9736,36 +9752,10 @@ function missionNotificationSection(mission, container) {
 
 function renderMissionChannelEditor(editor, mission, container) {
   editor.replaceChildren();
-  const preferences = state?.notificationPreferences || null;
-  const chosen = new Set(mission.notifications?.channels || defaultMissionChannels(preferences));
-  const options = document.createElement("div");
-  options.className = "mission-channels";
-  const discordField = document.createElement("label");
-  discordField.className = "mission-discord-target hidden";
-  const discordLabel = document.createElement("span");
-  discordLabel.textContent = "Discord target";
-  const discordInput = document.createElement("input");
-  discordInput.type = "text";
-  discordInput.maxLength = 200;
-  discordInput.dataset.discordTarget = "true";
-  discordInput.value = mission.notifications?.discord_target || preferences?.discordTarget || "";
-  discordField.append(discordLabel, discordInput);
-  const sync = () => {
-    const discord = options.querySelector('input[data-channel="discord"]');
-    discordField.classList.toggle("hidden", !(discord?.checked && !discord.disabled));
-  };
-  for (const channel of MISSION_NOTIFICATION_CHANNELS) {
-    options.append(missionChannelOption(channel, {
-      checked: chosen.has(channel),
-      preferences,
-      name: `mission-channel-${mission.id}`,
-      onChange: sync
-    }));
-  }
+  const picker = missionChannelPicker(mission.notifications, { name: `mission-channel-${mission.id}` });
   const save = actionButton("Save channels", "primary");
   save.addEventListener("click", () => changeMissionChannels(mission, editor, save, container));
-  editor.append(options, discordField, save);
-  sync();
+  editor.append(...picker.root.childNodes, save);
 }
 
 async function changeMissionChannels(mission, editor, button, container) {

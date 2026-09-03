@@ -1042,7 +1042,7 @@
               <section id="notificationSettingsCard" class="collaboration-profile-card notification-settings-card" aria-labelledby="notificationSettingsTitle">
                 <span class="eyebrow">MISSION UPDATES</span>
                 <h2 id="notificationSettingsTitle">Notifications</h2>
-                <p>Where Mission updates go by default. Each Mission can still choose its own channels when you create it. A phone number must be verified before AMOS texts it; nothing here changes what a Mission is allowed to do.</p>
+                <p>Where Mission updates go. A new Mission uses these; you can change them on its plan before you start it, or on the Mission later. A phone number must be verified before AMOS texts it; nothing here changes what a Mission is allowed to do.</p>
                 <div id="notificationSettingsUnavailable" class="notification-settings-note hidden" role="status"></div>
                 <div id="notificationSettingsBody" class="notification-settings-body">
                   <div class="notification-channel-rows">
@@ -1283,65 +1283,24 @@
     </div>
 
     <div id="missionModal" class="modal-backdrop hidden" role="presentation">
-      <form id="missionForm" class="connection-modal project-modal" role="dialog" aria-modal="true" aria-labelledby="missionModalTitle">
+      <form id="missionForm" class="connection-modal project-modal mission-modal" role="dialog" aria-modal="true" aria-labelledby="missionModalTitle">
         <div class="connection-modal-heading">
           <div>
-            <span class="eyebrow">AUTONOMOUS WORK</span>
-            <h2 id="missionModalTitle">Create a Mission</h2>
-            <p>Describe the outcome. AMOS will infer the safe plan, limits, and verification instead of asking you to write a Run Contract.</p>
+            <span class="eyebrow">MISSION</span>
+            <h2 id="missionModalTitle">New Mission</h2>
+            <p>Say it the way you would to a capable new hire. AMOS works out the plan, the limits, and where to send updates.</p>
           </div>
           <button id="missionModalClose" class="icon-button" type="button" aria-label="Close Mission setup">×</button>
         </div>
-        <label class="connection-field">
-          <span>How should this Mission finish?</span>
-          <select id="missionKindInput">
-            <option value="finite">Complete a defined outcome, then stop</option>
-            <option value="optimization">Continuously improve a measured outcome</option>
-          </select>
-          <small>Both live in Missions. Optimization Missions repeatedly measure, propose, verify, and learn within their approved boundaries.</small>
+        <label class="connection-field mission-goal-field">
+          <span>What do you want done?</span>
+          <textarea id="missionObjectiveInput" maxlength="4000" rows="4" required placeholder="Get me 500 VAR and MSP prospects in the US and Canada, no more than 700 credits"></textarea>
         </label>
-        <label class="connection-field">
-          <span>What outcome should AMOS accomplish?</span>
-          <textarea id="missionObjectiveInput" maxlength="4000" rows="5" required placeholder="Build 500 qualified VAR and MSP prospects, save them in AMOS, verify the list, and do not send outreach."></textarea>
-        </label>
-        <label class="connection-field">
-          <span>Where should it run?</span>
-          <select id="missionExecutionInput">
-            <option value="hosted">AMOS Hosted — continues when this computer sleeps</option>
-            <option value="local">This computer — uses Desktop and its current intelligence</option>
-          </select>
-        </label>
-        <label class="connection-field">
-          <span>Project context (optional)</span>
-          <select id="missionProjectInput">
-            <option value="">No Project</option>
-          </select>
-        </label>
-        <label id="missionCheckpointField" class="connection-field hidden">
-          <span>Research check-ins</span>
-          <select id="missionCheckpointInput">
-            <option value="0">Keep working; ask only when a real decision is needed</option>
-            <option value="5">Ask whether to continue after 5 minutes</option>
-            <option value="10">Ask whether to continue after 10 minutes</option>
-            <option value="15">Ask whether to continue after 15 minutes</option>
-            <option value="30">Ask whether to continue after 30 minutes</option>
-            <option value="60">Ask whether to continue after 1 hour</option>
-          </select>
-        </label>
-        <fieldset id="missionChannelsField" class="connection-field mission-channels-field">
-          <legend>Send Mission updates to</legend>
-          <div id="missionChannelOptions" class="mission-channels" role="group" aria-label="Mission update channels"></div>
-          <label id="missionDiscordTargetField" class="mission-discord-target hidden">
-            <span>Discord target</span>
-            <input id="missionDiscordTargetInput" type="text" maxlength="200" autocomplete="off" placeholder="Verified Discord channel or user" />
-          </label>
-          <small id="missionChannelsNote">In-app updates always appear in Missions. SMS, WhatsApp, and Discord need to be set up in Settings first.</small>
-        </fieldset>
-        <p id="missionBoundaryNote" class="project-modal-note">Hosted Missions keep running in AMOS Platform. AMOS will show the exact bounded contract for approval before execution.</p>
+        <p id="missionModalContext" class="project-modal-note hidden"></p>
         <div id="missionModalError" class="connection-modal-error hidden" role="alert"></div>
         <div class="connection-modal-actions">
           <button id="missionCancelButton" class="button secondary" type="button">Cancel</button>
-          <button id="missionSubmitButton" class="button primary" type="submit">Create Mission <span>→</span></button>
+          <button id="missionSubmitButton" class="button primary" type="submit">Start <span>→</span></button>
         </div>
       </form>
     </div>
