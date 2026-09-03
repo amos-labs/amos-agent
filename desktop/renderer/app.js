@@ -130,6 +130,8 @@ const missionCompiles = new Map();
 // Builder task ids whose authorized Mission has already been revealed, so a re-render never
 // refreshes or refocuses twice.
 const revealedMissionCompiles = new Set();
+// Compiled Run Contracts the user discarded, so a reload never re-seeds their cards.
+const dismissedMissionCompiles = new Set();
 const missionDetailCache = new Map();
 let focusedMissionId = "";
 let focusedMissionApprovalId = "";
@@ -4365,7 +4367,29 @@ function missionCompileApproval(outcome) {
   return pending[0] || null;
 }
 
+function seedCompiledMissionCards() {
+  // A compiled Run Contract survives a renderer reload in state.missionCompiles; give it a card
+  // again unless the user discarded it.
+  const recorded = Array.isArray(state?.missionCompiles) ? state.missionCompiles : [];
+  for (const record of recorded) {
+    if (record.kind !== "compiled" || !record.builderTaskId) continue;
+    if (missionCompiles.has(record.builderTaskId) || dismissedMissionCompiles.has(record.builderTaskId)) continue;
+    missionCompiles.set(record.builderTaskId, {
+      taskId: record.builderTaskId,
+      runId: record.runId || "",
+      projectId: String(record.spec?.project_id || ""),
+      objective: String(record.contract?.objective || record.spec?.objective || "").trim(),
+      missionKind: "finite",
+      startedAt: record.observedAt || new Date().toISOString(),
+      finishedAt: record.observedAt || new Date().toISOString(),
+      run: null,
+      outcome: null
+    });
+  }
+}
+
 function missionCompileEntries() {
+  seedCompiledMissionCards();
   const runs = Array.isArray(state?.activeRuns) ? state.activeRuns : [];
   const entries = [];
   for (const compile of missionCompiles.values()) {
@@ -4431,6 +4455,18 @@ function missionCompilePresentation(compile) {
       statusClass: "waiting",
       progress: "The compiler proposed a Run Contract. Waiting for the authorization request to sync…",
       actions: run ? ["stop"] : []
+    };
+  }
+  if (outcome?.kind === "compiled") {
+    // Dry run finished: nothing has started. The user reviews the contract and starts it here.
+    return {
+      tone: outcome.requiresConfirmation ? "attention" : "ready",
+      status: outcome.requiresConfirmation ? "CONFIRM LIMITS TO START" : "RUN CONTRACT READY",
+      statusClass: outcome.requiresConfirmation ? "waiting" : "authorized",
+      progress: outcome.requiresConfirmation
+        ? "AMOS guessed at least one budget you never stated (flagged below). Adjust or confirm it, then start the Mission. Nothing has started yet."
+        : (outcome.aiNextStep || "AMOS compiled this Run Contract from your outcome. Nothing has started yet; review it and start the Mission."),
+      actions: ["start", "details", "discard"]
     };
   }
   if (run) {
@@ -4506,6 +4542,170 @@ function missionCompileContract(contract) {
   return list;
 }
 
+// Limits the user may adjust on a compiled Run Contract, shown in human units and sent back in
+// the Platform's units.
+const MISSION_LIMIT_FIELDS = Object.freeze({
+  max_provider_credits: { label: "Provider credits", unit: "credits", scale: 1, step: 1 },
+  max_cost_microusd: { label: "Spend", unit: "USD", scale: 1_000_000, step: 0.01 },
+  max_wall_time_seconds: { label: "Wall time", unit: "minutes", scale: 60, step: 1 },
+  max_tool_calls: { label: "Tool calls", unit: "calls", scale: 1, step: 1 },
+  max_decisions: { label: "Human decisions", unit: "decisions", scale: 1, step: 1 }
+});
+
+function missionLimitDisplay(key, value) {
+  const field = MISSION_LIMIT_FIELDS[key];
+  const number = Number(value);
+  if (!field || !Number.isFinite(number)) return String(value);
+  const scaled = number / field.scale;
+  const text = field.scale === 1_000_000 ? scaled.toFixed(2) : String(Math.round(scaled * 100) / 100);
+  return `${text} ${field.unit}`;
+}
+
+function missionRunContractCard(compile, outcome) {
+  const contract = outcome?.contract || {};
+  const root = document.createElement("div");
+  root.className = "mission-run-contract";
+  const list = document.createElement("dl");
+  list.className = "mission-contract";
+  const addRow = (label, value) => {
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    if (value instanceof Node) detail.append(value);
+    else detail.textContent = String(value).slice(0, 600);
+    list.append(term, detail);
+    return detail;
+  };
+  addRow("Outcome", contract.objective || compile.objective || "—");
+  addRow("Done when", missionCompletionSummary(contract.completionCondition));
+  const groups = contract.operationGroups || {};
+  const grouped = [
+    ["Advancing", groups.advancing],
+    ["Observing", groups.observing],
+    ["Control", groups.control]
+  ].filter(([, verbs]) => Array.isArray(verbs) && verbs.length > 0);
+  if (grouped.length > 0) {
+    const operations = document.createElement("div");
+    operations.className = "mission-operation-groups";
+    for (const [label, verbs] of grouped) {
+      const group = document.createElement("span");
+      group.className = `mission-operation-group ${label.toLowerCase()}`;
+      const name = document.createElement("strong");
+      name.textContent = `${label}: `;
+      group.append(name, document.createTextNode(verbs.map((verb) => humanizeTool(verb)).join(", ")));
+      operations.append(group);
+    }
+    addRow("Operations", operations);
+  } else {
+    addRow("Operations", (contract.operations || []).map((verb) => humanizeTool(verb)).join(", ") || "None supplied");
+  }
+  const limits = contract.effectiveLimits && typeof contract.effectiveLimits === "object"
+    ? Object.entries(contract.effectiveLimits)
+    : [];
+  const sources = contract.limitSources && typeof contract.limitSources === "object" ? contract.limitSources : {};
+  if (limits.length > 0) {
+    const table = document.createElement("div");
+    table.className = "mission-limits";
+    for (const [key, value] of limits) {
+      const source = String(sources[key] || "");
+      const guessed = source === "default";
+      const row = document.createElement("label");
+      row.className = `mission-limit${guessed ? " default" : ""}`;
+      const name = document.createElement("span");
+      name.className = "mission-limit-name";
+      name.textContent = MISSION_LIMIT_FIELDS[key]?.label || key.replaceAll("_", " ");
+      const origin = document.createElement("span");
+      origin.className = `mission-limit-source${guessed ? " default" : ""}`;
+      origin.textContent = guessed ? "AMOS guessed · confirm or edit" : source ? `from ${source.replaceAll("_", " ")}` : "";
+      row.append(name);
+      if (guessed && MISSION_LIMIT_FIELDS[key]) {
+        const field = MISSION_LIMIT_FIELDS[key];
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = String(field.step);
+        input.step = String(field.step);
+        input.value = field.scale === 1_000_000
+          ? (Number(value) / field.scale).toFixed(2)
+          : String(Number(value) / field.scale);
+        input.dataset.limitKey = key;
+        input.dataset.limitScale = String(field.scale);
+        input.dataset.limitOriginal = String(Number(value));
+        input.setAttribute("aria-label", `${field.label} in ${field.unit}`);
+        const unit = document.createElement("span");
+        unit.className = "mission-limit-unit";
+        unit.textContent = field.unit;
+        row.append(input, unit);
+      } else {
+        const shown = document.createElement("span");
+        shown.className = "mission-limit-value";
+        shown.textContent = missionLimitDisplay(key, value);
+        row.append(shown);
+      }
+      row.append(origin);
+      table.append(row);
+    }
+    addRow("Effective limits", table);
+  }
+  if (Array.isArray(contract.prohibitions) && contract.prohibitions.length > 0) {
+    addRow("Prohibitions", contract.prohibitions.map((verb) => humanizeTool(verb)).join(", "));
+  }
+  if (Array.isArray(contract.boundResources) && contract.boundResources.length > 0) {
+    addRow("Bound resources", contract.boundResources.join(", "));
+  }
+  const admission = contract.admission && typeof contract.admission === "object"
+    ? Object.entries(contract.admission)
+    : [];
+  if (admission.length > 0) {
+    addRow("Admission", admission.map(([key, value]) => `${key.replaceAll("_", " ")}: ${value}`).join(" · "));
+  }
+  if (contract.contractSha256) addRow("Contract digest", contract.contractSha256.slice(0, 16));
+  root.append(list);
+  return root;
+}
+
+function missionLimitEditsFrom(card) {
+  const limits = {};
+  for (const input of card.querySelectorAll("input[data-limit-key]")) {
+    const scale = Number(input.dataset.limitScale || 1);
+    const value = Math.round(Number(input.value) * scale);
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`${input.getAttribute("aria-label") || input.dataset.limitKey} must be a positive number`);
+    }
+    if (value !== Number(input.dataset.limitOriginal)) limits[input.dataset.limitKey] = value;
+  }
+  return limits;
+}
+
+async function startCompiledMission(compile, card, button) {
+  let limits;
+  try {
+    limits = missionLimitEditsFrom(card);
+  } catch (error) {
+    toast(error.message, true);
+    return;
+  }
+  setButtonBusy(button, true, Object.keys(limits).length > 0 ? "Re-compiling…" : "Starting…");
+  try {
+    // Edited limits re-run the dry run inside the controller so the confirmation token matches the
+    // new contract digest; the outcome then flows through the same correlation record.
+    const response = await api.startCompiledMission({ builderTaskId: compile.taskId, limits });
+    if (Array.isArray(response?.missionCompiles)) state.missionCompiles = response.missionCompiles;
+    if (response?.missions) state.missions = response.missions;
+    const outcome = response?.outcome;
+    if (outcome?.kind === "pending_approval") {
+      toast("Run Contract proposed. Authorize it here in Missions when it syncs.");
+    } else if (outcome?.kind === "compiled") {
+      toast("AMOS re-compiled the Run Contract. Confirm the limits to start the Mission.");
+    } else if (outcome?.kind === "failed") {
+      toast(outcome.message || "AMOS could not create the Mission", true);
+    }
+    renderMissions();
+  } catch (error) {
+    toast(error.message, true);
+    renderMissions();
+  }
+}
+
 function retryMissionCompile(compile) {
   const projects = Array.isArray(state?.projects?.projects) ? state.projects.projects : [];
   const project = projects.find((item) => item.id === compile.projectId) || null;
@@ -4562,7 +4762,9 @@ function missionCompileCard(compile) {
     chip.textContent = label;
     details.append(chip);
   }
-  const contract = missionCompileContract(compile.outcome?.contract);
+  const contract = compile.outcome?.kind === "compiled"
+    ? missionRunContractCard(compile, compile.outcome)
+    : missionCompileContract(compile.outcome?.contract);
   const actions = document.createElement("div");
   actions.className = "task-card-actions";
   const builderTask = (state?.tasks?.tasks || []).find((task) => task.id === compile.taskId);
@@ -4586,6 +4788,19 @@ function missionCompileCard(compile) {
       const retry = actionButton("Edit and retry", "primary");
       retry.addEventListener("click", () => retryMissionCompile(compile));
       actions.append(retry);
+    } else if (action === "start") {
+      const start = actionButton("Start Mission", "primary");
+      start.addEventListener("click", () => startCompiledMission(compile, card, start));
+      actions.append(start);
+    } else if (action === "discard") {
+      const discard = actionButton("Discard", "ghost");
+      discard.addEventListener("click", () => {
+        dismissedMissionCompiles.add(compile.taskId);
+        missionCompiles.delete(compile.taskId);
+        toast("Run Contract discarded. Nothing was started.");
+        renderMissions();
+      });
+      actions.append(discard);
     } else if (action === "details" && builderTask) {
       const open = actionButton("Open compile details", "secondary");
       open.addEventListener("click", () => openManagedTask(builderTask, open));

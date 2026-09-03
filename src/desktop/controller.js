@@ -5336,9 +5336,108 @@ export class DesktopController {
     });
   }
 
+  attachMissionCompileSpec(outcome) {
+    const lane = this.runManager.current();
+    const record = lane?.missionOutcome;
+    if (
+      !record ||
+      record.kind !== "compiled" ||
+      record.spec ||
+      outcome?.failed === true ||
+      !isMissionCreationTool(outcome?.name, lane.missionCreationType)
+    ) {
+      return;
+    }
+    const spec = missionSpecFromArgs(outcome.args);
+    if (!spec) return;
+    this.recordMissionCompileOutcome(lane, { ...record, spec });
+  }
+
+  /**
+   * Start a Mission from a compiled Run Contract on the Missions page. The compile run only
+   * dry-ran create_mission; this is the one deliberate call that creates (owner) or parks
+   * (non-owner) it. Edited limits re-run the dry run first so the confirmation token matches
+   * the new contract digest; a server without dry_run support simply creates on that call.
+   */
+  async startCompiledMission(input = {}) {
+    const builderTaskId = String(input.builderTaskId || "").trim();
+    const record = this.missionCompileOutcomes.get(builderTaskId);
+    if (!record || record.kind !== "compiled") {
+      throw new Error("That Run Contract is no longer waiting to start");
+    }
+    if (!record.spec) {
+      throw new Error("The compiled Run Contract did not carry its specification. Compile the Mission again.");
+    }
+    const settings = await this.settingsStore.read();
+    if (settings.operatingMode !== "online" || this.identity?.principal_type !== "user") {
+      throw new Error("Connect your AMOS company before starting a hosted Mission");
+    }
+    const remote = await this.personalRemote(settings, "starting this Mission");
+    const edits = missionLimitEdits(input.limits);
+    const spec = { ...record.spec, ...edits };
+    const compiledLimits = record.contract?.effectiveLimits || {};
+    const edited = Object.entries(edits).some(([key, value]) => Number(compiledLimits[key]) !== value);
+    const tokenExpired = Boolean(record.confirmationExpiresAt) &&
+      Date.parse(record.confirmationExpiresAt) <= Date.now();
+    const laneLike = { taskRecordId: builderTaskId, id: record.runId, status: "completed" };
+    let token = record.confirmationToken;
+    let requiresConfirmation = record.requiresConfirmation;
+    try {
+      if (edited || (requiresConfirmation && (!token || tokenExpired))) {
+        const recompiled = missionCreationOutcome({
+          type: "tool_end",
+          name: "create_mission",
+          result: await remote.compileMission(spec)
+        });
+        if (!recompiled) throw new Error("AMOS did not return a compiled Run Contract");
+        if (recompiled.kind !== "compiled") {
+          // This server has no dry_run support and already created or parked the Mission.
+          return this.finishCompiledMissionStart(remote, laneLike, recompiled, spec);
+        }
+        this.recordMissionCompileOutcome(laneLike, { ...recompiled, spec });
+        token = recompiled.confirmationToken;
+        requiresConfirmation = recompiled.requiresConfirmation;
+        if (requiresConfirmation && !token) {
+          return {
+            started: false,
+            outcome: this.missionCompileOutcomes.get(builderTaskId),
+            missionCompiles: this.missionCompileState()
+          };
+        }
+      }
+      const result = await remote.createMission(spec, requiresConfirmation ? token : "");
+      const outcome = missionCreationOutcome({ type: "tool_end", name: "create_mission", result }) ||
+        { kind: "failed", message: "create_mission returned neither a Mission nor a pending approval" };
+      return this.finishCompiledMissionStart(remote, laneLike, outcome, spec);
+    } catch (error) {
+      this.recordMissionCompileOutcome(laneLike, {
+        ...record,
+        kind: "failed",
+        message: String(error?.message || "create_mission failed")
+      });
+      throw error;
+    }
+  }
+
+  async finishCompiledMissionStart(remote, laneLike, outcome, spec) {
+    this.recordMissionCompileOutcome(laneLike, { ...outcome, spec });
+    let missions = null;
+    if (outcome.kind === "authorized") {
+      missions = await this.refreshMissions(remote).catch(() => null);
+    }
+    return {
+      started: outcome.kind === "authorized" || outcome.kind === "pending_approval",
+      outcome: this.missionCompileOutcomes.get(laneLike.taskRecordId),
+      missionCompiles: this.missionCompileState(),
+      ...(missions ? { missions } : {})
+    };
+  }
+
   recordMissionCompileOutcome(lane, outcome) {
+    const previous = this.missionCompileOutcomes.get(lane.taskRecordId);
     const record = publicMissionOutcome({
       ...outcome,
+      spec: outcome.spec ?? previous?.spec ?? null,
       builderTaskId: lane.taskRecordId,
       runId: lane.id,
       runStatus: lane.status,
@@ -5820,6 +5919,7 @@ export class DesktopController {
           ) {
             this.activeTask.missionCreationObserved = true;
           }
+          this.attachMissionCompileSpec(outcome);
           this.captureContinuityToolOutcome(outcome, config.safety.workspaceRoot);
           if (outcome?.name === "desktop_focus_workspace" && outcome.result?.ok && !outcome.failed) {
             void this.persistWorkspaceFocus(outcome.result);
@@ -5828,6 +5928,16 @@ export class DesktopController {
         }
       })
     };
+    if (
+      this.runtime.runtime?.loop &&
+      this.runtime.runtime.loop.amosClient &&
+      (this.activeTask?.missionCreation === true || this.runManager.current()?.missionCreation === true) &&
+      (this.runManager.current()?.missionCreationType || missionBuilderKind(taskRecord)) !== "optimization"
+    ) {
+      // The Missions-page builder only compiles. The user starts the Mission from the Run
+      // Contract card, so every create_mission the model issues here is forced to a dry run.
+      this.runtime.runtime.loop.amosClient = missionCompileAmosClient(this.runtime.runtime.loop.amosClient);
+    }
     this.bindConversationScratchpad(this.runtime, taskRecord);
     await this.hydrateSessionContinuity(settings, requestedBoundary, this.runtime);
     return this.runtime;
@@ -8697,13 +8807,14 @@ function hostedMissionCreationPrompt(enabled, projectId = "", kind = "finite") {
     "",
     "Dedicated hosted Mission builder:",
     "- Translate the user's plain-English outcome into one finite, governed AMOS Mission.",
-    "- create_mission is the only successful terminal creation operation for this run.",
+    "- create_mission is the only successful terminal creation operation for this run. Call it with dry_run: true; Desktop forces the dry run here. The compiled Run Contract is shown to the user in Missions, who starts it themselves.",
+    "- When create_mission returns status compiled, summarize the Run Contract in two or three sentences and finish. Do not call create_mission again, and never pass confirmation_token.",
     "- Related tools may be read for context or prerequisites, but a campaign, Project goal, Automation, or ordinary task is not a Mission and cannot replace it.",
     "- Infer conservative contract details. Check mathematical feasibility across target counts, pages, batches, credits, time, and tool-call ceilings before proposing the Mission.",
     projectId
       ? `- Associate the Mission with this exact user-private Project context using project_id: ${projectId}`
       : "- Do not associate a Project unless the user selected one.",
-    "- Never tell the user the Mission exists unless create_mission returned a pending approval or mission_id.",
+    "- Never tell the user the Mission exists unless create_mission returned a pending approval or mission_id; a compiled contract has not started.",
     ""
   ].join("\n");
 }
@@ -8749,7 +8860,16 @@ function emptyMissionsState() {
 }
 
 const MISSION_COMPILE_OUTCOME_LIMIT = 32;
-const MISSION_OUTCOME_KINDS = new Set(["pending_approval", "authorized", "failed", "ended", "cancelled"]);
+const MISSION_OUTCOME_KINDS = new Set(["compiled", "pending_approval", "authorized", "failed", "ended", "cancelled"]);
+// Run Contract limits the user may edit on the compiled card before starting the Mission.
+const MISSION_LIMIT_KEYS = new Set([
+  "max_provider_credits",
+  "max_cost_microusd",
+  "max_wall_time_seconds",
+  "max_tool_calls",
+  "max_decisions"
+]);
+const MISSION_SPEC_BYTES_LIMIT = 32_768;
 
 function isMissionCreationTool(name, kind) {
   const tool = String(name || "");
@@ -8780,6 +8900,21 @@ export function missionCreationOutcome(event, kind = "finite") {
     return {
       kind: "failed",
       message: String(result.error?.message || result.error || result.message || "create_mission failed")
+    };
+  }
+  if (result.status === "compiled" || result.status === "compiled_awaiting_confirmation") {
+    // Dry run (or a guessed budget the user has not confirmed): nothing was created yet.
+    const contract = result.contract && typeof result.contract === "object" ? result.contract : {};
+    return {
+      kind: "compiled",
+      requiresConfirmation: result.requires_confirmation === true ||
+        result.status === "compiled_awaiting_confirmation",
+      confirmationToken: String(result.confirmation_token || ""),
+      confirmationExpiresAt: String(result.confirmation_expires_at || ""),
+      aiNextStep: String(result.ai_next_step || ""),
+      missionName: String(contract.name || result.name || ""),
+      contractSha256: String(contract.contract_sha256 || result.contract_sha256 || ""),
+      contract: compiledRunContract(result)
     };
   }
   const pendingId = String(
@@ -8824,9 +8959,20 @@ function compiledRunContract(result) {
     }
     return undefined;
   };
-  const operations = boundedStringList(pick("allowed_operations", "operations"), (entry) =>
+  const operationEntries = pick("allowed_operations", "operations");
+  const operations = boundedStringList(operationEntries, (entry) =>
     typeof entry === "string" ? entry : entry?.verb || entry?.operation || entry?.name || ""
   );
+  const operationGroups = { advancing: [], observing: [], control: [] };
+  if (Array.isArray(operationEntries)) {
+    for (const entry of operationEntries.slice(0, 24)) {
+      const verb = String(
+        typeof entry === "string" ? entry : entry?.verb || entry?.operation || entry?.name || ""
+      ).trim().slice(0, 160);
+      if (!verb) continue;
+      operationGroups[missionOperationGroup(entry)].push(verb);
+    }
+  }
   const prohibitions = boundedStringList(pick("prohibitions", "prohibited_operations"), (entry) =>
     typeof entry === "string" ? entry : entry?.verb || entry?.operation || entry?.description || ""
   );
@@ -8836,10 +8982,15 @@ function compiledRunContract(result) {
     max_cost_usd: pick("max_cost_usd", "budget_usd"),
     max_duration_minutes: pick("max_duration_minutes")
   });
+  const completion = pick("completion_condition");
   return {
     source: compilation && typeof compilation === "object" ? "compilation" : "result",
+    name: String(pick("name") || "").slice(0, 200),
     objective: String(pick("objective", "outcome", "goal") || "").slice(0, 1_000),
+    completionCondition: completion && typeof completion === "object" ? boundedScalarRecord(completion) : {},
+    contractSha256: String(pick("contract_sha256") || "").slice(0, 128),
     operations,
+    operationGroups,
     prohibitions,
     effectiveLimits: Object.keys(effectiveLimits).length > 0 ? effectiveLimits : legacyLimits,
     limitSources: boundedScalarRecord(pick("limit_sources")),
@@ -8849,6 +9000,88 @@ function compiledRunContract(result) {
     ),
     expiresAt: String(pick("expires_at") || "").slice(0, 64)
   };
+}
+
+function missionOperationGroup(entry) {
+  if (!entry || typeof entry !== "object") return "advancing";
+  const role = String(
+    entry.role || entry.group || entry.class || entry.category || entry.kind || entry.mode || ""
+  ).toLowerCase();
+  if (/control|pause|stop|cancel|escalat/.test(role)) return "control";
+  if (
+    /observ|read|monitor|inspect|verify/.test(role) ||
+    entry.consequence?.is_read === true ||
+    entry.read_only === true ||
+    entry.readOnly === true
+  ) {
+    return "observing";
+  }
+  return "advancing";
+}
+
+function missionSpecFromArgs(args) {
+  if (!args || typeof args !== "object" || Array.isArray(args)) return null;
+  const spec = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (key === "dry_run" || key === "confirmation_token" || value === undefined) continue;
+    spec[key] = value;
+  }
+  let encoded;
+  try {
+    encoded = JSON.stringify(spec);
+  } catch {
+    return null;
+  }
+  if (!encoded || encoded.length > MISSION_SPEC_BYTES_LIMIT) return null;
+  return JSON.parse(encoded);
+}
+
+function missionLimitEdits(limits) {
+  if (!limits || typeof limits !== "object" || Array.isArray(limits)) return {};
+  const edits = {};
+  for (const [key, raw] of Object.entries(limits)) {
+    if (!MISSION_LIMIT_KEYS.has(key)) throw new Error(`${key} is not an editable Run Contract limit`);
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`${key.replaceAll("_", " ")} must be a positive whole number`);
+    }
+    edits[key] = value;
+  }
+  return edits;
+}
+
+/**
+ * Wrap the compile lane's AMOS client so every create_mission the model issues is a dry run.
+ * The Missions page owns the real call (startCompiledMission); a server without dry_run support
+ * ignores the flag and behaves exactly as before.
+ */
+export function missionCompileAmosClient(client) {
+  if (!client || typeof client.callTool !== "function") return client;
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      if (property === "callTool") {
+        return (name, args, options) => {
+          const tool = String(name || "");
+          let nextArgs = args;
+          if (isMissionCreationTool(tool, "finite")) {
+            nextArgs = { ...(args && typeof args === "object" ? args : {}), dry_run: true };
+            delete nextArgs.confirmation_token;
+          } else if (
+            tool === "call_engine_tool" &&
+            isMissionCreationTool(args?.tool, "finite") &&
+            args && typeof args === "object"
+          ) {
+            const inner = { ...(args.arguments && typeof args.arguments === "object" ? args.arguments : {}), dry_run: true };
+            delete inner.confirmation_token;
+            nextArgs = { ...args, arguments: inner };
+          }
+          return target.callTool(name, nextArgs, options);
+        };
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    }
+  });
 }
 
 function boundedStringList(value, project) {
@@ -8893,12 +9126,21 @@ function publicMissionOutcome(value) {
     contractSha256: String(value?.contractSha256 || "").slice(0, 128),
     expiresAt: String(value?.expiresAt || "").slice(0, 64),
     message: String(value?.message || "").slice(0, 2_000),
+    requiresConfirmation: value?.requiresConfirmation === true,
+    confirmationToken: String(value?.confirmationToken || "").slice(0, 512),
+    confirmationExpiresAt: String(value?.confirmationExpiresAt || "").slice(0, 64),
+    aiNextStep: String(value?.aiNextStep || "").slice(0, 1_000),
+    spec: value?.spec && typeof value.spec === "object" && !Array.isArray(value.spec) ? value.spec : null,
     contract: value?.contract && typeof value.contract === "object" ? value.contract : null
   };
 }
 
 function missionOutcomeSummary(record) {
   switch (record.kind) {
+    case "compiled":
+      return record.requiresConfirmation
+        ? "Run Contract compiled; a guessed limit needs your confirmation before it starts"
+        : "Run Contract compiled; ready to start from Missions";
     case "authorized":
       return `Mission created: ${record.missionName || record.missionId}`;
     case "pending_approval":

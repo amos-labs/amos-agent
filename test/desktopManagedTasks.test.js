@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { DesktopController, missionCreationOutcome } from "../src/desktop/controller.js";
+import {
+  DesktopController,
+  missionCompileAmosClient,
+  missionCreationOutcome
+} from "../src/desktop/controller.js";
 import { continuityScope, SessionContinuityStore } from "../src/desktop/sessionContinuity.js";
 import { DesktopTaskStore, taskOwnerScope } from "../src/desktop/taskStore.js";
 
@@ -672,6 +676,213 @@ test("missionCreationOutcome classifies create_mission results without consultin
     missionCreationOutcome({ type: "tool_end", name: "amos_create_goal", result: { ok: true, goal_id: "g1" } }, "optimization").missionId,
     "g1"
   );
+});
+
+const compiledDryRun = {
+  ok: true,
+  status: "compiled",
+  requires_confirmation: true,
+  confirmation_token: "tok-1",
+  confirmation_expires_at: "2099-01-01T00:00:00.000Z",
+  ai_next_step: "Review the guessed spend limit, then start the Mission from Missions.",
+  contract: {
+    name: "VAR/MSP prospect list",
+    objective: "Build 500 qualified VAR/MSP prospects",
+    completion_condition: { kind: "work_exhausted" },
+    allowed_operations: [
+      { verb: "search_prospects", role: "advancing" },
+      { verb: "get_prospect", consequence: { is_read: true } },
+      { verb: "pause_mission", role: "control" }
+    ],
+    effective_limits: { max_tool_calls: 80, max_cost_microusd: 5_000_000, max_wall_time_seconds: 3600 },
+    limit_sources: { max_tool_calls: "user", max_cost_microusd: "default", max_wall_time_seconds: "project_cap" },
+    prohibitions: ["send_email"],
+    bound_resources: [{ name: "Apollo connector" }],
+    admission: { decision: "admitted" },
+    contract_sha256: "sha-1"
+  }
+};
+
+const missionSpec = {
+  name: "VAR/MSP prospect list",
+  objective: "Build 500 qualified VAR/MSP prospects",
+  allowed_operations: [{ verb: "search_prospects" }, { verb: "get_prospect" }, { verb: "pause_mission" }],
+  max_tool_calls: 80
+};
+
+test("the Missions-page compile dry-runs create_mission and records the compiled Run Contract with its spec", async () => {
+  const { controller, emitted } = await hostedMissionController("amos-hosted-mission-compiled-");
+  controller.executeRun = async () => {
+    // The agent loop reports the dry-run result as tool_end, then hands args to onToolResult.
+    controller.observeMissionCreationEvent({ type: "tool_end", name: "amos_create_mission", result: compiledDryRun });
+    controller.attachMissionCompileSpec({
+      name: "amos_create_mission",
+      args: { ...missionSpec, dry_run: true },
+      result: compiledDryRun,
+      failed: false
+    });
+    return { answer: "Compiled the Run Contract", taskEventId: "run:mission" };
+  };
+  const started = await controller.startHostedMission({ objective: "Build 500 qualified VAR/MSP prospects" });
+  await settled();
+
+  const [record] = controller.missionCompileState();
+  assert.equal(record.builderTaskId, started.builderTaskId);
+  assert.equal(record.kind, "compiled");
+  assert.equal(record.requiresConfirmation, true);
+  assert.equal(record.confirmationToken, "tok-1");
+  assert.equal(record.confirmationExpiresAt, "2099-01-01T00:00:00.000Z");
+  assert.equal(record.missionName, "VAR/MSP prospect list");
+  assert.equal(record.contractSha256, "sha-1");
+  assert.deepEqual(record.spec, missionSpec, "the spec is kept without dry_run");
+  assert.equal(record.contract.name, "VAR/MSP prospect list");
+  assert.deepEqual(record.contract.completionCondition, { kind: "work_exhausted" });
+  assert.deepEqual(record.contract.operationGroups, {
+    advancing: ["search_prospects"],
+    observing: ["get_prospect"],
+    control: ["pause_mission"]
+  });
+  assert.deepEqual(record.contract.effectiveLimits, { max_tool_calls: 80, max_cost_microusd: 5_000_000, max_wall_time_seconds: 3600 });
+  assert.equal(record.contract.limitSources.max_cost_microusd, "default");
+  assert.deepEqual(record.contract.prohibitions, ["send_email"]);
+  assert.deepEqual(record.contract.boundResources, ["Apollo connector"]);
+  // Nothing was created: the lane's completion does not turn the compiled contract into "ended".
+  assert.equal(controller.missionCompileState()[0].kind, "compiled");
+  assert.ok(emitted.filter((event) => event.channel === "mission-compiles:changed").length >= 2);
+});
+
+async function compiledMissionController(prefix, remoteCalls, remoteBehaviour) {
+  const { controller } = await hostedMissionController(prefix);
+  controller.personalRemote = async () => ({
+    async compileMission(spec) {
+      remoteCalls.push({ tool: "compileMission", spec });
+      return remoteBehaviour.compile(spec);
+    },
+    async createMission(spec, token) {
+      remoteCalls.push({ tool: "createMission", spec, token });
+      return remoteBehaviour.create(spec, token);
+    }
+  });
+  controller.refreshMissions = async () => ({ supported: true, missions: [], count: 0 });
+  controller.recordMissionCompileOutcome(
+    { taskRecordId: "builder-1", id: "run-1", status: "completed" },
+    { ...missionCreationOutcome({ type: "tool_end", name: "create_mission", result: compiledDryRun }), spec: missionSpec }
+  );
+  return controller;
+}
+
+test("Start Mission passes the dry-run confirmation token and lands on the authorized correlation path", async () => {
+  const calls = [];
+  const controller = await compiledMissionController("amos-compiled-start-", calls, {
+    compile: () => { throw new Error("no re-compile expected"); },
+    create: () => ({ ok: true, mission_id: "44444444-4444-4444-8444-444444444444", contract_id: "c-1" })
+  });
+  const response = await controller.startCompiledMission({ builderTaskId: "builder-1", limits: {} });
+  assert.deepEqual(calls.map((call) => call.tool), ["createMission"]);
+  assert.equal(calls[0].token, "tok-1");
+  assert.deepEqual(calls[0].spec, missionSpec);
+  assert.equal(response.started, true);
+  assert.equal(response.outcome.kind, "authorized");
+  assert.equal(response.outcome.missionId, "44444444-4444-4444-8444-444444444444");
+  assert.equal(response.outcome.builderTaskId, "builder-1");
+  assert.equal(response.missionCompiles[0].kind, "authorized");
+  assert.ok(response.missions);
+});
+
+test("editing a limit re-runs the dry run so the token matches the new contract digest", async () => {
+  const calls = [];
+  const controller = await compiledMissionController("amos-compiled-edit-", calls, {
+    compile: (spec) => ({
+      ...compiledDryRun,
+      confirmation_token: "tok-2",
+      contract: {
+        ...compiledDryRun.contract,
+        effective_limits: { ...compiledDryRun.contract.effective_limits, max_cost_microusd: spec.max_cost_microusd },
+        limit_sources: { ...compiledDryRun.contract.limit_sources, max_cost_microusd: "user" },
+        contract_sha256: "sha-2"
+      }
+    }),
+    create: () => ({ ok: true, status: "pending_approval", pending_id: "pending-9" })
+  });
+  const response = await controller.startCompiledMission({
+    builderTaskId: "builder-1",
+    limits: { max_cost_microusd: 12_000_000 }
+  });
+  assert.deepEqual(calls.map((call) => call.tool), ["compileMission", "createMission"]);
+  assert.equal(calls[0].spec.max_cost_microusd, 12_000_000);
+  assert.equal(calls[1].token, "tok-2");
+  assert.equal(calls[1].spec.max_cost_microusd, 12_000_000);
+  assert.equal(response.started, true);
+  assert.equal(response.outcome.kind, "pending_approval");
+  assert.equal(response.outcome.pendingId, "pending-9");
+
+  await assert.rejects(
+    controller.startCompiledMission({ builderTaskId: "builder-1" }),
+    /no longer waiting to start/
+  );
+  await assert.rejects(
+    compiledMissionController("amos-compiled-bad-limit-", [], {}).then((next) =>
+      next.startCompiledMission({ builderTaskId: "builder-1", limits: { max_cost_microusd: -3 } })
+    ),
+    /must be a positive whole number/
+  );
+});
+
+test("a server without dry_run support creates the Mission on the re-compile call itself", async () => {
+  const calls = [];
+  const controller = await compiledMissionController("amos-compiled-legacy-", calls, {
+    compile: () => ({ ok: true, mission_id: "55555555-5555-4555-8555-555555555555" }),
+    create: () => { throw new Error("must not be called twice"); }
+  });
+  const response = await controller.startCompiledMission({
+    builderTaskId: "builder-1",
+    limits: { max_tool_calls: 120 }
+  });
+  assert.deepEqual(calls.map((call) => call.tool), ["compileMission"]);
+  assert.equal(response.outcome.kind, "authorized");
+  assert.equal(response.outcome.missionId, "55555555-5555-4555-8555-555555555555");
+});
+
+test("a compiler rejection while starting surfaces the corrective message on the record", async () => {
+  const calls = [];
+  const controller = await compiledMissionController("amos-compiled-reject-", calls, {
+    compile: () => { throw new Error("unexpected"); },
+    create: () => ({ ok: false, error: "InvalidParams: no allowed operation can advance it. No Mission was created." })
+  });
+  const response = await controller.startCompiledMission({ builderTaskId: "builder-1" });
+  assert.equal(response.started, false);
+  assert.equal(response.outcome.kind, "failed");
+  assert.match(response.outcome.message, /No Mission was created/);
+});
+
+test("missionCompileAmosClient forces dry_run on create_mission and leaves other tools alone", async () => {
+  const seen = [];
+  const client = {
+    label: "mcp",
+    async callTool(name, args, options) { seen.push({ name, args, options }); return { ok: true }; },
+    async listTools() { return [this.label]; }
+  };
+  const wrapped = missionCompileAmosClient(client);
+  await wrapped.callTool("amos_create_mission", { objective: "x", confirmation_token: "stale" }, { signal: null });
+  await wrapped.callTool("call_engine_tool", { engine: "company", tool: "create_mission", arguments: { objective: "y" } });
+  await wrapped.callTool("amos_search", { query: "q" });
+  assert.deepEqual(seen[0].args, { objective: "x", dry_run: true });
+  assert.deepEqual(seen[1].args, { engine: "company", tool: "create_mission", arguments: { objective: "y", dry_run: true } });
+  assert.deepEqual(seen[2].args, { query: "q" });
+  assert.deepEqual(await wrapped.listTools(), ["mcp"]);
+  assert.equal(wrapped.label, "mcp");
+
+  const compiled = missionCreationOutcome({ type: "tool_end", name: "amos_create_mission", result: compiledDryRun });
+  assert.equal(compiled.kind, "compiled");
+  assert.equal(compiled.requiresConfirmation, true);
+  const awaiting = missionCreationOutcome({
+    type: "tool_end",
+    name: "amos_create_mission",
+    result: { ok: true, status: "compiled_awaiting_confirmation", contract: { objective: "o" } }
+  });
+  assert.equal(awaiting.kind, "compiled");
+  assert.equal(awaiting.requiresConfirmation, true);
+  assert.equal(awaiting.confirmationToken, "");
 });
 
 test("a local Mission accepts optional Project context and requires an outcome", async () => {

@@ -1157,7 +1157,7 @@ test("a Missions-page compile resolves from its create_mission result, keyed by 
   const card = javascript.match(/function missionCompileCard\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.match(card, /actionButton\("Edit and retry", "primary"\)/);
   assert.match(card, /retryMissionCompile\(compile\)/);
-  assert.match(card, /const contract = missionCompileContract\(compile\.outcome\?\.contract\);/);
+  assert.match(card, /: missionCompileContract\(compile\.outcome\?\.contract\);/);
   const retry = javascript.match(/function retryMissionCompile\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
   assert.match(retry, /openMissionModal\(project\)/);
   assert.match(retry, /elements\.missionObjectiveInput\.value = compile\.objective/);
@@ -1169,6 +1169,72 @@ test("a Missions-page compile resolves from its create_mission result, keyed by 
   for (const label of ["Outcome", "Operations", "Effective limits", "Prohibitions", "Bound resources", "Admission"]) {
     assert.match(contract, new RegExp(`\\["${label}"`));
   }
+});
+
+test("a Missions-page compile dry-runs create_mission and the user starts the compiled Run Contract", async () => {
+  const [javascript, controller, remoteState, main, preload] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/remoteState.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/main.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/preload.cjs", import.meta.url), "utf8")
+  ]);
+
+  // Dry run first: the compile lane's AMOS client forces dry_run on every create_mission, and
+  // the builder prompt says so.
+  assert.match(controller, /this\.runtime\.runtime\.loop\.amosClient = missionCompileAmosClient\(this\.runtime\.runtime\.loop\.amosClient\)/);
+  assert.match(controller, /export function missionCompileAmosClient\(client\)/);
+  assert.match(controller, /nextArgs = \{ \.\.\.\(args && typeof args === "object" \? args : \{\}\), dry_run: true \};/);
+  assert.match(controller, /Call it with dry_run: true; Desktop forces the dry run here\./);
+  assert.match(controller, /if \(result\.status === "compiled" \|\| result\.status === "compiled_awaiting_confirmation"\) \{/);
+  assert.match(controller, /kind: "compiled",\s*requiresConfirmation: result\.requires_confirmation === true \|\|/);
+  assert.match(controller, /this\.attachMissionCompileSpec\(outcome\);/);
+
+  // Start passes the token; an edited limit re-runs the dry run first so the token matches the digest.
+  const start = controller.match(/async startCompiledMission\(input = \{\}\) \{[\s\S]*?\n  \}\n/)?.[0];
+  assert.ok(start, "startCompiledMission must exist");
+  assert.match(start, /const edits = missionLimitEdits\(input\.limits\);/);
+  assert.match(start, /if \(edited \|\| \(requiresConfirmation && \(!token \|\| tokenExpired\)\)\) \{[\s\S]*?await remote\.compileMission\(spec\)/);
+  assert.match(start, /token = recompiled\.confirmationToken;/);
+  assert.match(start, /await remote\.createMission\(spec, requiresConfirmation \? token : ""\)/);
+  // A server without dry_run support already created or parked the Mission on that call.
+  assert.match(start, /if \(recompiled\.kind !== "compiled"\) \{[\s\S]*?return this\.finishCompiledMissionStart\(remote, laneLike, recompiled, spec\);/);
+  assert.match(remoteState, /async compileMission\(spec, \{ signal = null \} = \{\}\) \{\s*const args = \{ \.\.\.missionSpecArgs\(spec\), dry_run: true \};/);
+  assert.match(remoteState, /async createMission\(spec, confirmationToken = "", \{ signal = null \} = \{\}\) \{[\s\S]*?if \(token\) args\.confirmation_token = token;/);
+  assert.match(main, /ipcMain\.handle\("desktop:start-compiled-mission", \(_event, input\) =>\s*controller\.startCompiledMission\(input\)/);
+  assert.match(preload, /startCompiledMission: \(input\) => ipcRenderer\.invoke\("desktop:start-compiled-mission", input\)/);
+
+  // The compile card becomes a Run Contract card with one primary Start Mission button.
+  const presentation = javascript.match(/function missionCompilePresentation\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(presentation, /if \(outcome\?\.kind === "compiled"\) \{[\s\S]*?status: outcome\.requiresConfirmation \? "CONFIRM LIMITS TO START" : "RUN CONTRACT READY"[\s\S]*?actions: \["start", "details", "discard"\]/);
+  const card = javascript.match(/function missionCompileCard\(compile\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(card, /compile\.outcome\?\.kind === "compiled"\s*\? missionRunContractCard\(compile, compile\.outcome\)/);
+  assert.match(card, /actionButton\("Start Mission", "primary"\)/);
+  assert.match(card, /startCompiledMission\(compile, card, start\)/);
+  assert.doesNotMatch(card, /actionButton\("Start Mission", "secondary"\)/);
+  const contractCard = javascript.match(/function missionRunContractCard\(compile, outcome\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(contractCard, "missionRunContractCard must exist");
+  assert.match(contractCard, /addRow\("Outcome"/);
+  assert.match(contractCard, /addRow\("Done when", missionCompletionSummary\(contract\.completionCondition\)\)/);
+  assert.match(contractCard, /\["Advancing", groups\.advancing\],\s*\["Observing", groups\.observing\],\s*\["Control", groups\.control\]/);
+  assert.match(contractCard, /addRow\("Prohibitions"/);
+  assert.match(contractCard, /addRow\("Bound resources"/);
+  // Defaulted limits are flagged and editable; stated limits are display-only with their source.
+  assert.match(contractCard, /const guessed = source === "default";/);
+  assert.match(contractCard, /row\.className = `mission-limit\$\{guessed \? " default" : ""\}`/);
+  assert.match(contractCard, /"AMOS guessed · confirm or edit"/);
+  assert.match(contractCard, /if \(guessed && MISSION_LIMIT_FIELDS\[key\]\) \{[\s\S]*?input\.dataset\.limitKey = key;/);
+  assert.match(contractCard, /`from \$\{source\.replaceAll\("_", " "\)\}`/);
+  const edits = javascript.match(/function missionLimitEditsFrom\(card\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.match(edits, /if \(value !== Number\(input\.dataset\.limitOriginal\)\) limits\[input\.dataset\.limitKey\] = value;/);
+  const startFlow = javascript.match(/async function startCompiledMission\(compile, card, button\) \{[\s\S]*?\n\}\n/)?.[0];
+  assert.ok(startFlow);
+  assert.match(startFlow, /api\.startCompiledMission\(\{ builderTaskId: compile\.taskId, limits \}\)/);
+  assert.match(startFlow, /state\.missionCompiles = response\.missionCompiles/);
+  assert.doesNotMatch(startFlow, /showView\("operator"\)|addMessage\(/);
+  assert.match(javascript, /function seedCompiledMissionCards\(\)/);
+  // Chat-origin Missions keep the single compact receipt.
+  assert.match(javascript, /if \(isMissionApproval\(approval\)\) return renderMissionCreationReceipt\(approval\);/);
 });
 
 test("a chat-originated Mission leaves exactly one compact receipt in the transcript", async () => {
