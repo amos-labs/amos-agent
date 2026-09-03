@@ -16,7 +16,7 @@ import {
   summarizeCaseResult,
   validateIntegrationSuite,
   workspaceJsonSchema
-} from "../src/research/knowledgeIntegration.js";
+} from "../src/model/knowledgeIntegration.js";
 
 const args = process.argv.slice(2);
 const model = positional(args)[0];

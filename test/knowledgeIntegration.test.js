@@ -13,7 +13,7 @@ import {
   summarizeCaseResult,
   validateIntegrationSuite,
   workspaceJsonSchema
-} from "../src/research/knowledgeIntegration.js";
+} from "../src/model/knowledgeIntegration.js";
 
 test("structured integration answers accept fenced JSON but preserve strict labels", () => {
   assert.deepEqual(parseStructuredAnswer('```json\n{"label":"b","reason":"Retry with jitter"}\n```'), {

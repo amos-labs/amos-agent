@@ -27,10 +27,14 @@
 
 ## Product direction
 
-- [Recursive intelligence program](RECURSIVE_INTELLIGENCE_PROGRAM.md)
-- [Mission, Swarm, and Slice 0 boundary](MISSION_SWARM_SLICE_MAP.md)
-- [Research experiment protocol](RESEARCH_EXPERIMENT_PROTOCOL.md)
-- [Private AWS Qwen inference cell](../infra/aws/qwen-inference/README.md)
+The recursive-intelligence research program (the Qwen swarm self-learning
+experiment, its Harbor agents, benchmarks, recorded results, and the private
+AWS Qwen inference and research planes) now lives in
+[amos-labs/amos-organism](https://github.com/amos-labs/amos-organism) under
+`swarm/` and `docs/swarm/`, next to the organism kernel it feeds. The program,
+protocol, Platform Mission worker contract, slice map, and canary runbook are
+there.
+
 - [Dynamic canvas, offline intelligence, and portable memory](CANVAS-OFFLINE-MEMORY-SPIKE.md)
 - [Local frontier intelligence research roadmap](LOCAL_FRONTIER_INTELLIGENCE_ROADMAP.md)
 - [Knowledge integration experimental results](KNOWLEDGE_INTEGRATION_RESULTS.md)
