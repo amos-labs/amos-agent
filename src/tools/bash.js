@@ -65,13 +65,42 @@ export function createBashTool() {
         }
       }
 
-      return runBash(command, {
+      const result = await runBash(command, {
         cwd,
         bashPath: context.config.safety.bashPath,
         timeoutMs,
         maxOutputBytes: context.config.safety.maxOutputBytes,
         signal: context.signal
       });
+      return explainBashFailure(command, result);
+    }
+  };
+}
+
+export function explainBashFailure(command, result) {
+  if (result?.ok !== false || result?.canceled || result?.denied) return result;
+  const diagnostics = [result.error, result.stderr, result.stdout]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 4_000);
+  const escapedHome = /\\~(?=\/)/.test(String(command || ""));
+  const error = diagnostics || [
+    `Command exited with status ${result.exit_code ?? "unknown"} without diagnostic output.`,
+    "Retry once without suppressing stderr; do not repeat the same command."
+  ].join(" ");
+  return {
+    ...result,
+    error,
+    repair: {
+      retryable: true,
+      do_not_repeat: true,
+      ...(escapedHome
+        ? {
+            code: "escaped_home_path",
+            hint: "Bash treats \\~/ as a literal path. Use an absolute path or an unescaped $HOME/... path."
+          }
+        : {})
     }
   };
 }

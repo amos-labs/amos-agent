@@ -8,6 +8,18 @@ test("Electron suspend interrupts active work and resume refreshes recoverable s
   assert.match(main, /powerMonitor\.on\("resume"[\s\S]*?refreshRemote/);
 });
 
+test("attachment tasks prioritize their tools and failed returned results stay visible", async () => {
+  const [controller, renderer] = await Promise.all([
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8")
+  ]);
+
+  assert.match(controller, /mode: firstAttachmentToolkit \? "replace" : "add"/);
+  assert.match(renderer, /event\.type === "tool_error" \|\| failedToolResultEvent\(event\)/);
+  assert.match(renderer, /failure\s*\? toolResultError\(event\)/);
+  assert.match(controller, /result: summarizeResult\(event\.result\),\s*failed,\s*error: failed/);
+});
+
 test("every renderer element reference is registered and present in the HTML shell", async () => {
   const [javascript, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),

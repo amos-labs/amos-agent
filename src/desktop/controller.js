@@ -2717,8 +2717,18 @@ export class DesktopController {
           .map((reference) => attachmentToolkit(attachmentsById.get(reference?.id)))
           .filter(Boolean)
       );
+      let firstAttachmentToolkit = true;
       for (const toolkit of attachmentToolkits) {
-        runtime.registry?.activateToolkit?.(toolkit, { mode: "add" });
+        // The selected attachment defines the task's initial tool surface.
+        // Replace stale specialized toolkits on the first activation so a CSV
+        // importer cannot silently disappear behind the progressive-tool cap.
+        const activation = runtime.registry?.activateToolkit?.(toolkit, {
+          mode: firstAttachmentToolkit ? "replace" : "add"
+        });
+        firstAttachmentToolkit = false;
+        if (activation?.ok === false) {
+          throw new Error(`Could not activate the ${toolkit} tools for this attachment: ${activation.error}`);
+        }
       }
       const modelContent = this.attachments.buildMessageContent(
         [workFramePrompt(workFrame), prompt].filter(Boolean).join("\n\n"),
@@ -5709,14 +5719,18 @@ export class DesktopController {
       return;
     }
     if (event.type === "tool_end") {
+      const failed = event.result?.ok === false;
+      const failure = failed
+        ? String(event.result?.error?.message || event.result?.error || event.result?.message || "Tool returned a failed result").slice(0, 500)
+        : null;
       this.queueCheckpointUpdate(active.id, {
-        phase: "acting",
-        summary: `Completed ${event.name}`,
-        completedStep: `Completed ${event.name}`,
+        phase: failed ? "evaluating" : "acting",
+        summary: failed ? `${event.name} returned an error; AMOS was evaluating one repair` : `Completed ${event.name}`,
+        completedStep: failed ? `${event.name} did not complete` : `Completed ${event.name}`,
         action: {
           name: event.name,
-          status: "completed",
-          summary: "A tool result was recorded; receipts remain authoritative for side effects"
+          status: failed ? "failed" : "completed",
+          summary: failure || "A tool result was recorded; receipts remain authoritative for side effects"
         }
       });
     } else if (event.type === "tool_error") {
@@ -8548,6 +8562,18 @@ function sanitizeAgentEvent(event) {
   }
   if (event.type === "tool_error") {
     return { type: event.type, name: event.name, error: event.error };
+  }
+  if (event.type === "tool_end") {
+    const failed = event.result?.ok === false;
+    return {
+      type: event.type,
+      name: event.name,
+      result: summarizeResult(event.result),
+      failed,
+      error: failed
+        ? String(event.result?.error?.message || event.result?.error || event.result?.message || "Tool returned a failed result").slice(0, 500)
+        : null
+    };
   }
   if (event.type === "usage") {
     return {

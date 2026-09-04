@@ -327,6 +327,7 @@ export class AgentLoop {
       let previousToolPlanFingerprint = null;
       let repeatedToolCycles = 0;
       let repeatedToolPlanCycles = 0;
+      let recentToolPlanFingerprints = [];
       let consecutiveToolErrorCycles = 0;
       let capabilityDiscoveryCyclesWithoutProgress = 0;
       let previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
@@ -361,6 +362,7 @@ export class AgentLoop {
           previousToolPlanFingerprint = null;
           repeatedToolCycles = 0;
           repeatedToolPlanCycles = 0;
+          recentToolPlanFingerprints = [];
           consecutiveToolErrorCycles = 0;
           capabilityDiscoveryCyclesWithoutProgress = 0;
           previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
@@ -370,6 +372,7 @@ export class AgentLoop {
           previousToolPlanFingerprint = null;
           repeatedToolCycles = 0;
           repeatedToolPlanCycles = 0;
+          recentToolPlanFingerprints = [];
           consecutiveToolErrorCycles = 0;
           capabilityDiscoveryCyclesWithoutProgress = 0;
           previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
@@ -571,6 +574,7 @@ export class AgentLoop {
             previousToolPlanFingerprint = null;
             repeatedToolCycles = 0;
             repeatedToolPlanCycles = 0;
+            recentToolPlanFingerprints = [];
             consecutiveToolErrorCycles = 0;
             turn += 1;
             continue;
@@ -581,6 +585,7 @@ export class AgentLoop {
             previousToolPlanFingerprint = null;
             repeatedToolCycles = 0;
             repeatedToolPlanCycles = 0;
+            recentToolPlanFingerprints = [];
             consecutiveToolErrorCycles = 0;
             turn += 1;
             continue;
@@ -835,6 +840,7 @@ export class AgentLoop {
           previousToolPlanFingerprint = null;
           repeatedToolCycles = 0;
           repeatedToolPlanCycles = 0;
+          recentToolPlanFingerprints = [];
           consecutiveToolErrorCycles = 0;
           capabilityDiscoveryCyclesWithoutProgress = 0;
           previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
@@ -857,9 +863,18 @@ export class AgentLoop {
         repeatedToolPlanCycles =
           planFingerprint === previousToolPlanFingerprint ? repeatedToolPlanCycles + 1 : 1;
         previousToolPlanFingerprint = planFingerprint;
+        recentToolPlanFingerprints.push(toolPlanFingerprint(outcomes));
+        recentToolPlanFingerprints = recentToolPlanFingerprints.slice(-12);
+        const repeatedToolPattern = repeatedTailPattern(recentToolPlanFingerprints, {
+          maxPeriod: 3,
+          minimumRepeats: 2
+        });
         consecutiveToolErrorCycles = outcomes.every((outcome) => outcome.failed)
           ? consecutiveToolErrorCycles + 1
           : 0;
+        if (outcomes.some((outcome) => outcome.failed)) {
+          modelRetryGuidance = toolFailureRepairMessage(outcomes);
+        }
         const capabilitySurface = capabilitySurfaceFingerprint(this.registry);
         const discoveryCalls = outcomes.filter((outcome) =>
           CAPABILITY_DISCOVERY_TOOL_NAMES.has(outcome.name)
@@ -886,6 +901,7 @@ export class AgentLoop {
         const guardReason = this.guardReason({
           repeatedToolCycles,
           repeatedToolPlanCycles,
+          repeatedToolPattern,
           readOnlyToolPlan,
           consecutiveToolErrorCycles,
           capabilityDiscoveryCyclesWithoutProgress
@@ -1900,6 +1916,7 @@ export class AgentLoop {
   guardReason({
     repeatedToolCycles,
     repeatedToolPlanCycles = 0,
+    repeatedToolPattern = null,
     readOnlyToolPlan = false,
     consecutiveToolErrorCycles,
     capabilityDiscoveryCyclesWithoutProgress = 0
@@ -1916,6 +1933,9 @@ export class AgentLoop {
       return readOnlyToolPlan
         ? "the same read-only tool request repeated without a new user direction"
         : "the same tool request repeated without changing its plan";
+    }
+    if (repeatedToolPattern?.repeats >= (this.config.agent?.maxRepeatedToolPatternCycles ?? 3)) {
+      return `a ${repeatedToolPattern.period}-step tool-request cycle repeated without changing its plan`;
     }
     const errorLimit = this.config.agent?.maxConsecutiveToolErrorCycles ?? 3;
     if (consecutiveToolErrorCycles >= errorLimit) {
@@ -2555,9 +2575,68 @@ function toolCycleFingerprint(outcomes) {
 function toolPlanFingerprint(outcomes) {
   const encoded = JSON.stringify(outcomes.map(({ name, rawArgs, args }) => ({
     name,
-    args: stableLoopValue(args ?? rawArgs)
+    args: stableLoopValue(loopPlanArguments(name, args ?? rawArgs))
   })));
   return createHash("sha256").update(encoded).digest("hex");
+}
+
+function loopPlanArguments(name, value) {
+  if (name !== "run_bash" || !value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  const normalized = { ...value };
+  // A changing narration is not a changing command. Excluding `reason` also
+  // prevents a model from escaping the no-progress guard by paraphrasing why
+  // it wants to run the same probe again.
+  delete normalized.reason;
+  if (typeof normalized.command === "string") {
+    normalized.command = normalized.command
+      .replace(/\\~(?=\/)/g, "~")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return normalized;
+}
+
+function repeatedTailPattern(history, { maxPeriod = 3, minimumRepeats = 2 } = {}) {
+  const values = Array.isArray(history) ? history : [];
+  for (let period = 2; period <= Math.min(maxPeriod, Math.floor(values.length / minimumRepeats)); period += 1) {
+    let repeats = 1;
+    const tail = values.slice(-period);
+    for (let end = values.length - period; end >= period; end -= period) {
+      const candidate = values.slice(end - period, end);
+      if (!candidate.every((value, index) => value === tail[index])) break;
+      repeats += 1;
+    }
+    if (repeats >= minimumRepeats) return { period, repeats };
+  }
+  return null;
+}
+
+function toolFailureRepairMessage(outcomes) {
+  const failures = outcomes
+    .filter((outcome) => outcome.failed)
+    .slice(0, 4)
+    .map((outcome) => `- ${outcome.name}: ${toolFailureText(outcome.result)}`);
+  return {
+    role: "user",
+    content: [
+      "<amos_tool_failure_repair>",
+      "A tool failed. Treat its exact error as evidence and repair the arguments or approach; do not repeat the same or an equivalent call.",
+      ...failures,
+      "Make at most one corrected attempt before reporting the blocker. For shell repair, preserve stderr and use an absolute path or an unescaped $HOME path. If the task includes an attachment_id, use the attachment or purpose-built importer instead of searching Downloads for the original file.",
+      "</amos_tool_failure_repair>"
+    ].join("\n")
+  };
+}
+
+function toolFailureText(result) {
+  const error = result?.error ?? result?.message ?? result?.stderr;
+  if (typeof error === "string" && error.trim()) return error.trim().slice(0, 800);
+  if (error && typeof error === "object") {
+    return JSON.stringify(stableLoopValue(error)).slice(0, 800);
+  }
+  return "The tool returned ok:false without a diagnostic message.";
 }
 
 function readOnlyToolCycleFingerprint(outcomes) {

@@ -2938,6 +2938,101 @@ test("an unclassified repeated request cannot evade the loop guard with changing
   assert.match(answer, /no progress/i);
 });
 
+test("an alternating shell-repair cycle cannot evade the loop guard with paraphrased reasons", async () => {
+  const registry = new ToolRegistry();
+  let modelCalls = 0;
+  let toolCalls = 0;
+  registry.register({
+    name: "run_bash",
+    async handler(args) {
+      toolCalls += 1;
+      return { ok: true, command: args.command, observed: "unchanged" };
+    }
+  });
+  const loop = new AgentLoop({
+    config: { agent: { maxRepeatedToolCycles: 3 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    modelClient: {
+      async chat({ tools }) {
+        modelCalls += 1;
+        if (tools.length === 0) {
+          return { message: { role: "assistant", content: "The file probe is looping; use the attachment importer instead." } };
+        }
+        const copy = modelCalls % 2 === 1;
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `shell-${modelCalls}`,
+              function: {
+                name: "run_bash",
+                arguments: JSON.stringify({
+                  command: copy
+                    ? "cp \\~/Downloads/customers.csv ./customers.csv"
+                    : "ls -la ~/Downloads/customers.csv 2>/dev/null",
+                  reason: `Paraphrased reason ${modelCalls}`
+                })
+              }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  const answer = await loop.run("Import the attached customer CSV");
+
+  assert.equal(toolCalls, 6);
+  assert.equal(modelCalls, 7);
+  assert.match(answer, /attachment importer/i);
+});
+
+test("a returned tool failure gives the next model turn one explicit bounded repair instruction", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "import_contacts",
+    async handler() {
+      return { ok: false, error: "authorization_source must be at most 200 characters" };
+    }
+  });
+  let modelCalls = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    modelClient: {
+      async chat({ messages }) {
+        modelCalls += 1;
+        if (modelCalls === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "import-1",
+                function: { name: "import_contacts", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        assert.ok(messages.some((message) =>
+          String(message.content || "").includes("<amos_tool_failure_repair>") &&
+          String(message.content || "").includes("at most 200 characters") &&
+          String(message.content || "").includes("do not repeat")
+        ));
+        return { message: { role: "assistant", content: "I shortened the source description and can retry once." } };
+      }
+    }
+  });
+
+  assert.match(await loop.run("Import the contacts"), /retry once/i);
+  assert.equal(modelCalls, 2);
+});
+
 function toolNames(tools) {
   return tools
     .map((tool) => tool.function.name)
