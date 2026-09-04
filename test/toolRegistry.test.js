@@ -23,6 +23,29 @@ test("ToolRegistry executes registered tools", async () => {
   assert.deepEqual(await registry.execute("echo", { value: "hi" }, {}), { value: "hi" });
 });
 
+test("ToolRegistry rejects missing required arguments before a remote handler can run", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  registry.register({
+    name: "bulk_import",
+    parameters: {
+      type: "object",
+      properties: { contacts: { type: "array" } },
+      required: ["contacts"]
+    },
+    handler() {
+      calls += 1;
+      return { ok: true };
+    }
+  });
+
+  await assert.rejects(
+    registry.execute("bulk_import", {}, {}),
+    /bulk_import is missing required tool arguments: contacts/
+  );
+  assert.equal(calls, 0);
+});
+
 test("ToolRegistry makes object root union branches explicit for model runtimes", () => {
   const registry = new ToolRegistry();
   registry.register({

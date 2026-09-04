@@ -137,6 +137,7 @@ test("Desktop refuses unadvertised companies and switching during active work", 
 test("Desktop switches independently authenticated accounts and clears every live boundary", async () => {
   const store = settingsStore();
   let activeAccountId = "account-1";
+  let activeApprovalKeyId = "";
   let cacheCleared = false;
   const accountStore = {
     async list() {
@@ -150,12 +151,20 @@ test("Desktop switches independently authenticated accounts and clears every liv
     },
     async activate(id) {
       activeAccountId = id;
+    },
+    async activeApprovalKeyId() {
+      return activeAccountId === "account-1"
+        ? "11111111-1111-4111-8111-111111111111"
+        : "22222222-2222-4222-8222-222222222222";
     }
   };
   const controller = new DesktopController({
     userDataPath: "/tmp/amos-account-switch-controller",
     settingsStore: store,
     accountStore,
+    decisionKeyStore: {
+      async activate(id) { activeApprovalKeyId = id; }
+    },
     taskCheckpointStore: {
       async list() {
         return [
@@ -200,6 +209,7 @@ test("Desktop switches independently authenticated accounts and clears every liv
   const state = await controller.switchAccount("account-2");
 
   assert.equal(activeAccountId, "account-2");
+  assert.equal(activeApprovalKeyId, "22222222-2222-4222-8222-222222222222");
   assert.equal(cacheCleared, true);
   assert.equal(state.identity.tenant_id, targetTenant);
   assert.deepEqual(state.approvals, []);
@@ -213,6 +223,71 @@ test("Desktop switches independently authenticated accounts and clears every liv
   controller.activeTask = { id: "active" };
   await assert.rejects(controller.switchAccount("account-1"), /Finish or stop/);
   assert.equal(activeAccountId, "account-2");
+});
+
+test("Desktop authenticates a second login identity with a distinct approval key", async () => {
+  const store = settingsStore();
+  const legacyKey = {
+    id: "11111111-1111-4111-8111-111111111111",
+    publicKey: "a".repeat(43)
+  };
+  const secondKey = {
+    id: "22222222-2222-4222-8222-222222222222",
+    publicKey: "b".repeat(43)
+  };
+  let associatedLegacyKey = "";
+  let addedApprovalKey = "";
+  let loginApprovalKey = null;
+  const accountStore = {
+    async list() {
+      return {
+        currentAccountId: "account-1",
+        accounts: [{ id: "account-1", label: "AMOS Labs" }]
+      };
+    },
+    async activeApprovalKeyId() { return ""; },
+    async setActiveApprovalKeyId(id) { associatedLegacyKey = id; },
+    async add(_credentials, _profile, options) { addedApprovalKey = options.approvalKeyId; },
+    async updateActiveProfile() {}
+  };
+  const decisionKeyStore = {
+    async getDefault() { return legacyKey; },
+    async create() { return secondKey; },
+    async remove() { throw new Error("the successful key must not be removed"); }
+  };
+  const controller = new DesktopController({
+    userDataPath: "/tmp/amos-add-account-controller",
+    settingsStore: store,
+    accountStore,
+    decisionKeyStore,
+    openBrowser() {},
+    emit() {}
+  });
+  controller.oauthFor = (_settings, options = {}) => options.store
+    ? {
+        async login(input) {
+          loginApprovalKey = input.desktopApprovalKey;
+          return { access_token: "nuvola-token", refresh_token: "nuvola-refresh" };
+        }
+      }
+    : { async status() { return { access_token: "amos-token" }; } };
+  controller.desktopInstallId = async () => "installation-1";
+  controller.refreshRemote = async () => {
+    controller.identity = {
+      principal_type: "user",
+      sub: "nuvola-user",
+      tenant_id: targetTenant,
+      tenant_slug: "nuvola",
+      role: "owner"
+    };
+  };
+  controller.recordAcquisitionEvent = async () => {};
+
+  await controller.addAccount();
+
+  assert.equal(associatedLegacyKey, legacyKey.id);
+  assert.deepEqual(loginApprovalKey, secondKey);
+  assert.equal(addedApprovalKey, secondKey.id);
 });
 
 test("selecting the current account returns Personal mode to its online company", async () => {

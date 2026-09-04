@@ -23,14 +23,24 @@ test("Desktop stores independent OAuth accounts encrypted and switches locally",
   const filePath = join(directory, "accounts.json");
   const store = new DesktopAccountStore({ filePath, ...codec() });
 
-  const first = await store.add({ access_token: "first-secret", refresh_token: "first-refresh" });
+  const firstKey = "11111111-1111-4111-8111-111111111111";
+  const secondKey = "22222222-2222-4222-8222-222222222222";
+  const first = await store.add(
+    { access_token: "first-secret", refresh_token: "first-refresh" },
+    {},
+    { approvalKeyId: firstKey }
+  );
   await store.updateActiveProfile({
     user: { id: "user-amos", name: "Rick Barkley", email: "rick@amoslabs.com" },
     tenant_id: "tenant-amos",
     tenant_slug: "amos-labs",
     role: "owner"
   });
-  const second = await store.add({ access_token: "second-secret", refresh_token: "second-refresh" });
+  const second = await store.add(
+    { access_token: "second-secret", refresh_token: "second-refresh" },
+    {},
+    { approvalKeyId: secondKey }
+  );
   await store.updateActiveProfile({
     user: { id: "user-smile", name: "Rick Barkley", email: "rick@smilewise.com" },
     tenant_id: "tenant-smile",
@@ -39,8 +49,13 @@ test("Desktop stores independent OAuth accounts encrypted and switches locally",
   });
 
   assert.equal((await store.read()).access_token, "second-secret");
+  assert.equal(await store.activeApprovalKeyId(), secondKey);
   await store.activate(first);
   assert.equal((await store.read()).access_token, "first-secret");
+  assert.equal(await store.activeApprovalKeyId(), firstKey);
+  const replacementKey = "33333333-3333-4333-8333-333333333333";
+  await store.setActiveApprovalKeyId(replacementKey);
+  assert.equal(await store.activeApprovalKeyId(), replacementKey);
   await store.write({ access_token: "first-rotated", refresh_token: "first-refresh-2" });
   assert.equal((await store.read()).access_token, "first-rotated");
 
