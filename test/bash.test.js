@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createBashTool, runBash, safeChildEnvironment, shellInvocation } from "../src/tools/bash.js";
+import { createBashTool, explainBashFailure, runBash, safeChildEnvironment, shellInvocation } from "../src/tools/bash.js";
 
 test("bash child environment excludes provider and AMOS secrets", () => {
   const value = safeChildEnvironment({
@@ -53,6 +53,20 @@ test("bash captures only bounded output", async () => {
   assert.equal(result.ok, true);
   assert.match(result.stdout, /truncated 976 bytes/);
   assert.ok(Buffer.byteLength(result.stdout) < 1_100);
+});
+
+test("bash failures explain empty diagnostics and escaped home paths", () => {
+  const result = explainBashFailure("ls \\~/Downloads/customers.csv 2>/dev/null", {
+    ok: false,
+    exit_code: 2,
+    stdout: "",
+    stderr: ""
+  });
+
+  assert.match(result.error, /without diagnostic output/i);
+  assert.equal(result.repair.code, "escaped_home_path");
+  assert.match(result.repair.hint, /absolute path/i);
+  assert.equal(result.repair.do_not_repeat, true);
 });
 
 test("bash timeout terminates the process group promptly", async () => {

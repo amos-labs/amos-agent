@@ -11882,7 +11882,7 @@ function renderLiveEvent(event) {
   if (transientStatus) {
     updateChatRunStatus(transientStatus.message, transientStatus.status);
   }
-  if (event.type === "tool_error") setPanelBadge("error");
+  if (event.type === "tool_error" || failedToolResultEvent(event)) setPanelBadge("error");
   else if (running) setPanelBadge("working");
   if (event.type === "context_compiled") {
     // Compiling context is instantaneous next to the model wait. Keep the
@@ -11894,7 +11894,7 @@ function renderLiveEvent(event) {
   const card = document.createElement("div");
   card.className = [
     "event-card",
-    event.type === "tool_error" ? "error" : "",
+    event.type === "tool_error" || failedToolResultEvent(event) ? "error" : "",
     event.type === "phase" ? "phase" : "",
     event.type === "workflow" ? "workflow" : "",
     event.type === "coding_lifecycle" ? "coding-lifecycle" : "",
@@ -11953,9 +11953,12 @@ function liveEventCopy(event) {
     };
   }
   if (event.type === "tool_end") {
+    const failure = failedToolResultEvent(event);
     return {
       title: humanizeTool(event.name || "tool"),
-      detail: "Finished with a recorded result",
+      detail: failure
+        ? toolResultError(event)
+        : "Finished with a recorded result",
       inline: true
     };
   }
@@ -11983,6 +11986,18 @@ function liveEventCopy(event) {
     detail: event.summary && event.summary !== fallback ? event.summary : "",
     inline: Boolean(event.summary || event.name)
   };
+}
+
+function failedToolResultEvent(event) {
+  return event?.type === "tool_end" && (event?.failed === true || event?.result?.ok === false);
+}
+
+function toolResultError(event) {
+  const result = event?.result;
+  const value = event?.error || result?.error || result?.message || result?.stderr;
+  if (typeof value === "string" && value.trim()) return value.trim().slice(0, 500);
+  if (value && typeof value === "object") return JSON.stringify(value).slice(0, 500);
+  return "Tool returned a failed result without a diagnostic message";
 }
 
 function liveUsageSummary(event) {

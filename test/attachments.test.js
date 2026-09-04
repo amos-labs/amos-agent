@@ -178,3 +178,22 @@ test("large attachment excerpts follow the selected model context and remain chu
   assert.ok(chunk.offset > 0);
   assert.ok(attachmentTextBudget({ contextTokens: 16_384, maxOutputTokens: 4_096 }) < 30_000);
 });
+
+test("CSV attachments expose a bounded preview and direct the model to the deterministic importer", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-csv-attachment-"));
+  const file = join(root, "customers.csv");
+  await writeFile(file, `email,name\n${"person@example.com,Person\n".repeat(2_000)}`);
+  const manager = new AttachmentManager();
+  const [attachment] = await manager.addPaths([file]);
+
+  const content = manager.buildMessageContent(
+    "Create a marketing group from this file",
+    [{ id: attachment.id }],
+    { vision: false, contextTokens: 131_072, maxOutputTokens: 8_192 }
+  );
+
+  assert.ok(content.length < 10_000);
+  assert.match(content, /desktop_import_email_contacts_csv/);
+  assert.match(content, /Do not search Downloads/);
+  assert.match(content, /attachment text truncated/);
+});

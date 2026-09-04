@@ -65,9 +65,9 @@ function contactCsvParameters({ importing }) {
         enum: ["explicit_consent", "existing_customer_relationship", "legitimate_interest", "contractual_relationship", "other_user_asserted_basis"],
         description: "The user's asserted basis for placing the contacts in this audience."
       },
-      authorization_source: { type: "string", description: "Truthful provenance, such as a predecessor-company customer export and the relationship described by the user." },
+      authorization_source: { type: "string", maxLength: 200, description: "Concise truthful provenance (maximum 200 characters), such as a predecessor-company customer export and the relationship described by the user." },
       authorized_at: { type: "string", description: "RFC3339 timestamp when the user confirmed this basis to AMOS." },
-      segment_name: { type: "string", description: "Optional static AMOS segment to create or reuse across every batch." },
+      segment_name: { type: "string", maxLength: 200, description: "Optional static AMOS segment to create or reuse across every batch." },
       batch_size: { type: "integer", minimum: 1, maximum: 1000, default: DEFAULT_BATCH_SIZE }
     });
     required.push("authorization_confirmed", "authorization_basis", "authorization_source", "authorized_at");

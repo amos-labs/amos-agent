@@ -178,11 +178,24 @@ export class AttachmentManager {
     for (const [index, item] of documents.entries()) {
       const documentsLeft = documents.length - index;
       const fairShare = Math.floor(remaining / Math.max(1, documentsLeft));
-      const content = item.text.slice(0, Math.min(MAX_MODEL_TEXT_CHARS, fairShare));
+      const tabular = isTabularAttachment(item);
+      // Desktop retains and deterministically parses the complete CSV. A small
+      // preview is enough for the model to recognize columns without paying to
+      // re-tokenize hundreds of rows or tempting it to author a giant array.
+      const contentLimit = tabular
+        ? Math.min(8_000, fairShare)
+        : Math.min(MAX_MODEL_TEXT_CHARS, fairShare);
+      const content = item.text.slice(0, contentLimit);
       remaining -= content.length;
       documentBlocks.push(
         [
           `<attachment name="${escapeAttribute(item.name)}" type="${escapeAttribute(item.mime)}">`,
+          ...(tabular
+            ? [
+                "[Desktop retained the complete tabular attachment under the attachment_id above.]",
+                "[For an email-contact or marketing-group import, call desktop_preview_email_contacts_csv and desktop_import_email_contacts_csv. Do not search Downloads, copy the source file, or serialize all rows in a tool call.]"
+              ]
+            : []),
           content,
           content.length < item.text.length ? "\n[attachment text truncated for this model request]" : "",
           "</attachment>"
@@ -366,6 +379,14 @@ export function attachmentToolkit(attachment) {
     return "presentations";
   }
   return attachment.kind === "document" ? "documents" : "";
+}
+
+function isTabularAttachment(item) {
+  const extension = extname(String(item?.name || "")).toLowerCase();
+  const mime = String(item?.mime || "").toLowerCase();
+  return [".csv", ".tsv"].includes(extension) ||
+    mime === "text/csv" ||
+    mime === "text/tab-separated-values";
 }
 
 export function attachmentTextBudget({

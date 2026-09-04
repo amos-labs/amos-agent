@@ -61,6 +61,12 @@ export function loadConfig(env = process.env, cwd = process.cwd()) {
         2,
         12
       ),
+      maxRepeatedToolPatternCycles: intFromEnv(
+        env.AMOS_AGENT_MAX_REPEATED_TOOL_PATTERN_CYCLES,
+        3,
+        2,
+        6
+      ),
       maxConsecutiveToolErrorCycles: intFromEnv(
         env.AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES,
         3,
