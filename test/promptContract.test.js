@@ -60,7 +60,7 @@ test("canvas guidance defaults to chat and requires a material visual advantage"
 });
 
 test("the shared AMOS constitution is versioned and used on every boundary", () => {
-  assert.equal(AMOS_OPERATOR_CONSTITUTION_VERSION, 3);
+  assert.equal(AMOS_OPERATOR_CONSTITUTION_VERSION, 4);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Questioning is part of the work/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /ask until the user's\s+intent is clear/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /ask it in the conversation/);
@@ -71,15 +71,22 @@ test("the shared AMOS constitution is versioned and used on every boundary", () 
   assert.doesNotMatch(AMOS_OPERATOR_CONSTITUTION, /Investigate before interrogating/);
   assert.doesNotMatch(AMOS_OPERATOR_CONSTITUTION, /What kind of business/);
   assert.match(AMOS_OPERATOR_CONSTITUTION, /Do not run a personality survey or a fixed questionnaire/);
+  assert.match(AMOS_OPERATOR_CONSTITUTION, /AMOS is their tool, not their substitute decision/);
+  assert.match(AMOS_OPERATOR_CONSTITUTION, /Do not turn a best\s+practice, preference, or AMOS's uncertainty into an invented prohibition/);
   for (const prompt of [
     SYSTEM_PROMPT,
     DEMO_SYSTEM_PROMPT,
     PERSONAL_SYSTEM_PROMPT,
     OFFLINE_SYSTEM_PROMPT
   ]) {
-    assert.match(prompt, /AMOS Operator constitution v3/);
+    assert.match(prompt, /AMOS Operator constitution v4/);
     assert.match(prompt, /Questioning is part of the work/);
   }
+});
+
+test("bulk structured data is transformed deterministically outside model context", () => {
+  assert.match(SYSTEM_PROMPT, /use deterministic local tools, Bash\/Python, or a purpose-built importer/);
+  assert.match(SYSTEM_PROMPT, /Never hand-format hundreds of rows/);
 });
 
 test("automation setup waits for understanding instead of launching immediately", () => {

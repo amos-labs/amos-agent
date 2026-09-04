@@ -248,6 +248,23 @@ export class AttachmentManager {
     };
   }
 
+  tabularText(id) {
+    const item = this.get(id);
+    const extension = extname(String(item.name || "")).toLowerCase();
+    if (![".csv", ".tsv"].includes(extension)) {
+      throw new Error("Choose a CSV or TSV attachment for a contact import");
+    }
+    if (item.kind !== "document" || !item.text) {
+      throw new Error(`${item.name} does not contain readable tabular text`);
+    }
+    return {
+      id: item.id,
+      name: item.name,
+      sha256: item.sha256,
+      text: item.text
+    };
+  }
+
   memoryPayload(id, imageDescription = "") {
     const item = this.get(id);
     const content = item.kind === "image" ? String(imageDescription || "").trim() : item.text;

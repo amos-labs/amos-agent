@@ -53,7 +53,7 @@ export const CONSULTATIVE_SCENARIOS = [
     id: "model-switch",
     prompt: "Continue after falling back to the local profile.",
     expect: "same AMOS constitution and open loops",
-    context: "Open loop: decide whether Stripe or QBO is authoritative for customer changes. Constitution remains AMOS Operator constitution v3."
+    context: "Open loop: decide whether Stripe or QBO is authoritative for customer changes. Constitution remains AMOS Operator constitution v4."
   },
   {
     id: "returning-user",

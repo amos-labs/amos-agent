@@ -121,7 +121,7 @@ export class DesktopAccountStore {
     await this.writeEnvelope(envelope);
   }
 
-  async add(credentials, profile = {}) {
+  async add(credentials, profile = {}, { approvalKeyId = "" } = {}) {
     if (!credentials?.access_token) throw new Error("An AMOS account requires an OAuth session");
     const envelope = await this.readEnvelope();
     const id = randomUUID();
@@ -129,6 +129,7 @@ export class DesktopAccountStore {
     envelope.accounts.push(this.seal({
       credentials: structuredClone(credentials),
       profile: sanitizeProfile(profile),
+      approvalKeyId: cleanApprovalKeyId(approvalKeyId),
       createdAt: now,
       lastUsedAt: now
     }, id));
@@ -218,6 +219,24 @@ export class DesktopAccountStore {
     };
   }
 
+  async activeApprovalKeyId() {
+    const envelope = await this.readEnvelope();
+    const account = envelope.accounts.find((item) => item.id === envelope.activeAccountId);
+    return account ? cleanApprovalKeyId(this.open(account).approvalKeyId) : "";
+  }
+
+  async setActiveApprovalKeyId(approvalKeyId) {
+    const normalized = cleanApprovalKeyId(approvalKeyId);
+    if (!normalized) throw new Error("A valid Desktop approval key id is required");
+    const envelope = await this.readEnvelope();
+    const index = envelope.accounts.findIndex((item) => item.id === envelope.activeAccountId);
+    if (index < 0) throw new Error("No active AMOS account is available");
+    const record = this.open(envelope.accounts[index]);
+    record.approvalKeyId = normalized;
+    envelope.accounts[index] = this.seal(record, envelope.activeAccountId);
+    await this.writeEnvelope(envelope);
+  }
+
   seal(record, id) {
     return { id, encryptedRecord: this.encrypt(JSON.stringify(record)) };
   }
@@ -282,6 +301,11 @@ function sanitizeProfile(value = {}) {
     tenantSlug: clean(value.tenantSlug, 160),
     role: clean(value.role, 80)
   };
+}
+
+function cleanApprovalKeyId(value) {
+  const normalized = String(value || "").trim();
+  return /^[0-9a-f-]{36}$/i.test(normalized) ? normalized : "";
 }
 
 

@@ -269,7 +269,15 @@ export class ToolRegistry {
     if (!tool) {
       throw new Error(`Unknown tool: ${name}`);
     }
-    return tool.handler(args || {}, context);
+    const supplied = args && typeof args === "object" && !Array.isArray(args) ? args : {};
+    const required = Array.isArray(tool.definition?.function?.parameters?.required)
+      ? tool.definition.function.parameters.required
+      : [];
+    const missing = required.filter((key) => !Object.hasOwn(supplied, key));
+    if (missing.length > 0) {
+      throw new Error(`${name} is missing required tool arguments: ${missing.join(", ")}`);
+    }
+    return tool.handler(supplied, context);
   }
 }
 

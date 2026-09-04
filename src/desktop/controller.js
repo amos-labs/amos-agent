@@ -37,6 +37,7 @@ import {
 } from "../model/codingLifecycle.js";
 import { createRuntime, shouldUseOAuth } from "../runtime.js";
 import { createSubagentTools } from "../tools/subagents.js";
+import { createContactCsvTools } from "../tools/contactCsv.js";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { DesktopApprovalBridge } from "./approvalBridge.js";
@@ -1383,20 +1384,49 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const activeOauth = this.oauthFor(settings);
     const previous = await activeOauth.status();
+    const accountsBefore = this.accountStore ? await this.accountStore.list() : null;
+    let approvalKey = null;
+    let createdApprovalKey = false;
+    if (this.decisionKeyStore) {
+      if (this.accountStore && accountsBefore?.accounts?.length > 0) {
+        // Accounts created before per-account approval keys shared the one
+        // legacy key. Pin that key to the current account before creating a
+        // distinct key for the newly authenticated identity.
+        let activeKeyId = await this.accountStore.activeApprovalKeyId();
+        if (!activeKeyId) {
+          const legacyKey = await this.decisionKeyStore.getDefault();
+          activeKeyId = legacyKey.id;
+          await this.accountStore.setActiveApprovalKeyId(activeKeyId);
+        }
+        approvalKey = await this.decisionKeyStore.create();
+        createdApprovalKey = true;
+      } else {
+        approvalKey = await this.decisionKeyStore.getOrCreate();
+      }
+    }
     const pendingStore = this.accountStore ? new MemoryTokenStore() : null;
     const oauth = pendingStore
       ? this.oauthFor(settings, { store: pendingStore })
       : activeOauth;
-    const credentials = await oauth.login({
-      openBrowser: true,
-      desktopInstallId: await this.desktopInstallId(),
-      desktopApprovalKey: this.decisionKeyStore
-        ? await this.decisionKeyStore.getOrCreate()
-        : null,
-      onAuthorize: ({ url }) => this.send("auth:browser", { url })
-    });
+    let credentials;
+    try {
+      credentials = await oauth.login({
+        openBrowser: true,
+        desktopInstallId: await this.desktopInstallId(),
+        desktopApprovalKey: approvalKey,
+        onAuthorize: ({ url }) => this.send("auth:browser", { url })
+      });
+    } catch (error) {
+      if (createdApprovalKey) await this.decisionKeyStore.remove(approvalKey.id);
+      throw error;
+    }
     if (this.accountStore) {
-      await this.accountStore.add(credentials);
+      try {
+        await this.accountStore.add(credentials, {}, { approvalKeyId: approvalKey?.id });
+      } catch (error) {
+        if (createdApprovalKey) await this.decisionKeyStore.remove(approvalKey.id);
+        throw error;
+      }
     } else if (!replaceDisconnected && previous?.access_token) {
       throw new Error("This AMOS Desktop build supports only one account");
     }
@@ -1444,10 +1474,24 @@ export class DesktopController {
     const settings = await this.settingsStore.read();
     const oauth = this.oauthFor(settings);
     const credentials = await oauth.status();
+    const removedApprovalKeyId = this.accountStore
+      ? await this.accountStore.activeApprovalKeyId()
+      : "";
     await oauth.logout();
     const remainingAccounts = this.accountStore ? await this.accountStore.list() : null;
-    if (this.decisionKeyStore && (!remainingAccounts || remainingAccounts.accounts.length === 0)) {
-      await this.decisionKeyStore.clear();
+    if (this.decisionKeyStore) {
+      if (!remainingAccounts || remainingAccounts.accounts.length === 0) {
+        await this.decisionKeyStore.clear();
+      } else {
+        if (removedApprovalKeyId) await this.decisionKeyStore.remove(removedApprovalKeyId);
+        let activeKeyId = await this.accountStore.activeApprovalKeyId();
+        if (!activeKeyId) {
+          const legacyKey = await this.decisionKeyStore.getDefault();
+          activeKeyId = legacyKey.id;
+          await this.accountStore.setActiveApprovalKeyId(activeKeyId);
+        }
+        await this.decisionKeyStore.activate(activeKeyId);
+      }
     }
     if (this.companyCacheStore) await this.companyCacheStore.clear();
     this.companyCacheRevalidatedFor = null;
@@ -1495,6 +1539,15 @@ export class DesktopController {
     }
 
     if (accountId !== accounts.currentAccountId) await this.accountStore.activate(accountId);
+    if (this.decisionKeyStore) {
+      let approvalKeyId = await this.accountStore.activeApprovalKeyId();
+      if (!approvalKeyId) {
+        const legacyKey = await this.decisionKeyStore.getDefault();
+        approvalKeyId = legacyKey.id;
+        await this.accountStore.setActiveApprovalKeyId(approvalKeyId);
+      }
+      await this.decisionKeyStore.activate(approvalKeyId);
+    }
     if (this.companyCacheStore) await this.companyCacheStore.clear();
     this.companyCacheRevalidatedFor = null;
     await this.settingsStore.write({
@@ -5884,6 +5937,13 @@ export class DesktopController {
     if (!contextOnly) {
       extraTools.push(...createAttachmentTools({
         read: (input) => this.attachments.readModelChunk(input.id, input)
+      }));
+      extraTools.push(...createContactCsvTools({
+        attachments: this.attachments,
+        onProgress: ({ batchNumber, processed, total }) => this.record(
+          "acting",
+          `Imported contact batch ${batchNumber}: ${processed} of ${total}`
+        )
       }));
       extraTools.push(createCodeWorkspaceTool({
         present: (spec) => this.presentCanvas(spec)
