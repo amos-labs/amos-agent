@@ -2751,6 +2751,7 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   const registry = new ToolRegistry();
   const events = [];
   let synthesisMessages = [];
+  const toolTurnMessages = [];
   let calls = 0;
   registry.register({
     name: "inspect_issue",
@@ -2780,6 +2781,7 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
             }
           };
         }
+        toolTurnMessages.push(messages);
         return {
           message: {
             role: "assistant",
@@ -2807,6 +2809,10 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   assert.equal(synthesisMessages.filter((message) => message.role === "system").length, 1);
   assert.equal(synthesisMessages.at(-1).role, "user");
   assert.match(synthesisMessages.at(-1).content, /Do not call another tool/);
+  assert.ok(toolTurnMessages[2].some((message) =>
+    String(message.content || "").includes("<amos_no_progress_recovery>") &&
+    String(message.content || "").includes("materially different move")
+  ));
 });
 
 test("an identical read-only status request synthesizes despite changing receipt metadata", async () => {
@@ -3172,6 +3178,49 @@ test("a returned tool failure gives the next model turn one explicit bounded rep
   });
 
   assert.match(await loop.run("Import the contacts"), /retry once/i);
+  assert.equal(modelCalls, 2);
+});
+
+test("a user-denied tool is direction, not a repairable failure", async () => {
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "write_file",
+    async handler() {
+      return { ok: false, denied: true, status: "denied", message: "User denied file write." };
+    }
+  });
+  let modelCalls = 0;
+  const loop = new AgentLoop({
+    config: { agent: { maxConsecutiveToolErrorCycles: 1 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    modelClient: {
+      async chat({ messages, tools }) {
+        modelCalls += 1;
+        assert.ok(tools.length > 0, "a denial must not force guard synthesis");
+        if (modelCalls === 1) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: "write-1",
+                function: { name: "write_file", arguments: "{}" }
+              }]
+            }
+          };
+        }
+        const guidance = messages.map((message) => String(message.content || "")).join("\n");
+        assert.match(guidance, /<amos_tool_denial>/);
+        assert.match(guidance, /new direction, not as a tool failure/i);
+        assert.doesNotMatch(guidance, /<amos_tool_failure_repair>/);
+        return { message: { role: "assistant", content: "The file was not changed because you denied the write." } };
+      }
+    }
+  });
+
+  assert.match(await loop.run("Write the file"), /not changed/i);
   assert.equal(modelCalls, 2);
 });
 
