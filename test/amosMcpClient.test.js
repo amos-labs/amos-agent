@@ -247,3 +247,34 @@ test("normalizeMcpToolResult turns MCP error envelopes into failed tool results"
     isError: true
   }), { ok: false, error: "connection expired" });
 });
+
+test("normalizeMcpToolResult preserves bounded structured diagnostics", () => {
+  assert.deepEqual(normalizeMcpToolResult({
+    structuredContent: {
+      error: {
+        code: "missing_scope",
+        message: "The connection needs another scope.",
+        details: {
+          provider: "apollo",
+          required_action: "reconnect",
+          access_token: "must-not-reach-the-model"
+        },
+        retryable: false,
+        required_scopes: ["contacts.read"]
+      },
+      status: 403
+    },
+    isError: true
+  }), {
+    ok: false,
+    error: "The connection needs another scope.",
+    code: "missing_scope",
+    details: {
+      provider: "apollo",
+      required_action: "reconnect"
+    },
+    retryable: false,
+    status: "403",
+    required_scopes: ["contacts.read"]
+  });
+});

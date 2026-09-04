@@ -351,6 +351,7 @@ export class AgentLoop {
       let gatherTurns = 0;
       let timeoutContinuations = 0;
       let totalToolCycles = 0;
+      let repeatedPlanRecoveryIssued = false;
       const resetProgressGuards = () => {
         previousToolPlanFingerprint = null;
         repeatedToolPlanCycles = 0;
@@ -359,6 +360,7 @@ export class AgentLoop {
         capabilityDiscoveryCyclesWithoutProgress = 0;
         previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
         modelRetryGuidance = null;
+        repeatedPlanRecoveryIssued = false;
       };
 
       while (true) {
@@ -775,8 +777,9 @@ export class AgentLoop {
             onEvent({ type: "tool_error", name, error: result.error });
           }
           modelEvidence.push(...takeModelEvidence(result));
-          if (failed) failedToolActions += 1;
-          else {
+          if (failed) {
+            if (!toolResultDenied(result)) failedToolActions += 1;
+          } else {
             completedToolActions += 1;
             if (isScratchpadBookkeepingTool(name)) completedScratchpadActions += 1;
             else completedEvidenceToolActions += 1;
@@ -839,11 +842,30 @@ export class AgentLoop {
           maxPeriod: 8,
           minimumRepeats: 2
         });
-        consecutiveToolErrorCycles = outcomes.some((outcome) => outcome.failed)
+        const repairableFailures = outcomes.filter((outcome) =>
+          outcome.failed && !toolResultDenied(outcome.result)
+        );
+        const deniedOutcomes = outcomes.filter((outcome) => toolResultDenied(outcome.result));
+        consecutiveToolErrorCycles = repairableFailures.length > 0
           ? consecutiveToolErrorCycles + 1
           : 0;
-        if (outcomes.some((outcome) => outcome.failed)) {
-          modelRetryGuidance = toolFailureRepairMessage(outcomes);
+        if (repairableFailures.length > 0) {
+          modelRetryGuidance = toolFailureRepairMessage(repairableFailures);
+        } else if (deniedOutcomes.length > 0) {
+          modelRetryGuidance = toolDenialDirectionMessage(deniedOutcomes);
+        } else if (
+          !readOnlyToolPlan &&
+          repeatedToolPlanCycles === 2 &&
+          !repeatedPlanRecoveryIssued
+        ) {
+          repeatedPlanRecoveryIssued = true;
+          modelRetryGuidance = repeatedPlanRecoveryMessage(outcomes);
+          onEvent({
+            type: "phase",
+            phase: "retrying",
+            turn,
+            summary: "The same tool plan produced no new approach; asking the model to change strategy once"
+          });
         }
         const capabilitySurface = capabilitySurfaceFingerprint(this.registry);
         const discoveryCalls = outcomes.filter((outcome) =>
@@ -2574,7 +2596,6 @@ function repeatedTailPattern(history, { maxPeriod = 8, minimumRepeats = 2 } = {}
 
 function toolFailureRepairMessage(outcomes) {
   const failures = outcomes
-    .filter((outcome) => outcome.failed)
     .slice(0, 4)
     .map((outcome) => `- ${outcome.name}: ${toolFailureText(outcome.result)}`);
   return {
@@ -2585,6 +2606,43 @@ function toolFailureRepairMessage(outcomes) {
       ...failures,
       "Make at most one corrected attempt before reporting the blocker. For shell repair, preserve stderr and use an absolute path or an unescaped $HOME path. If the task includes an attachment_id, use the attachment or purpose-built importer instead of searching Downloads for the original file.",
       "</amos_tool_failure_repair>"
+    ].join("\n")
+  };
+}
+
+function toolResultDenied(result) {
+  const status = String(result?.status || result?.code || "").trim().toLowerCase();
+  return result?.denied === true || ["denied", "user_denied", "cancelled", "canceled"].includes(status);
+}
+
+function toolDenialDirectionMessage(outcomes) {
+  const names = [...new Set(outcomes.map((outcome) => outcome.name).filter(Boolean))]
+    .slice(0, 4)
+    .join(", ");
+  return {
+    role: "user",
+    content: [
+      "<amos_tool_denial>",
+      `The user denied ${names || "the requested tool action"}. Treat that as new direction, not as a tool failure to repair.`,
+      "Do not retry the denied action or an equivalent action unless the user explicitly asks. Continue only with a materially different, already-authorized path, or explain the consequence of the denial and ask one necessary question.",
+      "</amos_tool_denial>"
+    ].join("\n")
+  };
+}
+
+function repeatedPlanRecoveryMessage(outcomes) {
+  const calls = outcomes.slice(0, 6).map((outcome) => {
+    const args = stableLoopValue(loopPlanArguments(outcome.name, outcome.args ?? outcome.rawArgs));
+    return `- ${outcome.name}: ${JSON.stringify(args).slice(0, 500)}`;
+  });
+  return {
+    role: "user",
+    content: [
+      "<amos_no_progress_recovery>",
+      "The same non-read-only tool plan was submitted twice without a new approach:",
+      ...calls,
+      "Do not submit it a third time. Make one materially different move: change the substantive arguments, use a different tool, inspect the missing prerequisite, or ask the user one concrete question. If none can advance the task, report the blocker now.",
+      "</amos_no_progress_recovery>"
     ].join("\n")
   };
 }

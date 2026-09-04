@@ -347,6 +347,13 @@ distinct records remain productive work. A failed call gets one corrected
 attempt. The absolute boundary synthesizes the evidence already collected; it
 does not replay completed work.
 
+Before stopping a repeated non-read-only plan, AMOS gives the model one
+request-local instruction to change its substantive arguments, choose a
+different tool, inspect a missing prerequisite, or report the blocker. A human
+denial is direction rather than a repairable failure and is never retried
+without a new user request. Structured MCP error codes, bounded details,
+retryability, and required scopes remain available to that recovery step.
+
 ## Reporting a problem
 
 Security vulnerabilities should be reported privately as described in

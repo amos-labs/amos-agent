@@ -47,10 +47,7 @@ export function normalizeMcpToolResult(result) {
   const parsed = structured ?? parseMcpToolText(text);
 
   if (isError) {
-    return {
-      ok: false,
-      error: mcpErrorMessage(parsed, text)
-    };
+    return mcpErrorResult(parsed, text);
   }
   if (plainObject(parsed)) {
     return parsed.ok === undefined ? { ...parsed, ok: true } : parsed;
@@ -72,11 +69,73 @@ function parseMcpToolText(text) {
   }
 }
 
-function mcpErrorMessage(payload, text) {
-  if (plainObject(payload)) {
-    return String(payload.error?.message || payload.error || payload.message || text || "AMOS tool failed");
+function mcpErrorResult(payload, text) {
+  const envelope = plainObject(payload) ? payload : {};
+  const nested = plainObject(envelope.error) ? envelope.error : {};
+  const error = boundedDiagnosticText(
+    nested.message ||
+    (typeof envelope.error === "string" ? envelope.error : "") ||
+    envelope.message ||
+    (!plainObject(payload) ? payload : "") ||
+    text ||
+    "AMOS tool failed",
+    2_000
+  );
+  const code = boundedDiagnosticScalar(nested.code ?? envelope.code, 160);
+  const details = boundedDiagnosticValue(nested.details ?? envelope.details);
+  const retryable = typeof (nested.retryable ?? envelope.retryable) === "boolean"
+    ? (nested.retryable ?? envelope.retryable)
+    : null;
+  const status = boundedDiagnosticScalar(nested.status ?? envelope.status, 80);
+  const requiredScopes = boundedDiagnosticList(
+    nested.required_scopes ?? nested.required_scope ?? envelope.required_scopes ?? envelope.required_scope
+  );
+  return {
+    ok: false,
+    error,
+    ...(code !== null ? { code } : {}),
+    ...(details !== null ? { details } : {}),
+    ...(retryable !== null ? { retryable } : {}),
+    ...(status !== null ? { status } : {}),
+    ...(requiredScopes.length > 0 ? { required_scopes: requiredScopes } : {})
+  };
+}
+
+function boundedDiagnosticText(value, limit) {
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return String(text || "AMOS tool failed").slice(0, limit);
+}
+
+function boundedDiagnosticScalar(value, limit) {
+  if (!["string", "number"].includes(typeof value)) return null;
+  const text = String(value).trim();
+  return text ? text.slice(0, limit) : null;
+}
+
+function boundedDiagnosticList(value) {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  return [...new Set(values
+    .map((item) => boundedDiagnosticScalar(item, 160))
+    .filter(Boolean))]
+    .slice(0, 16);
+}
+
+function boundedDiagnosticValue(value, depth = 0) {
+  if (value == null || depth > 3) return null;
+  if (typeof value === "string") return value.slice(0, 2_000);
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    return value.slice(0, 16)
+      .map((item) => boundedDiagnosticValue(item, depth + 1))
+      .filter((item) => item !== null);
   }
-  return String(payload || text || "AMOS tool failed");
+  if (!plainObject(value)) return null;
+  const entries = Object.entries(value)
+    .filter(([key]) => !/(?:token|secret|password|authorization|cookie|api.?key)/i.test(key))
+    .slice(0, 24)
+    .map(([key, item]) => [key, boundedDiagnosticValue(item, depth + 1)])
+    .filter(([, item]) => item !== null);
+  return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
 function plainObject(value) {
