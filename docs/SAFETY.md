@@ -331,17 +331,21 @@ not recommended for normal interactive Desktop use. `AMOS_AGENT_AUTO_APPROVE_BAS
 only removes the approval prompt; see [Shell commands](#shell-commands) for what
 still applies and what never did.
 
-Productive work has no fixed cycle ceiling. Three progress safeguards remain
-configurable for unusual deployments:
+One model/tool run has a high absolute circuit breaker. Long-lived work should
+checkpoint into another bounded run instead of keeping one inference loop alive
+forever. Repetition and failure safeguards stop earlier when appropriate:
 
 ```bash
+AMOS_AGENT_MAX_TOOL_CYCLES=64
 AMOS_AGENT_MAX_REPEATED_TOOL_CYCLES=5
 AMOS_AGENT_MAX_REPEATED_TOOL_PATTERN_CYCLES=3
-AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES=3
+AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES=2
 ```
 
-They count only repeated identical tool/result cycles, short repeating tool-plan
-patterns, or cycles in which every tool fails—not normal productive work.
+Exact request fingerprints retain their arguments, so sequential pages and
+distinct records remain productive work. A failed call gets one corrected
+attempt. The absolute boundary synthesizes the evidence already collected; it
+does not replay completed work.
 
 ## Reporting a problem
 

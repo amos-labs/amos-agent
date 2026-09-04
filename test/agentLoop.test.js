@@ -1309,6 +1309,148 @@ test("productive work continues beyond the former eight-cycle limit", async () =
   assert.deepEqual(executed, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
 });
 
+test("read-only pagination remains productive when the request arguments advance", async () => {
+  const registry = new ToolRegistry();
+  const pages = [];
+  registry.register({
+    name: "list_records",
+    readOnly: true,
+    parallelSafe: true,
+    async handler({ page }) {
+      pages.push(page);
+      return { ok: true, page, records: [{ id: `record-${page}` }] };
+    }
+  });
+  let modelCalls = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    modelClient: {
+      async chat() {
+        modelCalls += 1;
+        if (modelCalls <= 4) {
+          return {
+            message: {
+              role: "assistant",
+              content: "",
+              tool_calls: [{
+                id: `page-${modelCalls}`,
+                function: {
+                  name: "list_records",
+                  arguments: JSON.stringify({ page: modelCalls })
+                }
+              }]
+            }
+          };
+        }
+        return { message: { role: "assistant", content: "All four pages were inspected." } };
+      }
+    }
+  });
+
+  assert.equal(await loop.run("Inspect all pages"), "All four pages were inspected.");
+  assert.deepEqual(pages, [1, 2, 3, 4]);
+});
+
+test("one failed tool repair is allowed even when another tool in the cycle succeeds", async () => {
+  const registry = new ToolRegistry();
+  let failedCalls = 0;
+  let successfulCalls = 0;
+  registry.register({
+    name: "broken_read",
+    async handler() {
+      failedCalls += 1;
+      return { ok: false, error: "invalid filter" };
+    }
+  });
+  registry.register({
+    name: "healthy_read",
+    async handler() {
+      successfulCalls += 1;
+      return { ok: true, count: successfulCalls };
+    }
+  });
+  let modelCalls = 0;
+  const loop = new AgentLoop({
+    config: { agent: {} },
+    registry,
+    approvals: {},
+    amosClient: {},
+    modelClient: {
+      async chat({ tools }) {
+        modelCalls += 1;
+        if (tools.length === 0) {
+          return { message: { role: "assistant", content: "The filter remained invalid after one repair attempt." } };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `broken-${modelCalls}`,
+              function: { name: "broken_read", arguments: JSON.stringify({ attempt: modelCalls }) }
+            }, {
+              id: `healthy-${modelCalls}`,
+              function: { name: "healthy_read", arguments: JSON.stringify({ attempt: modelCalls }) }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  assert.match(await loop.run("Read both sources"), /one repair attempt/i);
+  assert.equal(failedCalls, 2);
+  assert.equal(successfulCalls, 2);
+  assert.equal(modelCalls, 3);
+});
+
+test("novel tool plans still stop at the absolute execution boundary", async () => {
+  const registry = new ToolRegistry();
+  let toolCalls = 0;
+  registry.register({
+    name: "inspect_next",
+    async handler({ item }) {
+      toolCalls += 1;
+      return { ok: true, item };
+    }
+  });
+  let modelCalls = 0;
+  const loop = new AgentLoop({
+    config: { agent: { maxToolCycles: 4 } },
+    registry,
+    approvals: {},
+    amosClient: {},
+    modelClient: {
+      async chat({ tools }) {
+        modelCalls += 1;
+        if (tools.length === 0) {
+          return { message: { role: "assistant", content: "The bounded run stopped after four unique inspections." } };
+        }
+        return {
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [{
+              id: `inspect-${modelCalls}`,
+              function: {
+                name: "inspect_next",
+                arguments: JSON.stringify({ item: `unique-${modelCalls}` })
+              }
+            }]
+          }
+        };
+      }
+    }
+  });
+
+  assert.match(await loop.run("Keep inspecting forever"), /stopped after four/i);
+  assert.equal(toolCalls, 4);
+  assert.equal(modelCalls, 5);
+});
+
 test("a model timeout after completed tools exposes recoverable progress", async () => {
   const registry = new ToolRegistry();
   registry.register({
@@ -2886,8 +3028,8 @@ test("paraphrased read-only discovery cannot evade the guard and synthesis route
     onEvent: (event) => events.push(event)
   });
 
-  assert.equal(discoveryCalls, 2);
-  assert.equal(modelCalls, 3);
+  assert.equal(discoveryCalls, 3);
+  assert.equal(modelCalls, 4);
   assert.equal(synthesisRouting.minimumClass, "deep");
   assert.match(answer, /missing connection/i);
   assert.ok(events.some((event) =>

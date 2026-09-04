@@ -79,6 +79,28 @@ test("AMOS MCP error envelopes fail the agent tool cycle", async () => {
   assert.deepEqual(result, { ok: false, error: "tenant unavailable" });
 });
 
+test("deterministic AMOS bootstrap reads are classified as read-only", () => {
+  const registry = new ToolRegistry();
+  for (const tool of createAmosTools()) registry.register(tool);
+
+  for (const name of [
+    "amos_get_started",
+    "amos_whoami",
+    "amos_resume_company",
+    "amos_company_overview",
+    "amos_list_engines"
+  ]) {
+    assert.deepEqual(registry.executionPolicy(name), {
+      readOnly: true,
+      parallelSafe: true
+    });
+  }
+  assert.deepEqual(registry.executionPolicy("amos_execute_capability"), {
+    readOnly: false,
+    parallelSafe: false
+  });
+});
+
 test("plain-English capability resolution registers a pinned typed operation and executes through its manifest", async () => {
   const registry = new ToolRegistry({ progressive: true });
   for (const tool of createAmosTools()) registry.register(tool);

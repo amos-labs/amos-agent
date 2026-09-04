@@ -323,9 +323,7 @@ export class AgentLoop {
 
     try {
       let turn = 0;
-      let previousToolFingerprint = null;
       let previousToolPlanFingerprint = null;
-      let repeatedToolCycles = 0;
       let repeatedToolPlanCycles = 0;
       let recentToolPlanFingerprints = [];
       let consecutiveToolErrorCycles = 0;
@@ -352,30 +350,26 @@ export class AgentLoop {
       let lastToolNames = [];
       let gatherTurns = 0;
       let timeoutContinuations = 0;
+      let totalToolCycles = 0;
+      const resetProgressGuards = () => {
+        previousToolPlanFingerprint = null;
+        repeatedToolPlanCycles = 0;
+        recentToolPlanFingerprints = [];
+        consecutiveToolErrorCycles = 0;
+        capabilityDiscoveryCyclesWithoutProgress = 0;
+        previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
+        modelRetryGuidance = null;
+      };
 
       while (true) {
         throwIfAborted(signal);
         const steeringBeforeThinking = await this.applySteering(takeSteering, onEvent, turn);
         const decisionEvidence = this.flushPendingDecisionEvidence();
         if (steeringBeforeThinking > 0 || decisionEvidence > 0) {
-          previousToolFingerprint = null;
-          previousToolPlanFingerprint = null;
-          repeatedToolCycles = 0;
-          repeatedToolPlanCycles = 0;
-          recentToolPlanFingerprints = [];
-          consecutiveToolErrorCycles = 0;
-          capabilityDiscoveryCyclesWithoutProgress = 0;
-          previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
+          resetProgressGuards();
         }
         if (this.applyHandoff(this.pendingHandoff, onEvent)) {
-          previousToolFingerprint = null;
-          previousToolPlanFingerprint = null;
-          repeatedToolCycles = 0;
-          repeatedToolPlanCycles = 0;
-          recentToolPlanFingerprints = [];
-          consecutiveToolErrorCycles = 0;
-          capabilityDiscoveryCyclesWithoutProgress = 0;
-          previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
+          resetProgressGuards();
         }
         onEvent({
           type: "phase",
@@ -570,23 +564,13 @@ export class AgentLoop {
         const toolCalls = assistantMessage.tool_calls || [];
         if (toolCalls.length === 0) {
           if (this.flushPendingDecisionEvidence() > 0) {
-            previousToolFingerprint = null;
-            previousToolPlanFingerprint = null;
-            repeatedToolCycles = 0;
-            repeatedToolPlanCycles = 0;
-            recentToolPlanFingerprints = [];
-            consecutiveToolErrorCycles = 0;
+            resetProgressGuards();
             turn += 1;
             continue;
           }
           const steeringAfterResponse = await this.applySteering(takeSteering, onEvent, turn);
           if (steeringAfterResponse > 0) {
-            previousToolFingerprint = null;
-            previousToolPlanFingerprint = null;
-            repeatedToolCycles = 0;
-            repeatedToolPlanCycles = 0;
-            recentToolPlanFingerprints = [];
-            consecutiveToolErrorCycles = 0;
+            resetProgressGuards();
             turn += 1;
             continue;
           }
@@ -824,7 +808,7 @@ export class AgentLoop {
 
         this.compactProcessedToolEvidence();
 
-        this.applyHandoff(this.pendingHandoff, onEvent);
+        const handoffAppliedAfterTools = this.applyHandoff(this.pendingHandoff, onEvent);
 
         if (modelEvidence.length > 0) this.appendEphemeralModelEvidence(modelEvidence);
 
@@ -836,40 +820,26 @@ export class AgentLoop {
 
         const steeringAfterTools = await this.applySteering(takeSteering, onEvent, turn);
         if (steeringAfterTools > 0) {
-          previousToolFingerprint = null;
-          previousToolPlanFingerprint = null;
-          repeatedToolCycles = 0;
-          repeatedToolPlanCycles = 0;
-          recentToolPlanFingerprints = [];
-          consecutiveToolErrorCycles = 0;
-          capabilityDiscoveryCyclesWithoutProgress = 0;
-          previousCapabilitySurface = capabilitySurfaceFingerprint(this.registry);
+          resetProgressGuards();
           turn += 1;
           continue;
         }
+        if (handoffAppliedAfterTools) resetProgressGuards();
 
         const readOnlyToolPlan = outcomes.length > 0 && outcomes.every((outcome) =>
           this.registry.executionPolicy(outcome.name).readOnly
         );
-        const fingerprint = readOnlyToolPlan
-          ? readOnlyToolCycleFingerprint(outcomes)
-          : toolCycleFingerprint(outcomes);
-        repeatedToolCycles =
-          fingerprint === previousToolFingerprint ? repeatedToolCycles + 1 : 1;
-        previousToolFingerprint = fingerprint;
-        const planFingerprint = readOnlyToolPlan
-          ? readOnlyToolPlanFingerprint(outcomes)
-          : toolPlanFingerprint(outcomes);
+        const planFingerprint = toolPlanFingerprint(outcomes);
         repeatedToolPlanCycles =
           planFingerprint === previousToolPlanFingerprint ? repeatedToolPlanCycles + 1 : 1;
         previousToolPlanFingerprint = planFingerprint;
-        recentToolPlanFingerprints.push(toolPlanFingerprint(outcomes));
-        recentToolPlanFingerprints = recentToolPlanFingerprints.slice(-12);
+        recentToolPlanFingerprints.push(planFingerprint);
+        recentToolPlanFingerprints = recentToolPlanFingerprints.slice(-24);
         const repeatedToolPattern = repeatedTailPattern(recentToolPlanFingerprints, {
-          maxPeriod: 3,
+          maxPeriod: 8,
           minimumRepeats: 2
         });
-        consecutiveToolErrorCycles = outcomes.every((outcome) => outcome.failed)
+        consecutiveToolErrorCycles = outcomes.some((outcome) => outcome.failed)
           ? consecutiveToolErrorCycles + 1
           : 0;
         if (outcomes.some((outcome) => outcome.failed)) {
@@ -897,14 +867,15 @@ export class AgentLoop {
         }
         previousCapabilitySurface = capabilitySurface;
         toolCyclesSinceResearchCheckpoint += 1;
+        totalToolCycles += 1;
 
         const guardReason = this.guardReason({
-          repeatedToolCycles,
           repeatedToolPlanCycles,
           repeatedToolPattern,
           readOnlyToolPlan,
           consecutiveToolErrorCycles,
-          capabilityDiscoveryCyclesWithoutProgress
+          capabilityDiscoveryCyclesWithoutProgress,
+          totalToolCycles
         });
         if (guardReason) {
           const escalatedRouting = escalateRoutingDecision(
@@ -1914,20 +1885,16 @@ export class AgentLoop {
   }
 
   guardReason({
-    repeatedToolCycles,
     repeatedToolPlanCycles = 0,
     repeatedToolPattern = null,
     readOnlyToolPlan = false,
     consecutiveToolErrorCycles,
-    capabilityDiscoveryCyclesWithoutProgress = 0
+    capabilityDiscoveryCyclesWithoutProgress = 0,
+    totalToolCycles = 0
   }) {
     const repeatedLimit = this.config.agent?.maxRepeatedToolCycles ?? 3;
-    if (repeatedToolCycles >= repeatedLimit) {
-      return "the same tool plan and results repeated without producing new evidence";
-    }
-    // Volatile timestamps, receipt ids, and heartbeats must not turn the same
-    // request into apparent progress. Read-only observations get one redundant
-    // check; unclassified/write tools retain the configured safety limit.
+    // Read-only calls may repeat once to confirm a volatile state. Their
+    // arguments remain part of the fingerprint so real pagination is progress.
     const planLimit = readOnlyToolPlan ? Math.min(2, repeatedLimit) : repeatedLimit;
     if (repeatedToolPlanCycles >= planLimit) {
       return readOnlyToolPlan
@@ -1937,13 +1904,17 @@ export class AgentLoop {
     if (repeatedToolPattern?.repeats >= (this.config.agent?.maxRepeatedToolPatternCycles ?? 3)) {
       return `a ${repeatedToolPattern.period}-step tool-request cycle repeated without changing its plan`;
     }
-    const errorLimit = this.config.agent?.maxConsecutiveToolErrorCycles ?? 3;
+    const errorLimit = this.config.agent?.maxConsecutiveToolErrorCycles ?? 2;
     if (consecutiveToolErrorCycles >= errorLimit) {
-      return "every tool in several consecutive cycles failed";
+      return "a tool failure persisted after its one corrected attempt";
     }
     const discoveryLimit = this.config.agent?.maxCapabilityDiscoveryCycles ?? 3;
     if (capabilityDiscoveryCyclesWithoutProgress >= discoveryLimit) {
       return "capability discovery repeated without adding a usable operation or changing task state";
+    }
+    const cycleLimit = this.config.agent?.maxToolCycles ?? 64;
+    if (totalToolCycles >= cycleLimit) {
+      return `the task reached its ${cycleLimit}-cycle execution boundary without returning a result`;
     }
     return null;
   }
@@ -2560,18 +2531,6 @@ function truncateHistoryContent(value, limit) {
   return `${content.slice(0, limit - 1)}…`;
 }
 
-function toolCycleFingerprint(outcomes) {
-  const encoded = JSON.stringify(
-    outcomes.map(({ name, rawArgs, args, failed, result }) => ({
-      name,
-      args: stableLoopValue(args ?? rawArgs),
-      failed,
-      result: stableLoopEvidence(result)
-    }))
-  );
-  return createHash("sha256").update(encoded).digest("hex");
-}
-
 function toolPlanFingerprint(outcomes) {
   const encoded = JSON.stringify(outcomes.map(({ name, rawArgs, args }) => ({
     name,
@@ -2598,7 +2557,7 @@ function loopPlanArguments(name, value) {
   return normalized;
 }
 
-function repeatedTailPattern(history, { maxPeriod = 3, minimumRepeats = 2 } = {}) {
+function repeatedTailPattern(history, { maxPeriod = 8, minimumRepeats = 2 } = {}) {
   const values = Array.isArray(history) ? history : [];
   for (let period = 2; period <= Math.min(maxPeriod, Math.floor(values.length / minimumRepeats)); period += 1) {
     let repeats = 1;
@@ -2637,33 +2596,6 @@ function toolFailureText(result) {
     return JSON.stringify(stableLoopValue(error)).slice(0, 800);
   }
   return "The tool returned ok:false without a diagnostic message.";
-}
-
-function readOnlyToolCycleFingerprint(outcomes) {
-  const encoded = JSON.stringify(outcomes.map(({ name, failed, result }) => ({
-    name,
-    failed,
-    resultShape: readOnlyResultShape(result)
-  })));
-  return createHash("sha256").update(encoded).digest("hex");
-}
-
-function readOnlyToolPlanFingerprint(outcomes) {
-  const encoded = JSON.stringify(outcomes.map(({ name }) => ({ name })));
-  return createHash("sha256").update(encoded).digest("hex");
-}
-
-function readOnlyResultShape(value) {
-  if (value == null) return "empty";
-  if (Array.isArray(value)) return value.length === 0 ? "empty_array" : "non_empty_array";
-  if (typeof value !== "object") return value === "" ? "empty" : "scalar";
-  const entries = Object.entries(value).filter(([key]) => !isVolatileLoopEvidenceKey(key));
-  if (entries.length === 0) return "empty_object";
-  const count = ["count", "total", "result_count", "operation_count"]
-    .map((key) => Number(value[key]))
-    .find((candidate) => Number.isFinite(candidate));
-  if (count === 0) return "zero_results";
-  return "non_empty_object";
 }
 
 function observedRoutingClass(decision) {
@@ -2705,28 +2637,12 @@ function capabilitySurfaceFingerprint(registry) {
   return createHash("sha256").update(JSON.stringify(names)).digest("hex");
 }
 
-function stableLoopEvidence(value) {
-  if (Array.isArray(value)) return value.map(stableLoopEvidence);
-  if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !isVolatileLoopEvidenceKey(key))
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => [key, stableLoopEvidence(item)]));
-}
-
 function stableLoopValue(value) {
   if (Array.isArray(value)) return value.map(stableLoopValue);
   if (!value || typeof value !== "object") return value;
   return Object.fromEntries(Object.entries(value)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, item]) => [key, stableLoopValue(item)]));
-}
-
-function isVolatileLoopEvidenceKey(key) {
-  const normalized = String(key || "")
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .toLowerCase();
-  return /(?:^|_)(?:timestamp|request_id|trace_id|receipt_id|event_id|latency_ms|elapsed_ms|duration_ms|heartbeat_at|observed_at|fetched_at|checked_at|created_at|updated_at)$/.test(normalized);
 }
 
 function humanizeToolName(value) {
