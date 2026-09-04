@@ -4,8 +4,8 @@ import { sanitizeModelContinuityCapture } from "./consultativeState.js";
 
 export function createAmosTools() {
   return [
-    mcpTool("amos_get_started", "Call AMOS get_started for operating instructions and available paths.", "get_started"),
-    mcpTool("amos_whoami", "Call AMOS whoami for tenant, role, and scope context.", "whoami"),
+    mcpTool("amos_get_started", "Call AMOS get_started for operating instructions and available paths.", "get_started", undefined, { readOnly: true }),
+    mcpTool("amos_whoami", "Call AMOS whoami for tenant, role, and scope context.", "whoami", undefined, { readOnly: true }),
     mcpTool(
       "amos_resume_company",
       "Restore the durable company brief, recent decisions, open work, goals, and recommended next actions for this session.",
@@ -16,7 +16,8 @@ export function createAmosTools() {
           since: { type: "string", description: "Optional resume cursor from a prior session." }
         },
         additionalProperties: false
-      }
+      },
+      { readOnly: true }
     ),
     mcpTool(
       "amos_company_overview",
@@ -28,7 +29,8 @@ export function createAmosTools() {
           since: { type: "string", description: "Optional resume cursor from a prior company_overview." }
         },
         additionalProperties: false
-      }
+      },
+      { readOnly: true }
     ),
     {
       name: "amos_resolve_capabilities",
@@ -162,7 +164,7 @@ export function createAmosTools() {
       ),
       toolkit: "core"
     },
-    mcpTool("amos_list_engines", "List available AMOS engines filtered by scope and plan.", "list_engines"),
+    mcpTool("amos_list_engines", "List available AMOS engines filtered by scope and plan.", "list_engines", undefined, { readOnly: true }),
     {
       name: "amos_load_engine_tools",
       source: "amos",
@@ -326,12 +328,20 @@ function compactToolkitMenu(toolkits) {
     }));
 }
 
-function mcpTool(name, description, remoteName, parameters = { type: "object", properties: {}, additionalProperties: false }) {
+function mcpTool(
+  name,
+  description,
+  remoteName,
+  parameters = { type: "object", properties: {}, additionalProperties: false },
+  { readOnly = false } = {}
+) {
   return {
     name,
     source: "amos",
     description,
     parameters,
+    readOnly,
+    parallelSafe: readOnly,
     async handler(args, context) {
       const result = await context.amosClient.callTool(
         remoteName,

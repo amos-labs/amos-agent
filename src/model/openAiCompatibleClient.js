@@ -11,7 +11,6 @@ import {
 } from "./intelligenceRouter.js";
 import {
   canonicalizeChatMessages,
-  canonicalizeMessageToolCalls,
   jsonObjectArgumentString,
   normalizedUsage
 } from "./protocol.js";
@@ -233,7 +232,11 @@ export class OpenAICompatibleClient {
       }
 
       const result = {
-        message: canonicalizeMessageToolCalls(choice.message),
+        // Preserve malformed inbound argument text. AgentLoop owns validation
+        // and can then give the model one bounded correction. Coercing bad JSON
+        // to `{}` here disguises a provider/model failure as a tool-schema
+        // failure and sends recovery down the wrong path.
+        message: normalizeInboundMessageToolCalls(choice.message),
         usage: withRequestMetrics(normalizedUsage(payload.usage), {
           config: requestConfig,
           requestedConfig: this.config,
@@ -579,7 +582,7 @@ async function readStreamingResponse(response, {
         ...value,
         function: {
           ...value.function,
-          arguments: jsonObjectArgumentString(value.function?.arguments)
+          arguments: inboundToolArguments(value.function?.arguments)
         }
       }));
   }
@@ -598,6 +601,34 @@ async function readStreamingResponse(response, {
         : null
     }
   };
+}
+
+function normalizeInboundMessageToolCalls(message) {
+  if (!message || !Array.isArray(message.tool_calls) || message.tool_calls.length === 0) {
+    return message;
+  }
+  return {
+    ...message,
+    tool_calls: message.tool_calls.map((call) => ({
+      ...call,
+      function: {
+        ...(call?.function || {}),
+        arguments: inboundToolArguments(call?.function?.arguments)
+      }
+    }))
+  };
+}
+
+function inboundToolArguments(value) {
+  if (value == null || value === "") return "{}";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
 }
 
 function withCorrelationReference(message, correlationId) {

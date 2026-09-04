@@ -8,21 +8,23 @@ test("authentication mode defaults to auto and accepts explicit API-key mode", (
   assert.equal(loadConfig({ AMOS_AGENT_AUTH_MODE: "unexpected" }, ".").auth.mode, "auto");
 });
 
-test("agent work has progress guards instead of a productive-cycle ceiling", () => {
+test("agent work has bounded progress and repair guards", () => {
   const defaults = loadConfig({}, ".").agent;
+  assert.equal(defaults.maxToolCycles, 64);
   assert.equal(defaults.maxRepeatedToolCycles, 3);
   assert.equal(defaults.maxRepeatedToolPatternCycles, 3);
-  assert.equal(defaults.maxConsecutiveToolErrorCycles, 3);
+  assert.equal(defaults.maxConsecutiveToolErrorCycles, 2);
   assert.equal(defaults.maxCapabilityDiscoveryCycles, 3);
   assert.equal(defaults.maxModelTransientRetries, 2);
-  assert.equal(Object.hasOwn(defaults, "maxToolTurns"), false);
 
   const configured = loadConfig({
+    AMOS_AGENT_MAX_TOOL_CYCLES: "80",
     AMOS_AGENT_MAX_REPEATED_TOOL_CYCLES: "5",
     AMOS_AGENT_MAX_REPEATED_TOOL_PATTERN_CYCLES: "4",
     AMOS_AGENT_MAX_CONSECUTIVE_TOOL_ERROR_CYCLES: "4",
     AMOS_AGENT_MAX_CAPABILITY_DISCOVERY_CYCLES: "6"
   }, ".").agent;
+  assert.equal(configured.maxToolCycles, 80);
   assert.equal(configured.maxRepeatedToolCycles, 5);
   assert.equal(configured.maxRepeatedToolPatternCycles, 4);
   assert.equal(configured.maxConsecutiveToolErrorCycles, 4);

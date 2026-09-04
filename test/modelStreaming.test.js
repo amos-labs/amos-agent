@@ -201,6 +201,57 @@ test("OpenAI-compatible streaming stores blank tool arguments as {}", async () =
   assert.equal(result.message.tool_calls[0].function.arguments, "{}");
 });
 
+test("OpenAI-compatible streaming preserves malformed inbound tool arguments for loop repair", async () => {
+  const events = [{
+    choices: [{
+      delta: {
+        tool_calls: [{
+          index: 0,
+          id: "broken-1",
+          type: "function",
+          function: { name: "amos_whoami", arguments: "{\"broken\"" }
+        }]
+      }
+    }]
+  }];
+  const fetchImpl = async () => new Response(
+    events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") + "data: [DONE]\n\n",
+    { status: 200, headers: { "content-type": "text/event-stream" } }
+  );
+
+  const result = await client(fetchImpl).chat({
+    messages: [{ role: "user", content: "who am I" }],
+    tools: [{ type: "function", function: { name: "amos_whoami" } }],
+    onDelta: () => {}
+  });
+
+  assert.equal(result.message.tool_calls[0].function.arguments, "{\"broken\"");
+});
+
+test("OpenAI-compatible JSON responses preserve malformed inbound tool arguments for loop repair", async () => {
+  const result = await client(async () => new Response(JSON.stringify({
+    choices: [{
+      message: {
+        role: "assistant",
+        content: "",
+        tool_calls: [{
+          id: "broken-2",
+          type: "function",
+          function: { name: "amos_whoami", arguments: "{\"broken\"" }
+        }]
+      }
+    }]
+  }), {
+    status: 200,
+    headers: { "content-type": "application/json" }
+  })).chat({
+    messages: [{ role: "user", content: "who am I" }],
+    tools: [{ type: "function", function: { name: "amos_whoami" } }]
+  });
+
+  assert.equal(result.message.tool_calls[0].function.arguments, "{\"broken\"");
+});
+
 test("OpenAI-compatible streaming aborts the actual request", async () => {
   const fetchImpl = (_url, options) =>
     new Promise((_resolve, reject) => {
