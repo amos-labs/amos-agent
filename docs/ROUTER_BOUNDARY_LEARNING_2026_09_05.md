@@ -136,16 +136,51 @@ export once, verifies each artifact, registers only experimental names and runs
 the frozen paired screens. It does not start another training job or select a
 production model. Partial prior screens require inspection rather than overwrite.
 
+After all six screens finish, `python3
+research/router-boundary-20260905/measure_runtime.py --execute` runs the frozen
+three-repetition evaluator sequentially for each passing candidate. It samples
+the actual Ollama runner process tree every two seconds, matching each runner to
+the verified GGUF digest. These are sampled resident-memory observations, not
+Node memory or artifact size. They exclude the shared Ollama daemon and do not
+represent total Metal/unified-memory use. Repeated warm measurements still do not
+replace independent cold, warm and contended qualification.
+On macOS the orchestration uses `caffeinate` to prevent idle system sleep only
+while local measurement runs; it releases the assertion afterward and changes no
+persistent setting. It does not keep the Mac awake while waiting for cloud work.
+The finisher unloads completed experimental runners before each pair so the
+previous candidate cannot occupy the baseline's runtime slot. The baseline and
+unrelated local models are never selected for this cleanup.
+Run `node research/router-boundary-20260905/summarize_repeated.mjs` afterward to
+validate repeated reports and their raw memory evidence and save the summary.
+
 ### Execution status
 
-The six-run training job `amos-router-boundary-20260905-140240` is running.
-The previous permission-check timeout was resolved; five runs completed and the
-sixth started. The job has a 7,200-second runtime cap. The finishing workflow is
-waiting for its terminal result before exporting and screening the candidates.
-No candidate inference results have been collected yet, so this experiment
-establishes no router accuracy gain at this stage.
-The restart checkpoint is `output/router-boundary-20260905/workflow-status.json`;
-inspect the existing job before doing anything that could duplicate paid work.
+The six-run training job `amos-router-boundary-20260905-140240` completed
+successfully with 4,043 billable seconds. CPU export job
+`amos-router-boundary-export-20260905-151417` completed in 2,447.454 processing
+seconds, within its 3,600-second cap. All six artifacts passed reconstruction and
+registration checks and all six paired screens finished. Two learning candidates
+passed the accuracy criteria; none of the replay-only controls passed. The third
+learning seed regressed on deep classification and the legacy regression set, so
+the recipe fails the required three-seed consistency check.
+
+The third control was interrupted by confirmed macOS idle sleep and contains one
+baseline timeout and two very large baseline elapsed times. Its timing is not
+usable as a normal warm measurement, and its baseline predictions do not fully
+match the corresponding learning pair. Original evidence is retained. The third
+learning candidate also fails against its own clean paired baseline, independently
+of that interruption. A separate second-seed preflight residency failure occurred
+before held-out inference; completed experimental runners are now unloaded before
+each pair and that unchanged evaluation resumed successfully.
+
+Repeated warm measurements completed for both passing candidates. All repeated
+accuracy checks passed, predictions were stable, p95 increases stayed below 0.71%
+across the measured suites, and sampled peak runner RSS increased by less than
+0.07%. The three-seed recipe gate still fails. See the
+[complete results](ROUTER_BOUNDARY_RESULTS_2026_09_05.md). The selected router is
+unchanged. The restart
+checkpoint is `output/router-boundary-20260905/workflow-status.json`; both cloud
+jobs are terminal and must not be relaunched.
 
 ## Swarm as the mission agent and frontier service
 
@@ -169,3 +204,12 @@ The current Swarm evidence demonstrates gains on synthetic AMOS conventions and
 memory tasks. Broader frontier replacement requires hard mission evaluations,
 sealed holdouts, and production shadow evidence. Keep fallback available through
 the Platform while each Swarm configuration earns its assigned capability tier.
+
+The saved first autonomous Swarm cycle was also audited from its existing S3
+reports and store. All 189 verifier judgments replayed correctly, and all 59
+expected training harvest episodes were present with valid digests and verifier
+references: 50 first-answer examples and nine recovered-answer pairs. This was
+one base-model cycle, with no candidate comparison or promotion. The old progress
+counter reported three candidate advances for three completed standing orders;
+the separate Swarm change corrects that count to zero without rewriting the
+immutable records. See [Swarm learning evidence PR #12](https://github.com/amos-labs/amos-organism/pull/12).
