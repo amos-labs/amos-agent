@@ -964,7 +964,6 @@ test("first-run defaults to Automatic intelligence and leads with a real outcome
   assert.match(main, /controller\.completeOnboarding\(input\)/);
   assert.match(controller, /const completedAt = settings\.onboardingCompletedAt \|\| new Date\(\)\.toISOString\(\)/);
   assert.match(controller, /onboardingCompletedAt: completedAt/);
-  assert.match(controller, /onboardingBoundary: "northwind",\s*onboardingCompletedAt: ""/);
 
   assert.match(onboarding, /What would you like AMOS to get done\?/);
   assert.match(onboarding, /AMOS Intelligence is ready automatically/);

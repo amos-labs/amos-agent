@@ -4,7 +4,6 @@ import { statSync } from "node:fs";
 import { homedir, totalmem, freemem, arch, platform, release } from "node:os";
 import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { loadConfig, validateConfig } from "../config.js";
-import { AmosDesktopDemoSession } from "../auth/demo.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
 import { createModelClient, listModelProviders } from "../model/providers.js";
@@ -1091,69 +1090,6 @@ export class DesktopController {
         boundary: "personal"
       });
     }
-    return this.state();
-  }
-
-  async startDemo() {
-    this.requireNoActiveRuns("starting the demo workspace");
-    const settings = await this.settingsStore.read();
-    const oauth = this.oauthFor(settings);
-    const existing = await oauth.status();
-    if (existing?.access_token && !existing.demo) {
-      const accountStatus = await this.accountStatusFor(settings, oauth);
-      if (accountStatus.workspaceActive) {
-        throw new Error(
-          "Your AMOS workspace is already active. Continue with My company to connect data, applications, memory, and policy."
-        );
-      }
-      if (!this.accountStore) await oauth.logout();
-    }
-    const demoWorkspace = join(this.userDataPath, "northwind-demo-workspace");
-    await mkdir(demoWorkspace, { recursive: true, mode: 0o700 });
-    const pendingStore = this.accountStore ? new MemoryTokenStore() : new FileTokenStore(join(this.userDataPath, "oauth.json"));
-    const demo = new AmosDesktopDemoSession({
-      mcpUrl: settings.amosMcpUrl,
-      store: pendingStore,
-      openBrowser: (url) => {
-        this.openBrowser(url);
-        return true;
-      }
-    });
-    const demoCredentials = await demo.start({
-      previousWorkspace: settings.workspace,
-      installId: await this.desktopInstallId()
-    });
-    if (this.accountStore) {
-      await this.accountStore.add(demoCredentials, {
-        label: "Northwind Labs demo",
-        tenantId: demoCredentials.tenant_id,
-        tenantSlug: "northwind-demo"
-      });
-    }
-    const saved = await this.settingsStore.write({
-      ...settings,
-      ...(settings.provider === "amos-hosted"
-        ? {
-            provider: "amos-hosted",
-            model: "auto",
-            baseUrl: "",
-            intelligenceProfile: "auto",
-            reasoningEffort: ""
-          }
-        : {}),
-      operatingMode: "online",
-      workspace: demoWorkspace,
-      onboardingBoundary: "northwind",
-      onboardingCompletedAt: ""
-    });
-    this.clearEphemeralCompanyBoundary();
-    this.record("auth", "Northwind Labs demo company connected");
-    if (settings.onboardingBoundary !== "northwind") {
-      await this.recordAcquisitionEvent(saved, "desktop_boundary_selected", {
-        boundary: "northwind"
-      });
-    }
-    await this.refreshRemote({ notify: false });
     return this.state();
   }
 

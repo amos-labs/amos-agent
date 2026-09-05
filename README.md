@@ -10,10 +10,9 @@ The first run offers three honest starting points:
 
 - **My workspace** — no AMOS account required; use a provider key or local
   model for private code, research, documents, and local automation.
-- **Northwind demo** — a short-lived sample company using the real AMOS tool,
-  policy, approval, receipt, and hosted-intelligence boundaries.
-- **My company** — sign in or create an AMOS account for durable organizational
-  memory, connected applications, shared authority, approvals, and proof.
+- **My company** — sign in or create a free AMOS account for durable
+  organizational memory, connected applications, shared authority, approvals,
+  and proof, with AMOS Intelligence included.
 
 [Download for Apple Silicon](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-arm64.dmg)
 ·
@@ -93,14 +92,12 @@ Shared business state, integrations, governance, and receipts remain in AMOS.
 2. On macOS, drag **AMOS Desktop** into **Applications**. On Windows, run the
    signed per-user installer; it adds Start-menu and desktop shortcuts without
    requiring an administrator account.
-3. Open it and choose **My workspace**, **Northwind demo**, or **My company**.
+3. Open it and choose **My workspace** or **My company**.
 4. For personal work, select a local runtime, provider API, Bedrock, or another
    compatible endpoint. No AMOS account or company tools are required.
-5. For the demo, the browser creates a bounded sample company and securely
-   returns it to Desktop without placing its short-lived key in a URL.
-6. For your company, sign in and use automatically routed AMOS Intelligence.
+5. For your company, sign in and use automatically routed AMOS Intelligence.
    Alternative infrastructure remains available under advanced settings.
-7. Grant only the local workspace you want AMOS to inspect and operate.
+6. Grant only the local workspace you want AMOS to inspect and operate.
 
 The app checks for signed updates after launch and every six hours. It notifies
 you before downloading and never restarts during an active task.

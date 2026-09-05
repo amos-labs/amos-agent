@@ -401,7 +401,6 @@ function registerIpc() {
     controller.completeOnboarding(input)
   );
   ipcMain.handle("desktop:start-personal", () => controller.startPersonal());
-  ipcMain.handle("desktop:start-demo", () => controller.startDemo());
   ipcMain.handle("desktop:login", () => controller.login());
   ipcMain.handle("desktop:add-account", () => controller.addAccount());
   ipcMain.handle("desktop:switch-account", (_event, accountId) =>
