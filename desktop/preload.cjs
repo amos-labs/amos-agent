@@ -30,7 +30,6 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   completeOnboarding: (input) =>
     ipcRenderer.invoke("desktop:complete-onboarding", input),
   startPersonal: () => ipcRenderer.invoke("desktop:start-personal"),
-  startDemo: () => ipcRenderer.invoke("desktop:start-demo"),
   login: () => ipcRenderer.invoke("desktop:login"),
   addAccount: () => ipcRenderer.invoke("desktop:add-account"),
   switchAccount: (accountId) => ipcRenderer.invoke("desktop:switch-account", accountId),

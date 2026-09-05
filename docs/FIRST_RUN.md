@@ -107,32 +107,17 @@ Returning users see their active company instead of trial acquisition copy.
 "Reconnect" is reserved for an authentication session that actually needs to
 be renewed.
 
-## Northwind demo — legacy only
+## Northwind demo — retired
 
-Northwind is no longer offered in customer first-run. New users should reach a
-verified outcome on their own document or connected business system rather
-than learn a sample company. Existing and internal demo sessions remain
-supported.
+The public Northwind demo is retired. The platform answers its former entry
+points with 410 Gone and provisions nothing, and Desktop no longer exposes a
+way to start one. A Desktop that still holds an old demo credential treats it
+as expired: the banner offers **Connect my company** and **Leave demo**, and
+the credential is never used to connect. The remaining demo-mode code paths in
+Desktop are removed in a follow-up once no such credentials can exist.
 
-The legacy demo launches the public Playground in a browser. After abuse
-checks create a short-lived Northwind tenant, the Playground sends the
-tenant-scoped key to a one-time loopback receiver using an HTML form POST. The
-key does not enter the browser URL, history, query logs, or referrer.
-
-Desktop stores the expiring demo credential with the same owner-only token
-store used for OAuth and switches to an app-owned demo workspace. It uses the
-currently selected intelligence and does not reintroduce a customer first-run
-provider chooser.
-
-The hosted balance comes from `/v1/intelligence/status`; Desktop does not
-infer it from rendered messages. The persistent Northwind banner shows the
-remaining balance and exposes **Connect my company**, **Change intelligence**,
-and **Leave demo**. Leaving restores the prior local workspace and returns to
-the starting-point screen.
-
-The demo uses real AMOS tools, policy, approvals, receipts, and metered hosted
-intelligence against sample data. It cannot connect credentials, spend real
-money, or escape the demo tenant.
+Internal verification now uses a durable, non-public `test_fixture` tenant
+created through governed onboarding (see the platform's `docs/TEST-TENANT.md`).
 
 ## This computer / your provider
 
