@@ -1,0 +1,2525 @@
+{
+  "schema": "amos.router-boundary-review-results",
+  "version": 1,
+  "generatedAt": "2026-09-05T16:46:41.220634+00:00",
+  "productionModel": "amos-router:0.8b-pilot003-v2",
+  "productionChanged": false,
+  "qualification": false,
+  "recipeSupported": false,
+  "screenResultsSha256": "f173d6fdfabcd0a9c1d14f5ddab70c21582d895b5bc77d6a775283d1eff2b3da",
+  "repeatedResultsSha256": "c2d2d05b5378b518ff167c3cfc83c013081e1d79845d41c58c4b7d2a12723ed5",
+  "screenProtocolSha256": "e381a01a49d6ad310b53e4e81a806f795518d9c26c3fa8830498caefd567c61d",
+  "screen": [
+    {
+      "seed": 20260905,
+      "arm": "control",
+      "model": "amos-router:0.8b-boundary-control-20260905",
+      "ggufSha256": "621eeab5044465c9ff12263743d04ebd7edc9bff32bcc1ad80a1d027fbbf7a9e",
+      "ggufBytes": 529296768,
+      "passesAccuracyScreen": false,
+      "checks": {
+        "freshJointTaskAccuracyImproved": false,
+        "noClassAccuracyRegression": false,
+        "noSevereUnderRouteIncrease": true,
+        "noLegacyOrContextAggregateLoss": false,
+        "noFailedAttempts": true
+      },
+      "jointFresh": {
+        "tasks": 72,
+        "baselineCorrect": 61,
+        "candidateCorrect": 60,
+        "wins": [
+          "989b6c6bdb5407dd",
+          "fadf1172deb735cf"
+        ],
+        "losses": [
+          "1b35dd5aee21ead6",
+          "b94bcf186aa26b79",
+          "bb0a9ef21b2befef"
+        ]
+      },
+      "scores": {
+        "evaluation": {
+          "baseline": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 17
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "evaluation-context": {
+          "baseline": {
+            "cases": 72,
+            "correct": 62,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 12
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 61,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 12
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "regression": {
+          "baseline": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 40,
+            "correct": 33,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 5
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "context": {
+          "baseline": {
+            "cases": 56,
+            "correct": 47,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 9,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 56,
+            "correct": 51,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 17
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        }
+      },
+      "reportDigests": {
+        "evaluation": "662dfcd7cd0f0d40ed76370685c84616b7830548916f3bf9dcb79a8ad3b1470b",
+        "evaluation-context": "f493701ac6d5df6ccd317855ee3ad4c5c4e947d90ed20a98d97255abad681d8d",
+        "regression": "250c2d4a50c384ef2731ce959dada0a8b4ed53a2d069ada70c6736178215f545",
+        "context": "6d06be05b9675383d752cbab777c4497936c10a83ece122a9ab947d30f0d4610"
+      }
+    },
+    {
+      "seed": 20260905,
+      "arm": "learning",
+      "model": "amos-router:0.8b-boundary-learning-20260905",
+      "ggufSha256": "ce9421b90644a86b8193370f94c823485d782c4bb72923bc74019b013dc50460",
+      "ggufBytes": 529296768,
+      "passesAccuracyScreen": true,
+      "checks": {
+        "freshJointTaskAccuracyImproved": true,
+        "noClassAccuracyRegression": true,
+        "noSevereUnderRouteIncrease": true,
+        "noLegacyOrContextAggregateLoss": true,
+        "noFailedAttempts": true
+      },
+      "jointFresh": {
+        "tasks": 72,
+        "baselineCorrect": 61,
+        "candidateCorrect": 71,
+        "wins": [
+          "4b4b6cb42183786f",
+          "6d4520b8a2c054b8",
+          "989b6c6bdb5407dd",
+          "9c7c63160904d7c3",
+          "dce8bdbe3cbb141b",
+          "f0e27efe52f57d0f",
+          "fadf1172deb735cf",
+          "1b8221367f081c3d",
+          "22a7ee9bc7873214",
+          "3418eebbc65eba6e"
+        ],
+        "losses": []
+      },
+      "scores": {
+        "evaluation": {
+          "baseline": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 17
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 71,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 17
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 1,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "evaluation-context": {
+          "baseline": {
+            "cases": 72,
+            "correct": 62,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 12
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 72,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 18
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 0,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "regression": {
+          "baseline": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 40,
+            "correct": 36,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 8
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 3,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "context": {
+          "baseline": {
+            "cases": 56,
+            "correct": 47,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 9,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 56,
+            "correct": 53,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 17
+              },
+              "deep": {
+                "total": 19,
+                "correct": 17
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 3,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        }
+      },
+      "reportDigests": {
+        "evaluation": "5ccc167c7b8438e61f30c668fd3a25880f63cbdaff717c3fecbefae39cfcb941",
+        "evaluation-context": "4df58169a96c76dcfe0ef8dda0a49634831fe2701230f8d083437be78c7b8742",
+        "regression": "5daf85cabf8cba5eae23eb6496e13e01a99c865c24279bba55acc8f048050497",
+        "context": "13143fef12441dc645445c5abc19a55f03f7cb7fbd01f977913990de63ceb5ba"
+      }
+    },
+    {
+      "seed": 20260906,
+      "arm": "control",
+      "model": "amos-router:0.8b-boundary-control-20260906",
+      "ggufSha256": "633df40956a8977cd97d53fdb0ad6223409be3dbf83688e7ae1ee2b1453f4475",
+      "ggufBytes": 529296768,
+      "passesAccuracyScreen": false,
+      "checks": {
+        "freshJointTaskAccuracyImproved": true,
+        "noClassAccuracyRegression": false,
+        "noSevereUnderRouteIncrease": true,
+        "noLegacyOrContextAggregateLoss": true,
+        "noFailedAttempts": true
+      },
+      "jointFresh": {
+        "tasks": 72,
+        "baselineCorrect": 61,
+        "candidateCorrect": 62,
+        "wins": [
+          "6d4520b8a2c054b8",
+          "989b6c6bdb5407dd",
+          "9c7c63160904d7c3",
+          "dce8bdbe3cbb141b",
+          "f0e27efe52f57d0f"
+        ],
+        "losses": [
+          "708ae624564a2872",
+          "8afc194944d04528",
+          "a5997f2e20121363",
+          "bb0a9ef21b2befef"
+        ]
+      },
+      "scores": {
+        "evaluation": {
+          "baseline": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 17
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 64,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 14
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 8,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "evaluation-context": {
+          "baseline": {
+            "cases": 72,
+            "correct": 62,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 12
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 66,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 17
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "regression": {
+          "baseline": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "context": {
+          "baseline": {
+            "cases": 56,
+            "correct": 47,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 9,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 56,
+            "correct": 47,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 9,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        }
+      },
+      "reportDigests": {
+        "evaluation": "ab16af74b0bc99652a4421574a874961d0300b0c79aeaccbd5505bb1e6655c35",
+        "evaluation-context": "b5de9e90a0b29ec37cf04ba4255f79664e0d85ae3b5c4391c60765e14efeee88",
+        "regression": "7c02f665d07b0ee2f27fb5f77bcd3186eb8ca68539ff4bdcbec13c2fbcb47b8c",
+        "context": "a11bdf9c4e9c9b017e61a3d7297cf2076761f8b8aec8ded40d55b725d24edc26"
+      }
+    },
+    {
+      "seed": 20260906,
+      "arm": "learning",
+      "model": "amos-router:0.8b-boundary-learning-20260906",
+      "ggufSha256": "89c2722badbf93dc6481f9de35e8ae02b817e14dcb2af7011b466ad44f990d45",
+      "ggufBytes": 529296768,
+      "passesAccuracyScreen": true,
+      "checks": {
+        "freshJointTaskAccuracyImproved": true,
+        "noClassAccuracyRegression": true,
+        "noSevereUnderRouteIncrease": true,
+        "noLegacyOrContextAggregateLoss": true,
+        "noFailedAttempts": true
+      },
+      "jointFresh": {
+        "tasks": 72,
+        "baselineCorrect": 61,
+        "candidateCorrect": 70,
+        "wins": [
+          "4b4b6cb42183786f",
+          "6d4520b8a2c054b8",
+          "989b6c6bdb5407dd",
+          "9c7c63160904d7c3",
+          "f0e27efe52f57d0f",
+          "fadf1172deb735cf",
+          "1b8221367f081c3d",
+          "22a7ee9bc7873214",
+          "3418eebbc65eba6e"
+        ],
+        "losses": []
+      },
+      "scores": {
+        "evaluation": {
+          "baseline": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 17
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 71,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 17
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 1,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "evaluation-context": {
+          "baseline": {
+            "cases": 72,
+            "correct": 62,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 12
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 71,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 17
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 18
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 0,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "regression": {
+          "baseline": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 40,
+            "correct": 36,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 8
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 3,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "context": {
+          "baseline": {
+            "cases": 56,
+            "correct": 47,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 9,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 56,
+            "correct": 55,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 19,
+                "correct": 18
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 1,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        }
+      },
+      "reportDigests": {
+        "evaluation": "b5dfb2b7b766de441a6065f92830c15efc907f0147cc89d9e151b2af008a5253",
+        "evaluation-context": "06ee81f5f2e8f47acbb40879da71ca421e45bea47f38943e2b4bfad358ded6b3",
+        "regression": "e48d7aa75ebae73acd2322de5f6399ef448ff1a5643c6760c6a6f52d134226f9",
+        "context": "e86432810d8874d03c0a919f3a76c4f700d95e6b667acb869c672dbff7216591"
+      }
+    },
+    {
+      "seed": 20260907,
+      "arm": "control",
+      "model": "amos-router:0.8b-boundary-control-20260907",
+      "ggufSha256": "ce54e4f92b245bdbaec35c327081d4efd652272ea1820f68581b004daec8f105",
+      "ggufBytes": 529296768,
+      "passesAccuracyScreen": false,
+      "checks": {
+        "freshJointTaskAccuracyImproved": true,
+        "noClassAccuracyRegression": false,
+        "noSevereUnderRouteIncrease": true,
+        "noLegacyOrContextAggregateLoss": true,
+        "noFailedAttempts": false
+      },
+      "jointFresh": {
+        "tasks": 72,
+        "baselineCorrect": 61,
+        "candidateCorrect": 62,
+        "wins": [
+          "6d4520b8a2c054b8",
+          "989b6c6bdb5407dd",
+          "9c7c63160904d7c3"
+        ],
+        "losses": [
+          "708ae624564a2872",
+          "8afc194944d04528"
+        ]
+      },
+      "scores": {
+        "evaluation": {
+          "baseline": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 17
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 18,
+                "correct": 16
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "evaluation-context": {
+          "baseline": {
+            "cases": 72,
+            "correct": 62,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 12
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 1
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 65,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 15
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "regression": {
+          "baseline": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "context": {
+          "baseline": {
+            "cases": 56,
+            "correct": 47,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 9,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 56,
+            "correct": 50,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 14
+              },
+              "deep": {
+                "total": 19,
+                "correct": 17
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 6,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        }
+      },
+      "reportDigests": {
+        "evaluation": "a656184135464fbd957dd6634680b9ad3fca5f691f156040404d5e884c7f9295",
+        "evaluation-context": "77bde2675c5f6f3f8ff119f1b386f9ed56d2bf3eb8494b98b73ae3d2bebe233a",
+        "regression": "3d37befc489930dd62e4e61abc197bad78e4fef7ca84ca45831c7cadc712bd43",
+        "context": "a85d1ed7298773c74192ddf91fbeb1d73f9a83e8fffd80771315d6d2606e4bcc"
+      }
+    },
+    {
+      "seed": 20260907,
+      "arm": "learning",
+      "model": "amos-router:0.8b-boundary-learning-20260907",
+      "ggufSha256": "ad913dcc854d129f20d134bd250b229aafb7147cf49246cfd2f7ecc8ee962e4f",
+      "ggufBytes": 529296768,
+      "passesAccuracyScreen": false,
+      "checks": {
+        "freshJointTaskAccuracyImproved": true,
+        "noClassAccuracyRegression": false,
+        "noSevereUnderRouteIncrease": true,
+        "noLegacyOrContextAggregateLoss": false,
+        "noFailedAttempts": true
+      },
+      "jointFresh": {
+        "tasks": 72,
+        "baselineCorrect": 61,
+        "candidateCorrect": 67,
+        "wins": [
+          "4b4b6cb42183786f",
+          "6d4520b8a2c054b8",
+          "989b6c6bdb5407dd",
+          "9c7c63160904d7c3",
+          "dce8bdbe3cbb141b",
+          "f0e27efe52f57d0f",
+          "fadf1172deb735cf"
+        ],
+        "losses": [
+          "b94bcf186aa26b79"
+        ]
+      },
+      "scores": {
+        "evaluation": {
+          "baseline": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 17
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 67,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "evaluation-context": {
+          "baseline": {
+            "cases": 72,
+            "correct": 62,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 12
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 14
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 72,
+            "correct": 72,
+            "byClass": {
+              "routine": {
+                "total": 18,
+                "correct": 18
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 18
+              },
+              "deep": {
+                "total": 18,
+                "correct": 18
+              },
+              "frontier": {
+                "total": 18,
+                "correct": 18
+              }
+            },
+            "underRoutes": 0,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "regression": {
+          "baseline": {
+            "cases": 40,
+            "correct": 35,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 7
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 4,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 40,
+            "correct": 34,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 10,
+                "correct": 10
+              },
+              "deep": {
+                "total": 10,
+                "correct": 6
+              },
+              "frontier": {
+                "total": 10,
+                "correct": 8
+              }
+            },
+            "underRoutes": 5,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        },
+        "context": {
+          "baseline": {
+            "cases": 56,
+            "correct": 47,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 13
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 9,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          },
+          "candidate": {
+            "cases": 56,
+            "correct": 49,
+            "byClass": {
+              "routine": {
+                "total": 10,
+                "correct": 10
+              },
+              "balanced": {
+                "total": 18,
+                "correct": 15
+              },
+              "deep": {
+                "total": 19,
+                "correct": 15
+              },
+              "frontier": {
+                "total": 9,
+                "correct": 9
+              }
+            },
+            "underRoutes": 7,
+            "severeUnderRoutes": 0,
+            "failedAttempts": 0
+          }
+        }
+      },
+      "reportDigests": {
+        "evaluation": "aeb29628b554a5d66ce18abe636d90c2bcf6c3fc3628cb935ee9183278cc2eb0",
+        "evaluation-context": "990fb74bd312eb76bb3e352b51edc2579325f26fa6f24bab3006c2a26176b808",
+        "regression": "5ff9ed38132347effdf663c8d95b1663ab5141694412b4dab0bdb1a22368a7f3",
+        "context": "9d1f15d5b6cf61f32db5f6ca4ba9044ae765b6cf306696ff322b3e30e3e67d42"
+      }
+    }
+  ],
+  "pairedSeeds": [
+    {
+      "seed": 20260905,
+      "status": "screened",
+      "baselineConsistentBetweenPairs": true,
+      "learningBeatsControl": true,
+      "learningPassesAccuracyScreen": true,
+      "jointCorrectDifference": 11
+    },
+    {
+      "seed": 20260906,
+      "status": "screened",
+      "baselineConsistentBetweenPairs": true,
+      "learningBeatsControl": true,
+      "learningPassesAccuracyScreen": true,
+      "jointCorrectDifference": 8
+    },
+    {
+      "seed": 20260907,
+      "status": "screened",
+      "baselineConsistentBetweenPairs": false,
+      "learningBeatsControl": true,
+      "learningPassesAccuracyScreen": false,
+      "jointCorrectDifference": 5
+    }
+  ],
+  "repeated": [
+    {
+      "seed": 20260905,
+      "model": "amos-router:0.8b-boundary-learning-20260905",
+      "passesRepeatedAccuracyChecks": true,
+      "repeatedChecks": [
+        {
+          "repetition": 0,
+          "baselineJoint": 61,
+          "candidateJoint": 71,
+          "freshJointTaskAccuracyImproved": true,
+          "noClassAccuracyRegression": true,
+          "noSevereUnderRouteIncrease": true,
+          "noLegacyOrContextAggregateLoss": true,
+          "noFailedAttempts": true
+        },
+        {
+          "repetition": 1,
+          "baselineJoint": 61,
+          "candidateJoint": 71,
+          "freshJointTaskAccuracyImproved": true,
+          "noClassAccuracyRegression": true,
+          "noSevereUnderRouteIncrease": true,
+          "noLegacyOrContextAggregateLoss": true,
+          "noFailedAttempts": true
+        },
+        {
+          "repetition": 2,
+          "baselineJoint": 61,
+          "candidateJoint": 71,
+          "freshJointTaskAccuracyImproved": true,
+          "noClassAccuracyRegression": true,
+          "noSevereUnderRouteIncrease": true,
+          "noLegacyOrContextAggregateLoss": true,
+          "noFailedAttempts": true
+        }
+      ],
+      "largestWarmP95Ratio": 1.0070410353811057,
+      "sampledPeakRssRatio": 1.0006618544333905,
+      "maximumMemorySamplingGapSeconds": 2.102,
+      "memory": {
+        "schema": "amos.router-runtime-memory-measurement",
+        "version": 1,
+        "source": "external-runtime-process-tree-rss",
+        "evidenceSha256": "b1d06a6fa02981dfdb75529c2be26b50e880c78bf4b6caeda4d1d3e3755bd048",
+        "samplingIntervalSeconds": 2,
+        "completePairedSamples": 276,
+        "evaluationExitCode": 0,
+        "productionChanged": false,
+        "qualification": false,
+        "limitations": "Sampled runner-tree RSS excludes the shared Ollama daemon. Shared pages may be counted more than once; this is not total Metal/unified-memory accounting. The maximum is the largest observed sample, not a continuous peak.",
+        "measurements": [
+          {
+            "modelId": "amos-router:0.8b-pilot003-v2",
+            "artifactSha256": "cbe690bd7550f8f8e6597681bde03d72ad783216c1446bef5386ee44a0da9305",
+            "peakRssBytes": 792150016
+          },
+          {
+            "modelId": "amos-router:0.8b-boundary-learning-20260905",
+            "artifactSha256": "ce9421b90644a86b8193370f94c823485d782c4bb72923bc74019b013dc50460",
+            "peakRssBytes": 792674304
+          }
+        ]
+      },
+      "suites": {
+        "evaluation": {
+          "cases": 72,
+          "repetitions": 3,
+          "reportDigest": "e018e22816e6acc6c5e843c0f07cd3623cf0d87fd8098093dc135ace4bea51ac",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 67,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 17,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 67,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 17,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 67,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 17,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 306.96133399999235,
+                "p95": 320.63566699999865,
+                "max": 369.80774999999267
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260905": {
+              "scores": [
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 17,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 17,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 17,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 307.2282500000001,
+                "p95": 318.0120420000021,
+                "max": 433.47016700000677
+              }
+            }
+          }
+        },
+        "evaluation-context": {
+          "cases": 72,
+          "repetitions": 3,
+          "reportDigest": "5658f0d9b545952299a6a16a999e3ed9e6c19f26bec218a26e32c4e86765676e",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 62,
+                  "byClass": {
+                    "routine": 12,
+                    "balanced": 18,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 62,
+                  "byClass": {
+                    "routine": 12,
+                    "balanced": 18,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 62,
+                  "byClass": {
+                    "routine": 12,
+                    "balanced": 18,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 361.656707999995,
+                "p95": 368.5992499999993,
+                "max": 374.6558329999971
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260905": {
+              "scores": [
+                {
+                  "correct": 72,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 72,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 72,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 363.2503330000036,
+                "p95": 369.6881669999857,
+                "max": 416.70470800000476
+              }
+            }
+          }
+        },
+        "regression": {
+          "cases": 40,
+          "repetitions": 3,
+          "reportDigest": "ab2587994f0d9dc3c3d860a1dcaa0c5d603fda1a00d895f248b5925dc588df5c",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 35,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 7,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 35,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 7,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 35,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 7,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 305.5296250000247,
+                "p95": 314.6970410000067,
+                "max": 347.6447080000071
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260905": {
+              "scores": [
+                {
+                  "correct": 36,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 8,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 36,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 8,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 36,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 8,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 304.54845800000476,
+                "p95": 316.912834000017,
+                "max": 350.4076660000137
+              }
+            }
+          }
+        },
+        "context": {
+          "cases": 56,
+          "repetitions": 3,
+          "reportDigest": "323a8aaa931da5c072a6a013fc247bae2d6969fe11bfbb2ba3db868a24349d12",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 47,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 15,
+                    "deep": 13,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 47,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 15,
+                    "deep": 13,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 47,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 15,
+                    "deep": 13,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 314.21199999999953,
+                "p95": 349.7321670000092,
+                "max": 354.38937500002794
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260905": {
+              "scores": [
+                {
+                  "correct": 53,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 17,
+                    "deep": 17,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 53,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 17,
+                    "deep": 17,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 53,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 17,
+                    "deep": 17,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 312.87691599997925,
+                "p95": 348.22441599995364,
+                "max": 356.58125000004657
+              }
+            }
+          }
+        },
+        "training-probe": {
+          "cases": 152,
+          "repetitions": 1,
+          "reportDigest": "d64fab52fbc1636432e7e6c0f35efc027f4899cf9fef65c623ac1378973cc65b",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 136,
+                  "byClass": {
+                    "routine": 33,
+                    "balanced": 36,
+                    "deep": 29,
+                    "frontier": 38
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 317.6426659999415,
+                "p95": 367.39191700005904,
+                "max": 375.79066599998623
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260905": {
+              "scores": [
+                {
+                  "correct": 152,
+                  "byClass": {
+                    "routine": 38,
+                    "balanced": 38,
+                    "deep": 38,
+                    "frontier": 38
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 355.0227500000037,
+                "p95": 368.0682080000406,
+                "max": 478.32166600006167
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "seed": 20260906,
+      "model": "amos-router:0.8b-boundary-learning-20260906",
+      "passesRepeatedAccuracyChecks": true,
+      "repeatedChecks": [
+        {
+          "repetition": 0,
+          "baselineJoint": 61,
+          "candidateJoint": 70,
+          "freshJointTaskAccuracyImproved": true,
+          "noClassAccuracyRegression": true,
+          "noSevereUnderRouteIncrease": true,
+          "noLegacyOrContextAggregateLoss": true,
+          "noFailedAttempts": true
+        },
+        {
+          "repetition": 1,
+          "baselineJoint": 61,
+          "candidateJoint": 70,
+          "freshJointTaskAccuracyImproved": true,
+          "noClassAccuracyRegression": true,
+          "noSevereUnderRouteIncrease": true,
+          "noLegacyOrContextAggregateLoss": true,
+          "noFailedAttempts": true
+        },
+        {
+          "repetition": 2,
+          "baselineJoint": 61,
+          "candidateJoint": 70,
+          "freshJointTaskAccuracyImproved": true,
+          "noClassAccuracyRegression": true,
+          "noSevereUnderRouteIncrease": true,
+          "noLegacyOrContextAggregateLoss": true,
+          "noFailedAttempts": true
+        }
+      ],
+      "largestWarmP95Ratio": 1.0021258533864026,
+      "sampledPeakRssRatio": 1.0003515956236686,
+      "maximumMemorySamplingGapSeconds": 2.092,
+      "memory": {
+        "schema": "amos.router-runtime-memory-measurement",
+        "version": 1,
+        "source": "external-runtime-process-tree-rss",
+        "evidenceSha256": "c07fe2abe74a45b669450b12d886d4c35ef8729b4cbe83075eed8d3460fd6315",
+        "samplingIntervalSeconds": 2,
+        "completePairedSamples": 275,
+        "evaluationExitCode": 0,
+        "productionChanged": false,
+        "qualification": false,
+        "limitations": "Sampled runner-tree RSS excludes the shared Ollama daemon. Shared pages may be counted more than once; this is not total Metal/unified-memory accounting. The maximum is the largest observed sample, not a continuous peak.",
+        "measurements": [
+          {
+            "modelId": "amos-router:0.8b-pilot003-v2",
+            "artifactSha256": "cbe690bd7550f8f8e6597681bde03d72ad783216c1446bef5386ee44a0da9305",
+            "peakRssBytes": 792182784
+          },
+          {
+            "modelId": "amos-router:0.8b-boundary-learning-20260906",
+            "artifactSha256": "89c2722badbf93dc6481f9de35e8ae02b817e14dcb2af7011b466ad44f990d45",
+            "peakRssBytes": 792461312
+          }
+        ]
+      },
+      "suites": {
+        "evaluation": {
+          "cases": 72,
+          "repetitions": 3,
+          "reportDigest": "eb4bba19c500ef2b12f5a812b808a1ef156e7ca9afc7a5ad87568da159eb5603",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 67,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 17,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 67,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 17,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 67,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 17,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 305.2912919999944,
+                "p95": 310.13004199998977,
+                "max": 324.8557920000021
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260906": {
+              "scores": [
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 17,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 17,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 18,
+                    "balanced": 18,
+                    "deep": 17,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 304.2931249999965,
+                "p95": 310.7893330000006,
+                "max": 313.59562500000175
+              }
+            }
+          }
+        },
+        "evaluation-context": {
+          "cases": 72,
+          "repetitions": 3,
+          "reportDigest": "dd20ee7c72cd2c00890bd0493f230b582832ae0c058e5191af7374e682e73eab",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 62,
+                  "byClass": {
+                    "routine": 12,
+                    "balanced": 18,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 62,
+                  "byClass": {
+                    "routine": 12,
+                    "balanced": 18,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 62,
+                  "byClass": {
+                    "routine": 12,
+                    "balanced": 18,
+                    "deep": 14,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 362.9285000000091,
+                "p95": 370.09666700000525,
+                "max": 375.78274999998393
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260906": {
+              "scores": [
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 17,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 17,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 71,
+                  "byClass": {
+                    "routine": 17,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 18
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 361.1239999999525,
+                "p95": 369.1826659999788,
+                "max": 382.30375000002095
+              }
+            }
+          }
+        },
+        "regression": {
+          "cases": 40,
+          "repetitions": 3,
+          "reportDigest": "37e05fd2a9a986c681689f64d7974ec83543041cd0953bd1c6b53036708b300a",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 35,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 7,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 35,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 7,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 35,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 7,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 305.1773750000284,
+                "p95": 315.36733300000196,
+                "max": 351.8180830000201
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260906": {
+              "scores": [
+                {
+                  "correct": 36,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 8,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 36,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 8,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 36,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 10,
+                    "deep": 8,
+                    "frontier": 8
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 306.3839999999618,
+                "p95": 315.3397910000058,
+                "max": 357.9178339999635
+              }
+            }
+          }
+        },
+        "context": {
+          "cases": 56,
+          "repetitions": 3,
+          "reportDigest": "70fc77cdcca384289d32f4d3e0a3afc9295e2e473e6225d68f1e739f6bbbedf6",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 47,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 15,
+                    "deep": 13,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 47,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 15,
+                    "deep": 13,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 47,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 15,
+                    "deep": 13,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 314.2448340000119,
+                "p95": 349.0736249999609,
+                "max": 360.2606670000241
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260906": {
+              "scores": [
+                {
+                  "correct": 55,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 55,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                },
+                {
+                  "correct": 55,
+                  "byClass": {
+                    "routine": 10,
+                    "balanced": 18,
+                    "deep": 18,
+                    "frontier": 9
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 312.6862910000491,
+                "p95": 349.07279199996265,
+                "max": 359.48662499996135
+              }
+            }
+          }
+        },
+        "training-probe": {
+          "cases": 152,
+          "repetitions": 1,
+          "reportDigest": "9ae83d95e3e52ea07844adf8b8891bb6b7b32a133715940b5cef15ed282c73cd",
+          "models": {
+            "amos-router:0.8b-pilot003-v2": {
+              "scores": [
+                {
+                  "correct": 136,
+                  "byClass": {
+                    "routine": 33,
+                    "balanced": 36,
+                    "deep": 29,
+                    "frontier": 38
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 316.0786659999285,
+                "p95": 367.36479199992027,
+                "max": 374.0748329999624
+              }
+            },
+            "amos-router:0.8b-boundary-learning-20260906": {
+              "scores": [
+                {
+                  "correct": 150,
+                  "byClass": {
+                    "routine": 37,
+                    "balanced": 38,
+                    "deep": 37,
+                    "frontier": 38
+                  },
+                  "severeUnderRoutes": 0,
+                  "failedAttempts": 0
+                }
+              ],
+              "stableAcrossRepetitions": true,
+              "latencyMs": {
+                "p50": 318.1336659999797,
+                "p95": 367.57774999993853,
+                "max": 375.53341699996963
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "execution": {
+    "trainingJob": "amos-router-boundary-20260905-140240",
+    "trainingStatus": "Completed",
+    "trainingBillableSeconds": 4043,
+    "exportJob": "amos-router-boundary-export-20260905-151417",
+    "exportStatus": "Completed",
+    "exportProcessingSeconds": 2447.454,
+    "earlierStoppedPilotBillableSeconds": 41
+  },
+  "evidenceBundle": {
+    "schema": "amos.router-evaluation-evidence-bundle",
+    "sha256": "cd34dc0ab9530fd5e27846b7c27e80562284700a642c862243ecb15e53590a63",
+    "bytes": 1171085,
+    "members": 112,
+    "modelWeightsIncluded": false,
+    "archive": "evaluation-evidence-cd34dc0ab9530fd5e27846b7c27e80562284700a642c862243ecb15e53590a63.tar.gz"
+  },
+  "limitations": [
+    "72 fresh tasks with correlated standalone and continuation forms; these are synthetic policy labels, not verified production outcomes.",
+    "Older regression/context sets are development diagnostics and are not independent qualification.",
+    "Three-seed recipe gate failed; two screened candidates are retained only for further research.",
+    "The third control was interrupted by idle sleep and contains one baseline timeout; that comparison is not clean replication evidence.",
+    "RSS measures sampled Ollama runner process trees, excludes the shared daemon, and is not total unified-memory accounting.",
+    "The complete evidence bundle is local. The optional S3 backup was rejected by automatic approval review and was not uploaded."
+  ]
+}

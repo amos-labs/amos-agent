@@ -5,6 +5,7 @@ import json, subprocess, sys, time, os
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from runtime_models import awake_runtime, unload_other_experiments
 
 root=Path(__file__).resolve().parents[2]
 out=root/'output/router-boundary-20260905'
@@ -62,8 +63,10 @@ while True:
         reports=[out/(name+'.screen.'+suite+'.report.json') for suite in suites]
         if not all(p.exists() for p in reports):
             if any(p.exists() for p in reports) or (out/(name+'.screen.runtime-before.json')).exists():raise RuntimeError('Partial prior screen requires inspection: '+name)
+            emit('experimental-runners-unloaded', models=unload_other_experiments('amos-router:0.8b-boundary-'+name))
             emit('local-screen-start',run=name)
-            run([node,str(research/'evaluate.mjs'),name,'--screen'],name+'.screen.log',1800)
+            with awake_runtime():
+                run([node,str(research/'evaluate.mjs'),name,'--screen'],name+'.screen.log',1800)
         run([node,str(research/'summarize.mjs')],'summary-history.log',60)
         complete.add(name);advanced=True;emit('local-screen-complete',run=name,completed=len(complete))
     if len(complete)==6 and status=='Completed':break
