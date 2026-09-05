@@ -80,15 +80,30 @@ export function intelligenceRouterPayload({
 } = {}) {
   const recentContext = [];
   let remaining = 4_000;
-  for (let index = messages.length - 1; index >= 0 && recentContext.length < 4; index -= 1) {
-    const message = messages[index];
-    if (!["user", "assistant"].includes(message?.role)) continue;
-    const content = messageText(message?.content).slice(0, remaining).trim();
+  let latestUserIndex = -1;
+  // Reserve the request before allocating space to assistant progress. It can
+  // otherwise disappear behind one long response or four tool-cycle updates.
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role !== "user") continue;
+    const content = messageText(messages[index].content).slice(0, remaining).trim();
     if (!content) continue;
-    recentContext.unshift({ role: message.role, content });
+    latestUserIndex = index;
+    recentContext.push({ index, role: "user", content });
     remaining -= content.length;
-    if (remaining <= 0) break;
+    break;
   }
+  for (let index = messages.length - 1; index >= 0 && recentContext.length < 4 && remaining > 0; index -= 1) {
+    const message = messages[index];
+    if (index === latestUserIndex || !["user", "assistant"].includes(message?.role)) continue;
+    const limit = message.role === "assistant" ? Math.min(512, remaining) : remaining;
+    const content = messageText(message.content).slice(0, limit).trim();
+    if (!content) continue;
+    recentContext.push({ index, role: message.role, content });
+    remaining -= content.length;
+  }
+  // This is a classification input, not a chronological transcript. Present
+  // background first so the final instruction is the user's current request.
+  recentContext.sort((a, b) => Number(a.index === latestUserIndex) - Number(b.index === latestUserIndex) || a.index - b.index);
   const task = recentContext.length === 1 && recentContext[0].role === "user"
     ? recentContext[0].content
     : recentContext.map((message) => `${message.role}: ${message.content}`).join("\n");
