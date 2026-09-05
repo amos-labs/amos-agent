@@ -1,0 +1,481 @@
+{
+  "schema": "amos.router-context-development-result",
+  "suites": {
+    "fresh-single": {
+      "baseline": {
+        "cases": 24,
+        "correctCases": 19,
+        "stableAcrossRepetitions": true,
+        "attempts": 96,
+        "errors": 0,
+        "severeUnderRouteCases": 0,
+        "byClass": {
+          "routine": {
+            "cases": 4,
+            "correctCases": 4
+          },
+          "balanced": {
+            "cases": 8,
+            "correctCases": 5
+          },
+          "deep": {
+            "cases": 8,
+            "correctCases": 6
+          },
+          "frontier": {
+            "cases": 4,
+            "correctCases": 4
+          }
+        },
+        "latencyMs": {
+          "p50": 292.4326669999864,
+          "p95": 339.6099159999999
+        },
+        "promptTokens": {
+          "p50": 410,
+          "p95": 426
+        }
+      },
+      "candidate": {
+        "cases": 24,
+        "correctCases": 19,
+        "stableAcrossRepetitions": true,
+        "attempts": 96,
+        "errors": 0,
+        "severeUnderRouteCases": 0,
+        "byClass": {
+          "routine": {
+            "cases": 4,
+            "correctCases": 4
+          },
+          "balanced": {
+            "cases": 8,
+            "correctCases": 5
+          },
+          "deep": {
+            "cases": 8,
+            "correctCases": 6
+          },
+          "frontier": {
+            "cases": 4,
+            "correctCases": 4
+          }
+        },
+        "latencyMs": {
+          "p50": 305.6695000000036,
+          "p95": 318.5615419999813
+        },
+        "promptTokens": {
+          "p50": 410,
+          "p95": 426
+        }
+      }
+    },
+    "fresh-continuation": {
+      "baseline": {
+        "cases": 24,
+        "correctCases": 4,
+        "stableAcrossRepetitions": true,
+        "attempts": 96,
+        "errors": 0,
+        "severeUnderRouteCases": 12,
+        "byClass": {
+          "routine": {
+            "cases": 4,
+            "correctCases": 4
+          },
+          "balanced": {
+            "cases": 8,
+            "correctCases": 0
+          },
+          "deep": {
+            "cases": 8,
+            "correctCases": 0
+          },
+          "frontier": {
+            "cases": 4,
+            "correctCases": 0
+          }
+        },
+        "latencyMs": {
+          "p50": 393.96229200000016,
+          "p95": 548.278875
+        },
+        "promptTokens": {
+          "p50": 634,
+          "p95": 1232
+        }
+      },
+      "candidate": {
+        "cases": 24,
+        "correctCases": 20,
+        "stableAcrossRepetitions": true,
+        "attempts": 96,
+        "errors": 0,
+        "severeUnderRouteCases": 0,
+        "byClass": {
+          "routine": {
+            "cases": 4,
+            "correctCases": 4
+          },
+          "balanced": {
+            "cases": 8,
+            "correctCases": 8
+          },
+          "deep": {
+            "cases": 8,
+            "correctCases": 4
+          },
+          "frontier": {
+            "cases": 4,
+            "correctCases": 4
+          }
+        },
+        "latencyMs": {
+          "p50": 347.9539169999771,
+          "p95": 385.3920419999995
+        },
+        "promptTokens": {
+          "p50": 543,
+          "p95": 611
+        }
+      }
+    },
+    "steering-control": {
+      "baseline": {
+        "cases": 8,
+        "correctCases": 8,
+        "stableAcrossRepetitions": true,
+        "attempts": 32,
+        "errors": 0,
+        "severeUnderRouteCases": 0,
+        "byClass": {
+          "routine": {
+            "cases": 2,
+            "correctCases": 2
+          },
+          "balanced": {
+            "cases": 2,
+            "correctCases": 2
+          },
+          "deep": {
+            "cases": 3,
+            "correctCases": 3
+          },
+          "frontier": {
+            "cases": 1,
+            "correctCases": 1
+          }
+        },
+        "latencyMs": {
+          "p50": 307.64800000000105,
+          "p95": 347.0572919999977
+        },
+        "promptTokens": {
+          "p50": 441,
+          "p95": 462
+        }
+      },
+      "candidate": {
+        "cases": 8,
+        "correctCases": 8,
+        "stableAcrossRepetitions": true,
+        "attempts": 32,
+        "errors": 0,
+        "severeUnderRouteCases": 0,
+        "byClass": {
+          "routine": {
+            "cases": 2,
+            "correctCases": 2
+          },
+          "balanced": {
+            "cases": 2,
+            "correctCases": 2
+          },
+          "deep": {
+            "cases": 3,
+            "correctCases": 3
+          },
+          "frontier": {
+            "cases": 1,
+            "correctCases": 1
+          }
+        },
+        "latencyMs": {
+          "p50": 313.6251249999914,
+          "p95": 345.00787500000297
+        },
+        "promptTokens": {
+          "p50": 441,
+          "p95": 462
+        }
+      }
+    },
+    "historical-regression": {
+      "baseline": {
+        "cases": 40,
+        "correctCases": 35,
+        "stableAcrossRepetitions": true,
+        "attempts": 160,
+        "errors": 0,
+        "severeUnderRouteCases": 0,
+        "byClass": {
+          "routine": {
+            "cases": 10,
+            "correctCases": 10
+          },
+          "balanced": {
+            "cases": 10,
+            "correctCases": 10
+          },
+          "deep": {
+            "cases": 10,
+            "correctCases": 7
+          },
+          "frontier": {
+            "cases": 10,
+            "correctCases": 8
+          }
+        },
+        "latencyMs": {
+          "p50": 301.4456669999927,
+          "p95": 336.9667499999996
+        },
+        "promptTokens": {
+          "p50": 406,
+          "p95": 433
+        }
+      },
+      "candidate": {
+        "cases": 40,
+        "correctCases": 35,
+        "stableAcrossRepetitions": true,
+        "attempts": 160,
+        "errors": 0,
+        "severeUnderRouteCases": 0,
+        "byClass": {
+          "routine": {
+            "cases": 10,
+            "correctCases": 10
+          },
+          "balanced": {
+            "cases": 10,
+            "correctCases": 10
+          },
+          "deep": {
+            "cases": 10,
+            "correctCases": 7
+          },
+          "frontier": {
+            "cases": 10,
+            "correctCases": 8
+          }
+        },
+        "latencyMs": {
+          "p50": 302.9090830000059,
+          "p95": 341.7263329999987
+        },
+        "promptTokens": {
+          "p50": 406,
+          "p95": 433
+        }
+      }
+    }
+  },
+  "changes": [
+    {
+      "id": "fresh-balanced-csv-helper-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-balanced-aggregation-query-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-balanced-invitation-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-balanced-event-checklist-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-balanced-software-shortlist-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-balanced-interview-summary-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-balanced-billing-reply-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-balanced-workshop-outline-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "balanced",
+      "before": "routine",
+      "after": "balanced",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-inventory-causality-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "deep",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-identity-transition-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "balanced",
+      "gained": false,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-measurement-conflict-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "balanced",
+      "gained": false,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-seasonal-planning-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "balanced",
+      "gained": false,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-performance-investigation-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "deep",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-portfolio-strategy-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "balanced",
+      "gained": false,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-scientific-synthesis-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "deep",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-deep-offline-booking-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "deep",
+      "before": "routine",
+      "after": "deep",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-frontier-unresolved-number-theory-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "frontier",
+      "before": "routine",
+      "after": "frontier",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-frontier-novel-private-computation-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "frontier",
+      "before": "routine",
+      "after": "frontier",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-frontier-original-material-theory-long-assistant",
+      "suite": "fresh-continuation",
+      "expectedClass": "frontier",
+      "before": "routine",
+      "after": "frontier",
+      "gained": true,
+      "lost": false
+    },
+    {
+      "id": "fresh-frontier-formal-reconfiguration-many-assistants",
+      "suite": "fresh-continuation",
+      "expectedClass": "frontier",
+      "before": "routine",
+      "after": "frontier",
+      "gained": true,
+      "lost": false
+    }
+  ],
+  "checks": {
+    "continuationGain": true,
+    "noPreviouslyCorrectLoss": true,
+    "controlsUnchanged": true,
+    "noSevereUnderRouteIncrease": true,
+    "noErrors": true,
+    "stable": true,
+    "continuationP95Within10Percent": true
+  },
+  "diagnosticAccepted": true,
+  "qualified": false,
+  "verifiedBackendOutcomes": false,
+  "trainingExamplesAdmitted": 0,
+  "reportSha256": "5f9b40af79dbdf2b7199a17bda68e6bef5263a3894acac144b03ae6ed7526190"
+}
