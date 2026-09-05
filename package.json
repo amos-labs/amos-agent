@@ -23,6 +23,8 @@
     "benchmark:local": "node scripts/benchmarkLocalModels.js",
     "benchmark:prompt-cache": "node scripts/benchmarkPromptCache.js",
     "evaluate:router-workflows": "node scripts/evaluateRouterWorkflows.js",
+    "evaluate:router-learning": "node scripts/evaluateRouterLearning.js",
+    "review:router-corrections": "node scripts/reviewRouterCorrections.js",
     "benchmark:local:vision": "node scripts/benchmarkLocalVision.js",
     "qualification:compile": "node scripts/compileModelCapabilities.js",
     "qualification:bedrock": "node scripts/qualifyBedrockMantle.js",
