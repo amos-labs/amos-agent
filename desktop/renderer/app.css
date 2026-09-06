@@ -4758,3 +4758,13 @@ html[data-platform="win32"] .sidebar-toggle {
   .canvas-decision-block,
   .canvas-operating-plan-block { grid-column: 1; }
 }
+.automatic-routing-options {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.automatic-routing-options:disabled {
+  opacity: 0.6;
+}

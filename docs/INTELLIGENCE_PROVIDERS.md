@@ -52,8 +52,8 @@ platform—not the client—selects the actual provider and model. The exact mod
 provider, and hardware profile may therefore evolve independently from AMOS
 Desktop.
 
-Desktop presents one **AMOS Intelligence · Automatic** route. It sends no
-managed reasoning-tier hint. The signed local 0.8B router classifies each step
+Desktop defaults to **AMOS Intelligence · Automatic**. It sends no
+managed reasoning-tier hint. In Auto, the signed local 0.8B router classifies each step
 as `routine`, `balanced`, `deep`, or `frontier` and attaches that floor under
 `amos_routing`. The platform maps routine / balanced / deep to the owned Qwen
 cell (thinking off / medium / high) when the Qwen cortex URL is configured,
@@ -61,6 +61,20 @@ and maps frontier to Bedrock Claude Opus 5. Deep can later be pinned to
 Sonnet high-thinking with a platform env override. The platform—not Desktop—
 selects the provider. Until the Qwen URL is live, non-frontier classes keep
 the current Claude compatibility routes.
+
+The Desktop Tier selector also supports **Routine**, **Balanced**, **Deep**,
+and **Frontier**. A manual selection skips local router warm-up, task/workflow
+classification, and request classification. Requests retain `model: "auto"`
+and carry the selected `amos_routing.minimum_class`, with
+`source: "desktop-manual-tier"` and no classifier contract. The platform uses
+this declared class without running its fallback classifier. Account-tier
+limits, context overflow, and availability policies remain authoritative.
+
+Manual selection pauses hybrid routing and coding-role pairing without
+discarding their preferences. Auto restores those options. The saved setting
+is `hostedTier` (or `AMOS_HOSTED_TIER` for configuration); absent or invalid
+values default to Auto. Legacy `intelligenceProfile` values still migrate to
+Auto. Separately selected providers ignore the hosted tier.
 
 The underlying provider and model remain available in private diagnostics and
 receipts, but they are not routine product choices. The business remains

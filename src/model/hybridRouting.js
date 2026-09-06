@@ -1,4 +1,5 @@
 import { INTELLIGENCE_ROUTER_CLASSES } from "./intelligenceRouter.js";
+import { hasManualHostedTier } from "./hostedTier.js";
 import { clean } from "../util/validate.js";
 
 export const HYBRID_ROUTING_STRATEGIES = Object.freeze([
@@ -59,6 +60,7 @@ export function sanitizeHybridRouting(input = {}) {
 export function hybridRoutingEnabled(settings = {}) {
   return Boolean(
     settings.provider === "amos-hosted" &&
+    !hasManualHostedTier(settings) &&
     settings.operatingMode === "online" &&
     sanitizeHybridRouting(settings.hybridRouting).enabled
   );

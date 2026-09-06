@@ -237,10 +237,12 @@ company. The client requests only the stable `auto` alias so provider/model
 routing can evolve server-side. Existing BYOK, private endpoint, Bedrock, and
 local profiles remain explicit alternatives.
 
-New installations default to AMOS Intelligence automatic routing. Desktop sends
-the stable `auto` alias without a reasoning-tier hint, while the managed
-platform selects the most efficient configuration that satisfies the task's
-measured requirements. Users can still choose exact infrastructure through an
+New installations default to AMOS Intelligence automatic routing. In
+**Intelligence & Settings**, choose **Auto**, **Routine**, **Balanced**, **Deep**,
+or **Frontier**. Manual tiers skip router startup and classification and pause
+optional hybrid routing and coding-role model switching. Desktop still sends
+the stable `auto` model alias; the platform maps the selected tier to its
+current model, subject to account limits and availability. Users can still choose exact infrastructure through an
 advanced customer Bedrock, provider-key, private-endpoint, or local setup.
 
 See [Intelligence providers](docs/INTELLIGENCE_PROVIDERS.md) and the

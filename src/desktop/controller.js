@@ -7,6 +7,7 @@ import { loadConfig, validateConfig } from "../config.js";
 import { AmosOAuthSession } from "../auth/oauth.js";
 import { FileTokenStore, MemoryTokenStore } from "../auth/tokenStore.js";
 import { createModelClient, listModelProviders } from "../model/providers.js";
+import { hasManualHostedTier, normalizeHostedTier, hostedTierLabel } from "../model/hostedTier.js";
 import { configureBedrockProviderDataSharing } from "../model/bedrockDataRetention.js";
 import {
   INTELLIGENCE_ROUTER_WORKFLOW_QUALIFIED,
@@ -552,7 +553,7 @@ export class DesktopController {
     }
     const saved = await this.settingsStore.write(candidate);
     if (
-      saved.hybridRouting?.enabled === true &&
+      hybridRoutingEnabled(saved) &&
       JSON.stringify(current.hybridRouting) !== JSON.stringify(saved.hybridRouting)
     ) {
       const offline = await this.offlineManager?.refresh?.(systemProfile()).catch(() => null);
@@ -581,7 +582,7 @@ export class DesktopController {
       this.resetRuntime();
       if (intelligenceSettingsChanged(current, saved)) {
         const intelligence = saved.provider === "amos-hosted"
-          ? "AMOS Intelligence · Automatic"
+          ? `AMOS Intelligence · ${hostedTierLabel(saved.hostedTier)}`
           : `${saved.provider} · ${saved.model}`;
         this.record(
           "settings",
@@ -635,9 +636,9 @@ export class DesktopController {
     const selectedSettings = settings || await this.settingsStore.read();
     const resolvedConfig = this.configFrom(selectedSettings);
     const modelConfig = resolvedConfig.model;
-    const needsRouter = isAmosDesktopRoutingConfig(modelConfig) ||
+    const needsRouter = !hasManualHostedTier(selectedSettings) && (isAmosDesktopRoutingConfig(modelConfig) ||
       selectedSettings.intelligenceRoles?.enabled === true ||
-      resolvedConfig.agent?.progressiveTools !== false;
+      resolvedConfig.agent?.progressiveTools !== false);
     let routerWarm = null;
     if (needsRouter) {
       try {
@@ -654,7 +655,7 @@ export class DesktopController {
     }
     const requestedModel = selectedSettings.provider === "ollama"
       ? selectedSettings.model
-      : selectedSettings.hybridRouting?.enabled === true
+      : hybridRoutingEnabled(selectedSettings)
         ? selectedSettings.hybridRouting.localModel
         : "";
     if (!requestedModel) return routerWarm;
@@ -2560,7 +2561,7 @@ export class DesktopController {
     let modelIdentity = recoveryModelIdentity({ settings });
     try {
       await this.startRunSupervision(settings, abortController);
-      const pairing = sanitizeIntelligenceRoles(settings.intelligenceRoles);
+      const pairing = effectiveIntelligenceRoles(settings);
       const attachmentNames = references
         .map((reference) => this.attachments.list().find((item) => item.id === reference?.id)?.name)
         .filter(Boolean);
@@ -5824,6 +5825,7 @@ export class DesktopController {
       this.runtime?.contextOnly === contextOnly &&
       this.runtime?.workspaceFocus === workspaceFocus &&
       this.runtime?.config?.model?.baseUrl === config.model.baseUrl &&
+      this.runtime?.config?.model?.hostedTier === config.model.hostedTier &&
       this.runtime?.config?.model?.model === config.model.model
     ) {
       this.bindConversationScratchpad(this.runtime, taskRecord);
@@ -6175,6 +6177,7 @@ export class DesktopController {
     pairing,
     signal = null
   }) {
+    if (hasManualHostedTier(settings)) return null;
     const config = this.configFrom(settings);
     const needsMinimumClass = boundary === "online" &&
       isAmosDesktopRoutingConfig(config.model) &&
@@ -7252,7 +7255,7 @@ export class DesktopController {
 
   async applyIntelligenceRole(role, { settings = null, announce = true, resetRuntime = false } = {}) {
     const current = settings || this.runManager.current()?.settings || await this.settingsStore.read();
-    const pairing = sanitizeIntelligenceRoles(current.intelligenceRoles);
+    const pairing = effectiveIntelligenceRoles(current);
     const normalized = normalizeIntelligenceRole(role, pairing.enabled ? "implementer" : "implementer");
     const selection = pairing.enabled
       ? roleSelection(pairing, normalized)
@@ -7349,7 +7352,7 @@ export class DesktopController {
     const settings = parentLane?.settings || await this.settingsStore.read();
     const parentId = this.activeTaskRecordId;
     if (!parentId) throw new Error("Start a parent task before spawning a child");
-    const pairing = sanitizeIntelligenceRoles(settings.intelligenceRoles);
+    const pairing = effectiveIntelligenceRoles(settings);
     const role = normalizeIntelligenceRole(input.role, "implementer");
     const selection = pairing.enabled
       ? roleSelection(pairing, role)
@@ -7557,6 +7560,7 @@ export class DesktopController {
     const env = {
       ...process.env,
       AMOS_MODEL_PROVIDER: settings.provider,
+      AMOS_HOSTED_TIER: normalizeHostedTier(settings.hostedTier),
       AMOS_MODEL: localTarget?.model || settings.model,
       AMOS_MODEL_BASE_URL: localTarget?.baseUrl || settings.baseUrl,
       AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
@@ -8117,16 +8121,21 @@ function publicProvider(config) {
     authMode: managed ? "amos" : config.authMode,
     model: managed ? "" : config.model,
     baseUrl: managed ? "" : config.baseUrl,
-    routingMode: managed ? "automatic" : "pinned",
-    profile: managed ? "auto" : null,
-    profileLabel: managed ? "Automatic" : ""
+    routingMode: managed ? config.routingMode : "pinned",
+    profile: managed ? normalizeHostedTier(config.hostedTier) : null,
+    profileLabel: managed ? hostedTierLabel(config.hostedTier) : ""
   };
+}
+
+function effectiveIntelligenceRoles(settings = {}) {
+  const roles = sanitizeIntelligenceRoles(settings.intelligenceRoles);
+  return hasManualHostedTier(settings) ? { ...roles, enabled: false } : roles;
 }
 
 function continuityModelIdentity(settings) {
   const provider = String(settings?.provider || "compatible").trim();
   const model = provider === "amos-hosted"
-    ? String(settings?.intelligenceProfile || "auto").trim()
+    ? normalizeHostedTier(settings?.hostedTier)
     : String(settings?.model || "auto").trim();
   return `${provider}:${model}`.slice(0, 256);
 }
@@ -8170,6 +8179,7 @@ function operatingMode(settings, config) {
 
 function runtimeSettingsChanged(previous, next) {
   return [
+    "hostedTier",
     "provider",
     "model",
     "baseUrl",
@@ -8188,6 +8198,7 @@ function runtimeSettingsChanged(previous, next) {
 
 function intelligenceSettingsRequested(input = {}) {
   return [
+    "hostedTier",
     "provider",
     "model",
     "baseUrl",
@@ -8213,6 +8224,7 @@ function localApprovalSettingsChanged(previous, next) {
 
 function intelligenceSettingsChanged(previous, next) {
   return [
+    "hostedTier",
     "provider",
     "model",
     "baseUrl",
@@ -8226,6 +8238,7 @@ function intelligenceSettingsChanged(previous, next) {
 }
 
 function validateHybridRoutingSettings(settings, configFrom) {
+  if (hasManualHostedTier(settings)) return;
   const policy = sanitizeHybridRouting(settings.hybridRouting);
   if (!policy.enabled) return;
   if (settings.provider !== "amos-hosted" || settings.operatingMode !== "online") {
@@ -8266,7 +8279,7 @@ ${settings?.operatingMode === "offline"
 - Local approval policy: ${desktopLocalApprovalDescription(settings)}
 - This local policy never approves AMOS company operations, external-system writes, or governed decisions.
 ${projectOrientationPrompt(extras.project)}${autonomousGoalPrompt(extras.autonomousGoal)}
-${settings?.intelligenceRoles?.enabled
+${effectiveIntelligenceRoles(settings).enabled
     ? "- Coding-role pairing is on for coding workflows only. AMOS Desktop deterministically requires plan, implementation, independent check, and any necessary repair before completion. Report every stage through desktop_report_coding_stage; do not infer time pressure or silently skip a stage. Non-coding work stays on its normal intelligence route. Use desktop_spawn_subagent for isolated Git worktrees, and collect every spawned child before completing the current stage. Children cannot spawn children or widen company authority."
     : ""}`;
 }
@@ -8859,6 +8872,9 @@ function toolEventSummary(event) {
   if (event.type === "routing") {
     if (event.hostedClass) {
       return `Local ${event.minimumClass || "invalid"} vs hosted ${event.hostedClass}: ${event.agreement ? "agreement" : "disagreement"}`;
+    }
+    if (event.status === "manual") {
+      return `Using the selected ${event.minimumClass} tier`;
     }
     if (event.rolloutMode === "hybrid" && event.selectedProvider) {
       const target = `${event.selectedProvider} · ${event.selectedModel || "automatic"}`;

@@ -8,6 +8,7 @@ import {
   resolveBedrockAuthMode
 } from "./bedrockSigV4.js";
 import { MODEL_PROTOCOLS, normalizeModelProtocol } from "./protocol.js";
+import { normalizeHostedTier } from "./hostedTier.js";
 import {
   INTELLIGENCE_ROUTING_OWNERS,
   isAmosDesktopRoutingConfig,
@@ -219,6 +220,7 @@ export function resolveModelConfig(env = process.env) {
   const region = env.AWS_REGION || env.AWS_DEFAULT_REGION || BEDROCK_MANTLE_CATALOG.defaultRegion;
   const hostedBaseUrl = hostedInferenceBaseUrl(env.AMOS_MCP_URL);
   const hosted = provider.id === "amos-hosted";
+  const hostedTier = hosted ? normalizeHostedTier(env.AMOS_HOSTED_TIER) : "auto";
   const apiKey = provider.usesAmosIdentity
     ? ""
     : env.AMOS_MODEL_API_KEY ||
@@ -267,8 +269,9 @@ export function resolveModelConfig(env = process.env) {
     routingOwner: hosted
       ? INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP
       : INTELLIGENCE_ROUTING_OWNERS.SELECTED_PROVIDER,
-    routingMode: hosted ? "automatic" : "pinned",
-    localRouterMode: hosted
+    routingMode: hosted ? (hostedTier === "auto" ? "automatic" : "manual") : "pinned",
+    hostedTier,
+    localRouterMode: hosted && hostedTier === "auto"
       ? normalizeIntelligenceRouterRolloutMode(env.AMOS_LOCAL_ROUTER_MODE)
       : "disabled",
     apiVersion: env.AMOS_MODEL_API_VERSION || modelProfile?.apiVersion ||

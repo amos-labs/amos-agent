@@ -1,4 +1,5 @@
 import { fetchCompat } from "../util/fetchCompat.js";
+import { hasManualHostedTier } from "./hostedTier.js";
 import {
   createAbortError,
   isAbortError,
@@ -273,7 +274,27 @@ export class OpenAICompatibleClient {
     skipLocalRouting
   }) {
     const rolloutMode = this.config.localRouterMode || "disabled";
-    if (!isAmosDesktopRoutingConfig(this.config) || rolloutMode === "disabled") return null;
+    if (!isAmosDesktopRoutingConfig(this.config)) return null;
+    if (this.config.routingMode === "manual" && hasManualHostedTier(this.config)) {
+      const envelope = intelligenceRoutingEnvelope({
+        minimumClass: this.config.hostedTier,
+        phase: messages.some((message) => message?.role === "tool") ? "continue" : "plan"
+      });
+      delete envelope.classifier_contract;
+      envelope.source = "desktop-manual-tier";
+      body.amos_routing = envelope;
+      const event = {
+        status: "manual",
+        rolloutMode: "manual",
+        source: envelope.source,
+        minimumClass: this.config.hostedTier,
+        phase: envelope.phase,
+        latencyMs: 0
+      };
+      onRoutingDecision?.(event);
+      return event;
+    }
+    if (rolloutMode === "disabled") return null;
     if (skipLocalRouting === true) return null;
     const phase = messages.some((message) => message?.role === "tool") ? "continue" : "plan";
     const publicFacts = {

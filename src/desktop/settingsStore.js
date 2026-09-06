@@ -1,5 +1,6 @@
 import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { normalizeHostedTier } from "../model/hostedTier.js";
 import {
   DEFAULT_INTELLIGENCE_ROLES,
   sanitizeIntelligenceRoles
@@ -42,6 +43,7 @@ export const DEFAULT_DESKTOP_SETTINGS = Object.freeze({
   baseUrl: "",
   bedrockAuthMode: "auto",
   intelligenceProfile: "auto",
+  hostedTier: "auto",
   reasoningEffort: "",
   localRuntime: "ollama",
   operatingMode: "online",
@@ -111,6 +113,7 @@ export class DesktopSettingsStore {
     settings.intelligenceRoles = sanitizeIntelligenceRoles(settings.intelligenceRoles);
     settings.hybridRouting = sanitizeHybridRouting(settings.hybridRouting);
     settings.intelligenceProfile = "auto";
+    settings.hostedTier = normalizeHostedTier(settings.hostedTier);
     if (settings.provider === "amos-hosted") {
       settings.model = "auto";
       settings.baseUrl = "";
@@ -155,6 +158,7 @@ export class DesktopSettingsStore {
     const autoApproveLocal = localAutoApproveEnabled(settings);
     return {
       AMOS_MODEL_PROVIDER: settings.provider,
+      AMOS_HOSTED_TIER: settings.hostedTier,
       AMOS_MODEL: settings.model,
       AMOS_MODEL_BASE_URL: settings.baseUrl,
       AMOS_MODEL_API_KEY: settings.provider === "amos-hosted" ? "" : settings.apiKey,
@@ -206,6 +210,7 @@ export function sanitizeSettings(input = {}) {
       ? input.bedrockAuthMode
       : "auto",
     intelligenceProfile: "auto",
+    hostedTier: normalizeHostedTier(input.hostedTier),
     reasoningEffort: managed
       ? ""
       : ["none", "low", "medium", "high", "max", "xhigh"].includes(input.reasoningEffort)
