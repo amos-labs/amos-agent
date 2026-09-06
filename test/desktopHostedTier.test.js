@@ -44,12 +44,13 @@ for (const tier of ["routine", "balanced", "deep", "frontier"]) {
       [{ role: "user", content: "Review the project" }, { role: "tool", tool_call_id: "read", content: "source" }]
     ]) {
       await client.chat({ messages, preclassifiedRouting: { minimumClass: "balanced" },
-        skipLocalRouting: true, onRoutingDecision: d => decisions.push(d) });
+        reasoningEffortOverride: "low", skipLocalRouting: true, onRoutingDecision: d => decisions.push(d) });
     }
     assert.deepEqual(bodies.map(b => b.amos_routing.minimum_class), [tier, tier]);
     assert.deepEqual(bodies.map(b => b.amos_routing.phase), ["plan", "continue"]);
     assert.ok(bodies.every(b => b.model === "auto" && b.amos_routing.source === "desktop-manual-tier"));
     assert.ok(bodies.every(b => !b.amos_routing.classifier_contract && !b.amos_routing_shadow));
+    assert.ok(bodies.every(b => !Object.hasOwn(b, "reasoning_effort")));
     assert.ok(decisions.filter(d => d.status === "manual").every(d => d.latencyMs === 0));
   });
 }
@@ -79,6 +80,37 @@ test("manual Desktop mode bypasses router preparation and optional switching whi
   assert.doesNotMatch(desktopSystemPrompt("Base", settings, {}), /Coding-role pairing is on/);
   assert.equal(hybridRoutingEnabled({ ...settings, hostedTier: "auto" }), true);
 });
+
+for (const stream of [false, true]) {
+  test(`manual routing reports actual hosted tier and reasons (${stream ? "stream" : "JSON"})`, async () => {
+    for (const [selected, actual, reason] of [
+      ["frontier", "frontier", "declared_capability_floor"],
+      ["frontier", "deep", "free_foreground_qwen_frontier_clamped"],
+      ["deep", "frontier", "qwen_prompt_requires_frontier_hatch"],
+      ["frontier", "balanced", "invalid_task_envelope"],
+      ["frontier", "unknown", "invalid_task_envelope"]
+    ]) {
+      const decisions = [];
+      const config = resolveModelConfig({ AMOS_MODEL_PROVIDER: "amos-hosted", AMOS_HOSTED_TIER: selected });
+      const client = createModelClient(config, async () => {
+        const payload = {
+          choices: [{ message: { role: "assistant", content: "done" }, delta: {content: "done"}, finish_reason: "stop" }],
+          amos: { routed_tier: actual, routing_reasons: [reason] }
+        };
+        return new Response(stream ? `data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n` : JSON.stringify(payload),
+          {status: 200, headers: {"content-type": stream ? "text/event-stream" : "application/json"}});
+      });
+      await client.chat({ messages: [{role: "user", content: "hello"}],
+        onDelta: stream ? () => {} : undefined, onRoutingDecision: d => decisions.push(d) });
+      const outcome = decisions.at(-1);
+      assert.equal(outcome.status, actual === "unknown" ? "unconfirmed" : "resolved");
+      assert.equal(outcome.minimumClass, selected);
+      assert.equal(outcome.hostedClass, actual === "unknown" ? null : actual);
+      assert.equal(outcome.agreement, actual === "unknown" ? null : actual === selected);
+      assert.equal(outcome.reason, reason);
+    }
+  });
+}
 
 test("saving a manual tier resets runtime and tolerates inactive hybrid credentials", async () => {
   let current = { ...hosted, hybridRouting: { enabled: true,

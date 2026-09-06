@@ -8870,11 +8870,16 @@ function toolEventSummary(event) {
     return event.summary || "Recorded the user's research direction";
   }
   if (event.type === "routing") {
+    if (event.rolloutMode === "manual") {
+      if (event.status === "resolved") {
+        const selected = event.hostedClass === event.minimumClass ? "" : ` (selected ${event.minimumClass})`;
+        return `AMOS used ${event.hostedClass}${selected}${event.reason ? ` · ${event.reason}` : ""}`;
+      }
+      if (event.status === "unconfirmed") return `Selected ${event.minimumClass}; hosted response did not confirm the applied tier`;
+      return `Using the selected ${event.minimumClass} tier`;
+    }
     if (event.hostedClass) {
       return `Local ${event.minimumClass || "invalid"} vs hosted ${event.hostedClass}: ${event.agreement ? "agreement" : "disagreement"}`;
-    }
-    if (event.status === "manual") {
-      return `Using the selected ${event.minimumClass} tier`;
     }
     if (event.rolloutMode === "hybrid" && event.selectedProvider) {
       const target = `${event.selectedProvider} · ${event.selectedModel || "automatic"}`;

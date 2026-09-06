@@ -69,6 +69,10 @@ and carry the selected `amos_routing.minimum_class`, with
 `source: "desktop-manual-tier"` and no classifier contract. The platform uses
 this declared class without running its fallback classifier. Account-tier
 limits, context overflow, and availability policies remain authoritative.
+Manual requests also omit legacy `reasoning_effort` hints, including internal
+gather-stage overrides. Activity and receipts record the returned hosted class
+and routing reasons; a clamp or context hatch can differ from the selected
+tier. If the response omits a recognized class, its application is unconfirmed.
 
 Manual selection pauses hybrid routing and coding-role pairing without
 discarding their preferences. Auto restores those options. The saved setting

@@ -7,6 +7,7 @@ import {
   throwIfAborted
 } from "../util/abort.js";
 import {
+  INTELLIGENCE_ROUTER_CLASSES,
   intelligenceRoutingEnvelope,
   isAmosDesktopRoutingConfig
 } from "./intelligenceRouter.js";
@@ -62,7 +63,11 @@ export class OpenAICompatibleClient {
     });
     throwIfAborted(signal);
 
-    const reasoningEffort = reasoningEffortOverride || this.config.reasoningEffort;
+    // Platform's free-account compatibility path gives this legacy hint priority
+    // over the tier envelope. A gather-stage override must not change a manual tier.
+    const reasoningEffort = hasManualHostedTier(this.config)
+      ? ""
+      : reasoningEffortOverride || this.config.reasoningEffort;
     if (reasoningEffort && this.config.capabilities?.reasoning !== false) {
       if (
         this.config.provider === "ollama" &&
@@ -377,6 +382,22 @@ export class OpenAICompatibleClient {
 
   emitHostedRoutingOutcome({ localRouting, raw, onRoutingDecision }) {
     const amos = raw?.amos;
+    if (localRouting?.rolloutMode === "manual") {
+      const hostedClass = INTELLIGENCE_ROUTER_CLASSES.includes(amos?.routed_tier)
+        ? amos.routed_tier
+        : null;
+      onRoutingDecision?.({
+        ...localRouting,
+        status: hostedClass ? "resolved" : "unconfirmed",
+        source: "platform",
+        hostedClass,
+        agreement: hostedClass ? hostedClass === localRouting.minimumClass : null,
+        reason: Array.isArray(amos?.routing_reasons)
+          ? amos.routing_reasons.filter(r => typeof r === "string").slice(0, 8).join(", ").slice(0, 160)
+          : null
+      });
+      return;
+    }
     if (
       localRouting?.rolloutMode !== "shadow" ||
       !["compared", "invalid"].includes(amos?.local_router_shadow_status)
