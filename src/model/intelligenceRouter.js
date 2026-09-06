@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { hasManualHostedTier } from "./hostedTier.js";
 import { canonicalizeSignedText } from "./signedText.js";
 
 export const INTELLIGENCE_ROUTER_CONTRACT = "amos-router:2026-08-09";
@@ -69,7 +70,8 @@ export function isAmosDesktopRoutingConfig(config) {
     config?.protocol === "openai-chat-completions" &&
     config?.usesAmosIdentity === true &&
     config?.routingOwner === INTELLIGENCE_ROUTING_OWNERS.AMOS_DESKTOP &&
-    config?.routingMode === "automatic"
+    (config?.routingMode === "automatic" ||
+      (config?.routingMode === "manual" && hasManualHostedTier(config)))
   );
 }
 

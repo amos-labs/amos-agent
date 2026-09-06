@@ -209,6 +209,7 @@ const elements = Object.fromEntries(
     "managedConnectionCallout", "managedConnectButton",
     "localSetupField", "localSetupButton", "offlineIntelligenceCard",
     "modelSelectField", "modelInput", "customModelField", "customModelInput",
+    "hostedTierInput", "automaticRoutingOptions",
     "baseUrlInput", "baseUrlHelp", "bedrockAuthField", "bedrockAuthInput",
     "bedrockRetentionField", "bedrockRetentionConsent", "bedrockRetentionButton", "bedrockRetentionStatus",
     "intelligenceRolesField", "intelligenceRolesEnabled", "intelligenceRoleControls", "plannerRoleInput",
@@ -391,6 +392,7 @@ function bindActions() {
   });
   elements.promptForm.addEventListener("drop", handleDrop);
   elements.settingsForm.addEventListener("submit", saveSettings);
+  elements.hostedTierInput.addEventListener("change", syncHostedTierControls);
   elements.notificationSaveButton.addEventListener("click", saveNotificationSettings);
   elements.notificationVerifyButton.addEventListener("click", verifyNotificationPhone);
   elements.notificationVerifyCodeInput.addEventListener("keydown", (event) => {
@@ -9421,7 +9423,7 @@ function onboardingEnterLabel() {
 
 function providerStatusLabel() {
   if (state.provider.id === "amos-hosted") {
-    return "AMOS Intelligence · Automatic";
+    return `AMOS Intelligence · ${state.provider.profileLabel || "Automatic"}`;
   }
   if (state.provider.deployment === "local") {
     return `Local · ${state.provider.model}`;
@@ -9494,6 +9496,8 @@ function renderSettings() {
   }
   if (document.activeElement !== elements.baseUrlInput) elements.baseUrlInput.value = settings.baseUrl || "";
   elements.reasoningInput.value = settings.reasoningEffort || "max";
+  elements.hostedTierInput.value = settings.hostedTier || "auto";
+  syncHostedTierControls();
   elements.bedrockAuthInput.value = settings.bedrockAuthMode === "api-key" ||
     (settings.bedrockAuthMode === "auto" && settings.hasApiKey)
     ? "api-key"
@@ -10387,6 +10391,10 @@ function selectedProviderHasStoredCredential() {
   );
 }
 
+function syncHostedTierControls() {
+  elements.automaticRoutingOptions.disabled = elements.hostedTierInput.value !== "auto";
+}
+
 function renderProviderFields(modelValue = "") {
   const managed = selectedProvider === "amos-hosted";
   const managedConnectionRequired = managed && !state.connected;
@@ -10788,6 +10796,7 @@ async function persistSettings() {
       ? elements.bedrockAuthInput.value
       : "auto",
     intelligenceProfile: "auto",
+    hostedTier: elements.hostedTierInput.value,
     intelligenceRoles: collectIntelligenceRoles(),
     hybridRouting: collectHybridRouting(),
     reasoningEffort: managed

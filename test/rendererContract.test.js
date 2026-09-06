@@ -153,13 +153,17 @@ test("AMOS Hosted turns an unauthenticated intelligence test into account onboar
   assert.match(javascript, /Error invoking remote method/);
 });
 
-test("AMOS Intelligence is one automatic experience with infrastructure controls disclosed", async () => {
+test("AMOS Intelligence defaults to Auto and exposes manual tiers alongside advanced infrastructure", async () => {
   const [javascript, html] = await Promise.all([
     readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
   ]);
 
-  assert.match(html, /AMOS Intelligence routes automatically/);
+  assert.match(html, /Choose how AMOS Intelligence works/);
+  assert.match(html, /id="hostedTierInput"/);
+  for (const tier of ["auto", "routine", "balanced", "deep", "frontier"]) {
+    assert.match(html, new RegExp(`<option value="${tier}">`));
+  }
   assert.match(html, /AMOS Intelligence is ready automatically/);
   assert.match(html, /Free to start · run real missions/);
   assert.match(html, /Upgrade for more hosted usage/);

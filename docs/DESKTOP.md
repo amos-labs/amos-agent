@@ -178,6 +178,16 @@ See [Streaming, cancellation, and restart-safe tasks](TASK_LIFECYCLE.md).
 
 ### Intelligence choices
 
+AMOS Intelligence defaults to **Auto**. The **Tier** setting also offers
+**Routine**, **Balanced**, **Deep**, and **Frontier**. Selecting a tier bypasses
+the local router, including startup warm-up, and sends that choice on every
+hosted request and tool continuation. Optional hybrid routing and coding-role
+pairing are paused; their saved preferences resume when you return to Auto.
+Finish or stop active tasks before changing the shared setting.
+
+Tier labels are stable across platform model changes. Account limits, context
+capacity, and availability still apply; a tier does not pin a vendor model.
+
 - AMOS-hosted inference;
 - Amazon Bedrock;
 - customer-controlled OpenAI-compatible endpoints;

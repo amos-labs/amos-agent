@@ -814,8 +814,8 @@
             <div class="settings-heading-copy">
               <button id="settingsBackButton" class="button ghost settings-back-button" type="button">← Back to setup</button>
               <span class="eyebrow">INTELLIGENCE &amp; INFRASTRUCTURE</span>
-              <h1>AMOS Intelligence routes automatically.</h1>
-              <p>AMOS Intelligence is ready automatically. Free to start · run real missions. It selects the most efficient qualified intelligence for each step and escalates when necessary. Upgrade when you need more hosted usage. AMOS Local and BYOK require no AMOS subscription.</p>
+              <h1>Choose how AMOS Intelligence works.</h1>
+              <p>Use Auto to select intelligence for each step, or choose a tier yourself. Free to start · run real missions. Upgrade when you need more hosted usage. AMOS Local and BYOK require no AMOS subscription.</p>
               <p class="settings-availability-note">Change intelligence at any time here or from AMOS Desktop → Intelligence &amp; Settings (⌘,). Choosing intelligence never requires choosing a workspace.</p>
             </div>
             <div id="systemCard" class="system-card"></div>
@@ -824,22 +824,34 @@
           <form id="settingsForm" class="settings-layout">
             <div class="provider-column">
               <div id="managedProfileField" class="amos-routing-card hidden">
-                <span class="eyebrow accent">AUTOMATIC ROUTING</span>
+                <span class="eyebrow accent">INTELLIGENCE TIER</span>
                 <h2>AMOS Intelligence</h2>
                 <div class="intelligence-commercial-note">
                   <strong>AMOS Intelligence</strong>
                   <span>Free to start · Run real missions · Upgrade for more hosted usage</span>
                 </div>
                 <p>
-                  Qualification, task requirements, privacy, latency, and cost determine
+                  In Auto, qualification, task requirements, privacy, latency, and cost determine
                   the route. AMOS uses the least expensive model that has proven it can
                   safely complete each step.
                 </p>
                 <ul>
                   <li>Models are filtered by measured capability.</li>
-                  <li>Difficult or consequential steps escalate automatically.</li>
+                  <li>In Auto, difficult or consequential steps escalate automatically.</li>
                   <li>Underlying routes remain available in diagnostics and receipts.</li>
                 </ul>
+                <label class="field" for="hostedTierInput">
+                  Tier
+                  <select id="hostedTierInput" aria-describedby="hostedTierHelp">
+                    <option value="auto">Auto — choose for each step</option>
+                    <option value="routine">Routine</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="deep">Deep</option>
+                    <option value="frontier">Frontier</option>
+                  </select>
+                  <small id="hostedTierHelp">Auto chooses a tier for each step. A manual tier skips classification and pauses optional model switching below. Account limits and model availability still apply.</small>
+                </label>
+                <fieldset id="automaticRoutingOptions" class="automatic-routing-options">
                 <section class="hybrid-routing-card" aria-labelledby="hybridRoutingTitle">
                   <label class="hybrid-routing-toggle" for="hybridRoutingEnabled">
                     <input id="hybridRoutingEnabled" type="checkbox">
@@ -894,6 +906,7 @@
                   </div>
                   <small class="coding-routing-status">Each role uses the encrypted credential stored for that provider. You can still switch roles manually inside a coding conversation.</small>
                 </section>
+                </fieldset>
               </div>
               <details id="advancedInfrastructureDetails" class="intelligence-advanced">
                 <summary>Advanced intelligence infrastructure</summary>
