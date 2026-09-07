@@ -114,3 +114,111 @@ test("a hidden hosted stream retry is stopped and its failed raw response is ret
   assert.equal(r.verifiedComplete, false);
   assert.match(r.requests[0].responseBody, /provider_stream_error/);
 });
+
+function directResponse(delta, model = "fixture-s5") {
+  const frames = [
+    { model, choices: [{ delta }] },
+    { choices: [{ delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 } }
+  ];
+  return new Response(frames.map(f => `data: ${JSON.stringify(f)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } });
+}
+function directOptions(extra = {}) {
+  return options({ transportProfile: "direct-cortex", modelConfig: { ...config(), baseUrl: "http://cortex.fixture.invalid/v1" }, ...extra });
+}
+
+test("direct cortex runs both model IDs through Desktop with otherwise identical thinking-off requests", async () => {
+  const runs = [];
+  for (const model of ["fixture-base", "fixture-s5"]) {
+    let calls = 0;
+    const sent = [];
+    const r = await runDesktopFixture(directOptions({ expectedServedModel: model, fetchImpl: async (url, request) => {
+      assert.equal(url, "http://cortex.fixture.invalid/v1/chat/completions");
+      assert.equal(request.redirect, "error");
+      sent.push(request.body);
+      return directResponse(++calls === 1 ? call() : { content: "42" }, model);
+    } }));
+    assert.equal(r.verifiedComplete, true);
+    assert.equal(r.turns.length, 2);
+    assert.equal(r.transportProfile, "direct-cortex");
+    assert.equal(r.transportOrigin, "http://cortex.fixture.invalid");
+    for (const [i, request] of r.requests.entries()) {
+      assert.deepEqual(request.body, JSON.parse(sent[i]));
+      assert.equal(request.bodyBytesSha256, createHash("sha256").update(sent[i]).digest("hex"));
+      assert.equal(request.body.model, model);
+      assert.equal(request.body.enable_thinking, false);
+      assert.deepEqual(request.body.chat_template_kwargs, { enable_thinking: false });
+      assert.deepEqual(request.body.stream_options, { include_usage: true });
+      assert.equal(request.body.max_completion_tokens, 256);
+      assert.equal(request.body.amos_routing, undefined);
+      assert.equal(request.body.amos_routing_shadow, undefined);
+      assert.equal(request.body.reasoning_effort, undefined);
+      assert.equal(request.clientBody.model, "auto");
+      assert.ok(request.clientBody.amos_routing);
+      assert.deepEqual(request.clientBody.messages, request.body.messages);
+      assert.deepEqual(request.clientBody.tools, request.body.tools);
+      assert.equal(request.responseCaptureComplete, true);
+    }
+    for (const turn of r.turns) {
+      assert.equal(turn.raw.model, model);
+      assert.equal(turn.raw.amos, undefined);
+      assert.deepEqual(turn.servingEvidence, { source: "provider-response-model", expectedModel: model, reportedModel: model, matched: true });
+      assert.equal(turn.usage.model, model);
+      assert.equal(turn.usage.requested_model, model);
+      assert.equal(turn.usage.runtime, "direct-cortex");
+      assert.equal(turn.usage.total_tokens, 13);
+      for (const key of ["served_model", "frontier_route", "provider_calls", "correlation_id", "fallback_used", "fallback_reason"]) assert.equal(turn.usage[key], null);
+    }
+    assert.doesNotMatch(JSON.stringify(r), /private-test-credential|Authorization/);
+    runs.push(r);
+  }
+  for (let i = 0; i < 2; i++) {
+    const { model: _base, ...baseBody } = runs[0].requests[i].body;
+    const { model: _s5, ...s5Body } = runs[1].requests[i].body;
+    assert.deepEqual(baseBody, s5Body);
+    assert.equal(runs[0].requests[i].modelIndependentBodySha256, runs[1].requests[i].modelIndependentBodySha256);
+  }
+});
+
+test("direct cortex identity failures stop before executing a proposed side effect", async () => {
+  for (const model of ["wrong-model", null, undefined]) {
+    let executed = 0;
+    const r = await runDesktopFixture(directOptions({ tools: [{ ...tool, handler: async () => { executed++; return {}; } }],
+      fetchImpl: async () => new Response(JSON.stringify({ ...(model === undefined ? {} : { model }), choices: [{ message: { role: "assistant", ...call() } }] }), { headers: { "content-type": "application/json" } }),
+      verify: () => ({ verdict: "pass" }) }));
+    assert.equal(r.stopReason, "serving_identity_mismatch");
+    assert.equal(r.verifiedComplete, false);
+    assert.equal(executed, 0);
+    assert.equal(r.turns[0].servingEvidence.matched, false);
+  }
+});
+
+test("hosted and direct cortex identity evidence cannot be substituted for one another", async () => {
+  const direct = await runDesktopFixture(directOptions({ fetchImpl: async () => new Response(JSON.stringify({
+    model: "fixture-s5", amos: { served_model: "fixture-s5", fallback_used: false },
+    choices: [{ message: { role: "assistant", content: "42" } }]
+  }), { headers: { "content-type": "application/json" } }) }));
+  assert.equal(direct.stopReason, "serving_identity_mismatch");
+  const hosted = await runDesktopFixture(options({ fetchImpl: async () => directResponse({ content: "42" }) }));
+  assert.equal(hosted.stopReason, "serving_identity_mismatch");
+  assert.equal(hosted.transportProfile, "hosted");
+});
+
+test("direct cortex retains the corrected Desktop SSE assembly for repeated fragments", async () => {
+  const frames = [
+    { model: "fixture-s5", choices: [{ delta: { content: "  x" } }] },
+    { choices: [{ delta: { content: "  x" } }] },
+    { choices: [{ delta: { content: "\n\n" }, finish_reason: "stop" }] }
+  ];
+  const r = await runDesktopFixture(directOptions({
+    fetchImpl: async () => new Response(frames.map(f => `data: ${JSON.stringify(f)}\n\n`).join("") + "data: [DONE]\n\n", { headers: { "content-type": "text/event-stream" } }),
+    verify: exec => ({ verdict: exec.turns[0].message.content === "  x  x\n\n" ? "pass" : "fail" })
+  }));
+  assert.equal(r.verifiedComplete, true);
+  assert.equal(r.turns[0].message.content, "  x  x\n\n");
+});
+
+test("a misspelled transport profile is rejected before any network call", async () => {
+  let calls = 0;
+  await assert.rejects(runDesktopFixture(directOptions({ transportProfile: "direct", fetchImpl: async () => { calls++; } })), /Unsupported fixture transport profile/);
+  assert.equal(calls, 0);
+});
