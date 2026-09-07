@@ -709,6 +709,7 @@ function withRequestMetrics(usage, {
   raw
 }) {
   const normalized = usage || {};
+  const hosted = hostedServingEvidence(config, raw);
   const stats = raw?.mtplx_stats && typeof raw.mtplx_stats === "object"
     ? raw.mtplx_stats
     : {};
@@ -728,12 +729,15 @@ function withRequestMetrics(usage, {
   return {
     ...normalized,
     ...(cachedInputTokens == null ? {} : { cache_read_input_tokens: cachedInputTokens }),
-    model: String(config?.model || ""),
+    model: hosted?.served_model || String(config?.model || ""),
     requested_model: String(requestedConfig?.model || ""),
+    ...(hosted || {}),
     runtime: localRuntimeName(config),
     requested_runtime: localRuntimeName(requestedConfig),
-    fallback_used: fallbackUsed === true,
-    fallback_reason: fallbackUsed === true ? "primary_transport_failed" : null,
+    fallback_used: fallbackUsed === true || hosted?.fallback_used === true,
+    fallback_reason: fallbackUsed === true
+      ? "primary_transport_failed"
+      : hosted?.fallback_reason || null,
     response_streamed: !bufferedResponse,
     latency_ms: totalLatencyMs,
     time_to_first_output_ms: firstOutputAt
@@ -754,6 +758,31 @@ function withRequestMetrics(usage, {
     ssd_cached_tokens: firstFinite(stats.ssd_cached_tokens),
     ssd_restore_s: firstFinite(stats.ssd_restore_s),
     session_restore_mode: textOrNull(stats.session_restore_mode)
+  };
+}
+
+function hostedServingEvidence(config, raw) {
+  const amos = raw?.amos;
+  if (config?.provider !== "amos-hosted" || !amos || typeof amos !== "object" || Array.isArray(amos)) {
+    return null;
+  }
+  const frontierRoute = ["canary", "opus", "opus_fallback"].includes(amos.frontier_route)
+    ? amos.frontier_route
+    : null;
+  const fallbackUsed = amos.fallback_used === true || frontierRoute === "opus_fallback";
+  return {
+    served_model: typeof amos.served_model === "string" ? textOrNull(amos.served_model) : null,
+    frontier_route: frontierRoute,
+    provider_calls: Number.isSafeInteger(amos.provider_calls) && amos.provider_calls >= 0
+      ? amos.provider_calls
+      : null,
+    correlation_id: typeof amos.correlation_id === "string" ? textOrNull(amos.correlation_id) : null,
+    fallback_used: fallbackUsed,
+    // Platform's flag also covers provider compatibility retries. Only the
+    // explicit Frontier path establishes that the canary fell back to Opus.
+    fallback_reason: !fallbackUsed ? null : frontierRoute === "opus_fallback"
+      ? "frontier_canary_fallback_opus"
+      : "hosted_provider_fallback"
   };
 }
 
