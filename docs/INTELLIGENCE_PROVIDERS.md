@@ -74,6 +74,15 @@ gather-stage overrides. Activity and receipts record the returned hosted class
 and routing reasons; a clamp or context hatch can differ from the selected
 tier. If the response omits a recognized class, its application is unconfirmed.
 
+Hosted usage records use Platform's `amos.served_model` as the answering model
+when supplied, while retaining `requestedModel: "auto"` separately. Both JSON
+and final SSE metadata preserve `servedModel`, `frontierRoute`, `providerCalls`,
+`correlationId` and fallback evidence through Desktop events. Receipt events
+include the actual model and request reference. `opus_fallback` identifies a
+failed Frontier canary; other hosted provider retries remain distinct from a
+local runtime transport fallback. The selected tier alone never establishes
+which backend answered, and missing serving metadata stays unconfirmed.
+
 Manual selection pauses hybrid routing and coding-role pairing without
 discarding their preferences. Auto restores those options. The saved setting
 is `hostedTier` (or `AMOS_HOSTED_TIER` for configuration); absent or invalid

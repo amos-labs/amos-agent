@@ -8550,6 +8550,12 @@ function sanitizeAgentEvent(event) {
       estimated: event.estimated === true,
       model: event.model ? String(event.model).slice(0, 256) : null,
       requestedModel: event.requestedModel ? String(event.requestedModel).slice(0, 256) : null,
+      servedModel: event.servedModel ? String(event.servedModel).slice(0, 256) : null,
+      frontierRoute: event.frontierRoute ? String(event.frontierRoute).slice(0, 32) : null,
+      providerCalls: Number.isSafeInteger(event.providerCalls) && event.providerCalls >= 0
+        ? event.providerCalls
+        : null,
+      correlationId: event.correlationId ? String(event.correlationId).slice(0, 256) : null,
       runtime: event.runtime ? String(event.runtime).slice(0, 32) : null,
       requestedRuntime: event.requestedRuntime
         ? String(event.requestedRuntime).slice(0, 32)
@@ -8824,14 +8830,17 @@ function receiptEvent(event) {
   if (event.type === "usage") {
     return {
       type: "usage",
-      name: event.runtime || event.model || "model",
+      name: event.servedModel || event.runtime || event.model || "model",
       outcome: [
         `${Math.max(0, Number(event.latencyMs || 0))}ms`,
         event.timeToFirstOutputMs == null ? null : `ttfo:${Math.max(0, Number(event.timeToFirstOutputMs))}ms`,
         event.generationTokensPerSecond == null
           ? null
           : `${Math.max(0, Number(event.generationTokensPerSecond))}tok/s`,
-        event.fallbackUsed ? `fallback:${event.fallbackReason || "yes"}` : null
+        event.fallbackUsed ? `fallback:${event.fallbackReason || "yes"}` : null,
+        event.frontierRoute ? `frontier:${event.frontierRoute}` : null,
+        event.providerCalls == null ? null : `provider_calls:${event.providerCalls}`,
+        event.correlationId ? `reference:${event.correlationId}` : null
       ].filter(Boolean).join(":")
     };
   }

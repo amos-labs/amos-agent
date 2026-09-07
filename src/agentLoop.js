@@ -2210,6 +2210,12 @@ function usageEventFromResponse(usage, turn) {
     turn,
     model: String(usage?.model || "").slice(0, 256),
     requestedModel: String(usage?.requested_model || "").slice(0, 256),
+    servedModel: String(usage?.served_model || "").slice(0, 256) || null,
+    frontierRoute: String(usage?.frontier_route || "").slice(0, 32) || null,
+    providerCalls: Number.isSafeInteger(usage?.provider_calls) && usage.provider_calls >= 0
+      ? usage.provider_calls
+      : null,
+    correlationId: String(usage?.correlation_id || "").slice(0, 256) || null,
     runtime: String(usage?.runtime || "").slice(0, 32) || null,
     requestedRuntime: String(usage?.requested_runtime || "").slice(0, 32) || null,
     fallbackUsed: usage?.fallback_used === true,
