@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { OpenAICompatibleClient } from "../src/model/openAiCompatibleClient.js";
 
 function client(fetchImpl) {
@@ -587,3 +588,45 @@ test("a structured provider error aborts a stream even after partial output", as
     }
   );
 });
+
+for (const scenario of [
+  {
+    name: "repeated prefixes, indentation and blank lines",
+    deltas: ["ha", "ha", "\n\n", "  x = ", "x", " + 1", "\n", "\n"],
+    expected: "haha\n\n  x = x + 1\n\n"
+  },
+  {
+    name: "captured hosted Python response",
+    ...JSON.parse(readFileSync(new URL("./fixtures/hosted-stream-content-deltas.json", import.meta.url), "utf8"))
+  }
+]) {
+  test(`hosted streaming preserves exact incremental content: ${scenario.name}`, async () => {
+    const frames = scenario.deltas.map(content => ({ choices: [{ delta: { content } }] }));
+    frames.push({ choices: [{ delta: {}, finish_reason: "stop" }] });
+    frames.push({ choices: [], amos: {
+      provider: "amos-hosted", served_model: "test-hosted-model",
+      frontier_route: "canary", provider_calls: 1, fallback_used: false
+    }});
+    const bytes = new TextEncoder().encode(frames.map(frame => `data: ${JSON.stringify(frame)}\n\n`).join("") + "data: [DONE]\n\n");
+    const texts = [];
+    const result = await new OpenAICompatibleClient({
+      apiKey: "test", provider: "amos-hosted", model: "auto",
+      baseUrl: "https://models.example/v1", requestTimeoutMs: 5000,
+      capabilities: { tools: true }
+    }, async () => new Response(new ReadableStream({
+      start(controller) {
+        // Split inside JSON frames so network chunk boundaries cannot alter content.
+        for (let offset = 0; offset < bytes.length; offset += 17) controller.enqueue(bytes.slice(offset, offset + 17));
+        controller.close();
+      }
+    }), { headers: { "content-type": "text/event-stream" } })).chat({
+      messages: [{ role: "user", content: "Synthetic stream regression" }],
+      onDelta: (_delta, text) => texts.push(text)
+    });
+    assert.equal(result.message.content, scenario.expected);
+    const visibleDeltas = scenario.deltas.filter(delta => delta.length > 0);
+    assert.deepEqual(texts, visibleDeltas.map((_, index) => visibleDeltas.slice(0, index + 1).join("")));
+    assert.equal(result.usage.served_model, "test-hosted-model");
+    assert.equal(result.usage.frontier_route, "canary");
+  });
+}

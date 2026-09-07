@@ -193,6 +193,7 @@ export class OpenAICompatibleClient {
               onDelta,
               signal,
               displayName: this.config.displayName || "Model",
+              incrementalContent: requestConfig.provider === "amos-hosted",
               requestStartedAt,
               onActivity: refreshTimeout
             });
@@ -490,6 +491,7 @@ async function readStreamingResponse(response, {
   onDelta,
   signal,
   displayName,
+  incrementalContent = false,
   requestStartedAt = performance.now(),
   onActivity = () => {}
 }) {
@@ -549,10 +551,13 @@ async function readStreamingResponse(response, {
     }
     if (typeof delta.content === "string" && delta.content.length > 0) {
       firstOutputAt ||= performance.now();
-      // Some OpenAI-compatible servers (including vLLM Qwen) retransmit the
-      // whole answer so far in each delta. Replace growing snapshots instead
-      // of concatenating them into a staircase.
-      message.content = mergeThoughtDelta(message.content, delta.content);
+      // Hosted content follows the SSE delta contract. Repeated fragments and
+      // whitespace are meaningful in code, JSON and prose; thought/snapshot
+      // deduplication can silently delete them. Keep compatibility handling
+      // for other endpoints that send cumulative snapshots.
+      message.content = incrementalContent
+        ? message.content + delta.content
+        : mergeThoughtDelta(message.content, delta.content);
       onDelta(delta.content, message.content);
     }
     const reasoningDelta = streamReasoningDelta(delta);
