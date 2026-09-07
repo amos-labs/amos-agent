@@ -11,7 +11,7 @@ import { createAbortError, linkAbortSignal, throwIfAborted } from "../util/abort
 // tools are discovered here: the controller supplies each explicitly.
 export async function runDesktopFixture({
   fixture, tools = [], verify, modelConfig, fetchImpl, expectedServedModel,
-  limits, systemPrompt = SYSTEM_PROMPT, signal = null
+  limits, systemPrompt = SYSTEM_PROMPT, signal = null, transportProfile = "hosted"
 }) {
   if (fixture?.synthetic !== true || !fixture.id || typeof fixture.prompt !== "string") {
     throw new Error("Provide a named synthetic fixture and prompt");
@@ -19,9 +19,13 @@ export async function runDesktopFixture({
   if (!hasManualHostedTier(modelConfig) || typeof fetchImpl !== "function") {
     throw new Error("Provide a manual hosted configuration and explicit transport");
   }
-  if (!expectedServedModel || typeof verify !== "function") {
+  if (typeof expectedServedModel !== "string" || !expectedServedModel.trim() || typeof verify !== "function") {
     throw new Error("An expected serving identity and independent verifier are required");
   }
+  if (!["hosted", "direct-cortex"].includes(transportProfile)) {
+    throw new Error("Unsupported fixture transport profile");
+  }
+  const direct = transportProfile === "direct-cortex";
   const bounds = {
     maxModelTurns: bound(limits?.maxModelTurns, 1, 32),
     maxHttpCalls: bound(limits?.maxHttpCalls, 1, 64),
@@ -57,10 +61,15 @@ export async function runDesktopFixture({
     // The normal client can retry a dropped stream. A research model turn is
     // one HTTP attempt; a rejected hidden retry ends the fixture explicitly.
     if (requests.some(request => request.modelTurn === turns.length)) return stop("transport_retry_disallowed");
-    const body = JSON.parse(options.body);
+    const clientBody = JSON.parse(options.body);
+    const body = direct ? directCortexBody(clientBody, expectedServedModel) : clientBody;
+    const wireBody = direct ? JSON.stringify(body) : options.body;
+    const { model: _model, ...modelIndependentBody } = body;
     const request = {
       index: requests.length, modelTurn: turns.length,
-      body, bodyBytesSha256: sha(options.body),
+      body, bodyBytesSha256: sha(wireBody),
+      ...(direct ? { clientBody, clientBodyBytesSha256: sha(options.body) } : {}),
+      modelIndependentBodySha256: sha(canonicalJson(modelIndependentBody)),
       compiledInput: { messages: body.messages, tools: body.tools || [] },
       responseBody: "", responseBytes: 0, responseCaptureTruncated: false
     };
@@ -71,6 +80,8 @@ export async function runDesktopFixture({
     try {
       const response = await fetchImpl(url, {
         ...options,
+        body: wireBody,
+        ...(direct ? { redirect: "error" } : {}),
         signal: AbortSignal.any([abort.signal, ...(options.signal ? [options.signal] : [])])
       });
       request.httpStatus = response.status;
@@ -90,8 +101,29 @@ export async function runDesktopFixture({
       const before = performance.now();
       try {
         const response = await client.chat(args);
+        if (direct) {
+          // Keep provider identity separate from AMOS routing receipts. The
+          // unchanged hosted client also supplies local convenience defaults;
+          // these do not attest a route, a fallback or server-side call count.
+          response.usage = {
+            ...response.usage,
+            model: typeof response.raw?.model === "string" ? response.raw.model : null,
+            requested_model: expectedServedModel,
+            runtime: "direct-cortex", requested_runtime: "direct-cortex",
+            served_model: null, frontier_route: null, provider_calls: null,
+            correlation_id: null, fallback_used: null, fallback_reason: null
+          };
+        }
         Object.assign(turn, { message: structuredClone(response.message), usage: structuredClone(response.usage), raw: structuredClone(response.raw) });
-        if (response.usage.served_model !== expectedServedModel || response.usage.fallback_used !== false) {
+        turn.servingEvidence = {
+          source: direct ? "provider-response-model" : "amos-serving-metadata",
+          expectedModel: expectedServedModel,
+          reportedModel: direct ? response.raw?.model ?? null : response.usage.served_model,
+          matched: direct
+            ? response.raw?.model === expectedServedModel && !response.raw?.amos
+            : response.usage.served_model === expectedServedModel && response.usage.fallback_used === false
+        };
+        if (!turn.servingEvidence.matched) {
           return stop("serving_identity_mismatch");
         }
         return response;
@@ -122,6 +154,7 @@ export async function runDesktopFixture({
   const result = {
     schema: "amos.desktop-fixture-execution", version: 1,
     fixtureId: fixture.id, synthetic: true, missionComparisonEligible: false,
+    transportProfile, transportOrigin: origin,
     startedAt, wallMs: performance.now() - started, limits: bounds,
     status: abort.signal.aborted ? "aborted" : error ? "error" : "answered",
     stopReason: abort.signal.aborted ? redact(abort.signal.reason) : null,
@@ -149,6 +182,18 @@ function bound(value, min, max) {
   return value;
 }
 function sha(value) { return createHash("sha256").update(value).digest("hex"); }
+
+function directCortexBody(clientBody, model) {
+  const body = structuredClone(clientBody);
+  body.model = model;
+  delete body.amos_routing;
+  delete body.amos_routing_shadow;
+  delete body.reasoning_effort;
+  body.enable_thinking = false;
+  body.chat_template_kwargs = { enable_thinking: false };
+  if (body.stream) body.stream_options = { include_usage: true };
+  return body;
+}
 
 function captureResponse(response, record) {
   if (!response.body) return response;
