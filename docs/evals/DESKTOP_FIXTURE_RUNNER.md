@@ -87,3 +87,17 @@ A fixture's private state must establish successful effects: validate the target
 The helper's hashes are diagnostic references. Organism must use its existing canonical treatment/protocol helpers for Mission comparison records, and leave `missionComparisonEligible:false` for this synthetic research output. The initial compiled-input equality check belongs at the paired decision boundary; subsequent prompts can legitimately diverge after different model actions. Do not manufacture a full Mission measurement from a model alias or these records.
 
 Run the network-free integration tests with `node --test test/desktopFixtureRunner.test.js`. They exercise tool success, failure then correction, unavailable names, exact request/response capture, identity mismatch, HTTP/model/wall limits, hidden retries and independent-verifier failure. Direct-profile tests verify paired request equality, thinking controls, provider identity before side effects, refusal of substituted Hosted evidence and exact repeated SSE content. No live inference is started by importing the module or running its tests.
+
+## Tokenizer rendering profiles
+
+The offline worker supports two explicit manifest profiles.
+`qwen-text-thinking-off-json-arguments-v1` retains the original local rendering.
+`qwen-text-thinking-off-serving-tools-v2` additionally orders function-tool fields
+as `type`, `function`, then `name`, `description`, `parameters` before rendering.
+Parameter-schema ordering and the original wire request remain unchanged. The v2
+profile rejects other tool shapes, including unsupported optional function fields;
+verify their serving behavior before adding another profile. Empty tool lists are supported.
+
+Matching token counts alone does not prove that two renderers produce the same
+token sequence. Bind the profile and worker source with the actual serving
+evidence for the run; do not infer universal parity from a few examples.
