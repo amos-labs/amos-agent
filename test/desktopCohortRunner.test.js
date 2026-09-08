@@ -172,3 +172,27 @@ test("process death leaves a durable reservation and restart cannot repeat it", 
   assert.equal(calls, 0);
   await assert.rejects(readFile(join(f.outputDirectory, "summary.json")), { code: "ENOENT" });
 });
+
+
+test("warmup barrier prevents a fast arm from exposing the holdout early", async t => {
+  const f = await setup(t); f.plan.concurrency = 2;
+  f.plan.entries = ["warmup", "holdout"].flatMap(phase => f.plan.entries.map(entry => ({...entry, phase, key:`${phase}-${entry.key}`})));
+  let calls = 0, entered, release;
+  const ready = new Promise(resolve => {entered=resolve;}); const gate = new Promise(resolve => {release=resolve;});
+  const running = runDesktopCohort({...f, fetchImpl: async (_url, request) => {
+    if (++calls === 2) {entered(); await gate;}
+    return response(JSON.parse(request.body).model);
+  }});
+  await ready; await new Promise(resolve => setTimeout(resolve, 20)); assert.equal(calls, 2);
+  release(); const result = await running; assert.equal(calls, 4); assert.equal(result.status,"completed");
+});
+
+test("failed warmup leaves all holdout entries undispatched", async t => {
+  const f = await setup(t);
+  f.plan.entries = ["warmup", "holdout"].flatMap(phase => f.plan.entries.map(entry => ({...entry, phase, key:`${phase}-${entry.key}`})));
+  let calls = 0;
+  const result = await runDesktopCohort({...f, prepareCase:async()=>({...await f.prepareCase(),verify:()=>({verdict:"fail"})}),
+    fetchImpl:async(_url,request)=>{calls++;return response(JSON.parse(request.body).model);}});
+  assert.equal(calls,1);assert.equal(result.status,"incomplete");assert.equal(result.stopReason,"cohort_warmup_failed");
+  assert.ok(result.entries.filter(e=>e.phase==='holdout').every(e=>e.status==='unresolved'));
+});

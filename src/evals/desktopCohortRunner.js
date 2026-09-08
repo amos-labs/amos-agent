@@ -63,8 +63,8 @@ export async function runDesktopCohort({
     require(counter?.identity === plan.tokenizerIdentity && typeof counter.count === "function" &&
       typeof counter.close === "function", "cohort_tokenizer_binding_mismatch");
     await journal({ type: "tokenizer_ready", identity: counter.identity });
-    const worker = async () => {
-      while (!budget.signal.aborted && next < plan.entries.length) {
+    const worker = async end => {
+      while (!budget.signal.aborted && next < end) {
         const index = next++, entry = plan.entries[index];
         try {
           await journal({ type: "case_started", index, entry });
@@ -111,13 +111,20 @@ export async function runDesktopCohort({
           await journal({ type: "case_finished", ...record, budget: budget.snapshot() });
           completed.set(index, record);
           if (result.status === "aborted") close(result.stopReason || "cohort_case_aborted");
+          if (entry.phase === "warmup" && result.verification.verdict !== "pass") close("cohort_warmup_failed");
         } catch {
           failure = failure || "cohort_execution_failed";
           close(failure);
         }
       }
     };
-    await Promise.all(Array.from({ length: plan.concurrency }, worker));
+    while (!budget.signal.aborted && next < plan.entries.length) {
+      const phase = plan.entries[next].phase;
+      let end = next;
+      while (end < plan.entries.length && plan.entries[end].phase === phase) end++;
+      // A fast arm cannot expose a holdout while another warmup is unfinished.
+      await Promise.all(Array.from({ length: plan.concurrency }, () => worker(end)));
+    }
   } catch {
     failure = failure || "cohort_preflight_failed";
     close(failure);
@@ -168,10 +175,14 @@ function validate(plan, outputDirectory, systemPrompt) {
   require(new Set(Object.values(plan.arms)).size === Object.keys(plan.arms).length, "Model arms must be distinct");
   require(Array.isArray(plan.entries) && plan.entries.length > 0 && plan.entries.length <= 2000, "Invalid cohort entries");
   const keys = new Set(), groups = new Map();
+  const rank = { warmup: 0, development: 1, regression: 1, holdout: 2 };
+  let latestPhase = -1;
   for (const entry of plan.entries) {
     require(named(entry.key) && !keys.has(entry.key) && named(entry.scenarioId) && named(entry.fixtureId), "Invalid or duplicate case identity");
     keys.add(entry.key);
     require(Object.hasOwn(plan.arms, entry.arm) && ["warmup", "development", "regression", "holdout"].includes(entry.phase), "Invalid case arm or phase");
+    require(rank[entry.phase] >= latestPhase, "Cohort phases must not move backwards");
+    latestPhase = rank[entry.phase];
     require(hashed(entry.initialInputSha256), "Compiled initial input binding required");
     const limits = entry.limits;
     require(positive(limits?.maxModelTurns) && limits.maxModelTurns <= 32 &&
@@ -183,6 +194,7 @@ function validate(plan, outputDirectory, systemPrompt) {
     require(!group.arms.has(entry.arm) && group.input === entry.initialInputSha256 && group.limits === digest(limits), "Unpaired initial input or limits");
     group.arms.add(entry.arm); groups.set(key, group);
   }
+  require(!plan.entries.some(entry => entry.phase === "holdout") || plan.entries.some(entry => entry.phase === "warmup"), "A holdout requires a preceding warmup for every arm");
   require([...groups.values()].every(group => group.arms.size === Object.keys(plan.arms).length), "Every scenario must include every model arm");
 }
 
