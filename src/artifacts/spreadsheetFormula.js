@@ -221,7 +221,10 @@ function inferNodeUnit(node, context, currentSheet) {
     return commonUnit(expandRange(start, end).map((address) => context.resolveUnit(sheet, address)));
   }
   const units = node.args.map((arg) => inferNodeUnit(arg, context, currentSheet));
-  if (["eq", "ne", "gt", "gte", "lt", "lte"].includes(node.op)) return "boolean";
+  if (["eq", "ne", "gt", "gte", "lt", "lte"].includes(node.op)) {
+    const currencies = new Set(units.map(unit => /^(usd|eur)(?:_|$)/.exec(unit)?.[1]).filter(Boolean));
+    return currencies.size > 1 ? "mixed" : "boolean";
+  }
   if (node.op === "if") return commonUnit([units[1], units[2]]);
   if (["add", "subtract", "sum", "average", "min", "max"].includes(node.op)) {
     return commonUnit(units);
@@ -236,6 +239,12 @@ function inferNodeUnit(node, context, currentSheet) {
     return units.includes("count") ? "count" : "number";
   }
   if (node.op === "divide") {
+    // Amount / a rate in the same denomination gives elapsed time. This
+    // does not convert currencies or silently convert annual/monthly rates.
+    if (["usd", "eur", "count"].includes(units[0])) {
+      if (units[1] === `${units[0]}_per_month`) return "months";
+      if (units[1] === `${units[0]}_per_year`) return "years";
+    }
     if (DIMENSIONLESS_UNITS.has(units[1])) return units[0];
     if (units[0] === units[1]) return "ratio";
     return "mixed";

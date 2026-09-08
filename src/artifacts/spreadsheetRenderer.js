@@ -471,7 +471,9 @@ function applyCellStyle(cell, spec) {
     wrapText: spec.wrap,
     indent: spec.indent
   };
-  cell.numFmt = NUMBER_FORMATS[spec.format];
+  cell.numFmt = ["eur", "eur_per_month", "eur_per_year"].includes(spec.unit)
+    ? NUMBER_FORMATS[spec.format].replaceAll("$", "€")
+    : NUMBER_FORMATS[spec.format];
   if (spec.role === "input") cell.protection = { locked: false };
 }
 
