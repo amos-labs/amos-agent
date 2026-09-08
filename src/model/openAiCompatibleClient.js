@@ -529,6 +529,7 @@ async function readStreamingResponse(response, {
   let usage = null;
   let rawText = "";
   let finalPayload = null;
+  let stopReason = "";
   let firstOutputAt = null;
 
   const consume = (payload) => {
@@ -543,6 +544,12 @@ async function readStreamingResponse(response, {
     }
     finalPayload = payload ? { ...(finalPayload || {}), ...payload } : finalPayload;
     usage = payload?.usage || usage;
+    // A usage-only trailer has choices: [] and overwrites raw. Keep the
+    // completion reason separately so an output-limited tool call is diagnosed
+    // correctly even when usage arrives after its final choice.
+    if (typeof payload?.choices?.[0]?.finish_reason === "string" && payload.choices[0].finish_reason) {
+      stopReason = payload.choices[0].finish_reason;
+    }
     const delta = payload?.choices?.[0]?.delta;
     if (!delta) return;
     if (typeof delta.role === "string") message.role = delta.role;
@@ -639,6 +646,7 @@ async function readStreamingResponse(response, {
   return {
     message,
     usage: normalizedUsage(usage),
+    stopReason,
     raw: finalPayload || rawText,
     timing: {
       buffered: false,

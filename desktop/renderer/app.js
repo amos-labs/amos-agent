@@ -11202,7 +11202,7 @@ async function runTask(event, options = {}) {
       ? "interrupted"
       : "failed";
     if (!isStillVisible()) {
-      toast(`A background task stopped: ${error.message}`, true);
+      toast(`A background task stopped: ${friendlyError(error)}`, true);
       return;
     }
     streamingMessage = null;
@@ -11211,7 +11211,7 @@ async function runTask(event, options = {}) {
       "error",
       error?.code === "AMOS_TASK_CANCELED" || /task canceled/i.test(error.message)
         ? "Run stopped safely. Its encrypted checkpoint is available under Conversations if you want to revalidate and continue."
-        : error.message
+        : friendlyError(error)
     );
   } finally {
     try {
