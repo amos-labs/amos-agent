@@ -437,6 +437,29 @@ export class AgentLoop {
           });
         } catch (error) {
           if (isAbortError(error) || signal?.aborted) throw error;
+          if (isInvalidToolArguments(error)) {
+            // Rejected generations still consumed tokens. Record each attempt
+            // before retrying, with the actual response's serving evidence.
+            // Never include the invalid argument text in diagnostic events.
+            const usageEvent = {
+              ...usageEventFromResponse(response?.usage || error.usage, turn),
+              responseRejected: true,
+              finishReason: String(error.stopReason || "").slice(0, 128),
+              toolName: /^[A-Za-z0-9_.:-]{1,128}$/.test(String(error.toolName || ""))
+                ? error.toolName : null,
+              argumentProblem: error.argumentProblem === "non_object" ? "non_object" : "invalid_json",
+              argumentCharacters: Math.max(0, Number(error.argumentCharacters) || 0),
+              outputTruncated: error.truncated === true
+            };
+            onEvent(usageEvent);
+            onEvent({
+              ...usageEvent,
+              type: "model_call",
+              provider: String(this.config.model?.provider || ""),
+              toolCallCount: Array.isArray(response?.message?.tool_calls)
+                ? response.message.tool_calls.length : null
+            });
+          }
           const retryBudget = this.config.agent?.maxModelTransientRetries ?? 2;
           const shouldRecoverEmptyResponse =
             completedToolActions > 0 &&
@@ -551,6 +574,7 @@ export class AgentLoop {
         }
         onEvent(usageEvent);
         onEvent({
+          ...usageEvent,
           type: "model_call",
           turn,
           provider: String(this.config.model?.provider || ""),
@@ -2078,7 +2102,7 @@ function invalidToolArgumentsRetryMessage(error, tools = []) {
       ...(schema && schema.length <= 6_000 ? [`The exact argument schema for ${toolName} is: ${schema}`] : []),
       "Arguments must be a JSON object, not a quoted JSON string, array, code fence, or prose. Use double-quoted keys and strings, with no trailing commas.",
       "Do not repeat any completed tool call already represented by a tool result in the conversation.",
-      "If the input would be large, split the work into bounded calls instead of placing a large document or dataset in one argument.",
+      "If the input would be large, split work only where the tool supports it. A full-file replacement must contain the entire file; never send partial chunks as successive replacements of the same file.",
       "</amos_tool_call_correction>"
     ].join("\n")
   };

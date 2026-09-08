@@ -11984,7 +11984,8 @@ function liveEventCopy(event) {
       detail: event.summary || [
         event.selectedProvider,
         event.selectedModel,
-        event.minimumClass
+        event.minimumClass,
+        event.servedModel
       ].filter(Boolean).join(" · "),
       inline: true
     };
@@ -12014,6 +12015,10 @@ function liveUsageSummary(event) {
     || (Number(event.inputTokens || 0) + Number(event.outputTokens || 0));
   const ms = Number(event.latencyMs || 0);
   const parts = [];
+  if (event.responseRejected) {
+    parts.push(event.outputTruncated ? "Tool call reached the output limit" : "Tool arguments rejected");
+    if (event.toolName) parts.push(event.toolName);
+  }
   if (ms > 0) parts.push(ms >= 10_000 ? `${Math.round(ms / 1000)}s` : `${(ms / 1000).toFixed(1)}s`);
   if (tokens > 0) parts.push(`${tokens.toLocaleString()} tokens`);
   if (Number(event.outputTokens || 0) > 0) {

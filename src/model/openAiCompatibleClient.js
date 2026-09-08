@@ -13,6 +13,7 @@ import {
 } from "./intelligenceRouter.js";
 import {
   canonicalizeChatMessages,
+  isModelOutputTruncated,
   jsonObjectArgumentString,
   normalizedUsage
 } from "./protocol.js";
@@ -393,6 +394,7 @@ export class OpenAICompatibleClient {
         source: "platform",
         hostedClass,
         agreement: hostedClass ? hostedClass === localRouting.minimumClass : null,
+        servedModel: hostedServingEvidence(this.config, raw)?.served_model || null,
         reason: Array.isArray(amos?.routing_reasons)
           ? amos.routing_reasons.filter(r => typeof r === "string").slice(0, 8).join(", ").slice(0, 160)
           : null
@@ -544,11 +546,13 @@ async function readStreamingResponse(response, {
     }
     finalPayload = payload ? { ...(finalPayload || {}), ...payload } : finalPayload;
     usage = payload?.usage || usage;
-    // A usage-only trailer has choices: [] and overwrites raw. Keep the
-    // completion reason separately so an output-limited tool call is diagnosed
-    // correctly even when usage arrives after its final choice.
-    if (typeof payload?.choices?.[0]?.finish_reason === "string" && payload.choices[0].finish_reason) {
-      stopReason = payload.choices[0].finish_reason;
+    // Retain the provider's completion reason across usage-only trailers and
+    // proxy-generated terminal "stop" frames. An explicit output limit always
+    // wins; a later generic stop must never erase evidence of truncation.
+    const incomingStopReason = payload?.choices?.[0]?.finish_reason;
+    if (typeof incomingStopReason === "string" && incomingStopReason &&
+        (!stopReason || isModelOutputTruncated(incomingStopReason))) {
+      stopReason = incomingStopReason;
     }
     const delta = payload?.choices?.[0]?.delta;
     if (!delta) return;
