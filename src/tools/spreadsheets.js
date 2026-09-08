@@ -61,7 +61,8 @@ function spreadsheetCalculatorTool() {
     source: "local",
     description: [
       "Perform material arithmetic deterministically with explicit units. Use before stating financial, pricing, payroll, scenario, rate, annual/monthly, or other consequential numeric conclusions.",
-      "Build dependent math as ordered steps. A step may reference an earlier step by key. Period conversion must use annual_to_monthly or monthly_to_annual; AMOS rejects unit mismatches."
+      "Build dependent math as ordered steps. A step may reference an earlier step by key. Subtract, divide and power take exactly two operands; sum accepts a list.",
+      "Keep USD and EUR distinct. Cash divided by same-currency monthly burn produces months; annual burn produces years. Period conversion must use annual_to_monthly or monthly_to_annual; AMOS rejects unit mismatches."
     ].join(" "),
     parameters: {
       type: "object",

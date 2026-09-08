@@ -55,6 +55,9 @@ export const SPREADSHEET_UNITS = Object.freeze([
   "usd",
   "usd_per_month",
   "usd_per_year",
+  "eur",
+  "eur_per_month",
+  "eur_per_year",
   "count_per_month",
   "count_per_year"
 ]);
@@ -336,7 +339,7 @@ function defaultUnit(value) {
 }
 
 function defaultFormat(unit) {
-  if (["usd", "usd_per_month", "usd_per_year"].includes(unit)) return "currency";
+  if (["usd", "usd_per_month", "usd_per_year", "eur", "eur_per_month", "eur_per_year"].includes(unit)) return "currency";
   if (unit === "percentage") return "percentage";
   if (unit === "ratio") return "number";
   if (["count", "months", "years", "count_per_month", "count_per_year"].includes(unit)) return "integer";
