@@ -26,13 +26,33 @@ def emit(value):
     print(json.dumps(value, separators=(",", ":")), flush=True)
 
 
+def serving_tools(tools):
+    # This explicit v2 profile matches the observed serving schema serializer.
+    # Preserve parameter-schema key order and never modify the wire request.
+    result = []
+    for tool in tools:
+        require(isinstance(tool, dict) and set(tool) == {"type", "function"})
+        require(tool["type"] == "function")
+        function = tool["function"]
+        require(isinstance(function, dict) and set(function) == {"name", "description", "parameters"})
+        require(isinstance(function["name"], str) and bool(function["name"]))
+        require(isinstance(function["description"], str))
+        require(isinstance(function["parameters"], dict))
+        result.append({"type": "function", "function": {
+            "name": function["name"], "description": function["description"],
+            "parameters": function["parameters"]
+        }})
+    return result
+
+
 def main():
     directory, manifest_path, maximum, expected_manifest_sha = sys.argv[1:]
     maximum = int(maximum)
     manifest_bytes = Path(manifest_path).read_bytes()
     require(sha(manifest_bytes) == expected_manifest_sha)
     manifest = json.loads(manifest_bytes)
-    require(manifest["profile"] == "qwen-text-thinking-off-json-arguments-v1")
+    profile = manifest["profile"]
+    require(profile in {"qwen-text-thinking-off-json-arguments-v1", "qwen-text-thinking-off-serving-tools-v2"})
     required = {"chat_template.jinja", "config.json", "merges.txt", "tokenizer.json", "tokenizer_config.json", "vocab.json"}
     require(set(manifest["files"]) == required)
     require(set(manifest["runtime"]) == {"transformers", "tokenizers", "jinja2", "huggingface-hub"})
@@ -69,6 +89,8 @@ def main():
         require(isinstance(messages, list) and messages)
         tools = body.get("tools", [])
         require(isinstance(tools, list))
+        if profile == "qwen-text-thinking-off-serving-tools-v2":
+            tools = serving_tools(tools)
         for message in messages:
             require(message["role"] in {"system", "user", "assistant", "tool"})
             require(message.get("content") is None or isinstance(message["content"], str))
