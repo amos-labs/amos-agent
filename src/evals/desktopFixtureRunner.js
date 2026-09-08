@@ -28,6 +28,7 @@ export async function runDesktopFixture({
   const direct = transportProfile === "direct-cortex";
   const bounds = {
     maxModelTurns: bound(limits?.maxModelTurns, 1, 32),
+    maxToolCalls: limits?.maxToolCalls === undefined ? null : bound(limits.maxToolCalls, 0, 256),
     maxHttpCalls: bound(limits?.maxHttpCalls, 1, 64),
     maxWallMs: bound(limits?.maxWallMs, 1, 300_000),
     maxCompletionTokens: bound(limits?.maxCompletionTokens, 1, 24_576)
@@ -35,6 +36,7 @@ export async function runDesktopFixture({
   const abort = new AbortController();
   const startedAt = new Date().toISOString(), started = performance.now();
   const turns = [], requests = [], events = [];
+  let proposedToolCalls = 0;
   const redact = value => {
     const message = String(value || "");
     return modelConfig.apiKey ? message.replaceAll(modelConfig.apiKey, "[REDACTED]") : message;
@@ -126,6 +128,15 @@ export async function runDesktopFixture({
         if (!turn.servingEvidence.matched) {
           return stop("serving_identity_mismatch");
         }
+        // Count every proposal, including unknown tools and failed retries.
+        // Reject an over-budget batch before AgentLoop can execute any of it;
+        // the recorded turn still retains the proposals and their HTTP usage.
+        turn.proposedToolCallCount = Array.isArray(response.message?.tool_calls)
+          ? response.message.tool_calls.length : 0;
+        proposedToolCalls += turn.proposedToolCallCount;
+        if (bounds.maxToolCalls !== null && proposedToolCalls > bounds.maxToolCalls) {
+          return stop("tool_call_limit");
+        }
         return response;
       } catch (error) {
         turn.error = redact(error.message);
@@ -155,7 +166,7 @@ export async function runDesktopFixture({
     schema: "amos.desktop-fixture-execution", version: 1,
     fixtureId: fixture.id, synthetic: true, missionComparisonEligible: false,
     transportProfile, transportOrigin: origin,
-    startedAt, wallMs: performance.now() - started, limits: bounds,
+    startedAt, wallMs: performance.now() - started, limits: bounds, proposedToolCalls,
     status: abort.signal.aborted ? "aborted" : error ? "error" : "answered",
     stopReason: abort.signal.aborted ? redact(abort.signal.reason) : null,
     systemPromptSha256: sha(systemPrompt), answer, error, turns, requests, events,

@@ -79,6 +79,57 @@ for (const [name, restriction, reason] of [
   assert.equal(r.requests.length, 1);
 });
 
+test("tool-call cap permits the exact limit and an explicit zero for answer-only cases", async () => {
+  for (const maxToolCalls of [0, 1]) {
+    let calls = 0, executions = 0;
+    const r = await runDesktopFixture(options({ limits: { ...limits, maxToolCalls },
+      tools: [{ ...tool, handler: async () => { executions++; return { balance: 42 }; } }],
+      fetchImpl: async () => response(++calls === 1 && maxToolCalls ? call() : { content: "42" }) }));
+    assert.equal(r.verifiedComplete, true);
+    assert.equal(r.proposedToolCalls, maxToolCalls);
+    assert.equal(executions, maxToolCalls);
+  }
+});
+
+for (const profile of ["hosted", "direct-cortex"]) test(`${profile} rejects a whole over-budget tool batch before any effect`, async () => {
+  let executions = 0;
+  const delta = { tool_calls: [call("one").tool_calls[0], { ...call("two").tool_calls[0], index: 1 }] };
+  const setup = profile === "direct-cortex" ? directOptions : options;
+  const r = await runDesktopFixture(setup({ limits: { ...limits, maxToolCalls: 1 },
+    tools: [{ ...tool, handler: async () => { executions++; return { balance: 42 }; } }],
+    fetchImpl: async () => profile === "direct-cortex" ? directResponse(delta) : response(delta) }));
+  assert.equal(r.stopReason, "tool_call_limit");
+  assert.equal(r.verifiedComplete, false);
+  assert.equal(r.proposedToolCalls, 2);
+  assert.equal(r.turns[0].proposedToolCallCount, 2);
+  assert.equal(r.turns[0].message.tool_calls.length, 2);
+  assert.equal(r.requests.length, 1);
+  assert.equal(executions, 0);
+});
+
+for (const failure of ["unknown", "handler"]) test(`${failure} tool failure still consumes the cumulative tool-call cap`, async () => {
+  let calls = 0, executions = 0;
+  const r = await runDesktopFixture(options({ limits: { ...limits, maxToolCalls: 1 },
+    tools: [{ ...tool, handler: async () => { executions++; throw new Error("fixture failure"); } }],
+    fetchImpl: async () => response(call(`call-${++calls}`, calls === 1 && failure === "unknown" ? "missing_tool" : "fixture_balance")) }));
+  assert.equal(r.stopReason, "tool_call_limit");
+  assert.equal(r.proposedToolCalls, 2);
+  assert.equal(calls, 2);
+  assert.equal(executions, failure === "handler" ? 1 : 0);
+  assert.ok(r.events.some(e => e.type === "tool_error"));
+  assert.equal(r.turns[1].message.tool_calls.length, 1);
+  assert.equal(r.verifiedComplete, false);
+});
+
+test("invalid explicit tool-call caps fail before transport", async () => {
+  let calls = 0;
+  for (const maxToolCalls of [-1, 1.5, null, Infinity, "1"]) {
+    await assert.rejects(runDesktopFixture(options({ limits: { ...limits, maxToolCalls },
+      fetchImpl: async () => { calls++; return response({ content: "42" }); } })), /Explicit integer limit/);
+  }
+  assert.equal(calls, 0);
+});
+
 test("an unexpected serving identity cannot be graded as a successful target arm", async () => {
   const r = await runDesktopFixture(options({ fetchImpl: async () => response({ content: "42" }, "different-model"), verify: () => ({ verdict: "pass" }) }));
   assert.equal(r.stopReason, "serving_identity_mismatch");
