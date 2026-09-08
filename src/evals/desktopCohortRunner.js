@@ -107,11 +107,12 @@ export async function runDesktopCohort({
           await writeDurable(resultPath, result);
           const record = { index, key: entry.key, scenarioId: entry.scenarioId, arm: entry.arm,
             phase: entry.phase, status: result.status, verdict: result.verification.verdict,
+            verifiedComplete: result.verifiedComplete,
             result: `results/${resultName}`, resultSha256: digest(result), wallMs: result.wallMs };
           await journal({ type: "case_finished", ...record, budget: budget.snapshot() });
           completed.set(index, record);
           if (result.status === "aborted") close(result.stopReason || "cohort_case_aborted");
-          if (entry.phase === "warmup" && result.verification.verdict !== "pass") close("cohort_warmup_failed");
+          if (entry.phase === "warmup" && result.verifiedComplete !== true) close("cohort_warmup_failed");
         } catch {
           failure = failure || "cohort_execution_failed";
           close(failure);
@@ -142,7 +143,7 @@ export async function runDesktopCohort({
     stopReason: snapshot.stopReason || failure, budget: snapshot,
     entries: plan.entries.map((entry, index) => completed.get(index) || {
       index, key: entry.key, scenarioId: entry.scenarioId, arm: entry.arm, phase: entry.phase,
-      status: "unresolved", verdict: "unknown", result: null
+      status: "unresolved", verdict: "unknown", verifiedComplete: false, result: null
     })
   };
   try {
