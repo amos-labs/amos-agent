@@ -196,3 +196,15 @@ test("failed warmup leaves all holdout entries undispatched", async t => {
   assert.equal(calls,1);assert.equal(result.status,"incomplete");assert.equal(result.stopReason,"cohort_warmup_failed");
   assert.ok(result.entries.filter(e=>e.phase==='holdout').every(e=>e.status==='unresolved'));
 });
+
+
+test("an erroneous passing verifier cannot qualify a failed warmup execution", async t => {
+  const f = await setup(t);
+  f.plan.entries = ["warmup", "holdout"].flatMap(phase => f.plan.entries.map(entry => ({...entry, phase, key:`${phase}-${entry.key}`})));
+  let calls = 0;
+  const result = await runDesktopCohort({...f, prepareCase:async()=>({...await f.prepareCase(),verify:()=>({verdict:"pass"})}),
+    fetchImpl:async()=>{calls++;return new Response("invalid request",{status:400});}});
+  assert.equal(calls,1);assert.equal(result.status,"incomplete");assert.equal(result.stopReason,"cohort_warmup_failed");
+  assert.equal(result.entries[0].verdict,"pass");assert.equal(result.entries[0].status,"error");assert.equal(result.entries[0].verifiedComplete,false);
+  assert.ok(result.entries.filter(e=>e.phase==='holdout').every(e=>e.status==='unresolved' && !e.verifiedComplete));
+});
