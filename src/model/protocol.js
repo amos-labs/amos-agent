@@ -135,9 +135,13 @@ export function invalidModelToolArgumentsError({
 } = {}) {
   const normalizedStopReason = String(stopReason || "").slice(0, 128);
   const truncated = isModelOutputTruncated(normalizedStopReason);
+  const safeToolName = /^[A-Za-z0-9_.:-]{1,128}$/.test(String(toolName || ""))
+    ? String(toolName)
+    : "";
+  const target = safeToolName ? ` for ${safeToolName}` : "";
   const error = new Error(truncated
-    ? `${displayName} returned incomplete tool arguments after reaching its output limit`
-    : `${displayName} returned invalid tool arguments`);
+    ? `${displayName} returned incomplete tool arguments${target} after reaching its output limit`
+    : `${displayName} returned invalid tool arguments${target}`);
   error.code = "AMOS_MODEL_INVALID_TOOL_ARGUMENTS";
   error.stopReason = normalizedStopReason;
   error.toolName = String(toolName || "").slice(0, 128);

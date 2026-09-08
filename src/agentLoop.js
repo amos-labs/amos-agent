@@ -470,7 +470,7 @@ export class AgentLoop {
             const invalidToolArguments = isInvalidToolArguments(error);
             const incompleteModelResponse = isIncompleteModelResponse(error);
             modelRetryGuidance = invalidToolArguments
-              ? invalidToolArgumentsRetryMessage(error)
+              ? invalidToolArgumentsRetryMessage(error, tools)
               : incompleteModelResponse
                 ? incompleteModelResponseRetryMessage(error)
                 : null;
@@ -479,12 +479,18 @@ export class AgentLoop {
               phase: "retrying",
               turn,
               summary: invalidToolArguments
-                ? `The model produced invalid tool arguments; no tool from that response executed, so AMOS is correcting and retrying safely (${transientRetries} of ${retryBudget})`
+                ? `${error.message}; no tool from that response executed, so AMOS is correcting and retrying safely (${transientRetries} of ${retryBudget})`
                 : incompleteModelResponse
                   ? `The model response ended before it could be accepted; no tool from that response executed, so AMOS is retrying safely (${transientRetries} of ${retryBudget})`
                 : `The model stopped responding; retrying with completed work intact (${transientRetries} of ${retryBudget})`
             });
             continue;
+          }
+          if (isInvalidToolArguments(error)) {
+            error.modelRetries = transientRetries;
+            error.message += transientRetries > 0
+              ? `. AMOS could not correct the tool call after ${transientRetries} automatic ${transientRetries === 1 ? "retry" : "retries"}. No tool from the rejected response ran.`
+              : ". No tool from the rejected response ran.";
           }
           if (isModelTimeout(error) && completedToolActions > 0) {
             if (this.config.model?.deployment !== "local" && timeoutContinuations < 1) {
@@ -2047,7 +2053,7 @@ function isInvalidToolArguments(error) {
     /invalid (?:streamed )?tool arguments|incomplete (?:streamed )?tool arguments/i.test(message);
 }
 
-function invalidToolArgumentsRetryMessage(error) {
+function invalidToolArgumentsRetryMessage(error, tools = []) {
   const toolName = /^[A-Za-z0-9_.:-]{1,128}$/.test(String(error?.toolName || ""))
     ? String(error.toolName)
     : "the requested tool";
@@ -2055,6 +2061,10 @@ function invalidToolArgumentsRetryMessage(error) {
   const problem = error?.argumentProblem === "non_object"
     ? "did not contain the required JSON object"
     : "were not valid JSON";
+  const tool = tools.find((candidate) => candidate?.function?.name === toolName);
+  // Repeat only the advertised schema, never the rejected argument content.
+  // Keep large schemas in the tools list instead of expanding a retry's context.
+  const schema = tool?.function?.parameters ? JSON.stringify(tool.function.parameters) : "";
   return {
     // This correction is request-local and deliberately does not mutate the
     // durable conversation. Strict chat templates also require system content
@@ -2065,6 +2075,8 @@ function invalidToolArgumentsRetryMessage(error) {
       `Your previous response could not be accepted because the arguments for ${toolName} ${truncated ? "were incomplete when the output limit was reached" : problem}.`,
       "No tool from that invalid response executed.",
       "Retry the next unfinished step now with one compact tool call whose complete JSON arguments exactly match the advertised schema.",
+      ...(schema && schema.length <= 6_000 ? [`The exact argument schema for ${toolName} is: ${schema}`] : []),
+      "Arguments must be a JSON object, not a quoted JSON string, array, code fence, or prose. Use double-quoted keys and strings, with no trailing commas.",
       "Do not repeat any completed tool call already represented by a tool result in the conversation.",
       "If the input would be large, split the work into bounded calls instead of placing a large document or dataset in one argument.",
       "</amos_tool_call_correction>"
