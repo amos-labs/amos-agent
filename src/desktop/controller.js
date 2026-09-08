@@ -8458,6 +8458,7 @@ function sanitizeAgentEvent(event) {
         : null,
       workflow: event.workflow ? String(event.workflow).slice(0, 80) : null,
       hostedClass: event.hostedClass ? String(event.hostedClass).slice(0, 32) : null,
+      servedModel: event.servedModel ? String(event.servedModel).slice(0, 256) : null,
       agreement: typeof event.agreement === "boolean" ? event.agreement : null,
       model: event.model ? String(event.model).slice(0, 160) : null,
       contract: event.contract ? String(event.contract).slice(0, 160) : null,
@@ -8524,9 +8525,26 @@ function sanitizeAgentEvent(event) {
         : null
     };
   }
+  if (event.type === "model_call") {
+    return {
+      ...sanitizeAgentEvent({ ...event, type: "usage" }),
+      type: "model_call",
+      provider: String(event.provider || "").slice(0, 128),
+      toolCallCount: Number.isSafeInteger(event.toolCallCount) && event.toolCallCount >= 0
+        ? event.toolCallCount : null
+    };
+  }
   if (event.type === "usage") {
     return {
       type: "usage",
+      responseRejected: event.responseRejected === true,
+      finishReason: event.finishReason ? String(event.finishReason).slice(0, 128) : null,
+      toolName: /^[A-Za-z0-9_.:-]{1,128}$/.test(String(event.toolName || "")) ? event.toolName : null,
+      argumentProblem: ["non_object", "invalid_json"].includes(event.argumentProblem)
+        ? event.argumentProblem : null,
+      argumentCharacters: Number.isSafeInteger(event.argumentCharacters) && event.argumentCharacters >= 0
+        ? event.argumentCharacters : null,
+      outputTruncated: event.outputTruncated === true,
       turn: Number(event.turn || 0),
       inputTokens: Number(event.inputTokens || 0),
       outputTokens: Number(event.outputTokens || 0),
@@ -8904,7 +8922,7 @@ function toolEventSummary(event) {
   if (event.type === "model_call") {
     const model = event.model || event.provider || "model";
     const finish = event.finishReason ? ` · ${event.finishReason}` : "";
-    return `${model} responded${finish}`;
+    return `${model} ${event.responseRejected ? "returned rejected tool arguments" : "responded"}${finish}`;
   }
   if (event.type === "guard") {
     return event.summary || `No-progress guard escalated the next synthesis step`;
