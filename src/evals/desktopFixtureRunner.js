@@ -11,7 +11,8 @@ import { createAbortError, linkAbortSignal, throwIfAborted } from "../util/abort
 // tools are discovered here: the controller supplies each explicitly.
 export async function runDesktopFixture({
   fixture, tools = [], verify, modelConfig, fetchImpl, expectedServedModel,
-  limits, systemPrompt = SYSTEM_PROMPT, signal = null, transportProfile = "hosted"
+  limits, systemPrompt = SYSTEM_PROMPT, signal = null, transportProfile = "hosted",
+  requestBudget = null, inputTokenCounter = null
 }) {
   if (fixture?.synthetic !== true || !fixture.id || typeof fixture.prompt !== "string") {
     throw new Error("Provide a named synthetic fixture and prompt");
@@ -25,6 +26,14 @@ export async function runDesktopFixture({
   if (!["hosted", "direct-cortex"].includes(transportProfile)) {
     throw new Error("Unsupported fixture transport profile");
   }
+  if (requestBudget !== null || inputTokenCounter !== null) {
+    if (typeof requestBudget?.reserve !== "function" || typeof requestBudget?.snapshot !== "function" ||
+        typeof requestBudget?.close !== "function" || !(requestBudget?.signal instanceof AbortSignal) ||
+        typeof inputTokenCounter?.identity !== "string" || !inputTokenCounter.identity.trim() ||
+        typeof inputTokenCounter?.count !== "function") {
+      throw new Error("A shared request budget and explicitly identified input token counter are required together");
+    }
+  }
   const direct = transportProfile === "direct-cortex";
   const bounds = {
     maxModelTurns: bound(limits?.maxModelTurns, 1, 32),
@@ -36,12 +45,20 @@ export async function runDesktopFixture({
   const abort = new AbortController();
   const startedAt = new Date().toISOString(), started = performance.now();
   const turns = [], requests = [], events = [];
+  const reservations = new Map();
   let proposedToolCalls = 0;
   const redact = value => {
     const message = String(value || "");
     return modelConfig.apiKey ? message.replaceAll(modelConfig.apiKey, "[REDACTED]") : message;
   };
-  const stop = reason => { abort.abort(reason); throw createAbortError(reason); };
+  const stop = reason => { requestBudget?.close(reason); abort.abort(reason); throw createAbortError(reason); };
+  const completeReservations = (modelTurn, usage = null) => {
+    for (const [request, ticket] of reservations) {
+      if (modelTurn !== null && request.modelTurn !== modelTurn) continue;
+      request.budgetReceipt = ticket.complete(usage ? { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens } : null);
+      reservations.delete(request);
+    }
+  };
   const registry = new ToolRegistry();
   const names = new Set();
   for (const tool of tools) {
@@ -68,7 +85,7 @@ export async function runDesktopFixture({
     const wireBody = direct ? JSON.stringify(body) : options.body;
     const { model: _model, ...modelIndependentBody } = body;
     const request = {
-      index: requests.length, modelTurn: turns.length,
+      index: requests.length, modelTurn: turns.length, dispatched: false,
       body, bodyBytesSha256: sha(wireBody),
       ...(direct ? { clientBody, clientBodyBytesSha256: sha(options.body) } : {}),
       modelIndependentBodySha256: sha(canonicalJson(modelIndependentBody)),
@@ -80,6 +97,23 @@ export async function runDesktopFixture({
     request.compiledInputSha256 = sha(canonicalJson(request.compiledInput));
     requests.push(request);
     try {
+      if (requestBudget) {
+        // Count the final wire request, including Desktop-injected tools and
+        // growing history. Never substitute a character estimate here.
+        request.inputTokenizer = inputTokenCounter.identity;
+        try {
+          request.countedInputTokens = await inputTokenCounter.count(structuredClone(body), { signal: abort.signal });
+        } catch (error) {
+          requestBudget.close("input_token_count_failed");
+          throw error;
+        }
+        throwIfAborted(abort.signal);
+        const ticket = requestBudget.reserve({ inputTokens: request.countedInputTokens, maxOutputTokens: bounds.maxCompletionTokens });
+        reservations.set(request, ticket);
+        request.budgetReservation = { id: ticket.id, inputTokens: ticket.inputTokens, maxOutputTokens: ticket.maxOutputTokens, reservedTokens: ticket.reservedTokens };
+      }
+      throwIfAborted(abort.signal);
+      request.dispatched = true;
       const response = await fetchImpl(url, {
         ...options,
         body: wireBody,
@@ -117,6 +151,8 @@ export async function runDesktopFixture({
           };
         }
         Object.assign(turn, { message: structuredClone(response.message), usage: structuredClone(response.usage), raw: structuredClone(response.raw) });
+        completeReservations(turn.index, response.usage);
+        throwIfAborted(abort.signal);
         turn.servingEvidence = {
           source: direct ? "provider-response-model" : "amos-serving-metadata",
           expectedModel: expectedServedModel,
@@ -141,7 +177,10 @@ export async function runDesktopFixture({
       } catch (error) {
         turn.error = redact(error.message);
         throw error;
-      } finally { turn.wallMs = performance.now() - before; }
+      } finally {
+        completeReservations(turn.index);
+        turn.wallMs = performance.now() - before;
+      }
     }
   };
   const loop = new AgentLoop({
@@ -149,7 +188,8 @@ export async function runDesktopFixture({
     modelClient: measured, registry, systemPrompt,
     approvals: { ask: async () => stop("interactive_approval_requested") }, amosClient: {}
   });
-  const unlink = linkAbortSignal(signal, abort);
+  const runSignal = requestBudget ? AbortSignal.any([requestBudget.signal, ...(signal ? [signal] : [])]) : signal;
+  const unlink = linkAbortSignal(runSignal, abort);
   const timer = setTimeout(() => abort.abort("wall_limit"), bounds.maxWallMs);
   let answer = null, error = null;
   try {
@@ -178,12 +218,20 @@ export async function runDesktopFixture({
     if (!["pass", "fail", "unknown"].includes(verdict?.verdict)) throw new Error("Verifier must return pass, fail or unknown");
     result.verification = structuredClone(verdict);
   } catch (cause) { result.verification = { verdict: "unknown", error: redact(cause.message) }; }
-  finally { clearTimeout(timer); unlink(); }
+  finally {
+    clearTimeout(timer);
+    // An interrupted request can still have unknown server usage. Close the
+    // shared admission gate before accounting for it conservatively.
+    if (abort.signal.aborted) requestBudget?.close(redact(abort.signal.reason));
+    completeReservations(null);
+    unlink();
+  }
   if (abort.signal.aborted) {
     result.status = "aborted";
     result.stopReason = redact(abort.signal.reason);
   }
   result.wallMs = performance.now() - started;
+  if (requestBudget) result.requestBudget = requestBudget.snapshot();
   result.verifiedComplete = result.status === "answered" && result.verification.verdict === "pass";
   return structuredClone(result);
 }

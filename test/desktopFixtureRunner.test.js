@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { runDesktopFixture } from "../src/evals/desktopFixtureRunner.js";
 import { resolveModelConfig } from "../src/model/providers.js";
+import { createFixtureRequestBudget } from "../src/evals/fixtureRequestBudget.js";
 
 const limits = { maxModelTurns: 6, maxHttpCalls: 6, maxWallMs: 2000, maxCompletionTokens: 256 };
 const fixture = { id: "synthetic-balance", synthetic: true, prompt: "Read the balance and report it." };
@@ -272,4 +273,114 @@ test("a misspelled transport profile is rejected before any network call", async
   let calls = 0;
   await assert.rejects(runDesktopFixture(directOptions({ transportProfile: "direct", fetchImpl: async () => { calls++; } })), /Unsupported fixture transport profile/);
   assert.equal(calls, 0);
+});
+
+const sharedBudget = extra => createFixtureRequestBudget({ maxHttpCalls: 4, maxTotalTokens: 600, maxInputTokensPerRequest: 100, maxConcurrentRequests: 2, ...extra });
+const inputCounter = { identity: "synthetic-tokenizer-v1", count: async () => 10 };
+
+test("shared budget counts final Desktop requests and growing history, then reconciles normalized usage", async () => {
+  let calls = 0;
+  const counted = [];
+  const budget = sharedBudget({ maxHttpCalls: 2, maxTotalTokens: 280 });
+  const r = await runDesktopFixture(directOptions({ requestBudget: budget,
+    inputTokenCounter: { identity: inputCounter.identity, count: async body => {
+      counted.push(structuredClone(body));
+      assert.equal(body.model, "fixture-s5");
+      assert.equal(body.enable_thinking, false);
+      assert.ok(body.tools.some(t => t.function.name === "desktop_read_scratchpad"));
+      body.messages.length = 0; // The supplied counter cannot mutate the wire request.
+      return 10;
+    } },
+    fetchImpl: async (_url, request) => {
+      assert.ok(JSON.parse(request.body).messages.length > 0);
+      return directResponse(++calls === 1 ? call() : { content: "42" });
+    } }));
+  assert.equal(r.verifiedComplete, true);
+  assert.equal(calls, 2);
+  assert.ok(counted[1].messages.some(m => m.role === "tool"));
+  assert.ok(counted[1].messages.length > counted[0].messages.length);
+  assert.equal(r.requestBudget.chargedTokens, 26);
+  assert.equal(r.requestBudget.reservedTokens, 0);
+  assert.ok(r.requests.every(q => q.dispatched && q.budgetReceipt.usageKnown && q.budgetReceipt.chargedTokens === 13));
+  assert.equal(r.requests[0].inputTokenizer, inputCounter.identity);
+});
+
+test("shared token reservation blocks a parallel request before transport and cancels the other fixture", async () => {
+  const started = Promise.withResolvers();
+  let calls = 0;
+  const budget = sharedBudget({ maxTotalTokens: 300 });
+  const first = runDesktopFixture(options({ requestBudget: budget, inputTokenCounter: inputCounter,
+    fetchImpl: async (_url, { signal }) => {
+      calls++; started.resolve();
+      return new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("stub aborted")), { once: true }));
+    } }));
+  await started.promise;
+  const second = await runDesktopFixture(options({ requestBudget: budget, inputTokenCounter: inputCounter,
+    fetchImpl: async () => { calls++; return response({ content: "42" }); } }));
+  const a = await first;
+  assert.equal(calls, 1);
+  assert.equal(second.requests[0].dispatched, false);
+  assert.equal(a.stopReason, "aggregate_token_limit");
+  assert.equal(second.stopReason, "aggregate_token_limit");
+  assert.equal(a.verifiedComplete, false);
+  assert.equal(second.verifiedComplete, false);
+  assert.equal(budget.snapshot().chargedTokens, 266);
+  assert.equal(budget.snapshot().activeRequests, 0);
+});
+
+test("input limit and counter failure stop before transport", async () => {
+  for (const failCounter of [false, true]) {
+    let calls = 0;
+    const r = await runDesktopFixture(options({ requestBudget: sharedBudget({ maxInputTokensPerRequest: 9 }),
+      inputTokenCounter: failCounter ? { identity: "broken-test-counter", count: async () => { throw new Error("cannot tokenize"); } } : inputCounter,
+      fetchImpl: async () => { calls++; return response({ content: "42" }); } }));
+    assert.equal(calls, 0);
+    assert.equal(r.stopReason, failCounter ? "input_token_count_failed" : "input_token_limit");
+    assert.equal(r.requests[0].dispatched, false);
+    assert.equal(r.requestBudget.httpCalls, 0);
+    assert.equal(r.verifiedComplete, false);
+  }
+});
+
+test("a missing usage report retains the full charge instead of treating it as free inference", async () => {
+  const r = await runDesktopFixture(directOptions({ requestBudget: sharedBudget(), inputTokenCounter: inputCounter,
+    fetchImpl: async () => new Response(JSON.stringify({ model: "fixture-s5", choices: [{ message: { role: "assistant", content: "42" } }] }), { headers: { "content-type": "application/json" } }) }));
+  assert.equal(r.verifiedComplete, true);
+  assert.equal(r.requests[0].budgetReceipt.usageKnown, false);
+  assert.equal(r.requestBudget.chargedTokens, 266);
+});
+
+test("tokenizer disagreement aborts before executing returned tool proposals", async () => {
+  let executions = 0;
+  const r = await runDesktopFixture(options({ requestBudget: sharedBudget(),
+    inputTokenCounter: { identity: "deliberate-mismatch", count: async () => 9 },
+    tools: [{ ...tool, handler: async () => { executions++; return { balance: 42 }; } }],
+    fetchImpl: async () => response(call()) }));
+  assert.equal(executions, 0);
+  assert.equal(r.stopReason, "input_token_count_mismatch");
+  assert.equal(r.turns[0].message.tool_calls.length, 1);
+  assert.equal(r.requests[0].budgetReceipt.reportedUsage.inputTokens, 10);
+  assert.equal(r.verifiedComplete, false);
+});
+
+test("wall cancellation closes shared admission while an input counter is still pending", async () => {
+  const counting = Promise.withResolvers();
+  const budget = sharedBudget();
+  let calls = 0;
+  const r = await runDesktopFixture(options({ requestBudget: budget,
+    limits: { ...limits, maxWallMs: 30 },
+    inputTokenCounter: { identity: "delayed-test-counter", count: () => counting.promise },
+    fetchImpl: async () => { calls++; return response({ content: "42" }); } }));
+  assert.equal(r.stopReason, "wall_limit");
+  assert.equal(budget.snapshot().closed, true);
+  counting.resolve(10);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls, 0);
+  assert.equal(budget.snapshot().httpCalls, 0);
+});
+
+test("a request budget and identified counter must be supplied together", async () => {
+  for (const extra of [{ requestBudget: sharedBudget() }, { inputTokenCounter: inputCounter }, { requestBudget: sharedBudget(), inputTokenCounter: { count: () => 10 } }]) {
+    await assert.rejects(runDesktopFixture(options({ ...extra, fetchImpl: async () => { assert.fail("must reject before transport"); } })), /required together/);
+  }
 });
