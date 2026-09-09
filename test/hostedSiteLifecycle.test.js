@@ -160,6 +160,34 @@ function observeSource(life, file, { args = {}, result = {} } = {}) {
   });
 }
 
+for (const integrity of [
+  { bytes_match_manifest: false },
+  { manifest_sha256: digest("different manifest bytes") },
+  { bytes_match_manifest: true, manifest_sha256: digest("different manifest bytes") }
+]) {
+  test(`a file read reporting inconsistent integrity cannot permit an existing overwrite: ${JSON.stringify(integrity)}`, () => {
+    const life = new HostedSiteLifecycle({ taskId: "integrity-1", tenantId: "tenant-1", objective: "Edit the current website" });
+    observeSource(life, { path: "index.html", content: goodSource }, { result: integrity });
+    assert.equal(life.beforeTool({ name: "amos_sites_put_site_files", args: {
+      slug: "demo", files: [{ path: "index.html", content: "Rewrite from inconsistent source" }]
+    } }).allow, false);
+  });
+}
+
+test("a newly reported read mismatch invalidates prior source until a consistent re-read", async () => {
+  const { life, status } = fixture();
+  await life.check(dependencies(status));
+  assert.ok(life.lastCheck, "a previous check exists before the inconsistent read");
+  observeSource(life, { path: "index.html", content: goodSource }, { result: { bytes_match_manifest: false } });
+  const call = { name: "amos_sites_put_site_files", args: { slug: "demo", files: [{ path: "index.html", content: "Updated copy" }] } };
+  assert.equal(life.beforeTool(call).allow, false, "even a site created this run must honor the contradiction");
+  assert.equal(life.lastCheck, null, "the previous check cannot outlive contradictory evidence");
+  observeSource(life, { path: "index.html", content: goodSource }, { result: {
+    bytes_match_manifest: true, manifest_sha256: digest(goodSource)
+  } });
+  assert.equal(life.beforeTool(call).allow, true, "a verified re-read restores safe editing");
+});
+
 test("authenticated current file reads allow a CSS edit and complete review of untouched HTML", async () => {
   const life = new HostedSiteLifecycle({ taskId: "edit-1", tenantId: "tenant-1", objective: "Make the existing website lighter" });
   const oldFiles = [{ path: "index.html", content: goodSource }, { path: "styles.css", content: "body { background: black; }" }];
