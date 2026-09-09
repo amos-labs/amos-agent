@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { runInterruptionMessage } from "./runOutcome.js";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled", "interrupted"]);
 
@@ -49,9 +50,10 @@ export class DesktopRunManager {
     const promise = this.storage.run(lane, async () => {
       try {
         const result = await execute(lane);
-        this.transition(lane.id, "completed", {
-          phase: "completed",
-          summary: "Task completed"
+        const interrupted = result?.interrupted === true;
+        this.transition(lane.id, interrupted ? "interrupted" : "completed", {
+          phase: interrupted ? "interrupted" : "completed",
+          summary: interrupted ? runInterruptionMessage(result) : "Task completed"
         });
         return result;
       } catch (error) {

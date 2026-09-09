@@ -1,5 +1,6 @@
 import { shouldSubmitPrompt } from "../../src/desktop/input.js";
 import { parseMarkdown } from "../../src/desktop/markdown.js";
+import { runInterruptionMessage } from "../../src/desktop/runOutcome.js";
 import {
   AUTOMATION_SETUP_PHASES,
   compileAutomationMappings,
@@ -11169,7 +11170,7 @@ async function runTask(event, options = {}) {
     addMessage("assistant", result.answer, { eventId: result.taskEventId });
     if (result.interrupted) {
       runTerminalState = "interrupted";
-      toast("The model timed out after making progress. Completed work is intact; continue here to verify and finish the remainder.", true);
+      toast(runInterruptionMessage(result), true);
     } else {
       runTerminalState = "completed";
     }
