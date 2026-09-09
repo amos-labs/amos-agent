@@ -7,6 +7,94 @@ const digest = content => createHash("sha256").update(content).digest("hex");
 const goodSource = "<!doctype html><html><head><title>Meet AMOS</title></head><body><h1>See what happens after the click</h1><a href='mailto:hello@example.test'>Contact us</a></body></html>";
 const preview = "https://platform.custom.amoslabs.com/s/preview/test-private-token";
 
+async function finishChecklist(life, events, deps) {
+  let result = await life.completionGate(deps);
+  if (!result.allow) result = await life.completionGate(deps);
+  return { result, checks: Object.fromEntries(events.at(-1).checks.map(check => [check.label, check.status])) };
+}
+
+function formReport(status, issues = []) {
+  return {
+    slug: status.slug, tenant_id: status.tenant_id, manifest: "draft", ready: issues.length === 0,
+    files: Object.entries(status.draft_manifest).map(([path, file]) => ({ path, sha256: file.sha256 })), issues
+  };
+}
+
+function layoutResult(overrides = {}) {
+  return { ok: true, viewports: [1280, 390].map(width => ({
+    width, horizontal_overflow_px: 0, images: { broken: 0, pending: 0 }, links: [], truncated: false, ...overrides
+  })) };
+}
+
+test("a page without a form finishes with only applicable completed checks", async () => {
+  const { life, status, events } = fixture();
+  const { result, checks } = await finishChecklist(life, events, dependencies(status));
+  assert.equal(result.allow, true);
+  assert.deepEqual(checks, { "Saved revision": "passed", "Page source review": "passed" });
+  assert.equal(result.outcome.verified, false);
+});
+
+test("a valid draft form passes its static contract while delivery remains an explicit limitation", async () => {
+  const { life, status, events } = fixture({ files: [{ path: "index.html", content: '<html><form action="/s/demo/_amos/lead"></form></html>' }] });
+  const report = formReport(status, ["site 'demo' is a draft: public intake returns 404 until publish_site is approved; the preview URL renders the form but cannot submit it"]);
+  const { result, checks } = await finishChecklist(life, events, dependencies(status, {
+    read: async operation => operation === "site_status" ? status : report
+  }));
+  assert.equal(checks["Lead form contract"], "passed");
+  assert.equal(result.outcome.verified, false);
+  assert.match(life.lastCheck.limitations.join(" "), /draft forms do not accept submissions/);
+  assert.equal(Object.keys(checks).some(label => /delivery|attribution|visual quality/i.test(label)), false);
+});
+
+test("failed and unavailable form checks preserve completed source checks", async () => {
+  for (const kind of ["invalid", "missing", "unavailable"]) {
+    const { life, status, events } = fixture({ files: [{ path: "index.html", content: "<html><form></form></html>" }] });
+    const { result, checks } = await finishChecklist(life, events, dependencies(status, {
+      read: async operation => {
+        if (operation === "site_status") return status;
+        if (kind === "unavailable") throw new Error("Unavailable");
+        return kind === "missing" ? null : formReport(status, ["Form lacks required email field"]);
+      }
+    }));
+    assert.equal(result.outcome.status, "interrupted", kind);
+    assert.equal(checks["Saved revision"], "passed", kind);
+    assert.equal(checks["Page source review"], "passed", kind);
+    assert.equal(checks["Lead form contract"], kind === "invalid" ? "failed" : "pending", kind);
+  }
+});
+
+test("layout checklist reflects observed structure without claiming aesthetic or delivery verification", async () => {
+  for (const [overrides, expected] of [[{}, "passed"], [{ horizontal_overflow_px: 80 }, "failed"], [{ truncated: true }, "pending"], [{ images: { broken: 0, pending: 1 } }, "pending"]]) {
+    const { life, status, events } = fixture();
+    const { result, checks } = await finishChecklist(life, events, dependencies(status, {
+      inspect: async () => layoutResult(overrides)
+    }));
+    assert.equal(checks["Desktop/mobile structure"], expected);
+    assert.equal(checks["Saved revision"], "passed");
+    assert.equal(checks["Page source review"], "passed");
+    assert.equal(result.outcome.verified, false);
+  }
+});
+
+test("an attempted but unavailable layout check is pending", async () => {
+  const { life, status, events } = fixture();
+  const { checks } = await finishChecklist(life, events, dependencies(status, { inspect: async () => { throw new Error("No browser"); } }));
+  assert.equal(checks["Desktop/mobile structure"], "pending");
+  assert.equal(checks["Lead form contract"], undefined);
+});
+
+test("a revision changed after review invalidates the earlier passing checklist", async () => {
+  const { life, status, events } = fixture();
+  let reads = 0;
+  const { checks } = await finishChecklist(life, events, dependencies(status, {
+    read: async () => ++reads % 2 ? status : { ...status, draft_manifest: {} },
+    inspect: async () => layoutResult()
+  }));
+  assert.equal(checks["Saved revision"], "failed");
+  assert.equal(checks["Page source review"], "pending");
+  assert.equal(checks["Desktop/mobile structure"], "pending");
+});
+
 function fixture({ files = [{ path: "index.html", content: goodSource }], created = true } = {}) {
   const events = [];
   const life = new HostedSiteLifecycle({ taskId: "task-1", tenantId: "tenant-1", objective: "Create an unpublished marketing landing page", emit: event => events.push(event) });
