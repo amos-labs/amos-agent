@@ -299,3 +299,31 @@ test("hydration rejects snapshots belonging to a different run, task, or context
     assert.doesNotMatch(run.elements.chatRunStatusText.textContent, /Checking the saved draft/);
   }
 });
+
+test("an upfront run failure restores the idle composer and Run control", async () => {
+  const run = conversationHarness();
+  const messages = [];
+  Object.assign(run.context, {
+    running: false, attachments: [], transientTaskMessages: new Set(),
+    eventMatchesActiveTask: () => true,
+    addMessage: (role, content) => { messages.push({ role, content }); return element(); },
+    clearTransientTaskMessages: () => {}, friendlyError: error => error.message,
+    renderPrivateMemory: () => {}, renderDecisions: () => {}, renderHistory: () => {}, renderTasks: () => {},
+    toast: () => {},
+    api: {
+      run: async () => { throw new Error("Connect AMOS before starting this task"); },
+      state: async () => ({})
+    }
+  });
+  for (const name of ["beginInlineActivity", "idlePromptPlaceholder", "runTask"]) {
+    vm.runInContext(`"use strict";\n${rendererFunction(name)}`, run.context);
+  }
+  run.elements.promptInput.value = "What is 2+2?";
+  await run.context.runTask();
+  assert.equal(run.context.running, false);
+  assert.equal(run.elements.runButton.disabled, false);
+  assert.equal(run.elements.cancelButton.classList.contains("hidden"), true);
+  assert.match(run.elements.promptInput.placeholder, /^Ask about the company/);
+  assert.doesNotMatch(run.elements.promptInput.placeholder, /while AMOS works/);
+  assert.equal(messages.at(-1).content, "Connect AMOS before starting this task");
+});
