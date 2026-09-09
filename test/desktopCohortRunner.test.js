@@ -83,12 +83,30 @@ test("shared token limit preserves missing cases and never calls a partial cohor
   assert.equal(result.entries[1].verdict, "unknown");
 });
 
-test("aggregate wall deadline stops a hung tokenizer factory and closes its late worker", async t => {
-  const f = await setup(t); f.plan.maxWallMs = 30; let closed = false, finish;
-  const result = await runDesktopCohort({ ...f, createInputTokenCounter: () => new Promise(resolve => { finish = resolve; }) });
+test("aggregate wall deadline stops a hung tokenizer factory and closes its late worker", { timeout: 5000 }, async t => {
+  const f = await setup(t); f.plan.maxWallMs = 30;
+  // The durable run-start journal can take longer than the deadline on a busy
+  // runner. Advance time only after the factory is actually waiting.
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let entered, finish, onClosed, counterSignal, closes = 0;
+  const factoryStarted = new Promise(resolve => { entered = resolve; });
+  const worker = new Promise(resolve => { finish = resolve; });
+  const workerClosed = new Promise(resolve => { onClosed = resolve; });
+  const running = runDesktopCohort({ ...f, createInputTokenCounter: ({ signal }) => {
+    counterSignal = signal; entered(); return worker;
+  } });
+  await Promise.race([factoryStarted, running.then(() => assert.fail("cohort exited before tokenizer creation"))]);
+  t.mock.timers.tick(29);
+  assert.equal(counterSignal.aborted, false);
+  t.mock.timers.tick(1);
+  assert.equal(counterSignal.aborted, true);
+  const result = await running;
   assert.equal(result.status, "incomplete"); assert.equal(result.stopReason, "cohort_wall_limit");
   assert.equal(result.budget.httpCalls, 0); assert.ok(result.entries.every(e => e.verdict === "unknown"));
-  finish({ close: () => { closed = true; } }); await new Promise(resolve => setImmediate(resolve)); assert.equal(closed, true);
+  assert.equal(closes, 0);
+  finish({ close: () => { closes++; onClosed(); } });
+  await workerClosed;
+  assert.equal(closes, 1);
 });
 
 test("replica 5xx cancels remaining arms and retains request reservation", async t => {
