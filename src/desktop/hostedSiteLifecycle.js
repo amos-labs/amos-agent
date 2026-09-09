@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 const MAX_SOURCE_BYTES = 64_000;
 const MAX_SITES = 6;
 const MAX_WRITES_BEFORE_REVIEW = 2;
-const CHECKS = ["Saved revision", "Page source review", "Lead form contract"];
+const CHECK_LABELS = { saved: "Saved revision", source: "Page source review", form: "Lead form contract", layout: "Desktop/mobile structure" };
 const hash = value => createHash("sha256").update(value).digest("hex");
 const plain = value => value && typeof value === "object" && !Array.isArray(value);
 
@@ -82,6 +82,9 @@ export class HostedSiteLifecycle {
     if (op.name === "put_site") return { allow: true };
     if (!Array.isArray(op.args.files) || (op.args.remove != null && !Array.isArray(op.args.remove))) return { allow: false, message: "Provide a valid files array and optional remove array before changing a site." };
     const paths = [...(op.args.files || []).map(file => file?.path), ...(op.args.remove || [])].filter(path => typeof path === "string");
+    if (paths.some(path => current.invalidSourcePaths.has(path))) {
+      return { allow: false, message: "The source read reported inconsistent file evidence. Obtain a current read whose bytes match the manifest before overwriting this path." };
+    }
     if (paths.some(path => current.files.has(path) && current.manifest?.[path] && current.manifest[path].sha256 !== current.files.get(path).sha256)) {
       return { allow: false, message: "The latest site manifest differs from the source you read. Read the current saved file before overwriting it." };
     }
@@ -99,7 +102,7 @@ export class HostedSiteLifecycle {
   }
 
   ensureSite(slug) {
-    if (!this.sites.has(slug)) this.sites.set(slug, { slug, attempts: 0, pathAttempts: new Map(), files: new Map(), preview: null, created: false, saved: false });
+    if (!this.sites.has(slug)) this.sites.set(slug, { slug, attempts: 0, pathAttempts: new Map(), files: new Map(), invalidSourcePaths: new Set(), preview: null, created: false, saved: false });
     return this.sites.get(slug);
   }
 
@@ -113,8 +116,19 @@ export class HostedSiteLifecycle {
     if (op.name === "site_status" && result.slug === slug && plain(result.draft_manifest)) this.ensureSite(slug).manifest = structuredClone(result.draft_manifest);
     if (op.name === "get_site_file" && op.args.published !== true && result.published !== true && (!result.manifest || result.manifest === "draft") && result.slug === slug && result.path === op.args.path && typeof result.content === "string") {
       const bytes = Buffer.from(result.content, result.encoding === "base64" || result.base64 === true ? "base64" : "utf8");
-      if (bytes.length <= MAX_SOURCE_BYTES && result.sha256 === hash(bytes) && Number(result.size) === bytes.length) {
-        this.ensureSite(slug).files.set(result.path, { path: result.path, sha256: result.sha256, size: bytes.length, source: bytes.toString("utf8") });
+      const site = this.ensureSite(slug);
+      // Older reads omitted integrity metadata. When supplied, it must agree
+      // with the independently hashed bytes; a matching content hash alone
+      // cannot override the server reporting a different manifest revision.
+      const manifestMatches = (!Object.hasOwn(result, "bytes_match_manifest") || result.bytes_match_manifest === true)
+        && (!Object.hasOwn(result, "manifest_sha256") || result.manifest_sha256 === result.sha256);
+      if (manifestMatches && bytes.length <= MAX_SOURCE_BYTES && result.sha256 === hash(bytes) && Number(result.size) === bytes.length) {
+        site.files.set(result.path, { path: result.path, sha256: result.sha256, size: bytes.length, source: bytes.toString("utf8") });
+        site.invalidSourcePaths.delete(result.path);
+      } else {
+        site.files.delete(result.path);
+        site.invalidSourcePaths.add(result.path);
+        this.lastCheck = null;
       }
     }
     if (op.name === "put_site_files" && result.slug === slug && Number(result.written) > 0) {
@@ -144,13 +158,17 @@ export class HostedSiteLifecycle {
     const issues = [...this.pendingLimits];
     const limitations = ["Visual desktop/mobile quality and end-to-end lead delivery require their own checks."];
     const revisions = [];
+    const siteChecks = [];
     if (![...this.sites.values()].some(site => site.saved)) issues.push("No saved page revision was captured for this task.");
     for (const site of this.sites.values()) {
       if (!site.saved) continue;
+      const checks = { saved: "pending", source: "pending" };
+      siteChecks.push(checks);
       let status;
       try { status = await read("site_status", { slug: site.slug }); }
       catch (error) { if (signal?.aborted) throw error; issues.push(`${site.slug}: saved status could not be read.`); continue; }
       if (!plain(status) || status.ok === false || status.slug !== site.slug || (status.tenant_id && status.tenant_id !== this.tenantId) || !plain(status.draft_manifest)) {
+        checks.saved = "failed";
         issues.push(`${site.slug}: no authoritative draft manifest was returned.`); continue;
       }
       const manifest = status.draft_manifest;
@@ -170,12 +188,15 @@ export class HostedSiteLifecycle {
         else sourceMissing = true;
       }
       if (!sources.some(file => /\.html?$/i.test(file.path)) || sourceMissing) {
+        checks.saved = "failed";
         issues.push(`${site.slug}: complete current page source is unavailable or changed since its save; read the saved source before claiming review.`);
         continue;
       }
       const hasLeadForm = sources.some(file => /_amos\/lead|<form\b/i.test(file.source));
       let form = null;
       if (hasLeadForm || status.lead_form?.enabled) {
+        checks.form = "pending";
+        const formIssueStart = issues.length;
         try { form = await read("validate_site_lead_form", { slug: site.slug, published: false }); }
         catch (error) { if (signal?.aborted) throw error; issues.push(`${site.slug}: the form validator is unavailable.`); }
         if (form) {
@@ -190,11 +211,17 @@ export class HostedSiteLifecycle {
             if (status.status === "draft" && text === `site '${site.slug}' is a draft: public intake returns 404 until publish_site is approved; the preview URL renders the form but cannot submit it`) limitations.push(`${site.slug}: draft forms do not accept submissions until publication.`);
             else issues.push(`${site.slug}: ${text}`);
           }
+          checks.form = issues.length === formIssueStart ? "passed" : "failed";
+        } else if (issues.length === formIssueStart) {
+          issues.push(`${site.slug}: the form validator returned no report.`);
         }
       }
       this.stage("checking", "Reviewing the saved page against the brief");
       let layout = null;
       if (site.preview && inspect) {
+        checks.layout = "pending";
+        const layoutIssueStart = issues.length;
+        const layoutLimitStart = limitations.length;
         try {
           layout = await inspect({ preview: site.preview, slug: site.slug });
           if (layout?.ok !== true || !Array.isArray(layout.viewports) || layout.viewports.length !== 2) {
@@ -207,6 +234,8 @@ export class HostedSiteLifecycle {
               if (view.links?.some(link => link.visible && link.missing_fragment)) issues.push(`${site.slug}: a visible link points to a missing section.`);
               if (view.truncated || view.images?.pending > 0) limitations.push(`${site.slug}: some page elements could not be checked completely.`);
             }
+            checks.layout = issues.length > layoutIssueStart ? "failed"
+              : limitations.length > layoutLimitStart ? "pending" : "passed";
           }
         } catch (error) {
           if (signal?.aborted) throw error;
@@ -222,21 +251,29 @@ export class HostedSiteLifecycle {
         continue;
       }
       if (verdict?.pass !== true || !Array.isArray(verdict?.issues) || verdict.issues.length > 0) {
+        checks.source = "failed";
         issues.push(...(Array.isArray(verdict?.issues) && verdict.issues.length
           ? verdict.issues.slice(0, 6).map(issue => `${site.slug}: ${String(issue).slice(0, 600)}`)
           : [`${site.slug}: source review did not return a valid pass.`]));
-      }
+      } else checks.source = "passed";
       let after;
       try { after = await read("site_status", { slug: site.slug }); }
-      catch (error) { if (signal?.aborted) throw error; issues.push(`${site.slug}: status could not be rechecked after review.`); continue; }
+      catch (error) {
+        if (signal?.aborted) throw error;
+        invalidateChecklist(checks);
+        issues.push(`${site.slug}: status could not be rechecked after review.`);
+        continue;
+      }
       if (!plain(after) || after.ok === false || after.slug !== site.slug || (after.tenant_id && after.tenant_id !== this.tenantId) || !plain(after.draft_manifest)
         || hash(JSON.stringify(Object.entries(after.draft_manifest).sort(([a], [b]) => a.localeCompare(b)))) !== revision
         || JSON.stringify(after.lead_form) !== JSON.stringify(status.lead_form)) {
+        invalidateChecklist(checks);
+        checks.saved = "failed";
         issues.push(`${site.slug}: the page or form configuration changed during review; check the new revision.`);
-      }
+      } else checks.saved = "passed";
       revisions.push({ slug: site.slug, revision, layoutChecked: Boolean(layout), files: sources.map(({ path, sha256 }) => ({ path, sha256 })) });
     }
-    this.lastCheck = { taskId: this.taskId, tenantId: this.tenantId, revisions, issues: [...new Set(issues)].slice(0, 16), limitations: [...new Set(limitations)].slice(0, 8), verified: false };
+    this.lastCheck = { taskId: this.taskId, tenantId: this.tenantId, revisions, checks: summarizeChecklist(siteChecks), issues: [...new Set(issues)].slice(0, 16), limitations: [...new Set(limitations)].slice(0, 8), verified: false };
     return this.lastCheck;
   }
 
@@ -252,7 +289,7 @@ export class HostedSiteLifecycle {
     }
     const partial = result.issues.length > 0;
     const saved = [...this.sites.values()].some(site => site.saved);
-    this.stage(partial ? "partial" : "ready", partial ? saved ? "Draft saved with checks still unfinished" : "Page work stopped before a saved draft was verified" : "Draft ready for review; source checks finished", CHECKS.map((label, index) => ({ label, status: partial ? "pending" : index === 2 ? "pending" : "passed" })));
+    this.stage(partial ? "partial" : "ready", partial ? saved ? "Draft saved with checks still unfinished" : "Page work stopped before a saved draft was verified" : "Draft ready for review; source checks finished", result.checks);
     return { allow: true, outcome: { status: partial ? "interrupted" : "completed", reason: partial ? "verification_incomplete" : "answer_returned", verified: false } };
   }
 
@@ -268,6 +305,19 @@ export class HostedSiteLifecycle {
     const saved = [...this.sites.values()].some(site => site.saved);
     return [!saved ? "Page work is unfinished; no saved draft was verified." : issues.length ? "Draft saved; some checks remain unfinished." : "Draft saved. Its source was checked against the brief.", ...links, ...(issues.length ? ["Remaining checks:", ...issues.map(issue => `- ${issue}`)] : []), ...limitations].join("\n\n");
   }
+}
+
+function invalidateChecklist(checks) {
+  for (const key of Object.keys(checks)) checks[key] = "pending";
+}
+
+function summarizeChecklist(siteChecks) {
+  const observations = siteChecks.length ? siteChecks : [{ saved: "pending", source: "pending" }];
+  return Object.entries(CHECK_LABELS).flatMap(([key, label]) => {
+    const statuses = observations.map(checks => checks[key]).filter(Boolean);
+    if (!statuses.length) return [];
+    return [{ label, status: statuses.includes("failed") ? "failed" : statuses.includes("pending") ? "pending" : "passed" }];
+  });
 }
 
 export function siteReviewMessages({ objective, slug, revision, sources, form, layout }) {
