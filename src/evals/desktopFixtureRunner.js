@@ -12,7 +12,7 @@ import { createAbortError, linkAbortSignal, throwIfAborted } from "../util/abort
 export async function runDesktopFixture({
   fixture, tools = [], verify, modelConfig, fetchImpl, expectedServedModel,
   limits, systemPrompt = SYSTEM_PROMPT, signal = null, transportProfile = "hosted",
-  requestBudget = null, inputTokenCounter = null
+  requestBudget = null, inputTokenCounter = null, isolateCaseLimits = false
 }) {
   if (fixture?.synthetic !== true || !fixture.id || typeof fixture.prompt !== "string") {
     throw new Error("Provide a named synthetic fixture and prompt");
@@ -26,6 +26,7 @@ export async function runDesktopFixture({
   if (!["hosted", "direct-cortex"].includes(transportProfile)) {
     throw new Error("Unsupported fixture transport profile");
   }
+  if (typeof isolateCaseLimits !== "boolean") throw new Error("isolateCaseLimits must be a boolean");
   if (requestBudget !== null || inputTokenCounter !== null) {
     if (typeof requestBudget?.reserve !== "function" || typeof requestBudget?.snapshot !== "function" ||
         typeof requestBudget?.close !== "function" || !(requestBudget?.signal instanceof AbortSignal) ||
@@ -51,7 +52,19 @@ export async function runDesktopFixture({
     const message = String(value || "");
     return modelConfig.apiKey ? message.replaceAll(modelConfig.apiKey, "[REDACTED]") : message;
   };
-  const stop = reason => { requestBudget?.close(reason); abort.abort(reason); throw createAbortError(reason); };
+  // A fully accounted case can exhaust its own work allowance without
+  // canceling a sibling. Unknown/in-flight usage and infrastructure failures
+  // still close the shared gate; no extra tool or HTTP attempt is permitted.
+  const canIsolate = reason => isolateCaseLimits && requestBudget !== null &&
+    ["tool_call_limit", "model_turn_limit", "http_call_limit"].includes(reason) &&
+    !requestBudget.signal.aborted && reservations.size === 0 &&
+    requests.every(request => !request.dispatched ||
+      (request.budgetReceipt?.usageKnown === true && request.responseCaptureComplete === true));
+  const stop = reason => {
+    if (!canIsolate(reason)) requestBudget?.close(reason);
+    abort.abort(reason);
+    throw createAbortError(reason);
+  };
   const completeReservations = (modelTurn, usage = null) => {
     for (const [request, ticket] of reservations) {
       if (modelTurn !== null && request.modelTurn !== modelTurn) continue;
@@ -222,7 +235,7 @@ export async function runDesktopFixture({
     clearTimeout(timer);
     // An interrupted request can still have unknown server usage. Close the
     // shared admission gate before accounting for it conservatively.
-    if (abort.signal.aborted) requestBudget?.close(redact(abort.signal.reason));
+    if (abort.signal.aborted && !canIsolate(abort.signal.reason)) requestBudget?.close(redact(abort.signal.reason));
     completeReservations(null);
     unlink();
   }
@@ -232,6 +245,7 @@ export async function runDesktopFixture({
   }
   result.wallMs = performance.now() - started;
   if (requestBudget) result.requestBudget = requestBudget.snapshot();
+  result.caseLimitIsolated = abort.signal.aborted && canIsolate(abort.signal.reason);
   result.verifiedComplete = result.status === "answered" && result.verification.verdict === "pass";
   return structuredClone(result);
 }
