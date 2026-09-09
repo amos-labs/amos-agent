@@ -5,6 +5,89 @@ import {
   estimateMessageTokens
 } from "../src/model/contextCompiler.js";
 
+for (const explicitActiveTask of [true, false]) {
+  test(`compaction retains the current save receipt after the user prompt (explicit active task: ${explicitActiveTask})`, () => {
+    const task = { role: "user", content: "Improve the same unpublished landing page and verify the saved changes." };
+    const save = {
+      role: "assistant", content: "",
+      tool_calls: [{ id: "save", function: {
+        name: "sites_put_site_files", arguments: '{"slug":"qa"}'
+      } }]
+    };
+    const receipt = {
+      role: "tool", tool_call_id: "save",
+      content: JSON.stringify({ ok: true, status: "draft", sha256: "saved-revision-123" })
+    };
+    const compiled = compileModelContext({
+      messages: [
+        { role: "system", content: "system" },
+        { role: "user", content: "Earlier campaign brief " + "x".repeat(20_000) },
+        { role: "assistant", content: "Original draft created." },
+        task, save, receipt
+      ],
+      contextTokens: 4_096, maxOutputTokens: 1_024,
+      activeTask: explicitActiveTask ? task : null
+    });
+    assert.equal(compiled.plan.compacted, true);
+    assert.ok(compiled.messages.includes(save), "the current tool call was lost");
+    assert.ok(compiled.messages.includes(receipt), "the successful save receipt was lost");
+    assert.ok(compiled.plan.compiledMessageTokens <= compiled.plan.messageTokenBudget);
+  });
+}
+
+test("compaction preserves steering and verification after the active task anchor", () => {
+  const task = { role: "user", content: "Improve the unpublished page." };
+  const steering = { role: "user", content: "The page is saved. Do not rewrite it. Verify status and finish." };
+  const status = {
+    role: "tool", tool_call_id: "status",
+    content: JSON.stringify({ ok: true, status: "draft", sha256: "verified-revision-123" })
+  };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" },
+      task,
+      { role: "assistant", content: "Earlier design reasoning. ".repeat(2_000) },
+      steering,
+      { role: "assistant", content: "", tool_calls: [{ id: "status", function: {
+        name: "sites_site_status", arguments: '{"slug":"qa"}'
+      } }] },
+      status
+    ],
+    contextTokens: 4_096, maxOutputTokens: 1_024, activeTask: task
+  });
+  assert.equal(compiled.plan.compacted, true);
+  assert.ok(compiled.messages.some(message => String(message.content).includes(steering.content)));
+  assert.ok(compiled.messages.some(message => String(message.content).includes(task.content)));
+  assert.ok(compiled.messages.includes(status));
+  assert.ok(compiled.plan.compiledMessageTokens <= compiled.plan.messageTokenBudget);
+});
+
+test("an oversized current write retains bounded outcome evidence instead of only its instruction", () => {
+  const task = { role: "user", content: "Update the page and report the outcome." };
+  const compiled = compileModelContext({
+    messages: [
+      { role: "system", content: "system" }, task,
+      { role: "assistant", content: "", tool_calls: [{ id: "save", function: {
+        name: "sites_put_site_files", arguments: JSON.stringify({ html: "x".repeat(40_000) })
+      } }] },
+      { role: "tool", tool_call_id: "save", content: JSON.stringify({
+        ok: false, error: "revision conflict; existing page unchanged", revision: "original-123"
+      }) }
+    ],
+    contextTokens: 4_096, maxOutputTokens: 1_024, activeTask: task
+  });
+  assert.equal(compiled.plan.compacted, true);
+  const text = JSON.stringify(compiled.messages);
+  assert.match(text, /sites_put_site_files/);
+  assert.match(text, /revision conflict; existing page unchanged/);
+  assert.match(text, /original-123/);
+  assert.ok(compiled.plan.compiledMessageTokens <= compiled.plan.messageTokenBudget);
+  const callIds = new Set(compiled.messages.flatMap(message => (message.tool_calls || []).map(call => call.id)));
+  for (const message of compiled.messages.filter(message => message.role === "tool")) {
+    assert.ok(callIds.has(message.tool_call_id), "compaction left an orphan tool result");
+  }
+});
+
 test("context compiler preserves the task and bounds old tool evidence to the selected model", () => {
   const task = { role: "user", content: `Analyze this evidence\n${"a".repeat(10_000)}` };
   const messages = [

@@ -199,7 +199,7 @@ function compactMessages(messages, charBudget, options) {
   if (!system || latestIndex < 0) return messages.slice(-1);
 
   const systemIndex = messages.indexOf(system);
-  const turns = conversationTurns(messages, systemIndex, latestIndex);
+  const turns = conversationTurns(messages, systemIndex);
   const cardReserve = 1_800;
   const digestReserve = 400;
   let remaining = Math.max(0, charBudget - messageLength(system) - cardReserve - digestReserve);
@@ -246,11 +246,14 @@ function compactMessages(messages, charBudget, options) {
   return ordered;
 }
 
-function conversationTurns(messages, systemIndex, latestIndex) {
+function conversationTurns(messages, systemIndex) {
   const turns = [];
   let current = [];
   for (let index = 0; index < messages.length; index += 1) {
-    if (index === systemIndex || index > latestIndex) continue;
+    // The active user message anchors the objective, not the end of its work.
+    // Include subsequent tool results and steering so compaction can retain
+    // the newest evidence instead of making completed actions look unstarted.
+    if (index === systemIndex) continue;
     const message = messages[index];
     if (message?.role === "user" && current.length > 0) {
       turns.push(current);
