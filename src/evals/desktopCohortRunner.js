@@ -82,6 +82,7 @@ export async function runDesktopCohort({
             modelConfig: prepared.modelConfig, systemPrompt,
             expectedServedModel: plan.arms[entry.arm], limits: entry.limits,
             transportProfile: "direct-cortex", requestBudget: budget,
+            isolateCaseLimits: plan.caseLimitPolicy === "isolate-accounted",
             inputTokenCounter: counter, signal: budget.signal,
             fetchImpl: async (target, options) => {
               check();
@@ -111,7 +112,7 @@ export async function runDesktopCohort({
             result: `results/${resultName}`, resultSha256: digest(result), wallMs: result.wallMs };
           await journal({ type: "case_finished", ...record, budget: budget.snapshot() });
           completed.set(index, record);
-          if (result.status === "aborted") close(result.stopReason || "cohort_case_aborted");
+          if (result.status === "aborted" && !result.caseLimitIsolated) close(result.stopReason || "cohort_case_aborted");
           if (entry.phase === "warmup" && result.verifiedComplete !== true) close("cohort_warmup_failed");
         } catch {
           failure = failure || "cohort_execution_failed";
@@ -166,6 +167,8 @@ function validate(plan, outputDirectory, systemPrompt) {
   require(positive(plan.maxWallMs) && plan.maxWallMs <= 86_400_000, "Invalid cohort wall limit");
   require(positive(plan.concurrency) && plan.concurrency <= 2 &&
     plan.concurrency <= plan.requestBudget?.maxConcurrentRequests, "Invalid cohort concurrency");
+  require(plan.caseLimitPolicy === undefined || ["abort-cohort", "isolate-accounted"].includes(plan.caseLimitPolicy),
+    "Invalid case limit policy");
   require(typeof plan.tokenizerIdentity === "string" && plan.tokenizerIdentity.length > 0,
     "An explicit tokenizer identity is required");
   require(hashed(plan.protocolSha256) && hashed(plan.fixtureSourceSha256) &&

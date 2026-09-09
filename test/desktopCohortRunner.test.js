@@ -208,3 +208,70 @@ test("an erroneous passing verifier cannot qualify a failed warmup execution", a
   assert.equal(result.entries[0].verdict,"pass");assert.equal(result.entries[0].status,"error");assert.equal(result.entries[0].verifiedComplete,false);
   assert.ok(result.entries.filter(e=>e.phase==='holdout').every(e=>e.status==='unresolved' && !e.verifiedComplete));
 });
+
+function overToolLimitResponse(model, knownUsage = true) {
+  const row = { model, choices: [{ delta: { tool_calls: [0, 1, 2].map(index => ({
+    index, id: `call-${index}`, type: "function", function: { name: "unavailable", arguments: "{}" }
+  })) }, finish_reason: "tool_calls" }],
+  ...(knownUsage ? { usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 } } : {}) };
+  return new Response(`data: ${JSON.stringify(row)}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
+}
+
+test("an accounted case limit does not cancel an in-flight paired arm", async t => {
+  const f = await setup(t); f.plan.caseLimitPolicy = "isolate-accounted"; f.plan.concurrency = 2;
+  let entered;
+  const candidateStarted = new Promise(resolve => { entered = resolve; });
+  const result = await runDesktopCohort({ ...f, fetchImpl: async (_url, request) => {
+    const model = JSON.parse(request.body).model;
+    if (model === "model-base") { await candidateStarted; return overToolLimitResponse(model); }
+    entered();
+    for (let i = 0; i < 100; i++) {
+      assert.equal(request.signal.aborted, false, "base failure must not cancel the candidate request");
+      if ((await journal(f.outputDirectory)).some(row => row.type === "case_finished" && row.index === 0))
+        return response(model, "42", true);
+      await new Promise(resolve => setTimeout(resolve, 2));
+    }
+    throw new Error("base did not finish within test bound");
+  } });
+  assert.equal(result.status, "completed"); assert.equal(result.budget.closed, false);
+  assert.equal(result.budget.httpCalls, 2); assert.equal(result.budget.unknownUsageCalls, 0);
+  assert.equal(result.budget.chargedTokens, 26); assert.equal(result.budget.reservedTokens, 0);
+  assert.deepEqual(result.entries.map(e => e.verifiedComplete), [false, true]);
+  assert.deepEqual(result.entries.map(e => e.status), ["aborted", "answered"]);
+  const failed = JSON.parse(await readFile(join(f.outputDirectory, result.entries[0].result), "utf8"));
+  assert.equal(failed.caseLimitIsolated, true); assert.equal(failed.stopReason, "tool_call_limit");
+  assert.equal(failed.proposedToolCalls, 3); assert.equal(failed.verification.verdict, "unknown");
+});
+
+for (const [name, policy, usage, expectedReason] of [
+  ["default policy", undefined, true, "tool_call_limit"],
+  ["unknown provider usage", "isolate-accounted", false, "tool_call_limit"]
+]) test(`${name} still closes the cohort on a case limit`, async t => {
+  const f = await setup(t); if (policy) f.plan.caseLimitPolicy = policy;
+  let calls = 0;
+  const result = await runDesktopCohort({ ...f, fetchImpl: async (_url, request) => {
+    calls++; return overToolLimitResponse(JSON.parse(request.body).model, usage);
+  } });
+  assert.equal(calls, 1); assert.equal(result.status, "incomplete");
+  assert.equal(result.stopReason, expectedReason); assert.equal(result.budget.closed, true);
+  assert.equal(result.entries[1].status, "unresolved");
+  const failed = JSON.parse(await readFile(join(f.outputDirectory, result.entries[0].result), "utf8"));
+  assert.equal(failed.caseLimitIsolated, false);
+});
+
+for (const [name, transport, reason] of [
+  ["identity mismatch", async () => response("wrong-model", "42", true), "serving_identity_mismatch"],
+  ["replica failure", async () => new Response("failure", { status: 503 }), "replica_http_5xx"]
+]) test(`case isolation preserves the global ${name} stop`, async t => {
+  const f = await setup(t); f.plan.caseLimitPolicy = "isolate-accounted";
+  let calls = 0;
+  const result = await runDesktopCohort({ ...f, fetchImpl: async (...args) => { calls++; return transport(...args); } });
+  assert.equal(calls, 1); assert.equal(result.status, "incomplete"); assert.equal(result.stopReason, reason);
+  assert.equal(result.entries[1].status, "unresolved");
+});
+
+test("invalid case-limit policy rejects before claiming the run", async t => {
+  const f = await setup(t); f.plan.caseLimitPolicy = "ignore-all-errors";
+  await assert.rejects(runDesktopCohort(f), /Invalid case limit policy/);
+  assert.deepEqual(await readdir(f.directory), []);
+});

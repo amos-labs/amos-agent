@@ -384,3 +384,30 @@ test("a request budget and identified counter must be supplied together", async 
     await assert.rejects(runDesktopFixture(options({ ...extra, fetchImpl: async () => { assert.fail("must reject before transport"); } })), /required together/);
   }
 });
+
+for (const [name, restriction, reason] of [
+  ["HTTP", { maxHttpCalls: 1 }, "http_call_limit"],
+  ["model turn", { maxModelTurns: 1 }, "model_turn_limit"],
+  ["tool", { maxToolCalls: 0 }, "tool_call_limit"]
+]) test(`opt-in ${name} exhaustion keeps its charge and leaves shared admission open`, async () => {
+  const budget = sharedBudget(); let calls = 0, executed = 0;
+  const r = await runDesktopFixture(directOptions({ requestBudget: budget, inputTokenCounter: inputCounter,
+    isolateCaseLimits: true, limits: { ...limits, ...restriction },
+    tools: [{ ...tool, handler: async () => { executed++; return { balance: 42 }; } }],
+    fetchImpl: async () => { calls++; return directResponse(call()); } }));
+  assert.equal(r.caseLimitIsolated, true); assert.equal(r.status, "aborted");
+  assert.equal(r.stopReason, reason); assert.equal(r.verifiedComplete, false);
+  assert.equal(calls, 1); assert.equal(executed, name === "tool" ? 0 : 1);
+  assert.equal(budget.snapshot().closed, false); assert.equal(budget.snapshot().chargedTokens, 13);
+  assert.equal(budget.snapshot().reservedTokens, 0); assert.equal(budget.snapshot().unknownUsageCalls, 0);
+  budget.reserve({ inputTokens: 10, maxOutputTokens: 1 }).complete({ inputTokens: 10, outputTokens: 1 });
+});
+
+test("isolation cannot leave shared admission open after an unaccounted wall timeout", async () => {
+  const budget = sharedBudget();
+  const r = await runDesktopFixture(directOptions({ requestBudget: budget, inputTokenCounter: inputCounter,
+    isolateCaseLimits: true, limits: { ...limits, maxWallMs: 30 }, fetchImpl: async () => new Promise(() => {}) }));
+  assert.equal(r.caseLimitIsolated, false); assert.equal(r.stopReason, "wall_limit");
+  assert.equal(budget.snapshot().closed, true); assert.equal(budget.snapshot().unknownUsageCalls, 1);
+  assert.equal(budget.snapshot().chargedTokens, 266);
+});
