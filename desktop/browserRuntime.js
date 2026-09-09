@@ -18,6 +18,8 @@ const VISUAL_KEYS = new Set([
 const TAKEOVER_TITLE = "AMOS Secure Browser";
 const MAX_TRANSFER_BYTES = 20 * 1024 * 1024;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 30_000;
+const LAYOUT_VIEWPORTS = Object.freeze([{ width: 1280, height: 800 }, { width: 390, height: 844 }]);
+const LAYOUT_INSPECTION_TIMEOUT_MS = 5_000;
 
 export class DesktopBrowserRuntime {
   constructor({
@@ -225,6 +227,92 @@ export class DesktopBrowserRuntime {
       frame,
       takeover_active: record.userVisible === true
     };
+  }
+
+  async inspectLayout(scope, { sessionId, signal = null } = {}) {
+    const record = this.requireSession(scope, sessionId);
+    assertAgentControl(record);
+    throwIfAborted(signal);
+    const window = record.window;
+    if (typeof window.getContentSize !== "function" || typeof window.setContentSize !== "function") {
+      throw new Error("This browser runtime does not support bounded viewport inspection");
+    }
+    const originalSize = window.getContentSize();
+    if (!Array.isArray(originalSize) || originalSize.length !== 2 || originalSize.some(value => !Number.isInteger(value) || value < 1)) {
+      throw new Error("The browser viewport could not be saved for restoration");
+    }
+    const expectedRevision = record.revision;
+    const deadline = Date.now() + LAYOUT_INSPECTION_TIMEOUT_MS;
+    const wait = promise => boundedLayoutInspection(promise, deadline, signal);
+    const viewports = [];
+    let currentUrl;
+    // This lock also excludes ordinary actions and user takeover until cleanup
+    // restores the window. It never grants control over another task's session.
+    record.layoutInspectionActive = true;
+    try {
+      try {
+        currentUrl = await wait(this.validateRecordTarget(record, window.webContents.getURL(), { allowSensitiveQuery: false }));
+        assertStableRevision(record, expectedRevision);
+        for (const viewport of LAYOUT_VIEWPORTS) {
+          throwIfAborted(signal);
+          assertAgentControl(record, { allowLayoutInspection: true });
+          assertStableRevision(record, expectedRevision);
+          window.setContentSize(viewport.width, viewport.height, false);
+          await wait(delay(75, signal));
+          const raw = await wait(executeIsolated(window.webContents, layoutInspectionScript()));
+          throwIfAborted(signal);
+          assertStableRevision(record, expectedRevision);
+          if (window.webContents.getURL() !== currentUrl.href || raw?.url !== currentUrl.href) {
+            throw new Error("The page changed during layout inspection; take a fresh snapshot");
+          }
+          if (raw.width !== viewport.width || raw.height !== viewport.height) {
+            throw new Error("The browser could not establish the requested layout viewport");
+          }
+          viewports.push(normalizeLayoutObservation(raw, record.localPreviewOrigin));
+        }
+      } finally {
+        try {
+          if (!window.isDestroyed?.()) window.setContentSize(originalSize[0], originalSize[1], false);
+        } finally {
+          // Resizing can move elements even without navigation. Invalidate their
+          // interaction references, including when an inspection was interrupted.
+          record.refs.clear();
+          record.frame = null;
+        }
+      }
+      throwIfAborted(signal);
+      assertAgentControl(record, { allowLayoutInspection: true });
+      assertStableRevision(record, expectedRevision);
+      await wait(delay(75, signal));
+      const finalUrl = await wait(this.validateRecordTarget(record, window.webContents.getURL(), { allowSensitiveQuery: false }));
+      if (finalUrl.href !== currentUrl.href) throw new Error("The page changed while restoring the viewport");
+      const image = await wait(window.webContents.capturePage());
+      assertStableRevision(record, expectedRevision);
+      if (window.webContents.getURL() !== currentUrl.href) throw new Error("The page changed while capturing layout evidence");
+      const frame = this.storeFrame(record, image);
+      return {
+        ok: true,
+        status: "ready",
+        operation: "inspect_layout",
+        session_id: record.id,
+        url: currentUrl.href,
+        title: cleanText(record.title, 300),
+        page_revision: expectedRevision,
+        observed_at: this.now().toISOString(),
+        viewports,
+        frame,
+        element_count: 0,
+        takeover_active: false,
+        summary: "Observed desktop and narrow-screen geometry and form/link structure; restored the original browser viewport.",
+        limitations: [
+          "DOM geometry observations do not establish visual design quality or copy accuracy.",
+          "No links were followed and no forms were submitted; delivery, attribution, and integration behavior remain untested.",
+          "Image state and responsive layout reflect these bounded observations; delayed changes may need another inspection."
+        ]
+      };
+    } finally {
+      record.layoutInspectionActive = false;
+    }
   }
 
   async visualObserve(scope, { sessionId, targetDescription = "", signal = null } = {}) {
@@ -850,12 +938,20 @@ export class DesktopBrowserRuntime {
 
   async startUserTakeover(sessionId) {
     const record = this.requireSessionById(sessionId);
-    if (!record.frame) await this.capture(record);
-    record.userVisible = true;
-    record.window.setTitle?.(takeoverTitle(record.url));
-    record.window.show?.();
-    record.window.focus?.();
-    return takeoverResult(record, this.now(), true);
+    if (record.layoutInspectionActive) {
+      throw new Error("AMOS is finishing a layout check. Try opening this browser again in a moment.");
+    }
+    record.takeoverStarting = true;
+    try {
+      if (!record.frame) await this.capture(record);
+      record.userVisible = true;
+      record.window.setTitle?.(takeoverTitle(record.url));
+      record.window.show?.();
+      record.window.focus?.();
+      return takeoverResult(record, this.now(), true);
+    } finally {
+      record.takeoverStarting = false;
+    }
   }
 
   async finishUserTakeover(sessionId) {
@@ -1251,6 +1347,10 @@ export class DesktopBrowserRuntime {
 
   async capture(record) {
     const image = await record.window.webContents.capturePage();
+    return this.storeFrame(record, image);
+  }
+
+  storeFrame(record, image) {
     const size = image.getSize();
     const buffer = image.toPNG();
     if (!buffer?.length || buffer.length > 8 * 1024 * 1024) {
@@ -1364,6 +1464,128 @@ function executeIsolated(webContents, code) {
     throw new Error("This AMOS Desktop build does not support isolated browser inspection");
   }
   return webContents.executeJavaScriptInIsolatedWorld(ISOLATED_WORLD_ID, [{ code }], false);
+}
+
+function boundedLayoutInspection(promise, deadline, signal) {
+  return new Promise((resolve, reject) => {
+    const abort = () => finish(new Error("Browser operation canceled"));
+    const timeout = setTimeout(() => finish(new Error("The bounded browser layout inspection timed out")), Math.max(1, deadline - Date.now()));
+    function finish(error, value) {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      if (error) reject(error);
+      else resolve(value);
+    }
+    Promise.resolve(promise).then(value => finish(null, value), error => finish(error));
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+function layoutInspectionScript() {
+  return `(() => {
+    const clean = (value, limit = 160) => String(value || '').replace(/\\s+/g, ' ').trim().slice(0, limit);
+    const visible = el => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const allImages = document.querySelectorAll('img');
+    const allLinks = document.querySelectorAll('a[href]');
+    const allForms = document.querySelectorAll('form');
+    const images = Array.from(allImages).slice(0, 200);
+    const links = Array.from(allLinks).slice(0, 60).map(el => {
+      let missingFragment = false;
+      try {
+        const destination = new URL(el.href, location.href);
+        const current = new URL(location.href);
+        if (destination.origin === current.origin && destination.pathname === current.pathname && destination.search === current.search && destination.hash.length > 1) {
+          const fragment = decodeURIComponent(destination.hash.slice(1));
+          if (fragment.toLowerCase() !== 'top' && !fragment.includes(':~:text=')) {
+            missingFragment = !document.getElementById(fragment) && !Array.from(document.getElementsByName(fragment)).some(anchor => anchor.tagName === 'A');
+          }
+        }
+      } catch {}
+      return { label: clean(el.getAttribute('aria-label') || el.textContent), href: String(el.href || '').slice(0, 2048), visible: visible(el), missing_fragment: missingFragment };
+    });
+    const forms = Array.from(allForms).slice(0, 10).map(form => {
+      const controls = form.querySelectorAll('input,textarea,select,button');
+      return {
+        name: clean(form.getAttribute('name') || form.id),
+        method: clean(form.method || 'get', 20).toLowerCase(),
+        action: String(form.action || location.href).slice(0, 2048),
+        visible: visible(form),
+        no_validate: form.noValidate === true,
+        control_count: controls.length,
+        truncated: controls.length > 60,
+        controls: Array.from(controls).slice(0, 60).map(el => ({
+          name: clean(el.getAttribute('name')),
+          type: clean(el.type || el.tagName.toLowerCase(), 40),
+          label: clean(el.getAttribute('aria-label') || Array.from(el.labels || []).map(label => label.textContent).join(' ')),
+          required: el.required === true,
+          disabled: el.disabled === true,
+          visible: visible(el)
+        }))
+      };
+    });
+    const width = window.innerWidth;
+    const documentWidth = Math.max(document.documentElement?.scrollWidth || 0, document.documentElement?.clientWidth || 0, document.body?.scrollWidth || 0);
+    return {
+      url: location.href,
+      width,
+      height: window.innerHeight,
+      document_width: documentWidth,
+      horizontal_overflow_px: Math.max(0, documentWidth - width),
+      images: { total: allImages.length, inspected: images.length, broken: images.filter(el => el.complete && el.naturalWidth === 0).length, pending: images.filter(el => !el.complete).length },
+      links,
+      forms,
+      link_count: allLinks.length,
+      form_count: allForms.length,
+      truncated: allImages.length > 200 || allLinks.length > 60 || allForms.length > 10 || forms.some(form => form.truncated)
+    };
+  })()`;
+}
+
+function normalizeLayoutObservation(raw, localPreviewOrigin) {
+  const observation = {
+    width: boundedInteger(raw.width, 0, 0, 4_000),
+    height: boundedInteger(raw.height, 0, 0, 4_000),
+    document_width: boundedInteger(raw.document_width, 0, 0, 10_000_000),
+    horizontal_overflow_px: boundedInteger(raw.horizontal_overflow_px, 0, 0, 10_000_000),
+    images: Object.fromEntries(["total", "inspected", "broken", "pending"].map(key => [key, boundedInteger(raw.images?.[key], 0, 0, 10_000_000)])),
+    links: (Array.isArray(raw.links) ? raw.links : []).slice(0, 60).map(link => ({
+      label: cleanText(link.label, 160), href: safeObservedHref(link.href, localPreviewOrigin),
+      visible: link.visible === true, missing_fragment: link.missing_fragment === true
+    })),
+    forms: (Array.isArray(raw.forms) ? raw.forms : []).slice(0, 10).map(form => ({
+      name: cleanText(form.name, 160), method: cleanText(form.method, 20),
+      action: safeObservedHref(form.action, localPreviewOrigin), visible: form.visible === true,
+      no_validate: form.no_validate === true, control_count: boundedInteger(form.control_count, 0, 0, 10_000_000),
+      truncated: form.truncated === true,
+      controls: (Array.isArray(form.controls) ? form.controls : []).slice(0, 60).map(control => ({
+        name: cleanText(control.name, 160), type: cleanText(control.type, 40), label: cleanText(control.label, 160),
+        required: control.required === true, disabled: control.disabled === true, visible: control.visible === true
+      }))
+    })),
+    link_count: boundedInteger(raw.link_count, 0, 0, 10_000_000),
+    form_count: boundedInteger(raw.form_count, 0, 0, 10_000_000),
+    truncated: raw.truncated === true
+  };
+  // Preserve geometry and aggregate counts even when a page contains hundreds
+  // of long form labels. Bound model-visible evidence without returning HTML.
+  while (JSON.stringify(observation).length > 16_000) {
+    observation.truncated = true;
+    const form = observation.forms.findLast(item => item.controls.length > 0);
+    if (form) {
+      form.truncated = true;
+      form.controls.length = Math.floor(form.controls.length / 2);
+    } else if (observation.links.length > 0) {
+      observation.links.length = Math.floor(observation.links.length / 2);
+    } else {
+      observation.forms.length = Math.floor(observation.forms.length / 2);
+    }
+  }
+  return observation;
 }
 
 function snapshotScript({ maxElements, maxChars }) {
@@ -2345,9 +2567,12 @@ function delay(milliseconds, signal = null) {
   });
 }
 
-function assertAgentControl(record) {
-  if (record?.userVisible === true) {
+function assertAgentControl(record, { allowLayoutInspection = false } = {}) {
+  if (record?.userVisible === true || record?.takeoverStarting === true) {
     throw new Error("Direct user control is active; return control to AMOS before browser tools continue");
+  }
+  if (record?.layoutInspectionActive && !allowLayoutInspection) {
+    throw new Error("A browser layout inspection is in progress; wait for it to finish before another browser action");
   }
 }
 

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import {
   buildEvidencePack,
   LOCAL_RECEIPT_DIGEST_KEYS,
+  LOCAL_RECEIPT_PUBLIC_KEYS,
   LocalReceiptStore,
   replayLocalReceiptDigest,
   toDesktopLocalItem,
@@ -104,6 +105,80 @@ test("local task receipts are isolated by independently authenticated account", 
   assert.equal(JSON.stringify(await store.list(accountA)).includes("user-a"), false);
   assert.equal(JSON.stringify(await store.list(accountA)).includes("tenant-a"), false);
 });
+
+test("interrupted receipts retain their status and replay through the established evidence shape", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-receipt-outcome-"));
+  const store = receiptOutcomeStore(directory);
+  const receipt = await store.add({
+    status: "completed",
+    executionOutcome: {
+      status: "interrupted", reason: "model_timeout_after_progress", verified: true,
+      detail: "private-token-must-not-export", result: { email: "private@example.test" }
+    },
+    events: Array.from({ length: 250 }, () => ({ type: "tool_end", name: "save", outcome: "completed" }))
+  });
+  assert.equal(receipt.status, "interrupted");
+  assert.equal(receipt.events.length, 200);
+  assert.deepEqual(receipt.events.at(-1), {
+    type: "execution_outcome", name: "model_timeout_after_progress", outcome: "interrupted:unverified"
+  });
+  assert.deepEqual(Object.keys(receipt), LOCAL_RECEIPT_PUBLIC_KEYS);
+  assert.equal(replayLocalReceiptDigest(receipt), receipt.digest);
+  const pack = buildEvidencePack({ localReceipts: [receipt] });
+  const checked = verifyEvidencePack(pack);
+  assert.equal(checked.ok, true, JSON.stringify(checked.errors));
+  assert.equal(checked.items[0].digest, "ok");
+  assert.equal(pack.items[0].status, "interrupted");
+  assert.doesNotMatch(JSON.stringify(pack), /private-token|private@example/);
+  assert.deepEqual((await store.list())[0], receipt);
+});
+
+test("receipts record verification only from explicit execution metadata", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-receipt-verification-"));
+  const store = receiptOutcomeStore(directory);
+  const tools = [{ type: "tool_end", name: "save", outcome: "completed" }];
+  for (const [reason, verified] of [["answer_returned", false], ["verified_delivery", true]]) {
+    const receipt = await store.add({
+      status: "completed", events: tools,
+      executionOutcome: { status: "completed", reason, verified }
+    });
+    assert.equal(receipt.events.at(-1).outcome, `completed:${verified ? "verified" : "unverified"}`);
+    assert.equal(replayLocalReceiptDigest(receipt), receipt.digest);
+  }
+  const legacy = await store.add({ status: "completed", events: tools });
+  assert.deepEqual(legacy.events, tools);
+  assert.equal(Object.hasOwn(legacy, "executionOutcome"), false);
+  assert.equal(replayLocalReceiptDigest(legacy), legacy.digest);
+});
+
+test("receipt outcome reasons cannot carry arbitrary content and cancellations retain the legacy spelling", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "amos-receipt-safe-enum-"));
+  const store = receiptOutcomeStore(directory);
+  const receipt = await store.add({
+    status: "completed",
+    executionOutcome: { status: "cancelled", reason: "private@example.test", verified: true }
+  });
+  assert.equal(receipt.status, "canceled");
+  assert.deepEqual(receipt.events, [{
+    type: "execution_outcome", name: "user_cancelled", outcome: "cancelled:unverified"
+  }]);
+  assert.equal(replayLocalReceiptDigest(receipt), receipt.digest);
+  assert.doesNotMatch(JSON.stringify(receipt), /private@example/);
+  const interrupted = await store.add({ status: "interrupted" });
+  assert.equal(interrupted.status, "interrupted");
+  assert.equal(replayLocalReceiptDigest(interrupted), interrupted.digest);
+});
+
+function receiptOutcomeStore(directory) {
+  let index = 0;
+  return new LocalReceiptStore({
+    filePath: join(directory, "receipts.json"),
+    encrypt: (value) => Buffer.from(value).toString("base64"),
+    decrypt: (value) => Buffer.from(value, "base64").toString("utf8"),
+    createId: () => `receipt-${++index}`,
+    now: () => new Date("2026-09-09T12:00:00.000Z")
+  });
+}
 
 test("evidence pack uses public local shape and platform rows without tool args", async () => {
   const directory = await mkdtemp(join(tmpdir(), "amos-evidence-"));

@@ -1789,6 +1789,8 @@ test("a repeated empty response after tool progress falls back to low-reasoning 
   assert.equal(writes, 1);
   assert.equal(turn, 4);
   assert.deepEqual(requests[3].tools, []);
+  assert.deepEqual(loop.lastOutcome, { status: "interrupted", reason: "empty_response_recovery", verified: false });
+  assert.equal(events.some(event => event.phase === "completed"), false);
   assert.equal(requests[3].reasoningEffortOverride, "low");
   assert.ok(requests[3].messages.some((message) =>
     String(message.content || "").includes("amos_empty_response_recovery")
@@ -1991,6 +1993,7 @@ test("a work-step checkpoint prevents varied tools from running indefinitely", a
   assert.equal(answer, "Here is the bounded result.");
   assert.equal(reads, 2);
   assert.equal(decisions, 1);
+  assert.deepEqual(loop.lastOutcome, { status: "completed", reason: "user_checkpoint", verified: false });
 });
 
 test("a research checkpoint can extend work or remove later timed interruptions", async () => {

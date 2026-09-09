@@ -1389,6 +1389,13 @@ html[data-platform="win32"] .sidebar-toggle {
 .chat-run-status.failed { border-color: rgba(255,117,87,.28); background: rgba(255,117,87,.055); color: var(--danger-text); }
 .chat-run-status.waiting { border-color: rgba(255,202,105,.3); background: rgba(255,202,105,.065); color: var(--warning); }
 .chat-run-status.completed { color: var(--muted-2); }
+.chat-run-progress-detail {
+  flex: 1 1 100%;
+  margin-left: 18px;
+  color: var(--muted-2);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
 .chat-run-dots { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; }
 .chat-run-dots i {
   width: 5px;

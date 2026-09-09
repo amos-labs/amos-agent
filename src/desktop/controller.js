@@ -176,7 +176,11 @@ import {
   sanitizeSettings,
   settingsForProvider
 } from "./settingsStore.js";
-import { createAbortError, isAbortError } from "../util/abort.js";
+import { createAbortError, isAbortError, throwIfAborted } from "../util/abort.js";
+import { normalizeAgentOutcome, agentOutcomeForError } from "../model/agentOutcome.js";
+import { usageEventFromResponse } from "../agentLoop.js";
+import { normalizeMcpToolResult } from "../mcp/amosMcpClient.js";
+import { HostedSiteLifecycle, wantsHostedSiteWork, siteOperation, siteReviewMessages, parseSiteReview } from "./hostedSiteLifecycle.js";
 import { assertSafeAgentPath, resolveWorkspacePath } from "../util/pathSafety.js";
 import {
   resolveTaskWorkflow,
@@ -499,6 +503,7 @@ export class DesktopController {
             intelligenceRole: this.activeTask.intelligenceRole || null,
             intelligence: this.activeTask.intelligence || null,
             codingLifecycle: this.activeTask.codingLifecycle?.state() || null,
+            taskProgress: this.activeTask.taskProgress || null,
             usage: this.activeTask.usage || null
           }
         : null,
@@ -2524,6 +2529,9 @@ export class DesktopController {
       intelligenceRole: input?.role || null,
       intelligence: null,
       codingLifecycle: null,
+      siteLifecycle: null,
+      taskProgress: null,
+      executionOutcome: null,
       missionCreation: input?.missionCreation === true || isMissionBuilderTask(conversationTask),
       missionCreationType: input?.missionCreationType === "optimization"
         ? "optimization"
@@ -2557,6 +2565,7 @@ export class DesktopController {
     });
     const offline = boundary === "offline";
     const company = boundary === "online";
+    this.activeTask.boundary = boundary;
     const receiptEvents = this.activeTask.receiptEvents;
     let modelIdentity = recoveryModelIdentity({ settings });
     try {
@@ -2612,6 +2621,7 @@ export class DesktopController {
           state: this.activeTask.codingLifecycle.state()
         });
       }
+      if (company && !this.activeTask.missionCreation && wantsHostedSiteWork(objective)) this.ensureHostedSiteLifecycle();
       const { config, runtime } = await this.getRuntime({
         requireAmos: company,
         boundary
@@ -2668,7 +2678,7 @@ export class DesktopController {
         }
       }
       const modelContent = this.attachments.buildMessageContent(
-        [workFramePrompt(workFrame), prompt].filter(Boolean).join("\n\n"),
+        [workFramePrompt(workFrame), prompt, this.activeTask.siteLifecycle?.prompt()].filter(Boolean).join("\n\n"),
         references,
         {
           ...config.model.capabilities,
@@ -2685,13 +2695,14 @@ export class DesktopController {
       } else {
         this.record("user", prompt);
       }
-      const answer = await runtime.loop.run(modelContent, {
+      let answer = await runtime.loop.run(modelContent, {
         signal: abortController.signal,
         workflow,
         routingDecision,
         presentationIntent: objective,
         canvasActive: Boolean(this.canvases.state().activeCanvasId),
-        completionGate: (context) => this.runCompletionGate(context),
+        completionGate: (context) => this.runCompletionGate({ ...context, runtime, config, signal: abortController.signal, routingDecision }),
+        toolCallGate: (call) => this.gateHostedSiteToolCall(call, runtime),
         researchCheckpoint: desktopResearchCheckpointPolicy({
           settings,
           input,
@@ -2716,40 +2727,36 @@ export class DesktopController {
           const active = this.activeTask;
           if (!active || active.id !== taskId || active.steeringQueue.length === 0) return [];
           const queued = active.steeringQueue.splice(0);
+          active.siteLifecycle?.applySteering(queued);
           active.steeringCount += queued.length;
           active.phase = "thinking";
           active.summary = "Applying the user's latest direction";
           return queued;
         },
         onEvent: (event) => {
-          const safeEvent = this.annotateUsageEvent(event, this.activeTask);
-          this.runManager.current()?.supervisor?.observe(safeEvent);
-          this.observeMissionCreationEvent(safeEvent);
-          this.send("agent:event", safeEvent);
-          if (safeEvent.type !== "assistant_delta") {
-            receiptEvents.push(receiptEvent(safeEvent));
-            this.activeTask?.episodeEvents?.push(taskEpisodeEvent(safeEvent));
-            this.record(
-              safeEvent.type === "phase" || safeEvent.type === "workflow" ? "task" : "tool",
-              toolEventSummary(safeEvent),
-              safeEvent
-            );
-          }
-          this.captureTaskProgress(safeEvent);
+          this.observeRunEvent(event);
         }
       });
+      throwIfAborted(abortController.signal);
+      const executionOutcome = normalizeAgentOutcome(runtime.loop.lastOutcome || { status: "completed", reason: "answer_returned", verified: false });
+      const interrupted = executionOutcome.status !== "completed";
+      this.activeTask.executionOutcome = executionOutcome;
+      answer = this.activeTask.siteLifecycle?.resultSummary() || answer;
       this.activeTask.acceptingSteering = false;
       this.activeTask.phase = "finalizing";
-      this.activeTask.summary = "Recording the completed result";
+      this.activeTask.summary = interrupted ? "Saving progress for continuation" : "Recording the result";
       await this.checkpointWrites.catch(() => {});
       if (this.activeTask?.checkpointed) {
-        await this.requireTaskCheckpointStore().remove(taskId);
+        if (interrupted) {
+          await this.queueCheckpointUpdate(taskId, { status: "interrupted", phase: "interrupted", summary: "Work paused with completed actions preserved", partialResponse: answer });
+        } else await this.requireTaskCheckpointStore().remove(taskId);
         await this.sendTaskCheckpoints();
       }
-      this.record("assistant", answer);
+      this.record("assistant", answer, { outcome: executionOutcome });
       const localReceipt = await this.recordLocalReceipt({
         taskId,
-        status: "completed",
+        status: interrupted ? "interrupted" : "completed",
+        executionOutcome,
         boundary,
         settings,
         prompt: objective,
@@ -2774,11 +2781,13 @@ export class DesktopController {
       await this.snapshotActiveTask(settings).catch((error) => {
         this.record("task", `Could not snapshot the task canvas: ${error.message}`);
       });
-      await this.recordFirstVerifiedOutcome(settings, receiptEvents, boundary);
-      await this.recordNorthwindValue(settings, receiptEvents);
-      await this.finishRunSupervision("completed", answer);
+      if (!interrupted) {
+        await this.recordFirstVerifiedOutcome(settings, receiptEvents, boundary, executionOutcome);
+        await this.recordNorthwindValue(settings, receiptEvents);
+      }
+      await this.finishRunSupervision(interrupted ? "interrupted" : "completed", answer);
       await this.recordChildOutcome({
-        status: "completed",
+        status: interrupted ? "interrupted" : "completed",
         answer,
         settings,
         error: null
@@ -2786,6 +2795,9 @@ export class DesktopController {
       return {
         answer,
         taskId,
+        outcome: executionOutcome,
+        ...(interrupted ? { interrupted: true, recovery: { reason: executionOutcome.reason, replayed: false } } : {}),
+        taskProgress: this.activeTask.taskProgress || null,
         codingLifecycle: this.activeTask.codingLifecycle?.state() || null,
         taskEventId: continuityRecord?.turns?.at(-1)?.id || `run:${taskId}`,
         activity: this.activity.slice(-100),
@@ -2799,6 +2811,7 @@ export class DesktopController {
       };
     } catch (error) {
       const canceled = isAbortError(error) || abortController.signal.aborted;
+      if (this.activeTask) this.activeTask.executionOutcome = agentOutcomeForError(error, abortController.signal);
       if (canceled && this.activeTask?.detached) {
         // cancelTask already persisted the interruption and released the UI.
         // If an uncooperative provider settles later, do not let the abandoned
@@ -3181,8 +3194,8 @@ export class DesktopController {
       .catch(() => {});
   }
 
-  async recordFirstVerifiedOutcome(settings, receiptEvents, boundary) {
-    if (!this.telemetry) return;
+  async recordFirstVerifiedOutcome(settings, receiptEvents, boundary, executionOutcome = null) {
+    if (!this.telemetry || executionOutcome?.status !== "completed" || executionOutcome?.verified !== true) return;
     const completedToolCount = receiptEvents.filter((event) =>
       event?.type === "tool_end" && event?.outcome === "completed"
     ).length;
@@ -3194,7 +3207,7 @@ export class DesktopController {
         context: {
           surface: "desktop",
           boundary: boundary || settings.onboardingBoundary || "unknown",
-          evidence: "completed_tool_task",
+          evidence: "controller_verified_outcome",
           completed_tool_count: Math.min(completedToolCount, 100)
         }
       })
@@ -5143,8 +5156,15 @@ export class DesktopController {
     startedAt,
     receiptEvents,
     error = null,
-    usage = null
+    usage = null,
+    executionOutcome = null
   }) {
+    const compatibleActiveOutcome = this.activeTask?.executionOutcome?.status === (status === "canceled" ? "cancelled" : status)
+      ? this.activeTask.executionOutcome : null;
+    const normalizedOutcome = normalizeAgentOutcome(executionOutcome || compatibleActiveOutcome || {
+      status: status === "canceled" ? "cancelled" : status,
+      verified: false
+    });
     const model = this.activeTask?.intelligence
       ? `${this.activeTask.intelligence.provider}:${this.activeTask.intelligence.model}`
       : continuityModelIdentity(settings);
@@ -5155,6 +5175,7 @@ export class DesktopController {
         receipt = await this.localReceiptStore.add({
           taskId,
           status,
+          executionOutcome: normalizedOutcome,
           boundary,
           workspace: basename(settings.workspace || homedir()),
           model,
@@ -5178,6 +5199,7 @@ export class DesktopController {
       const episode = await this.taskEpisodeStore?.record({
         taskId,
         status,
+        executionOutcome: normalizedOutcome,
         boundary,
         model,
         objective: prompt,
@@ -6058,6 +6080,7 @@ export class DesktopController {
           : ""}`,
         extraTools,
         onToolResult: (outcome) => {
+          this.observeHostedSiteToolOutcome(outcome);
           if (
             this.activeTask?.missionCreation &&
             (
@@ -7164,7 +7187,118 @@ export class DesktopController {
     return lifecycle.completionGate();
   }
 
-  runCompletionGate({ answer = "" } = {}) {
+  observeRunEvent(event) {
+    const active = this.activeTask;
+    if (!active) return;
+    const safeEvent = this.annotateUsageEvent(event, active);
+    if (safeEvent.type === "task_progress") active.taskProgress = safeEvent;
+    if (safeEvent.type === "agent_outcome") active.executionOutcome = normalizeAgentOutcome(safeEvent.outcome);
+    this.runManager.current()?.supervisor?.observe(safeEvent);
+    this.observeMissionCreationEvent(safeEvent);
+    this.send("agent:event", safeEvent);
+    if (safeEvent.type !== "assistant_delta") {
+      active.receiptEvents.push(receiptEvent(safeEvent));
+      active.episodeEvents.push(taskEpisodeEvent(safeEvent));
+      this.record(["phase", "workflow", "task_progress"].includes(safeEvent.type) ? "task" : "tool", toolEventSummary(safeEvent), safeEvent);
+    }
+    this.captureTaskProgress(safeEvent);
+  }
+
+  ensureHostedSiteLifecycle() {
+    const active = this.activeTask;
+    if (!active || active.boundary !== "online" || active.missionCreation || active.codingLifecycle) return null;
+    if (!active.siteLifecycle) active.siteLifecycle = new HostedSiteLifecycle({
+      taskId: active.id,
+      tenantId: this.identity?.tenant_id || "",
+      objective: active.objective,
+      emit: event => this.observeRunEvent(event)
+    });
+    return active.siteLifecycle;
+  }
+
+  gateHostedSiteToolCall(call, runtime) {
+    const remoteName = runtime?.registry?.tools?.get(call.name)?.remoteName || "";
+    const operation = siteOperation(call.name, call.args, remoteName);
+    const lifecycle = ["put_site", "put_site_files"].includes(operation.name)
+      ? this.ensureHostedSiteLifecycle() : this.activeTask?.siteLifecycle;
+    return lifecycle?.beforeTool({ ...call, remoteName }) || { allow: true };
+  }
+
+  observeHostedSiteToolOutcome(outcome) {
+    const remoteName = this.runtime?.runtime?.registry?.tools?.get(outcome.name)?.remoteName || "";
+    const operation = siteOperation(outcome.name, outcome.args, remoteName);
+    const lifecycle = ["put_site", "put_site_files"].includes(operation.name)
+      ? this.ensureHostedSiteLifecycle() : this.activeTask?.siteLifecycle;
+    lifecycle?.observe({ ...outcome, remoteName });
+  }
+
+  async completeHostedSite({ runtime, config, signal, routingDecision }) {
+    const lifecycle = this.activeTask.siteLifecycle;
+    const completion = await lifecycle.completionGate({
+      signal,
+      inspect: this.browserRuntime?.inspectLayout ? async ({ preview }) => {
+        throwIfAborted(signal);
+        const scope = desktopBrowserScope({ identity: this.identity, boundary: "online", taskId: this.activeTaskRecordId || this.activeContextKey || "active" });
+        const opened = await this.browserRuntime.open(scope, { url: preview, signal });
+        const result = await this.browserRuntime.inspectLayout(scope, { sessionId: opened.session_id, signal });
+        throwIfAborted(signal);
+        await this.presentBrowserSession({ operation: "inspect_layout", ...result });
+        this.observeRunEvent({ type: "tool_end", name: "browser_inspect_layout", result, executionMode: "artifact_check" });
+        return result;
+      } : null,
+      read: async (name, args) => {
+        // These two fixed Platform operations were reviewed as tenant-scoped
+        // reads. No model-selected operation, publication or lead submission.
+        if (!["site_status", "validate_site_lead_form"].includes(name)) throw new Error("Unsupported site review read");
+        throwIfAborted(signal);
+        this.observeRunEvent({ type: "tool_start", name: `amos_${name}`, args, executionMode: "artifact_check" });
+        try {
+          const result = normalizeMcpToolResult(await runtime.amosClient.callTool(name, args, { signal }));
+          throwIfAborted(signal);
+          this.observeRunEvent({ type: "tool_end", name: `amos_${name}`, result, executionMode: "artifact_check" });
+          return result;
+        } catch (error) {
+          this.observeRunEvent({ type: "tool_error", name: `amos_${name}`, error: signal?.aborted ? "Review interrupted" : "Site review read unavailable" });
+          throw error;
+        }
+      },
+      review: async input => {
+        const messages = siteReviewMessages(input);
+        const contextTokens = Number(config?.model?.contextTokens || 32_768);
+        if (JSON.stringify(messages).length / 3 + Number(config?.model?.maxCompletionTokens || 4096) + 1024 > contextTokens) {
+          throw new Error("The complete site source exceeds this model's bounded review context");
+        }
+        const started = Date.now();
+        const reviewSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000);
+        const recordReviewUsage = (usage, rejected = false) => {
+          const event = { ...usageEventFromResponse(usage, 0), stage: "artifact_review", responseRejected: rejected, latencyMs: Date.now() - started };
+          this.observeRunEvent(event);
+          this.observeRunEvent({ ...event, type: "model_call", provider: config?.model?.provider || "", toolCallCount: 0 });
+        };
+        let response;
+        try {
+          response = await runtime.modelClient.chat({
+            messages, tools: [], signal: reviewSignal,
+            preclassifiedRouting: routingDecision,
+            onRoutingDecision: decision => this.observeRunEvent({ type: "routing", ...decision })
+          });
+        } catch (error) {
+          if (error?.usage) recordReviewUsage(error.usage, true);
+          throw error;
+        }
+        recordReviewUsage(response.usage || {});
+        throwIfAborted(reviewSignal);
+        return parseSiteReview(response);
+      }
+    });
+    if (completion.allow && lifecycle.resultSummary()) completion.answer = lifecycle.resultSummary();
+    return completion;
+  }
+
+  runCompletionGate({ answer = "", ...context } = {}) {
+    if (this.activeTask?.siteLifecycle && !this.activeTask?.codingLifecycle && !this.activeTask?.missionCreation) {
+      return this.completeHostedSite(context);
+    }
     const coding = this.codingLifecycleCompletionGate();
     if (coding?.allow === false) return coding;
     if (!this.activeTask?.missionCreation || this.activeTask.missionCreationObserved) {
@@ -8816,6 +8950,8 @@ function conversationForkUnavailableMessage(reason) {
 }
 
 function receiptEvent(event) {
+  if (event.type === "agent_outcome") return { type: "execution_outcome", name: event.outcome?.reason, outcome: event.outcome?.status };
+  if (event.type === "task_progress") return { type: "task_progress", name: event.stage, outcome: event.summary };
   if (event.type === "workflow") {
     return {
       type: "workflow",

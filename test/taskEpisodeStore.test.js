@@ -122,3 +122,70 @@ test("non-outcome task episodes are explicitly blocked from export", async () =>
   assert.equal(recorded.episode.outcome.outcomeBearing, false);
   assert.ok(recorded.episode.dataPolicy.exportBlockers.includes("not-an-outcome-bearing-task"));
 });
+
+test("task episodes separate successful tool execution from independent verification", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-task-verification-"));
+  const store = new DesktopTaskEpisodeStore({ rootPath: root });
+  const toolEvent = taskEpisodeEvent({ type: "tool_end", name: "save", result: { ok: true } }, {
+    at: "2026-09-09T10:00:01.000Z"
+  });
+  const cases = [
+    { id: "answer", events: [], reason: "answer_returned", verified: false, bearing: false },
+    { id: "tool-only", events: [toolEvent], reason: "answer_returned", verified: false, bearing: true },
+    { id: "checked", events: [toolEvent], reason: "verified_delivery", verified: true, bearing: true }
+  ];
+  for (const item of cases) {
+    const input = {
+      taskId: item.id, status: "completed", events: item.events,
+      startedAt: "2026-09-09T10:00:00.000Z", finishedAt: "2026-09-09T10:01:00.000Z",
+      executionOutcome: { status: "completed", reason: item.reason, verified: item.verified }
+    };
+    const recorded = await store.record(input);
+    assert.equal(recorded.episode.outcome.outcomeBearing, item.bearing);
+    assert.equal(recorded.episode.outcome.verified, item.verified);
+    assert.deepEqual(recorded.episode.outcome.executionOutcome, input.executionOutcome);
+    assert.equal(recorded.episode.dataPolicy.exportEligible, false);
+    assert.ok(recorded.episode.dataPolicy.exportBlockers.includes("training-consent-not-recorded"));
+    assert.equal((await store.record(input)).episodeDigest, recorded.episodeDigest);
+  }
+});
+
+test("interrupted task metadata overrides a stale completed status without exporting raw content", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-task-interrupted-metadata-"));
+  const store = new DesktopTaskEpisodeStore({ rootPath: root });
+  const recorded = await store.record({
+    taskId: "interrupted-task", status: "completed",
+    startedAt: "2026-09-09T10:00:00.000Z", finishedAt: "2026-09-09T10:01:00.000Z",
+    events: [taskEpisodeEvent({ type: "tool_end", name: "save", result: { ok: true } })],
+    executionOutcome: {
+      status: "interrupted", reason: "private-reason-token", verified: true,
+      evidence: { content: "private-page-content" }, prompt: "private-prompt"
+    }
+  });
+  assert.equal(recorded.episode.outcome.status, "interrupted");
+  assert.equal(recorded.episode.outcome.outcomeBearing, false);
+  assert.equal(recorded.episode.outcome.verified, false);
+  assert.deepEqual(recorded.episode.outcome.executionOutcome, {
+    status: "interrupted", reason: "incomplete", verified: false
+  });
+  assert.doesNotMatch(await readFile(recorded.filePath, "utf8"), /private-reason-token|private-page-content|private-prompt/);
+  assert.equal(recorded.episode.dataPolicy.exportEligible, false);
+});
+
+test("legacy task episodes keep their digest shape and cancellation metadata uses the existing terminal spelling", async () => {
+  const root = await mkdtemp(join(tmpdir(), "amos-task-outcome-compatibility-"));
+  const store = new DesktopTaskEpisodeStore({ rootPath: root });
+  const common = {
+    startedAt: "2026-09-09T10:00:00.000Z", finishedAt: "2026-09-09T10:01:00.000Z",
+    status: "completed", events: []
+  };
+  const legacy = await store.record({ ...common, taskId: "legacy" });
+  assert.deepEqual(Object.keys(legacy.episode.outcome), ["status", "outcomeBearing", "errorSha256"]);
+  assert.equal((await store.record({ ...common, taskId: "legacy" })).episodeDigest, legacy.episodeDigest);
+  const canceled = await store.record({
+    ...common, taskId: "canceled",
+    executionOutcome: { status: "cancelled", reason: "user_cancelled", verified: true }
+  });
+  assert.equal(canceled.episode.outcome.status, "canceled");
+  assert.equal(canceled.episode.outcome.verified, false);
+});

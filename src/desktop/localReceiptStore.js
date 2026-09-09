@@ -6,6 +6,7 @@ import {
   MAX_PLATFORM_EVIDENCE_ITEMS
 } from "./memoryContract.js";
 import { clean } from "../util/validate.js";
+import { normalizeAgentOutcome } from "../model/agentOutcome.js";
 
 const VERSION = 1;
 const MAX_RECEIPTS = 500;
@@ -118,9 +119,23 @@ export class LocalReceiptStore {
 }
 
 function normalizeReceipt(input) {
-  const status = ["completed", "failed", "canceled"].includes(input.status)
-    ? input.status
+  const executionOutcome = input.executionOutcome == null
+    ? null : normalizeAgentOutcome(input.executionOutcome);
+  const rawStatus = executionOutcome?.status || input.status;
+  const status = rawStatus === "cancelled" ? "canceled" : LOCAL_STATUSES.has(rawStatus)
+    ? rawStatus
     : "failed";
+  const events = Array.isArray(input.events) ? input.events : [];
+  // Keep the established digest/public key lists unchanged. New outcome
+  // metadata lives in an existing, hashed event with only controlled enums.
+  // Reserve a slot so a long task cannot truncate its terminal assessment.
+  const receiptEvents = executionOutcome
+    ? [...events.filter((event) => event?.type !== "execution_outcome").slice(0, 199), {
+        type: "execution_outcome",
+        name: executionOutcome.reason,
+        outcome: `${executionOutcome.status}:${executionOutcome.verified ? "verified" : "unverified"}`
+      }]
+    : events;
   return {
     id: String(input.id),
     taskId: String(input.taskId || "").slice(0, 128),
@@ -133,8 +148,8 @@ function normalizeReceipt(input) {
     objective: String(input.objective || "").slice(0, 500),
     startedAt: String(input.startedAt || ""),
     finishedAt: String(input.finishedAt || ""),
-    events: Array.isArray(input.events)
-      ? input.events.slice(0, 200).map((event) => ({
+    events: receiptEvents.length
+      ? receiptEvents.slice(0, 200).map((event) => ({
           type: String(event.type || "").slice(0, 80),
           name: String(event.name || "").slice(0, 160),
           outcome: String(event.outcome || "").slice(0, 160)
@@ -207,7 +222,7 @@ export const LOCAL_RECEIPT_PUBLIC_KEYS = Object.freeze([
   "digest"
 ]);
 
-const LOCAL_STATUSES = new Set(["completed", "failed", "canceled"]);
+const LOCAL_STATUSES = new Set(["completed", "failed", "canceled", "interrupted"]);
 const LOCAL_BOUNDARIES = new Set(["online", "personal", "offline"]);
 const PLATFORM_AGENCIES = new Set([
   "human_directed",
@@ -438,7 +453,7 @@ function verifyDesktopLocalItem(item, index) {
   requireString(item.id, `${prefix}.id`, errors, { nonempty: true });
   requireString(item.taskId, `${prefix}.taskId`, errors);
   if (!LOCAL_STATUSES.has(item.status)) {
-    errors.push(`${prefix}.status must be completed, failed, or canceled`);
+    errors.push(`${prefix}.status must be completed, failed, canceled, or interrupted`);
   }
   if (!LOCAL_BOUNDARIES.has(item.boundary)) {
     errors.push(`${prefix}.boundary must be online, personal, or offline`);

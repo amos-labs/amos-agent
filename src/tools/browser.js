@@ -385,6 +385,23 @@ export function createBrowserTools({
         signal: context.signal
       }))
     },
+    ...(typeof browser.inspectLayout === "function" ? [{
+      name: "browser_inspect_layout",
+      source: "desktop-local",
+      readOnly: true,
+      parallelSafe: false,
+      description: "Inspect the current task browser at desktop and mobile widths for horizontal overflow, broken images, link targets and form structure. Restores the original viewport. Reads no field values, submits nothing and does not certify visual design or delivered leads.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        required: ["session_id"],
+        properties: { session_id: SESSION_ID }
+      },
+      handler: run("inspect_layout", (args, context, currentScope) => browser.inspectLayout(currentScope, {
+        sessionId: args.session_id,
+        signal: context.signal
+      }))
+    }] : []),
     {
       name: "browser_screenshot",
       source: "desktop-local",
