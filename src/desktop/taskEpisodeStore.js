@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, open, readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { normalizeAgentOutcome } from "../model/agentOutcome.js";
 
 export const DESKTOP_TASK_EPISODE_SCHEMA = "amos.desktop-task-episode";
 export const DESKTOP_TASK_EPISODE_VERSION = 1;
@@ -31,7 +32,10 @@ export class DesktopTaskEpisodeStore {
 
   async record(input = {}) {
     const taskId = boundedId(input.taskId, "taskId");
-    const status = String(input.status || "");
+    const executionOutcome = input.executionOutcome == null
+      ? null : normalizeAgentOutcome(input.executionOutcome);
+    const rawStatus = executionOutcome?.status || String(input.status || "");
+    const status = rawStatus === "cancelled" ? "canceled" : rawStatus;
     if (!TERMINAL_STATUSES.has(status)) throw new Error("Unsupported Desktop task status");
     const events = (Array.isArray(input.events) ? input.events : [])
       .slice(0, 10_000)
@@ -55,7 +59,15 @@ export class DesktopTaskEpisodeStore {
       outcome: {
         status,
         outcomeBearing,
-        errorSha256: input.error ? digestValue(String(input.error)) : null
+        errorSha256: input.error ? digestValue(String(input.error)) : null,
+        // outcomeBearing retains its historical meaning: a completed task
+        // with successful tool execution. It is NOT independent verification.
+        // Optional metadata preserves immutable digests for legacy replays;
+        // absent verified must always be treated as unverified by consumers.
+        ...(executionOutcome ? {
+          executionOutcome,
+          verified: executionOutcome.verified
+        } : {})
       },
       events,
       dataPolicy: {

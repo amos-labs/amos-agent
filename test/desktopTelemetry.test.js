@@ -169,7 +169,7 @@ test("anonymous events never carry a bearer token, even when flushed with an aut
   assert.ok(!raw.includes("should-not-be-sent"));
 });
 
-test("Desktop records first verified value only for a completed tool-backed task", async () => {
+test("Desktop records verified value only for a controller-verified completed task", async () => {
   const calls = [];
   const controller = new DesktopController({
     userDataPath: "/tmp/amos-desktop-first-value-controller",
@@ -199,13 +199,20 @@ test("Desktop records first verified value only for a completed tool-backed task
     "personal"
   );
 
+  assert.equal(calls.length, 0);
+  await controller.recordFirstVerifiedOutcome(
+    { amosMcpUrl: "https://app.amoslabs.com/mcp" },
+    [{ type: "tool_end", name: "read_file", outcome: "completed" }],
+    "personal",
+    { status: "completed", reason: "verified_delivery", verified: true }
+  );
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], "desktop_first_verified_outcome");
   assert.equal(calls[0][1].once, true);
   assert.deepEqual(calls[0][1].context, {
     surface: "desktop",
     boundary: "personal",
-    evidence: "completed_tool_task",
+    evidence: "controller_verified_outcome",
     completed_tool_count: 1
   });
 });

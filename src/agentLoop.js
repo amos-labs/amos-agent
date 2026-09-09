@@ -51,6 +51,7 @@ import {
   canonicalizeMessageToolCalls
 } from "./model/protocol.js";
 import { boundedInteger } from "./util/validate.js";
+import { agentOutcomeForError, guardedAgentOutcome, normalizeAgentOutcome } from "./model/agentOutcome.js";
 
 const DEFAULT_COMPLETED_HISTORY_LIMIT = 96;
 const MAX_LIVE_TRANSCRIPT_MESSAGES = 800;
@@ -116,6 +117,7 @@ export class AgentLoop {
     this.onToolResult = onToolResult;
     this.now = now;
     this.lastWorkflow = null;
+    this.lastOutcome = null;
     this.lastContextReceipt = null;
     this.lastContextPlan = null;
     this.activeTaskMessage = null;
@@ -145,6 +147,7 @@ export class AgentLoop {
 
   clear() {
     this.lastWorkflow = null;
+    this.lastOutcome = null;
     this.lastContextReceipt = null;
     this.lastContextPlan = null;
     this.activeTaskMessage = null;
@@ -263,11 +266,16 @@ export class AgentLoop {
       presentationIntent = null,
       canvasActive = false,
       completionGate = null,
+      toolCallGate = null,
       promptSession = null,
       researchCheckpoint = null
     } = {}
   ) {
-    throwIfAborted(signal);
+    this.lastOutcome = null;
+    if (signal?.aborted) {
+      this.recordOutcome(agentOutcomeForError(null, signal), onEvent, 0);
+      throwIfAborted(signal);
+    }
     this.configurePromptSession(promptSession);
     const incomingText = userMessageText(userContent);
     this.workingObjective = selectWorkingObjective(this.workingObjective, incomingText);
@@ -321,8 +329,8 @@ export class AgentLoop {
     this.messages.push(taskMessage);
     this.activeTaskMessage = taskMessage;
 
+    let turn = 0;
     try {
-      let turn = 0;
       let previousToolPlanFingerprint = null;
       let repeatedToolPlanCycles = 0;
       let recentToolPlanFingerprints = [];
@@ -531,12 +539,6 @@ export class AgentLoop {
             error.completedToolActions = completedToolActions;
             error.failedToolActions = failedToolActions;
             error.partialResponse = partialResponse;
-            onEvent({
-              type: "phase",
-              phase: "interrupted",
-              turn,
-              summary: `The model stopped responding after ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}; completed work remains intact`
-            });
           } else if (completedToolActions > 0 && isTransientModelFailure(error)) {
             // Retries are exhausted for a transient failure after completed tool
             // work. Surface the same recoverable-progress contract as a timeout
@@ -546,12 +548,6 @@ export class AgentLoop {
             error.completedToolActions = completedToolActions;
             error.failedToolActions = failedToolActions;
             error.partialResponse = partialResponse;
-            onEvent({
-              type: "phase",
-              phase: "interrupted",
-              turn,
-              summary: `The model stopped responding after ${completedToolActions} completed tool action${completedToolActions === 1 ? "" : "s"}; completed work remains intact`
-            });
           }
           throw error;
         }
@@ -677,16 +673,29 @@ export class AgentLoop {
               text: partialResponse
             });
           }
+          let completionOutcome = { status: "completed", reason: "answer_returned", verified: false };
+          let finalAnswer = assistantMessage.content || "";
           if (typeof completionGate === "function") {
             const completion = await completionGate({
               answer: assistantMessage.content || "",
               turn
             });
+            throwIfAborted(signal);
+            // An independent check may take long enough for the user to steer.
+            // Its verdict belongs to the earlier brief; accept new direction
+            // before emitting a terminal outcome or applying its answer.
+            if (await this.applySteering(takeSteering, onEvent, turn) > 0) {
+              resetProgressGuards();
+              rejectedCompletions = 0;
+              turn += 1;
+              continue;
+            }
             if (completion?.allow === false) {
               rejectedCompletions += 1;
               onEvent({
-                type: "coding_lifecycle",
+                type: completion?.type || "coding_lifecycle",
                 phase: "stage_result_required",
+                ...(completion?.stage ? { stage: completion.stage } : {}),
                 turn,
                 summary: String(
                   completion?.summary || "A structured coding-stage result is required before completion"
@@ -712,9 +721,19 @@ export class AgentLoop {
               turn += 1;
               continue;
             }
+            if (completion?.outcome) completionOutcome = completion.outcome;
+            if (typeof completion?.answer === "string" && completion.answer !== finalAnswer) {
+              finalAnswer = completion.answer;
+              this.messages[this.messages.length - 1] = { ...assistantMessage, content: finalAnswer };
+              onEvent({ type: "assistant_delta", turn, delta: "", text: finalAnswer });
+            }
           }
-          onEvent({ type: "phase", phase: "completed", turn, summary: "Task completed" });
-          return assistantMessage.content || "";
+          this.recordOutcome(completionOutcome, onEvent, turn);
+          onEvent({
+            type: "phase", phase: this.lastOutcome.status, turn,
+            summary: this.lastOutcome.status === "completed" ? "Task completed" : "Draft preserved with unfinished checks"
+          });
+          return finalAnswer;
         }
 
         const outcomes = [];
@@ -727,6 +746,23 @@ export class AgentLoop {
         const executeCall = async (call) => {
           throwIfAborted(signal);
           const startedAt = Date.now();
+          if (typeof toolCallGate === "function") {
+            const gate = await toolCallGate({ name: call.name, args: call.args });
+            throwIfAborted(signal);
+            if (gate?.allow === false) {
+              const result = {
+                ok: false,
+                code: "AMOS_TOOL_CALL_GATED",
+                error: String(gate.message || "This action needs a changed plan before it can run.").slice(0, 4_000),
+                not_executed: true
+              };
+              onEvent({
+                type: "tool_error", name: call.name, error: result.error,
+                durationMs: Date.now() - startedAt, executionMode: "not_executed"
+              });
+              return { ...call, result, failed: true };
+            }
+          }
           const landedFingerprint = connectorWriteFingerprint(call.name, call.args);
           if (
             landedFingerprint
@@ -941,7 +977,7 @@ export class AgentLoop {
             escalatedRoutingClass: escalatedRouting.minimumClass,
             summary: `No-progress guard escalated synthesis to ${escalatedRouting.minimumClass}`
           });
-          return this.summarizeGuardedStop(guardReason, {
+          return await this.summarizeGuardedStop(guardReason, {
             onEvent,
             signal,
             turn,
@@ -969,7 +1005,7 @@ export class AgentLoop {
             checkpointReason
           });
           if (checkpoint.action === "synthesize") {
-            return this.summarizeResearchCheckpoint({
+            return await this.summarizeResearchCheckpoint({
               onEvent,
               signal,
               turn,
@@ -987,9 +1023,23 @@ export class AgentLoop {
         }
         turn += 1;
       }
+    } catch (error) {
+      this.recordOutcome(agentOutcomeForError(error, signal), onEvent, turn);
+      onEvent({
+        type: "phase", phase: this.lastOutcome.status, turn,
+        summary: this.lastOutcome.status === "interrupted"
+          ? "Task interrupted; completed work remains intact"
+          : this.lastOutcome.status === "cancelled" ? "Task canceled" : "Task could not finish"
+      });
+      throw error;
     } finally {
       this.activeTaskMessage = null;
     }
+  }
+
+  recordOutcome(outcome, onEvent, turn) {
+    this.lastOutcome = normalizeAgentOutcome(outcome);
+    onEvent({ type: "agent_outcome", turn, outcome: this.lastOutcome });
   }
 
   activateWorkflowToolkits(workflow) {
@@ -1826,6 +1876,7 @@ export class AgentLoop {
       turn: turn + 1,
       phaseSummary: "Synthesizing the evidence collected so far",
       completionSummary: "Task completed at the user's research checkpoint",
+      outcome: { status: "completed", reason: "user_checkpoint", verified: false },
       instruction: [
         "<amos_research_checkpoint_synthesis>",
         "The user chose to synthesize now.",
@@ -1853,7 +1904,8 @@ export class AgentLoop {
       turn: turn + 1,
       reasoningEffortOverride: "low",
       phaseSummary: "The provider returned no final answer; recovering from completed work",
-      completionSummary: "Recovered an evidence-backed result without replaying completed work",
+      completionSummary: "Progress preserved after an incomplete model response",
+      outcome: { status: "interrupted", reason: "empty_response_recovery", verified: false },
       instruction: [
         "<amos_empty_response_recovery>",
         "A prior provider response contained no user-visible text or tool call.",
@@ -1876,6 +1928,7 @@ export class AgentLoop {
     instruction,
     phaseSummary,
     completionSummary,
+    outcome = { status: "completed", reason: "answer_returned", verified: false },
     reasoningEffortOverride = null
   }) {
     throwIfAborted(signal);
@@ -1927,9 +1980,10 @@ export class AgentLoop {
     onEvent(usageEventFromResponse(response.usage, turn));
     throwIfAborted(signal);
     this.messages.push(response.message);
+    this.recordOutcome(outcome, onEvent, turn);
     onEvent({
       type: "phase",
-      phase: "completed",
+      phase: this.lastOutcome.status,
       turn,
       summary: completionSummary
     });
@@ -2013,9 +2067,10 @@ export class AgentLoop {
     onEvent(usageEventFromResponse(response.usage, turn + 1));
     throwIfAborted(signal);
     this.messages.push(response.message);
+    this.recordOutcome(guardedAgentOutcome(reason), onEvent, turn + 1);
     onEvent({
       type: "phase",
-      phase: "completed",
+      phase: "interrupted",
       turn: turn + 1,
       summary: "Task paused with an evidence-backed result"
     });
@@ -2228,7 +2283,7 @@ export function shouldUseGatherReasoning({
   return continuingGather;
 }
 
-function usageEventFromResponse(usage, turn) {
+export function usageEventFromResponse(usage, turn) {
   const inputTokens = Number(
     usage?.input_tokens ?? usage?.prompt_tokens ?? 0
   );

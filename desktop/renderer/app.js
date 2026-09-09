@@ -1,6 +1,7 @@
 import { shouldSubmitPrompt } from "../../src/desktop/input.js";
 import { parseMarkdown } from "../../src/desktop/markdown.js";
 import { runInterruptionMessage } from "../../src/desktop/runOutcome.js";
+import { taskProgressFromEvent, taskProgressStatus } from "../../src/desktop/taskProgress.js";
 import {
   AUTOMATION_SETUP_PHASES,
   compileAutomationMappings,
@@ -136,6 +137,7 @@ let canvasSidecarOpen = false;
 let panelUserClosed = false;
 let currentPanelTab = "activity";
 let runTerminalState = "idle";
+let taskProgress = null;
 let activeUiRunToken = 0;
 let pendingUiActions = [];
 let pendingGenericConnectCalls = 0;
@@ -196,7 +198,7 @@ const elements = Object.fromEntries(
     "conversation", "conversationHeading", "welcomeMessage",
     "connectSystemsPush", "connectSystemsPushButton", "savingsAuditButton",
     "messages", "promptForm", "promptInput", "runButton", "cancelButton", "liveEvents",
-    "chatRunStatus", "chatRunStatusText", "chatRunThoughtSnippet", "chatRunActivityButton",
+    "chatRunStatus", "chatRunStatusText", "chatRunProgressDetail", "chatRunThoughtSnippet", "chatRunActivityButton",
     "newConversationButton", "forkConversationButton", "composerProjectChip",
     "sidebarToggle", "operatorGrid", "activityStream", "activityStreamTitle",
     "canvasSidecar", "contextResizeHandle", "panelActivityTab", "panelCanvasTab",
@@ -304,6 +306,7 @@ async function initialize() {
   [state, updateState] = await Promise.all([api.state(), api.updateState()]);
   currentTaskId = state.activeTask?.id || null;
   running = Boolean(state.activeTask);
+  hydrateActiveTaskProgress();
   updateAttachments(state.attachments || []);
   selectedProvider = state.settings.provider;
   canvasSidecarOpen = Boolean(state.activeCanvasId);
@@ -5402,6 +5405,7 @@ function adoptOpenedTask(response) {
   state = response.state;
   currentTaskId = state.activeTask?.id || null;
   running = Boolean(state.activeTask);
+  hydrateActiveTaskProgress();
   streamingMessage = null;
   continuityConversationRestored = false;
   activeCanvasId = state.activeCanvasId || null;
@@ -11172,7 +11176,9 @@ async function runTask(event, options = {}) {
       runTerminalState = "interrupted";
       toast(runInterruptionMessage(result), true);
     } else {
-      runTerminalState = "completed";
+      runTerminalState = ["failed", "cancelled"].includes(result.outcome?.status)
+        ? result.outcome.status === "cancelled" ? "interrupted" : "failed"
+        : "completed";
     }
     renderGovernedUiActions();
     state.activity = result.activity;
@@ -11285,15 +11291,37 @@ function clearTransientTaskMessages() {
 }
 
 async function cancelTask() {
-  if (!running) return;
+  if (!running || elements.cancelButton.disabled) return;
+  const requestedRunId = currentTaskId;
+  const requestedUiToken = activeUiRunToken;
+  const requestedTask = {
+    taskRecordId: String(state?.activeTaskRecordId || state?.tasks?.activeTaskId || ""),
+    contextKey: String(state?.activeContextKey || "active")
+  };
+  const stillSameRun = () => (
+    running && requestedUiToken === activeUiRunToken &&
+    (!requestedRunId || requestedRunId === currentTaskId) &&
+    eventMatchesActiveTask(requestedTask)
+  );
+  let stopAccepted = false;
   elements.cancelButton.disabled = true;
   elements.cancelButton.textContent = "Stopping…";
   try {
-    const result = await api.cancelTask(currentTaskId);
-    if (!result.canceled) toast(result.message || "No task is running.");
-    else if (result.detached) finishCanceledRunInUi(result.taskId);
+    const result = await api.cancelTask(requestedRunId);
+    if (!stillSameRun()) return;
+    stopAccepted = result?.canceled === true;
+    if (!stopAccepted) {
+      toast(result?.message || "Stop was not confirmed. You can try Stop safely again.", true);
+    } else if (result.detached) finishCanceledRunInUi(result.taskId);
   } catch (error) {
-    toast(error.message, true);
+    if (stillSameRun()) toast(`Could not stop this run: ${error.message}. You can try Stop safely again.`, true);
+  } finally {
+    // A rejected IPC request is not a stopped run. A late response belongs to
+    // its original run and must not alter a newer run's controls or status.
+    if (!stopAccepted && stillSameRun()) {
+      elements.cancelButton.disabled = false;
+      elements.cancelButton.textContent = "Stop safely";
+    }
   }
 }
 
@@ -11325,6 +11353,7 @@ function finishCanceledRunInUi(canceledRunId = "") {
 }
 
 function resetSessionView() {
+  activeUiRunToken += 1;
   continuityConversationRestored = false;
   state.sessionContinuity = null;
   state.workingContinuity = null;
@@ -11347,6 +11376,9 @@ function resetSessionView() {
   panelUserClosed = false;
   currentPanelTab = "activity";
   runTerminalState = "idle";
+  taskProgress = null;
+  elements.chatRunProgressDetail.textContent = "";
+  elements.chatRunProgressDetail.classList.add("hidden");
   setPanelBadge("");
   renderCanvas();
   renderStarterActions();
@@ -11655,6 +11687,9 @@ function approvalIdFromUrl(value) {
 }
 
 function beginInlineActivity() {
+  taskProgress = null;
+  elements.chatRunProgressDetail.textContent = "";
+  elements.chatRunProgressDetail.classList.add("hidden");
   pendingUiActions = [];
   pendingGenericConnectCalls = 0;
   runTerminalState = "running";
@@ -11681,6 +11716,13 @@ function finishInlineActivity(status = runTerminalState) {
       : "Activity";
   elements.runningIndicator.textContent = `${count} recorded event${count === 1 ? "" : "s"}`;
   elements.runningIndicator.classList.remove("active");
+  const progress = taskProgressStatus(taskProgress);
+  if (!failed && !interrupted && progress?.terminal) {
+    renderTaskProgress();
+    hideInlineThoughtSnippet();
+    setPanelBadge(progress.status === "waiting" ? "waiting" : activeCanvasId ? "artifact" : "");
+    return;
+  }
   updateChatRunStatus(
     failed
       ? `Run stopped · ${count} recorded event${count === 1 ? "" : "s"}`
@@ -11765,6 +11807,29 @@ function updateChatRunStatus(message, status = "active") {
   elements.chatRunStatus.classList.add(status);
   elements.chatRunStatusText.textContent = String(message || "AMOS is working…");
   if (status === "completed" || status === "failed") hideInlineThoughtSnippet();
+}
+
+function renderTaskProgress() {
+  const progress = taskProgressStatus(taskProgress);
+  if (!progress) return;
+  updateChatRunStatus(progress.message, progress.status);
+  elements.chatRunProgressDetail.textContent = progress.detail;
+  elements.chatRunProgressDetail.classList.toggle("hidden", !progress.detail);
+}
+
+function hydrateActiveTaskProgress() {
+  taskProgress = null;
+  elements.chatRunProgressDetail.textContent = "";
+  elements.chatRunProgressDetail.classList.add("hidden");
+  const active = state?.activeTask;
+  const snapshot = active?.taskProgress;
+  if (!running || !active?.id || currentTaskId !== active.id || !snapshot) return;
+  const selectedTaskId = String(state.activeTaskRecordId || state.tasks?.activeTaskId || "");
+  const selectedContext = String(state.activeContextKey || "active");
+  if (snapshot.runId && snapshot.runId !== active.id) return;
+  if (snapshot.taskRecordId && snapshot.taskRecordId !== selectedTaskId) return;
+  if (snapshot.contextKey && snapshot.contextKey !== selectedContext) return;
+  taskProgress = taskProgressFromEvent(snapshot);
 }
 
 function setPanelBadge(status = "") {
@@ -11872,25 +11937,40 @@ function renderGovernedUiActions() {
 }
 
 function renderLiveEvent(event) {
+  const progress = taskProgressFromEvent(event);
+  if (progress) {
+    taskProgress = progress;
+    renderTaskProgress();
+  }
+  if (event.type === "agent_outcome") {
+    const outcome = event.outcome;
+    if (["completed", "interrupted", "failed", "cancelled"].includes(outcome?.status)) {
+      runTerminalState = outcome.status === "cancelled" ? "interrupted" : outcome.status;
+    }
+  }
   if (event.type === "assistant_delta") {
     const channel = event.channel || "text";
     if (channel === "thinking") {
-      updateChatRunStatus("Thinking…", "active");
+      if (taskProgress) renderTaskProgress();
+      else updateChatRunStatus("Thinking…", "active");
       updateStreamingThought(event.thinking || event.delta || "");
       return;
     }
     if (channel === "tool" && event.toolName) {
-      updateChatRunStatus(`Preparing ${humanizeTool(event.toolName)}…`, "active");
+      if (taskProgress) renderTaskProgress();
+      else updateChatRunStatus(`Preparing ${humanizeTool(event.toolName)}…`, "active");
       return;
     }
-    updateChatRunStatus("Writing the response…", "active");
+    if (taskProgress) renderTaskProgress();
+    else updateChatRunStatus("Writing the response…", "active");
     updateStreamingDraft(event.text || "");
     return;
   }
   captureGovernedUiActions(event);
   const transientStatus = chatStatusForEvent(event);
   if (transientStatus) {
-    updateChatRunStatus(transientStatus.message, transientStatus.status);
+    if (taskProgress && transientStatus.status !== "waiting") renderTaskProgress();
+    else updateChatRunStatus(transientStatus.message, transientStatus.status);
   }
   if (event.type === "tool_error" || failedToolResultEvent(event)) setPanelBadge("error");
   else if (running) setPanelBadge("working");
@@ -11926,6 +12006,12 @@ function renderLiveEvent(event) {
 }
 
 function liveEventCopy(event) {
+  if (event.type === "task_progress") {
+    const progress = taskProgressStatus(taskProgressFromEvent(event));
+    return progress
+      ? { title: progress.message, detail: progress.detail, inline: true }
+      : { skipCard: true };
+  }
   if (event.type === "workflow") {
     return {
       title: event.title || "Plan",
@@ -12228,7 +12314,9 @@ function setRunning(value) {
   if (value) {
     if (runTerminalState === "idle") runTerminalState = "running";
     elements.activityStreamTitle.textContent = "Live activity";
-    if (elements.chatRunStatus.classList.contains("hidden")) {
+    if (taskProgress) {
+      renderTaskProgress();
+    } else if (elements.chatRunStatus.classList.contains("hidden")) {
       updateChatRunStatus("AMOS is working…", "active");
     }
     setPanelBadge("working");
