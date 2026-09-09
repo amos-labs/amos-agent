@@ -82,6 +82,9 @@ export class HostedSiteLifecycle {
     if (op.name === "put_site") return { allow: true };
     if (!Array.isArray(op.args.files) || (op.args.remove != null && !Array.isArray(op.args.remove))) return { allow: false, message: "Provide a valid files array and optional remove array before changing a site." };
     const paths = [...(op.args.files || []).map(file => file?.path), ...(op.args.remove || [])].filter(path => typeof path === "string");
+    if (paths.some(path => current.invalidSourcePaths.has(path))) {
+      return { allow: false, message: "The source read reported inconsistent file evidence. Obtain a current read whose bytes match the manifest before overwriting this path." };
+    }
     if (paths.some(path => current.files.has(path) && current.manifest?.[path] && current.manifest[path].sha256 !== current.files.get(path).sha256)) {
       return { allow: false, message: "The latest site manifest differs from the source you read. Read the current saved file before overwriting it." };
     }
@@ -99,7 +102,7 @@ export class HostedSiteLifecycle {
   }
 
   ensureSite(slug) {
-    if (!this.sites.has(slug)) this.sites.set(slug, { slug, attempts: 0, pathAttempts: new Map(), files: new Map(), preview: null, created: false, saved: false });
+    if (!this.sites.has(slug)) this.sites.set(slug, { slug, attempts: 0, pathAttempts: new Map(), files: new Map(), invalidSourcePaths: new Set(), preview: null, created: false, saved: false });
     return this.sites.get(slug);
   }
 
@@ -113,8 +116,19 @@ export class HostedSiteLifecycle {
     if (op.name === "site_status" && result.slug === slug && plain(result.draft_manifest)) this.ensureSite(slug).manifest = structuredClone(result.draft_manifest);
     if (op.name === "get_site_file" && op.args.published !== true && result.published !== true && (!result.manifest || result.manifest === "draft") && result.slug === slug && result.path === op.args.path && typeof result.content === "string") {
       const bytes = Buffer.from(result.content, result.encoding === "base64" || result.base64 === true ? "base64" : "utf8");
-      if (bytes.length <= MAX_SOURCE_BYTES && result.sha256 === hash(bytes) && Number(result.size) === bytes.length) {
-        this.ensureSite(slug).files.set(result.path, { path: result.path, sha256: result.sha256, size: bytes.length, source: bytes.toString("utf8") });
+      const site = this.ensureSite(slug);
+      // Older reads omitted integrity metadata. When supplied, it must agree
+      // with the independently hashed bytes; a matching content hash alone
+      // cannot override the server reporting a different manifest revision.
+      const manifestMatches = (!Object.hasOwn(result, "bytes_match_manifest") || result.bytes_match_manifest === true)
+        && (!Object.hasOwn(result, "manifest_sha256") || result.manifest_sha256 === result.sha256);
+      if (manifestMatches && bytes.length <= MAX_SOURCE_BYTES && result.sha256 === hash(bytes) && Number(result.size) === bytes.length) {
+        site.files.set(result.path, { path: result.path, sha256: result.sha256, size: bytes.length, source: bytes.toString("utf8") });
+        site.invalidSourcePaths.delete(result.path);
+      } else {
+        site.files.delete(result.path);
+        site.invalidSourcePaths.add(result.path);
+        this.lastCheck = null;
       }
     }
     if (op.name === "put_site_files" && result.slug === slug && Number(result.written) > 0) {
