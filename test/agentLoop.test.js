@@ -9,6 +9,59 @@ import { ToolRegistry } from "../src/tools/registry.js";
 import { attachModelEvidence } from "../src/model/evidence.js";
 import { parseToolResult } from "../src/util/toolResultEnvelope.js";
 
+test("a page edit under context pressure keeps its save evidence and finishes after verification", async () => {
+  const registry = new ToolRegistry();
+  const actions = [];
+  const events = [];
+  for (const name of ["sites_put_site_files", "sites_site_status"]) {
+    registry.register({
+      name,
+      readOnly: name === "sites_site_status",
+      handler: async () => {
+        actions.push(name);
+        return { ok: true, status: "draft", sha256: "saved-page-revision-123", files: 1 };
+      }
+    });
+  }
+  let modelCalls = 0;
+  const loop = new AgentLoop({
+    config: { agent: {}, model: { contextTokens: 4_096, maxCompletionTokens: 1_024 } },
+    systemPrompt: "Complete the user's task using tool evidence.",
+    registry, approvals: {}, amosClient: {},
+    modelClient: {
+      async chat({ messages }) {
+        modelCalls += 1;
+        assert.ok(modelCalls <= 3, "the task repeated instead of finishing");
+        if (modelCalls > 1) {
+          assert.match(JSON.stringify(messages), /saved-page-revision-123/,
+            "the next model call must see the successful write before choosing another action");
+        }
+        if (modelCalls === 3) {
+          const status = messages.find(message => message.role === "tool" && message.tool_call_id === "status");
+          assert.equal(parseToolResult(status?.content)?.sha256, "saved-page-revision-123");
+          return { message: { role: "assistant", content: "Saved and verified the revised draft. Form submission remains untested." } };
+        }
+        return { message: { role: "assistant", content: "", tool_calls: [{
+          id: modelCalls === 1 ? "save" : "status",
+          function: {
+            name: modelCalls === 1 ? "sites_put_site_files" : "sites_site_status",
+            arguments: JSON.stringify(modelCalls === 1
+              ? { slug: "qa", files: [{ path: "index.html", content: "<main>" + "x".repeat(24_000) + "</main>" }] }
+              : { slug: "qa" })
+          }
+        }] } };
+      }
+    }
+  });
+  const answer = await loop.run("Improve the unpublished page and verify the saved changes.", {
+    onEvent: event => events.push(event)
+  });
+  assert.match(answer, /Saved and verified/);
+  assert.deepEqual(actions, ["sites_put_site_files", "sites_site_status"]);
+  assert.equal(modelCalls, 3);
+  assert.ok(events.some(event => event.type === "context_compiled" && event.context?.compacted));
+});
+
 test("usage events keep OpenAI-compatible prompt and completion token names", async () => {
   const events = [];
   const loop = new AgentLoop({
