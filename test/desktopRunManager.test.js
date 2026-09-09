@@ -3,6 +3,35 @@ import test from "node:test";
 
 import { DesktopRunManager, DesktopRunSupervisor } from "../src/desktop/runManager.js";
 
+for (const reason of ["model_timeout_after_progress", "model_transient_after_progress", "system_sleep", "budget_exhausted"]) {
+  test(`DesktopRunManager preserves a returned interruption (${reason})`, async () => {
+    const manager = new DesktopRunManager();
+    const outcome = { answer: "Partial work remains available.", interrupted: true, recovery: { reason } };
+    const { lane, promise } = manager.launch({
+      id: "interrupted-run", taskRecordId: "partial-task", contextKey: "task:partial-task"
+    }, async () => outcome);
+    assert.equal(await promise, outcome);
+    assert.equal(lane.status, "interrupted");
+    assert.equal(lane.phase, "interrupted");
+    assert.doesNotMatch(lane.summary, /completed/i);
+    assert.ok(lane.finishedAt);
+    assert.equal(manager.active().length, 0);
+  });
+}
+
+test("a returned interruption cannot overwrite an already canceled lane", async () => {
+  const manager = new DesktopRunManager();
+  const { lane, promise } = manager.launch({
+    id: "canceled-run", taskRecordId: "canceled-task", contextKey: "task:canceled-task"
+  }, async run => {
+    manager.transition(run.id, "cancelled", { phase: "cancelled", summary: "Stopped by the user" });
+    return { interrupted: true, recovery: { reason: "model_transient_after_progress" } };
+  });
+  await promise;
+  assert.equal(lane.status, "cancelled");
+  assert.equal(lane.summary, "Stopped by the user");
+});
+
 test("DesktopRunManager executes isolated lanes concurrently", async () => {
   let nextId = 0;
   const manager = new DesktopRunManager({ createId: () => `run-${++nextId}` });

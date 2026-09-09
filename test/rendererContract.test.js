@@ -727,7 +727,7 @@ test("Operator is chat-first with transient progress and detailed activity in th
     javascript.match(/function renderStarterActions\(\)[\s\S]*?\n}\n\nasync function executeStarterAction/)?.[0] || "",
     /promptInput\.value/
   );
-  assert.match(javascript, /The model timed out after making progress\. Completed work is intact/);
+  assert.match(javascript, /toast\(runInterruptionMessage\(result\), true\)/);
   assert.match(javascript, /function toggleSidebar\(\)[\s\S]*?setSidebarCollapsed/);
   assert.match(javascript, /elements\.app\.classList\.toggle\("nav-collapsed", collapsed\)/);
   assert.match(
