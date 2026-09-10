@@ -843,7 +843,7 @@ test("dynamic canvases open beside chat without navigating away from Operator", 
   assert.match(css, /\.operator-grid\.has-context \.scope-note\s*{\s*display: none;/);
 });
 
-test("the identity card opens Google-style account switching outside Intelligence", async () => {
+test("the identity card has one account and company selector outside Intelligence", async () => {
   const [html, controller] = await Promise.all([
     readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8"),
     readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
@@ -856,6 +856,9 @@ test("the identity card opens Google-style account switching outside Intelligenc
   assert.match(sidebar, /id="accountMenuButton"/);
   assert.match(sidebar, /id="addAccountButton"/);
   assert.match(sidebar, /id="companySwitcherControl" class="account-company-switcher hidden"/);
+  assert.match(sidebar, /<label for="companySwitcher">Company &amp; account<\/label>/);
+  assert.equal((sidebar.match(/<select\b/g) || []).length, 1);
+  assert.doesNotMatch(sidebar, /id="accountList"|class="account-option/);
   assert.match(sidebar, /id="accountMemoryButton"/);
   assert.match(sidebar, /id="accountIntelligenceButton"/);
   assert.doesNotMatch(sidebar, /id="companySwitcherControl" class="field company-switcher/);

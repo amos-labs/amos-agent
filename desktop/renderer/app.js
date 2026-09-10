@@ -1,3 +1,4 @@
+import { accountContextChoices } from "../../src/desktop/accountContexts.js";
 import { shouldSubmitPrompt } from "../../src/desktop/input.js";
 import { parseMarkdown } from "../../src/desktop/markdown.js";
 import { runInterruptionMessage } from "../../src/desktop/runOutcome.js";
@@ -122,6 +123,7 @@ let currentWorkTab = "open";
 let selectedProvider = "amos-hosted";
 let pendingApproval = null;
 let running = false;
+let switchingAccountContext = false;
 let attachments = [];
 let dragDepth = 0;
 let updateState = null;
@@ -184,7 +186,7 @@ const elements = Object.fromEntries(
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
-    "accountList", "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
+    "addAccountButton", "signOutAccountButton", "accountVersion", "accountUpdateButton",
     "accountMemoryButton", "accountIntelligenceButton",
     "companySwitcherControl", "companySwitcher",
     "decisionBadge", "privateMemoryBadge", "missionBadge",
@@ -447,7 +449,7 @@ function bindActions() {
   elements.addAccountButton.addEventListener("click", addAccount);
   elements.signOutAccountButton.addEventListener("click", disconnectAmos);
   elements.accountUpdateButton.addEventListener("click", handleAccountUpdate);
-  elements.companySwitcher.addEventListener("change", switchCompany);
+  elements.companySwitcher.addEventListener("change", switchAccountContext);
   elements.refreshAutomationsButton.addEventListener("click", refreshAutomations);
   elements.buildAutomationButton.addEventListener("click", () => openAutomationTask(null, elements.buildAutomationButton, true));
   elements.automationEmptyBuildButton.addEventListener("click", () => openAutomationTask(null, elements.automationEmptyBuildButton, true));
@@ -691,7 +693,6 @@ function bindEvents() {
     if (eventMatchesActiveTask(remote)) syncAutomationSetup(remote.automationSetup);
     renderIdentity();
     renderAccountMenu();
-    renderCompanySwitcher();
     renderDecisions();
     renderWorkingContinuity();
     renderCompanyCache();
@@ -839,7 +840,6 @@ function render() {
   renderTaskRoles();
   renderTaskUsage();
   renderAccountMenu();
-  renderCompanySwitcher();
   elements.runtimeBadge.textContent = state.configured
     ? providerStatusLabel()
     : "Intelligence not configured";
@@ -7767,78 +7767,38 @@ function renderIdentity() {
 }
 
 function renderCompanySwitcher() {
-  const tenants =
-    state?.connectionMode === "user" && Array.isArray(state.companies?.tenants)
-      ? state.companies.tenants
-      : [];
-  const visible = tenants.length > 1;
-  elements.companySwitcherControl.classList.toggle("hidden", !visible);
-  if (!visible) {
-    elements.companySwitcher.replaceChildren();
-    return;
-  }
-
-  const options = tenants.map((tenant) => {
+  const choices = accountContextChoices(state);
+  const options = choices.map((choice) => {
     const option = document.createElement("option");
-    option.value = tenant.tenant_id;
-    option.textContent = tenant.parent_tenant_name
-      ? `${tenant.tenant_name} · ${tenant.relationship_kind || "unit"} of ${tenant.parent_tenant_name}`
-      : tenant.tenant_name;
-    option.selected = tenant.tenant_id === state.companies.currentTenantId;
+    option.value = choice.value;
+    option.textContent = choice.label;
+    option.selected = choice.selected;
     return option;
   });
+  if (!choices.some((choice) => choice.selected)) {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = choices.length
+      ? "Choose a company and account"
+      : state?.connectionMode === "api_key" ? "Connected with an API key" : "No account connected";
+    placeholder.disabled = true;
+    placeholder.selected = true;
+    options.unshift(placeholder);
+  }
+  elements.companySwitcherControl.classList.remove("hidden");
   elements.companySwitcher.replaceChildren(...options);
+  elements.companySwitcher.disabled = switchingAccountContext || !choices.length ||
+    (choices.length === 1 && choices[0].selected);
+  elements.companySwitcher.setAttribute("aria-busy", String(switchingAccountContext));
+  elements.companySwitcher.title = options.find((option) => option.selected)?.textContent || "";
 }
 
 function renderAccountMenu() {
-  const accounts = Array.isArray(state?.accounts?.accounts) ? state.accounts.accounts : [];
   const currentAccountId = state?.accounts?.currentAccountId || "";
   elements.accountMenuButton.title = state?.connectionMode === "api_key"
     ? "Add a personal AMOS sign-in or manage local accounts"
     : "Switch or add an AMOS account";
-  elements.accountList.replaceChildren();
-
-  if (accounts.length === 0) {
-    const empty = document.createElement("p");
-    empty.className = "account-privacy";
-    empty.textContent = "No personal AMOS account is connected on this computer.";
-    elements.accountList.append(empty);
-  } else {
-    for (const account of accounts) {
-      const active = account.id === currentAccountId;
-      const activeOnline = active && !state.mode?.personal && !state.mode?.offline;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `account-option${active ? " active" : ""}`;
-      button.disabled = activeOnline;
-      button.dataset.accountId = account.id;
-
-      const avatar = document.createElement("span");
-      avatar.className = "account-avatar";
-      avatar.textContent = accountInitial(account);
-      const copy = document.createElement("span");
-      copy.className = "account-copy";
-      const title = document.createElement("strong");
-      title.textContent = account.name || account.email || account.label || "AMOS account";
-      const detail = document.createElement("small");
-      detail.textContent = [account.email, account.tenantSlug, account.role]
-        .filter(Boolean)
-        .filter((value, index, list) => list.indexOf(value) === index)
-        .join(" · ") || (account.demo ? "Sample company" : "AMOS account");
-      copy.append(title, detail);
-      button.append(avatar, copy);
-      if (active) {
-        const mark = document.createElement("span");
-        mark.className = "account-active-mark";
-        mark.textContent = activeOnline ? "ACTIVE" : "USE";
-        button.append(mark);
-      }
-      if (!activeOnline) {
-        button.addEventListener("click", () => switchAccount(account.id));
-      }
-      elements.accountList.append(button);
-    }
-  }
+  renderCompanySwitcher();
 
   elements.signOutAccountButton.classList.toggle("hidden", !currentAccountId);
   elements.accountVersion.textContent = updateState?.currentVersion
@@ -7857,13 +7817,6 @@ function renderAccountMenu() {
           : status === "installing"
             ? "Installing…"
             : "Check for updates";
-}
-
-function accountInitial(account) {
-  return String(account.name || account.email || account.tenantSlug || "A")
-    .trim()
-    .charAt(0)
-    .toUpperCase() || "A";
 }
 
 function toggleAccountMenu() {
@@ -7910,19 +7863,6 @@ async function addAccount() {
     toast(error.message, true);
   } finally {
     setButtonBusy(elements.addAccountButton, false, "Add another account");
-  }
-}
-
-async function switchAccount(accountId) {
-  closeAccountMenu();
-  try {
-    state = await api.switchAccount(accountId);
-    resetSessionView();
-    render();
-    toast(`Switched to ${state.identity?.user?.name || activeCompanyName()}.`);
-  } catch (error) {
-    render();
-    toast(error.message, true);
   }
 }
 
@@ -10652,19 +10592,25 @@ async function disconnectAmos() {
   }
 }
 
-async function switchCompany(event) {
-  const targetTenantId = event.currentTarget.value;
-  event.currentTarget.disabled = true;
+async function switchAccountContext(event) {
+  const choice = accountContextChoices(state).find((item) => item.value === event.currentTarget.value);
+  if (switchingAccountContext || !choice || choice.selected) return;
+  switchingAccountContext = true;
+  elements.companySwitcher.disabled = true;
+  elements.companySwitcher.setAttribute("aria-busy", "true");
   try {
-    state = await api.switchCompany(targetTenantId);
+    state = choice.accountId
+      ? await api.switchAccount(choice.accountId)
+      : await api.switchCompany(choice.tenantId);
     resetSessionView();
+    closeAccountMenu();
     render();
     toast(`Switched to ${activeCompanyName()}.`);
   } catch (error) {
-    renderCompanySwitcher();
     toast(error.message, true);
   } finally {
-    event.currentTarget.disabled = false;
+    switchingAccountContext = false;
+    renderCompanySwitcher();
   }
 }
 
