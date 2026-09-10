@@ -285,6 +285,7 @@ html[data-platform="win32"] .sidebar-toggle {
   position: fixed;
   z-index: 80;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   max-height: min(620px, calc(100vh - 40px));
   gap: 14px;
   overflow: auto;
@@ -295,45 +296,19 @@ html[data-platform="win32"] .sidebar-toggle {
   box-shadow: var(--shadow);
   -webkit-app-region: no-drag;
 }
+.account-menu > * { min-width: 0; }
 .account-menu-heading,
-.account-menu-actions,
-.account-option {
+.account-menu-actions {
   display: flex;
   align-items: center;
 }
 .account-menu-heading { justify-content: space-between; gap: 12px; }
+.account-menu-heading > div { min-width: 0; }
+.account-menu-heading .icon-button { flex-shrink: 0; }
 .account-menu-heading strong { display: block; margin-top: 5px; font-size: 16px; }
-.account-list { display: grid; gap: 8px; }
-.account-option {
-  width: 100%;
-  gap: 11px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-soft);
-  text-align: left;
-  cursor: pointer;
-}
-.account-option:hover { border-color: rgba(109,147,255,.4); }
-.account-option.active { border-color: var(--blue); background: rgba(109,147,255,.1); }
-.account-avatar {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--brand-surface);
-  color: #fff;
-  font-weight: 800;
-}
-.account-copy { min-width: 0; flex: 1; }
-.account-copy strong,
-.account-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-copy small { margin-top: 3px; color: var(--muted-2); font-size: 11px; }
-.account-active-mark { color: var(--green); font-size: 11px; font-weight: 800; }
 .account-company-switcher {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   margin: 0;
   padding: 12px;
@@ -362,7 +337,8 @@ html[data-platform="win32"] .sidebar-toggle {
   cursor: pointer;
 }
 .account-company-switcher select:focus { border-color: var(--blue); }
-.account-company-switcher select:disabled { cursor: wait; opacity: .65; }
+.account-company-switcher select:disabled { cursor: default; opacity: .65; }
+.account-company-switcher select[aria-busy="true"] { cursor: wait; }
 .account-company-switcher small {
   color: var(--muted-2);
   font-size: 9px;
@@ -397,10 +373,14 @@ html[data-platform="win32"] .sidebar-toggle {
 .account-settings-link small { display: block; }
 .account-settings-link strong { font-size: 11px; }
 .account-settings-link small { margin-top: 3px; color: var(--muted-2); font-size: 9px; line-height: 1.4; }
-.account-menu-actions { align-items: stretch; gap: 8px; }
-.account-menu-actions .button { flex: 1; padding-inline: 11px; }
+.account-menu-actions { align-items: stretch; flex-wrap: wrap; gap: 8px; }
+.account-menu-actions .button { min-width: 0; flex: 1 1 140px; padding-inline: 11px; white-space: normal; }
+.account-menu-heading,
+.account-settings-link,
+.account-company-switcher small,
+.account-privacy { overflow-wrap: anywhere; }
 .account-privacy { color: var(--muted-2); font-size: 10px; line-height: 1.55; }
-.account-update-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.account-update-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .account-update-row span { color: var(--muted-2); font-size: 11px; }
 .account-update-row .text-button { color: var(--blue-2); font-size: 11px; }
 .status-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--warning); box-shadow: 0 0 0 4px rgba(255,202,105,.08); }
