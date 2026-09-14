@@ -1869,3 +1869,166 @@ function workingContinuityResponse({
     }
   };
 }
+
+test("Desktop snapshot projects platform sections through the same normalizers as the per-verb reads", async () => {
+  const calls = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "snapshot-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      calls.push(request.params);
+      assert.equal(request.params.name, "desktop_snapshot");
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              contract_version: 1,
+              snapshot_version: "snap-1",
+              generated_at: "2026-09-14T20:00:00.000Z",
+              client: { principal_type: "user", role: "owner", approval_decision_mode_source: "GET /api/v1/approvals" },
+              identity: { sub: "user-1", tenant_id: "tenant-1", role: "owner", principal_type: "user" },
+              surfaces: {
+                approvals: { label: "Decisions", available: true, locked: null, read: true, status: "available", version: "a1", unchanged: false },
+                connections: { label: "Connections", available: true, locked: null, read: true, status: "available", version: "c1", unchanged: false },
+                receipts: { label: "Proof", available: true, locked: null, read: true, status: "available", version: "r1", unchanged: true },
+                briefings: { label: "Briefings", available: true, locked: null, read: true, status: "available", version: "b1", unchanged: false },
+                automations: { label: "Automations", available: false, locked: { reason: "capability_disabled", detail: "marketing" }, reads: ["list_automations"], read: false },
+                tasks: { label: "Conversations", available: true, locked: null, read: true, status: "limited", version: "t1", unchanged: false },
+                projects: { label: "Projects", available: false, locked: { reason: "missing_scope", detail: "projects:read" }, read: false }
+              },
+              sections: {
+                connections: {
+                  version: "c1",
+                  status: "available",
+                  data: {
+                    list_connections: { connections: [{ id: "11111111-1111-4111-8111-111111111111", provider: "stripe", display_name: "Stripe", status: "connected" }] },
+                    list_connection_catalog: { catalog_version: 3, providers: [{ provider: "stripe", display_name: "Stripe", setup_mode: "hosted_secret", availability: "available" }] }
+                  },
+                  limited: {}
+                },
+                briefings: {
+                  version: "b1",
+                  status: "available",
+                  data: {
+                    list_briefing_templates: { contract_version: 2, templates: [{ key: "daily_company_brief", title: "Daily company brief" }] },
+                    list_briefings: { briefings: [{ id: "22222222-2222-4222-8222-222222222222", title: "Weekly ops" }] }
+                  },
+                  limited: {}
+                },
+                tasks: { version: "t1", status: "limited", data: {}, limited: { list_tasks: "timed_out" } }
+              },
+              resume: { since: { connections: "c1", receipts: "r1", briefings: "b1", tasks: "t1" } }
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const snapshot = await client.desktopSnapshot({
+    since: { connections: "c0", receipts: "r1", ignored: 7 },
+    include: null
+  });
+
+  assert.deepEqual(calls[0].arguments, { since: { connections: "c0", receipts: "r1" } });
+  assert.equal(snapshot.supported, true);
+  assert.equal(snapshot.contractVersion, 1);
+  assert.equal(snapshot.snapshotVersion, "snap-1");
+  assert.equal(snapshot.identity.tenant_id, "tenant-1");
+  assert.equal(snapshot.identityLimited, "");
+  assert.deepEqual(snapshot.since, { connections: "c1", receipts: "r1", briefings: "b1", tasks: "t1" });
+
+  assert.equal(snapshot.surfaces.automations.available, false);
+  assert.deepEqual(snapshot.surfaces.automations.locked, { reason: "capability_disabled", detail: "marketing" });
+  assert.equal(snapshot.surfaces.projects.locked.reason, "missing_scope");
+  assert.equal(snapshot.surfaces.receipts.unchanged, true);
+  assert.equal(snapshot.surfaces.connections.unchanged, false);
+
+  // Sections arrive already normalized the way connectionsCatalog()/briefingsLibrary() shape them.
+  assert.equal(snapshot.sections.connections.library.connections[0].provider, "stripe");
+  assert.equal(snapshot.sections.connections.library.providers[0].provider, "stripe");
+  assert.equal(snapshot.sections.connections.library.catalogVersion, 3);
+  assert.equal(snapshot.sections.briefings.library.supported, true);
+  assert.equal(snapshot.sections.briefings.library.contractVersion, 2);
+  assert.equal(snapshot.sections.briefings.library.templates[0].key, "daily_company_brief");
+  assert.equal(snapshot.sections.briefings.library.briefings[0].title, "Weekly ops");
+  // Unchanged, locked, and limited surfaces carry no library: the caller keeps or empties state.
+  assert.equal(snapshot.sections.receipts.library, null);
+  assert.equal(snapshot.sections.automations.library, null);
+  assert.equal(snapshot.sections.automations.templates.supported, false);
+  assert.equal(snapshot.sections.tasks.library, null);
+  assert.equal(snapshot.sections.projects.library, null);
+});
+
+test("Desktop snapshot reports unsupported on an older platform and rethrows other failures", async () => {
+  const older = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://older.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "older-platform-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        error: { code: -32601, message: "unknown tool 'desktop_snapshot'" }
+      });
+    }
+  );
+  assert.deepEqual(await older.desktopSnapshot(), { supported: false });
+
+  const failing = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "snapshot-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        error: { code: -32000, message: "load discovery entitlements: connection refused" }
+      });
+    }
+  );
+  await assert.rejects(failing.desktopSnapshot(), /connection refused/);
+});
+
+test("Desktop snapshot treats a limited identity as absent and ignores unknown surfaces", async () => {
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "snapshot-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              contract_version: 1,
+              identity: { status: "limited", reason: "timed_out" },
+              surfaces: { receipts: { label: "Proof", available: true, version: "r2" }, integrations: { available: true } },
+              sections: { receipts: { version: "r2", status: "available", data: { list_receipts: { receipts: [] } }, limited: {} } },
+              resume: { since: { receipts: "r2" } }
+            })
+          }]
+        }
+      });
+    }
+  );
+  const snapshot = await client.desktopSnapshot();
+  assert.equal(snapshot.identity, null);
+  assert.equal(snapshot.identityLimited, "timed_out");
+  assert.deepEqual(Object.keys(snapshot.surfaces), ["receipts"]);
+  assert.deepEqual(snapshot.sections.receipts.library, { display: [], platform: [] });
+});

@@ -698,6 +698,7 @@ function bindEvents() {
     renderCompanyCache();
     renderConnections();
     renderAutomations();
+    renderSurfaceLocks();
     renderProjects();
     renderMissions();
     renderTasks();
@@ -1044,6 +1045,7 @@ function render() {
   renderCompanyCache();
   renderConnections();
   renderAutomations();
+  renderSurfaceLocks();
   renderProjects();
   renderMissions();
   renderTasks();
@@ -1164,6 +1166,94 @@ function openIntelligenceSettings() {
 
 function returnFromIntelligenceSettings() {
   showView("operator");
+}
+
+// Platform-described client surfaces (desktop_snapshot.surfaces) mapped onto the
+// views that render them. Two surfaces share the Decisions view: approvals on
+// the Open tab and receipts on the History tab.
+const SURFACE_VIEWS = Object.freeze({
+  approvals: "work",
+  connections: "connections",
+  receipts: "work",
+  briefings: "canvas",
+  automations: "automations",
+  tasks: "tasks",
+  projects: "projects"
+});
+
+function surfaceLockMessage(locked) {
+  const detail = String(locked?.detail || "").trim();
+  switch (locked?.reason) {
+    case "missing_scope":
+      return `Your role does not include ${detail || "the required permission"}.`;
+    case "plan":
+      return "Available on a higher plan.";
+    case "capability_disabled":
+      return `An owner can turn on the ${detail || "required"} module in Settings → Modules.`;
+    default:
+      return "Not available to this account.";
+  }
+}
+
+// Hide navigation for surfaces the platform reports as not available to this
+// caller, and explain why inside the view itself so a person who lands there
+// (a stale deep link, a hidden nav item they remember) sees an honest reason
+// instead of an empty list. Presentation only: the platform still gates every
+// call. Without a snapshot-aware platform (`state.surfaces` null) nothing
+// changes, which keeps older servers behaving exactly as before.
+function renderSurfaceLocks() {
+  const surfaces = state.surfaces && typeof state.surfaces === "object" ? state.surfaces : null;
+  const sections = {
+    work: elements.workView,
+    connections: elements.connectionsView,
+    canvas: elements.canvasView,
+    automations: elements.automationsView,
+    tasks: elements.tasksView,
+    projects: elements.projectsView
+  };
+  const lockedByView = new Map();
+  const knownByView = new Map();
+  if (surfaces) {
+    for (const [key, view] of Object.entries(SURFACE_VIEWS)) {
+      const surface = surfaces[key];
+      if (!surface || typeof surface !== "object") continue;
+      knownByView.set(view, (knownByView.get(view) || 0) + 1);
+      if (surface.available === false) {
+        const list = lockedByView.get(view) || [];
+        list.push({ key, label: String(surface.label || key), locked: surface.locked });
+        lockedByView.set(view, list);
+      }
+    }
+  }
+  for (const [view, section] of Object.entries(sections)) {
+    if (!section) continue;
+    const locked = lockedByView.get(view) || [];
+    const allLocked = locked.length > 0 && locked.length === (knownByView.get(view) || 0);
+    const navItem = document.querySelector(`.nav-item[data-view="${view}"]`);
+    if (navItem) navItem.classList.toggle("hidden", allLocked);
+    let card = section.querySelector(":scope > .surface-locked");
+    if (locked.length === 0) {
+      if (card) card.remove();
+      continue;
+    }
+    if (!card) {
+      card = document.createElement("div");
+      card.className = "surface-locked";
+      card.setAttribute("role", "status");
+      section.prepend(card);
+    }
+    card.replaceChildren(
+      ...locked.map(({ label, locked: reason }) => {
+        const row = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = `${label} is not available here`;
+        const message = document.createElement("span");
+        message.textContent = surfaceLockMessage(reason);
+        row.append(title, message);
+        return row;
+      })
+    );
+  }
 }
 
 function showView(view) {

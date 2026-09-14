@@ -4755,3 +4755,9 @@ html[data-platform="win32"] .sidebar-toggle {
 .automatic-routing-options:disabled {
   opacity: 0.6;
 }
+
+/* Platform-reported surface locks (desktop_snapshot.surfaces): shown inside a
+   view whose surface is closed to this caller, with the platform's reason. */
+.surface-locked { display: grid; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-softer); }
+.surface-locked strong { display: block; color: var(--muted); font-size: 12px; }
+.surface-locked span { display: block; margin-top: 3px; color: var(--muted-2); font-size: 11px; line-height: 1.5; }
