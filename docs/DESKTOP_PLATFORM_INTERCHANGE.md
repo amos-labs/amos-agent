@@ -241,6 +241,33 @@ Client-specific presentation metadata is additive. Authorization continues to
 be determined by the user's identity, tenant role, policy, and requested
 operation—not by choosing Desktop instead of Claude or Codex.
 
+### Change stream
+
+The push half of the contract is `GET /api/v1/events` (amos-managed-platform
+`docs/MCP.md`, "Client change stream"): bearer-authenticated server-sent
+events that name *which* surface changed, never what changed. Desktop opens
+one stream per platform origin and company after its first snapshot-aware
+refresh, and:
+
+- on `surface.changed` coalesces events for a quarter second, then calls
+  `desktop_snapshot` with `include` set to just those surfaces and applies
+  only those sections (approvals still refresh through `GET /api/v1/approvals`,
+  which carries the decision mode);
+- tracks the SSE `id` as its cursor and reconnects with `Last-Event-ID` after
+  `stream.end` or a dropped connection (exponential backoff, one to thirty
+  seconds, jittered), honouring `Retry-After` on 503;
+- refreshes its token once on 401 and gives up for that server on 404, so an
+  older platform without the route leaves the thirty-second poll exactly as it
+  is today;
+- while connected, turns the thirty-second poll into a five-minute safety net;
+  disconnected or unsupported, the thirty-second poll resumes.
+
+The stream is stopped at every company boundary (sign-out, company switch,
+leaving online mode, system sleep) and its cursor never carries across one.
+Listening grants nothing: every refetch re-enters the platform's tenant,
+scope, module, and policy gates. Desktop shows "Live" or "Polling" beside the
+decisions sync status so the mode is visible.
+
 ## Briefings
 
 “Briefings” is the user-facing name for reusable governed company work surfaces.

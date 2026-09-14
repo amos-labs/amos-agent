@@ -237,7 +237,7 @@ const elements = Object.fromEntries(
     "approveButton", "denyButton", "taskApproveButton", "alwaysApproveButton", "autoApproveFolderButton", "approvalPersistence",
     "approvalScopeNote", "toast", "approvalsButton", "workspaceButton",
     "onboardingWorkspaceButton", "disconnectButton", "refreshDecisionsButton",
-    "allApprovalsButton", "decisionSyncStatus", "decisionNotice", "offlineProposalList", "pendingDecisions",
+    "allApprovalsButton", "decisionSyncStatus", "changeStreamIndicator", "decisionNotice", "offlineProposalList", "pendingDecisions",
     "recentDecisions", "updateButton", "privateMemoryList", "privateMemoryEmpty",
     "workDecisionsTab", "workProofTab", "workDecisionTabCount", "workDecisionsPanel", "workProofPanel",
     "exportEvidencePackButton",
@@ -8151,6 +8151,7 @@ function renderDecisions() {
         ? `Synced ${relativeTime(sync.lastSyncedAt)}`
         : "Not synced";
   elements.refreshDecisionsButton.disabled = Boolean(sync.syncing || sync.paused);
+  renderChangeStreamIndicator(state, sync);
 
   const notice = sync.paused
     ? proposals.length > 0
@@ -12555,4 +12556,27 @@ function formatBytes(value) {
   if (bytes < 1_024) return `${bytes} B`;
   if (bytes < 1_024 ** 2) return `${Math.round(bytes / 1_024)} KB`;
   return `${Math.round((bytes / 1_024 ** 2) * 10) / 10} MB`;
+}
+
+/**
+ * Live versus polling, from the platform change stream state the controller
+ * projects. Hidden when the company is not connected or Desktop is offline.
+ */
+function renderChangeStreamIndicator(state, sync) {
+  const indicator = elements.changeStreamIndicator;
+  if (!indicator) return;
+  const stream = state.changeStream || {};
+  const visible = Boolean(state.connected) && !sync.paused && state.connectionMode === "user";
+  indicator.classList.toggle("hidden", !visible);
+  if (!visible) return;
+  const live = stream.connected === true;
+  indicator.textContent = live ? "Live" : "Polling";
+  indicator.classList.toggle("is-live", live);
+  indicator.title = live
+    ? "Live: AMOS tells Desktop which surface changed and it refreshes only that one."
+    : stream.supported === false
+      ? "Polling every 30 seconds. This AMOS platform does not offer live updates yet."
+      : stream.lastError
+        ? `Polling every 30 seconds while live updates reconnect (${stream.lastError}).`
+        : "Polling every 30 seconds.";
 }
