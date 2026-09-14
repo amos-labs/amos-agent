@@ -72,6 +72,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     surfaces: null,
     surfaceManifests: { supported: false, manifests: [] },
     surfaceSections: {},
+    changeStream: { supported: null, connected: false, cursor: null, lastError: null },
     briefings: controller.briefings,
     automations: { supported: false, automations: [] },
     automationTemplates: {

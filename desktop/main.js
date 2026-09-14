@@ -995,7 +995,11 @@ app.whenReady().then(async () => {
   // cold load when the user's first task begins.
   controller.warmLocalIntelligence(initialSettings).catch(() => {});
   controller.refreshRemote().catch(() => {});
-  remoteSyncTimer = setInterval(() => controller.refreshRemote().catch(() => {}), 30_000);
+  // Thirty-second poll on older platforms; a five-minute safety net once the
+  // change stream is live (the controller decides per tick).
+  remoteSyncTimer = setInterval(() => {
+    if (controller.shouldPollRemote()) controller.refreshRemote().catch(() => {});
+  }, 30_000);
   remoteSyncTimer.unref?.();
 
   app.on("activate", () => {

@@ -194,8 +194,12 @@ test("runSurfaceAction binds arguments from the row, honours when, and refuses u
   const dispatched = calls.find((call) => call.name === "runSurfaceAction");
   assert.deepEqual(dispatched.args, ["pause_automation", { name: "Welcome" }]);
   assert.equal(outcome.pendingApprovalId, null);
-  // The refresh after the action re-read the snapshot.
-  assert.ok(calls.filter((call) => call.name === "desktopSnapshot").length >= 2);
+  // The refresh after the action is targeted: just this surface plus approvals.
+  const snapshots = calls.filter((call) => call.name === "desktopSnapshot");
+  assert.ok(snapshots.length >= 2);
+  assert.deepEqual(snapshots.at(-1).args.include, ["automations"]);
+  assert.ok(snapshots.at(-1).args.since, "the held versions are sent back");
+  assert.ok(calls.filter((call) => call.name === "approvals").length >= 2, "approvals re-read after an action");
 
   // Pause does not apply to the paused row.
   await assert.rejects(
