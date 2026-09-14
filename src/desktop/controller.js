@@ -144,6 +144,7 @@ import {
   missionDecisionReviewUrl,
   DesktopRemoteStateClient
 } from "./remoteState.js";
+import { ChangeStreamClient } from "./changeStream.js";
 import { mergeRemoteProjection, mergeRemoteProjectionValue,
   snapshotSettledResults
 } from "./remoteProjection.js";
@@ -275,6 +276,15 @@ export class DesktopController {
     // Section versions from the last applied snapshot (desktop_snapshot.resume.since).
     // Sent back so unchanged sections are omitted. Cleared with every company boundary.
     this.snapshotSince = null;
+    // The platform change stream (GET /api/v1/events). While it is connected the
+    // 30-second poll becomes a safety net and each event refetches only the
+    // surface it names. Stopped at every company boundary; null until the first
+    // snapshot-aware refresh starts it.
+    this.changeStream = null;
+    this.changeStreamKey = null;
+    this.pendingSurfaceChanges = new Set();
+    this.surfaceRefreshTimer = null;
+    this.surfaceRefreshPromise = null;
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
     this.automationTemplates = emptyAutomationTemplateCatalog();
@@ -458,6 +468,7 @@ export class DesktopController {
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
       surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
+      changeStream: this.changeStreamState(),
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
       automationTemplates: structuredClone(
@@ -1560,6 +1571,202 @@ export class DesktopController {
     return this.state();
   }
 
+  /** The change stream client. Tests inject a fake here. */
+  createChangeStream(options) {
+    return new ChangeStreamClient(options);
+  }
+
+  changeStreamState() {
+    const state = this.changeStream?.state?.() || null;
+    return {
+      supported: state ? state.supported : null,
+      connected: Boolean(state?.connected),
+      cursor: state?.cursor ?? null,
+      lastError: state?.lastError ?? null
+    };
+  }
+
+  /**
+   * Start (or keep) the change stream for this platform origin and company.
+   * A different origin or tenant replaces the stream so a cursor never carries
+   * across a company boundary. Never throws: the stream is an optimisation and
+   * the periodic poll remains the floor.
+   */
+  ensureChangeStream(settings, oauth, identity) {
+    let origin;
+    try {
+      origin = amosOrigin(settings.amosMcpUrl);
+    } catch {
+      return;
+    }
+    const key = `${origin}|${identity?.tenant_id || this.identity?.tenant_id || ""}`;
+    if (this.changeStream && this.changeStreamKey === key) return;
+    if (this.changeStream) void this.stopChangeStream();
+    this.changeStreamKey = key;
+    this.changeStream = this.createChangeStream({
+      origin,
+      getAccessToken: (options) => oauth.getAccessToken(options),
+      onChange: (change) => this.queueSurfaceChange(change),
+      onStateChange: () => {
+        void this.sendRemoteState();
+      }
+    });
+    this.changeStream.start?.();
+  }
+
+  async stopChangeStream() {
+    const stream = this.changeStream;
+    this.changeStream = null;
+    this.changeStreamKey = null;
+    this.pendingSurfaceChanges.clear();
+    if (this.surfaceRefreshTimer) {
+      clearTimeout(this.surfaceRefreshTimer);
+      this.surfaceRefreshTimer = null;
+    }
+    if (stream) await stream.stop?.();
+  }
+
+  /** Coalesce a burst of change events into one targeted refetch. */
+  queueSurfaceChange(change) {
+    const surface = String(change?.surface || "").trim();
+    if (!surface) return;
+    this.pendingSurfaceChanges.add(surface);
+    if (this.surfaceRefreshTimer) return;
+    this.surfaceRefreshTimer = setTimeout(() => {
+      this.surfaceRefreshTimer = null;
+      void this.flushSurfaceChanges();
+    }, 250);
+    this.surfaceRefreshTimer.unref?.();
+  }
+
+  async flushSurfaceChanges() {
+    if (this.surfaceRefreshTimer) {
+      clearTimeout(this.surfaceRefreshTimer);
+      this.surfaceRefreshTimer = null;
+    }
+    if (this.surfaceRefreshPromise) await this.surfaceRefreshPromise;
+    const surfaces = [...this.pendingSurfaceChanges];
+    this.pendingSurfaceChanges.clear();
+    if (surfaces.length === 0) return;
+    this.surfaceRefreshPromise = this.refreshSurfaces(surfaces).finally(() => {
+      this.surfaceRefreshPromise = null;
+    });
+    await this.surfaceRefreshPromise;
+  }
+
+  /**
+   * Refetch exactly the named surfaces through `desktop_snapshot(include)`,
+   * keeping every other section as it is. Approvals stay on the REST read
+   * that carries the decision mode. Falls back to nothing: if the platform
+   * does not support the snapshot the periodic refresh already covers it.
+   */
+  async refreshSurfaces(surfaces) {
+    const wanted = [...new Set(surfaces.map((s) => String(s || "").trim()).filter(Boolean))];
+    if (wanted.length === 0) return this.state();
+    const settings = await this.settingsStore.read();
+    if (settings.operatingMode !== "online") return this.state();
+    const oauth = this.oauthFor(settings);
+    const credentials = await oauth.status();
+    const config = this.configFrom(settings);
+    if (!shouldUseDesktopOAuth(config, credentials)) return this.state();
+    const remote = this.refreshRemoteClient(settings, oauth, config);
+    const errors = [];
+
+    const snapshotSurfaces = wanted.filter((surface) => surface !== "approvals");
+    if (snapshotSurfaces.length > 0) {
+      let snapshot = null;
+      try {
+        const result = await remote.desktopSnapshot({
+          since: this.snapshotSince,
+          include: snapshotSurfaces
+        });
+        if (result?.supported === true) snapshot = result;
+      } catch (error) {
+        errors.push(error?.message || "Could not refresh the changed AMOS surfaces");
+      }
+      if (snapshot) {
+        const results = snapshotSettledResults(snapshot, {
+          connectionsCatalog: this.connectionsCatalog,
+          receipts: { display: this.companyReceipts, platform: this.companyReceiptRows },
+          briefings: this.briefings,
+          automations: this.automations,
+          automationTemplates: this.automationTemplates,
+          emptyAutomationTemplates: emptyAutomationTemplateCatalog(),
+          tasks: this.tasks,
+          projects: this.projects,
+          emptyProjects: emptyProjectsState()
+        });
+        // Sections the platform did not read come back as the current value, so
+        // applying every result touches only the surfaces that were refetched.
+        if (results.connectionsResult.status === "fulfilled") {
+          this.connectionsCatalog = results.connectionsResult.value;
+        }
+        if (results.receiptsResult.status === "fulfilled") {
+          this.companyReceipts = results.receiptsResult.value.display;
+          this.companyReceiptRows = results.receiptsResult.value.platform;
+        }
+        if (results.briefingsResult.status === "fulfilled" && results.briefingsResult.value) {
+          this.briefings = results.briefingsResult.value;
+        }
+        if (results.automationsResult.status === "fulfilled" && results.automationsResult.value) {
+          this.automations = results.automationsResult.value;
+        }
+        if (
+          results.automationTemplatesResult.status === "fulfilled" &&
+          results.automationTemplatesResult.value
+        ) {
+          this.automationTemplates = results.automationTemplatesResult.value;
+        }
+        if (results.tasksResult.status === "fulfilled" && results.tasksResult.value) {
+          this.tasks = results.tasksResult.value;
+          await this.syncRemoteTasksLocally(settings, results.tasksResult.value.tasks).catch((error) => {
+            errors.push(`Could not retain local task presentation state: ${error.message}`);
+          });
+        }
+        if (results.projectsResult.status === "fulfilled" && results.projectsResult.value) {
+          this.projects = results.projectsResult.value;
+        }
+        this.surfaces = snapshot.surfaces;
+        this.snapshotSince = { ...(this.snapshotSince || {}), ...(snapshot.since || {}) };
+      }
+    }
+
+    if (wanted.includes("approvals")) {
+      try {
+        const approvals = await remote.approvals();
+        this.approvalsAvailable = approvals.available;
+        this.approvalDecisionMode = approvals.decision_mode || "hosted";
+        this.companyApprovals = approvals.pending_operations;
+        this.missionDecisions = approvals.mission_decisions || [];
+        if (approvals.available) await this.notifyNewCompanyApprovals(settings);
+        await this.deliverCompletedApprovalOutcomes();
+      } catch (error) {
+        errors.push(error?.message || "Could not refresh AMOS approvals");
+      }
+    }
+
+    this.remoteStatus = {
+      ...this.remoteStatus,
+      syncing: false,
+      lastSyncedAt: new Date().toISOString(),
+      error: errors.length > 0 ? errors.join(" ") : this.remoteStatus.error,
+      paused: false
+    };
+    await this.sendRemoteState();
+    return this.state();
+  }
+
+  /**
+   * Whether the periodic timer should run a full refresh now. With a live
+   * change stream the timer is a five-minute safety net; without one it is the
+   * thirty-second poll every customer runs today.
+   */
+  shouldPollRemote({ safetyIntervalMs = 5 * 60_000, now = Date.now() } = {}) {
+    if (!this.changeStreamState().connected) return true;
+    const last = Date.parse(this.remoteStatus?.lastSyncedAt || "");
+    return !Number.isFinite(last) || now - last >= safetyIntervalMs;
+  }
+
   /** The platform client the refresh loop reads through. Tests inject a fake here. */
   refreshRemoteClient(settings, oauth, config) {
     return new DesktopRemoteStateClient({
@@ -1580,6 +1787,7 @@ export class DesktopController {
   async refreshRemoteInner({ notify }) {
     const settings = await this.settingsStore.read();
     if (settings.operatingMode !== "online") {
+      await this.stopChangeStream();
       this.workingContinuity = null;
       this.onlineRelationshipProfile = null;
       this.snapshotSince = null;
@@ -1607,6 +1815,7 @@ export class DesktopController {
     const credentials = await oauth.status();
     const config = this.configFrom(settings);
     if (!shouldUseDesktopOAuth(config, credentials)) {
+      await this.stopChangeStream();
       this.identity = null;
       this.accountStatus = null;
       this.companyApprovals = [];
@@ -1698,9 +1907,11 @@ export class DesktopController {
       }));
       this.surfaces = snapshot.surfaces;
       this.snapshotSince = snapshot.since;
+      this.ensureChangeStream(settings, oauth, snapshot.identity);
     } else {
       // Older platform without desktop_snapshot (or a failed snapshot): the
       // per-verb reads keep every live customer working exactly as before.
+      await this.stopChangeStream();
       this.surfaces = null;
       this.snapshotSince = null;
       if (snapshotResult.status === "rejected") {
@@ -3484,6 +3695,7 @@ export class DesktopController {
   }
 
   interruptForSystemSleep() {
+    void this.stopChangeStream();
     const lanes = this.runManager.nonTerminal();
     if (lanes.length === 0) return 0;
     for (const lane of lanes) {
@@ -7919,6 +8131,9 @@ export class DesktopController {
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
+      changeStream: typeof this.changeStreamState === "function"
+        ? this.changeStreamState()
+        : { supported: null, connected: false, cursor: null, lastError: null },
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
       automationTemplates: structuredClone(

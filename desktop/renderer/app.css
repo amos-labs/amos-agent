@@ -4007,6 +4007,8 @@ html[data-platform="win32"] .sidebar-toggle {
 .decisions-heading > div:first-child { max-width: 760px; }
 .decision-actions { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
 .sync-status { color: var(--muted-2); font-size: 10px; white-space: nowrap; }
+.sync-live { padding: 1px 6px; border-radius: 999px; border: 1px solid var(--muted-2); }
+.sync-live.is-live { color: var(--accent, #2f8f6f); border-color: currentColor; }
 .decision-notice {
   margin: -12px 0 22px;
   padding: 13px 15px;
