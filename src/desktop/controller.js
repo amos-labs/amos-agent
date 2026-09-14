@@ -1,3 +1,4 @@
+import { bindArgs, listRows, visibleActions } from "./manifestView.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, stat } from "node:fs/promises";
 import { statSync } from "node:fs";
@@ -275,6 +276,11 @@ export class DesktopController {
     // Section versions from the last applied snapshot (desktop_snapshot.resume.since).
     // Sent back so unchanged sections are omitted. Cleared with every company boundary.
     this.snapshotSince = null;
+    // Platform-authored surface manifests (list_surface_manifests) and the raw
+    // section rows a manifest lists. Hand-built views stay in charge until a
+    // manifest for their surface arrives. Cleared with every company boundary.
+    this.surfaceManifests = { supported: false, manifests: [] };
+    this.surfaceSections = {};
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
     this.automationTemplates = emptyAutomationTemplateCatalog();
@@ -458,6 +464,8 @@ export class DesktopController {
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
       surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
+      surfaceManifests: structuredClone(this.surfaceManifests || { supported: false, manifests: [] }),
+      surfaceSections: structuredClone(this.surfaceSections || {}),
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
       automationTemplates: structuredClone(
@@ -1583,6 +1591,8 @@ export class DesktopController {
       this.workingContinuity = null;
       this.onlineRelationshipProfile = null;
       this.snapshotSince = null;
+      this.surfaceManifests = { supported: false, manifests: [] };
+      this.surfaceSections = {};
       this.automations = { supported: false, automations: [] };
       this.automationTemplates = emptyAutomationTemplateCatalog();
       this.automationSetup = null;
@@ -1619,6 +1629,8 @@ export class DesktopController {
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
       this.surfaces = null;
       this.snapshotSince = null;
+      this.surfaceManifests = { supported: false, manifests: [] };
+      this.surfaceSections = {};
       this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
       this.automations = { supported: false, automations: [] };
       this.automationTemplates = emptyAutomationTemplateCatalog();
@@ -1650,6 +1662,7 @@ export class DesktopController {
       companiesResult,
       continuityResult,
       collaborationProfileResult,
+      surfaceManifestsResult,
       missionsResult,
       notificationPreferencesResult
     ] = await Promise.allSettled([
@@ -1659,6 +1672,9 @@ export class DesktopController {
       oauth.companies(),
       remote.hydrateContinuity({ contextKey: this.activeContextKey }),
       remote.getCollaborationProfile(),
+      typeof remote.surfaceManifests === "function"
+        ? remote.surfaceManifests()
+        : Promise.resolve({ supported: false, manifests: [] }),
       remote.missionsLibrary(),
       remote.getNotificationPreferences()
     ]);
@@ -1698,11 +1714,13 @@ export class DesktopController {
       }));
       this.surfaces = snapshot.surfaces;
       this.snapshotSince = snapshot.since;
+      this.surfaceSections = mergeSnapshotSections(this.surfaceSections, snapshot);
     } else {
       // Older platform without desktop_snapshot (or a failed snapshot): the
       // per-verb reads keep every live customer working exactly as before.
       this.surfaces = null;
       this.snapshotSince = null;
+      this.surfaceSections = {};
       if (snapshotResult.status === "rejected") {
         errors.push(snapshotResult.reason?.message || "Could not load the AMOS Desktop snapshot");
       }
@@ -1747,6 +1765,16 @@ export class DesktopController {
       this.workingContinuity = null;
       this.onlineRelationshipProfile = null;
       errors.push(identityResult.reason?.message || "Could not load AMOS identity");
+    }
+
+    if (surfaceManifestsResult?.status === "fulfilled" && surfaceManifestsResult.value?.supported === true) {
+      this.surfaceManifests = surfaceManifestsResult.value;
+    } else {
+      // Older platform (unknown verb) or a failed read: hand-built views stay.
+      this.surfaceManifests = { supported: false, manifests: [] };
+      if (surfaceManifestsResult?.status === "rejected") {
+        errors.push(surfaceManifestsResult.reason?.message || "Could not load AMOS surface manifests");
+      }
     }
 
     if (approvalsResult.status === "fulfilled") {
@@ -1962,6 +1990,51 @@ export class DesktopController {
       opened: true,
       provider: providerKey,
       expiresIn: link.expiresIn
+    };
+  }
+
+  /**
+   * Run one action a surface manifest offers for one listed row. The manifest
+   * (already filtered by the platform to verbs this caller may dispatch) names
+   * the capability and its argument bindings; the row supplies the values; the
+   * platform gate still decides and may park the call as a pending approval.
+   */
+  async runSurfaceAction({ surfaceKey, actionIndex, rowIndex } = {}) {
+    const key = String(surfaceKey || "").trim();
+    const manifest = (this.surfaceManifests?.manifests || []).find((item) => item.key === key);
+    if (!manifest || manifest.available === false) {
+      throw new Error("AMOS blocked a surface action for a surface without a manifest");
+    }
+    const action = manifest.actions?.[Number(actionIndex)];
+    if (!action) throw new Error("AMOS blocked a surface action the manifest does not offer");
+    const rows = listRows(this.surfaceSections?.[key], manifest);
+    const row = rows[Number(rowIndex)];
+    if (!row) throw new Error("That row is no longer listed; refresh and try again");
+    if (!visibleActions(manifest, row).some((candidate) => candidate.index === Number(actionIndex))) {
+      throw new Error(`${action.label} does not apply to this row any more`);
+    }
+    const args = bindArgs(action, row);
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, `running ${action.label}`);
+    const result = await remote.runSurfaceAction(action.capability, args);
+    const pendingApprovalId = result?.pending_id || result?.pendingId ||
+      result?.pending_operation?.id || result?.pendingOperation?.id ||
+      (result?.status === "pending_approval" ? result?.id || "pending" : null) || null;
+    this.record(
+      "surface",
+      pendingApprovalId
+        ? `Requested governed ${action.label.toLowerCase()} on ${manifest.title}`
+        : `${action.label} ran on ${manifest.title} through AMOS Platform`,
+      { surface: key, capability: action.capability, pending_approval: Boolean(pendingApprovalId) }
+    );
+    // Re-read: the snapshot's since-map keeps this cheap, and the platform is
+    // the source of truth for what the action changed.
+    await this.refreshRemote({ notify: false }).catch(() => {});
+    return {
+      result,
+      pendingApprovalId,
+      surfaceSections: structuredClone(this.surfaceSections || {}),
+      approvals: structuredClone(this.companyApprovals)
     };
   }
 
@@ -7835,6 +7908,8 @@ export class DesktopController {
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
     this.surfaces = null;
     this.snapshotSince = null;
+    this.surfaceManifests = { supported: false, manifests: [] };
+    this.surfaceSections = {};
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
     this.automationTemplates = emptyAutomationTemplateCatalog();
@@ -7919,6 +7994,8 @@ export class DesktopController {
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
       surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
+      surfaceManifests: structuredClone(this.surfaceManifests || { supported: false, manifests: [] }),
+      surfaceSections: structuredClone(this.surfaceSections || {}),
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
       automationTemplates: structuredClone(
@@ -9617,4 +9694,25 @@ function runStatusForEvent(event) {
     if (["waiting", "blocked", "cancel_requested"].includes(event.phase)) return event.phase;
   }
   return "running";
+}
+
+
+// Raw section rows for manifest-drawn surfaces. A section the platform marked
+// `unchanged` (or did not read) keeps its current rows; one it did not return
+// at all is dropped so a locked surface never shows stale rows.
+function mergeSnapshotSections(current, snapshot) {
+  const next = {};
+  const surfaces = snapshot?.surfaces || {};
+  const sections = snapshot?.sections || {};
+  for (const key of Object.keys(surfaces)) {
+    const surface = surfaces[key];
+    if (!surface || surface.available === false) continue;
+    if (surface.unchanged === true || surface.read === false) {
+      if (current?.[key]) next[key] = current[key];
+      continue;
+    }
+    const raw = sections[key]?.raw;
+    if (raw && typeof raw === "object") next[key] = raw;
+  }
+  return next;
 }

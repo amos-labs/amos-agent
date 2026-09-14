@@ -70,6 +70,8 @@ test("remote state events project every refreshed platform surface into Desktop"
     companyReceipts: controller.companyReceipts,
     connectionsCatalog: controller.connectionsCatalog,
     surfaces: null,
+    surfaceManifests: { supported: false, manifests: [] },
+    surfaceSections: {},
     briefings: controller.briefings,
     automations: { supported: false, automations: [] },
     automationTemplates: {

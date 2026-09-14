@@ -417,6 +417,13 @@ function registerIpc() {
   ipcMain.handle("desktop:disconnect-connection", (_event, connectionId) =>
     controller.disconnectConnection(connectionId)
   );
+  ipcMain.handle("desktop:run-surface-action", (_event, payload) =>
+    controller.runSurfaceAction({
+      surfaceKey: payload?.surfaceKey,
+      actionIndex: payload?.actionIndex,
+      rowIndex: payload?.rowIndex
+    })
+  );
   ipcMain.handle("desktop:connect-secret-provider", (_event, payload) =>
     controller.connectSecretProvider(payload?.provider, payload?.input)
   );
