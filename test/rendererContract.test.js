@@ -1687,3 +1687,22 @@ test("the plan card renders the one question inline and hides internal vocabular
   assert.match(remoteState, /progress: normalizeMissionProgress\(value\),/);
   assert.match(remoteState, /function normalizeMissionProgress\(value\) \{[\s\S]*?completion\.target/);
 });
+
+test("platform-reported surface locks render in both refresh paths without hard-coded availability", async () => {
+  const [renderer, css] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/app.css", import.meta.url), "utf8")
+  ]);
+  // Both the remote:changed handler and the full render call the lock renderer.
+  assert.equal((renderer.match(/renderSurfaceLocks\(\);/g) || []).length, 2);
+  // Every snapshot surface maps onto an existing view, and the message copy is
+  // derived from the platform reason, never from a Desktop-side availability table.
+  for (const key of ["approvals", "connections", "receipts", "briefings", "automations", "tasks", "projects"]) {
+    assert.match(renderer, new RegExp(`${key}: "(work|connections|canvas|automations|tasks|projects)"`));
+  }
+  assert.match(renderer, /case "missing_scope":/);
+  assert.match(renderer, /case "plan":/);
+  assert.match(renderer, /case "capability_disabled":/);
+  assert.match(renderer, /state\.surfaces && typeof state\.surfaces === "object" \? state\.surfaces : null/);
+  assert.match(css, /\.surface-locked \{/);
+});

@@ -71,6 +71,42 @@ export class DesktopRemoteStateClient {
     return parseMcpJson(result, "AMOS identity");
   }
 
+  /**
+   * One versioned read behind the Desktop refresh (platform `desktop_snapshot`).
+   *
+   * Replaces the per-verb fan-out on platforms that have the verb: identity,
+   * the per-surface availability envelope (with the lock reason when a surface
+   * is closed to this caller), and the bounded list reads behind each surface,
+   * normalized through the SAME functions the per-verb methods use. `since`
+   * is the version map from the previous call; unchanged sections come back
+   * marked `unchanged` with no data so the caller keeps its current state.
+   *
+   * Returns `{ supported: false }` on an older platform that does not know the
+   * verb so the caller can fall back to the per-verb reads. Any other failure
+   * propagates.
+   */
+  async desktopSnapshot({ since = null, include = null, signal = null } = {}) {
+    const args = {};
+    if (since && typeof since === "object" && !Array.isArray(since)) {
+      const versions = {};
+      for (const [key, version] of Object.entries(since)) {
+        if (typeof version === "string" && version) versions[key] = version;
+      }
+      if (Object.keys(versions).length > 0) args.since = versions;
+    }
+    if (Array.isArray(include) && include.length > 0) {
+      args.include = include.map((key) => String(key)).slice(0, 16);
+    }
+    let result;
+    try {
+      result = await this.mcp.callTool("desktop_snapshot", args, { signal });
+    } catch (error) {
+      if (isUnknownTool(error, "desktop_snapshot")) return { supported: false };
+      throw error;
+    }
+    return normalizeDesktopSnapshot(parseMcpJson(result, "AMOS Desktop snapshot"));
+  }
+
   async companySnapshot({ signal = null } = {}) {
     const snapshot = parseMcpJson(
       await this.mcp.callTool("resume_company", {}, { signal }),
@@ -90,16 +126,10 @@ export class DesktopRemoteStateClient {
         this.mcp.callTool("list_briefing_templates", {}, { signal }),
         this.mcp.callTool("list_briefings", {}, { signal })
       ]);
-      const templates = parseMcpJson(templatesResult, "AMOS Briefing templates");
-      const definitions = parseMcpJson(definitionsResult, "AMOS Briefings");
-      return {
-        supported: true,
-        contractVersion: Number(
-          definitions?.contract_version || templates?.contract_version || 1
-        ),
-        templates: Array.isArray(templates?.templates) ? templates.templates : [],
-        briefings: Array.isArray(definitions?.briefings) ? definitions.briefings : []
-      };
+      return normalizeBriefingsPayload(
+        parseMcpJson(templatesResult, "AMOS Briefing templates"),
+        parseMcpJson(definitionsResult, "AMOS Briefings")
+      );
     } catch (error) {
       if (
         isUnknownTool(error, "list_briefing_templates") ||
@@ -140,26 +170,7 @@ export class DesktopRemoteStateClient {
       "list_automation_runs",
       "AMOS Automation runs"
     );
-    return {
-      supported: true,
-      automations: Array.isArray(payload?.automations)
-        ? payload.automations.map(normalizeAutomation).filter(Boolean)
-        : [],
-      grantsSupported: Array.isArray(grantsPayload?.standing_grants),
-      grants: Array.isArray(grantsPayload?.standing_grants)
-        ? grantsPayload.standing_grants.map(normalizeAutomationGrant).filter(Boolean)
-        : [],
-      operationsSupported: Boolean(failuresPayload && runsPayload),
-      failures: Array.isArray(failuresPayload?.items)
-        ? failuresPayload.items.map(normalizeAutomationFailure).filter(Boolean)
-        : [],
-      runs: Array.isArray(runsPayload?.runs)
-        ? runsPayload.runs.map(normalizeAutomationRun).filter(Boolean)
-        : [],
-      operationsContract: boundedJsonValue(
-        failuresPayload?.contract || runsPayload?.contract || {}
-      )
-    };
+    return normalizeAutomationsPayload({ payload, grantsPayload, failuresPayload, runsPayload });
   }
 
   async automationTemplateCatalog({ signal = null } = {}) {
@@ -330,12 +341,7 @@ export class DesktopRemoteStateClient {
         { limit: boundedLimit },
         { signal }
       );
-      const payload = parseMcpJson(result, "AMOS proof receipts");
-      const rows = Array.isArray(payload?.receipts) ? payload.receipts : [];
-      return {
-        display: rows.map(normalizeReceipt).filter(Boolean),
-        platform: rows.map(toPlatformEvidenceItem).filter(Boolean).slice(0, 200)
-      };
+      return normalizeReceiptsPayload(parseMcpJson(result, "AMOS proof receipts"));
     } catch (error) {
       if (isUnknownTool(error, "list_receipts")) return { display: [], platform: [] };
       throw error;
@@ -475,16 +481,7 @@ export class DesktopRemoteStateClient {
         query: String(query || "").slice(0, 160),
         limit: 100
       }, { signal });
-      const payload = parseMcpJson(result, "AMOS Tasks");
-      return {
-        supported: true,
-        tasks: (Array.isArray(payload?.tasks) ? payload.tasks : [])
-          .map(normalizeTaskResource)
-          .filter(Boolean),
-        contract: payload?.contract && typeof payload.contract === "object"
-          ? payload.contract
-          : null
-      };
+      return normalizeTasksPayload(parseMcpJson(result, "AMOS Tasks"));
     } catch (error) {
       if (isUnknownTool(error, "list_tasks")) {
         return { supported: false, tasks: [], contract: null };
@@ -507,33 +504,17 @@ export class DesktopRemoteStateClient {
       throw error;
     }
     const projectsPayload = parseMcpJson(projectsResult, "AMOS Projects");
-    let inbox = [];
-    let stalledCount = 0;
-    let runContract = null;
+    let inboxPayload = null;
     try {
       const inboxResult = await this.callCompanyTool("list_task_inbox", {
         include_terminal: includeTerminal === true,
         limit: 200
       }, { signal });
-      const inboxPayload = parseMcpJson(inboxResult, "AMOS task inbox");
-      inbox = (Array.isArray(inboxPayload?.items) ? inboxPayload.items : [])
-        .map(normalizeTaskRun)
-        .filter(Boolean);
-      stalledCount = boundedCount(inboxPayload?.stalled_count);
-      runContract = boundedContract(inboxPayload?.contract);
+      inboxPayload = parseMcpJson(inboxResult, "AMOS task inbox");
     } catch (error) {
       if (!isUnknownTool(error, "list_task_inbox")) throw error;
     }
-    return {
-      supported: true,
-      projects: (Array.isArray(projectsPayload?.projects) ? projectsPayload.projects : [])
-        .map(normalizeProject)
-        .filter(Boolean),
-      inbox,
-      stalledCount,
-      projectContract: boundedContract(projectsPayload?.contract),
-      runContract
-    };
+    return normalizeProjectsPayload(projectsPayload, inboxPayload);
   }
 
   async missionsLibrary({ signal = null } = {}) {
@@ -950,28 +931,10 @@ export class DesktopRemoteStateClient {
       this.mcp.callTool("list_connections", {}, { signal }),
       this.connectionProviderCatalog({ signal })
     ]);
-    const connectionPayload = parseMcpJson(connectionsResult, "AMOS connections");
-    const providers = Array.isArray(providerPayload?.providers)
-      ? providerPayload.providers.map(normalizeProvider).filter(Boolean)
-      : [
-          ...(Array.isArray(providerPayload?.curated) ? providerPayload.curated : []),
-          ...(Array.isArray(providerPayload?.tenant_defined) ? providerPayload.tenant_defined : [])
-        ].map(normalizeProvider).filter(Boolean);
-    return {
-      connections: Array.isArray(connectionPayload?.connections)
-        ? connectionPayload.connections.map(normalizeConnection).filter(Boolean)
-        : [],
-      providers,
-      catalogVersion: Number(providerPayload?.catalog_version || 0),
-      // Retained for one release so older renderer consumers do not break while
-      // list_connection_catalog rolls through deployed platform environments.
-      curated: Array.isArray(providerPayload?.curated)
-        ? providerPayload.curated.map(normalizeProvider).filter(Boolean)
-        : [],
-      tenantDefined: Array.isArray(providerPayload?.tenant_defined)
-        ? providerPayload.tenant_defined.map(normalizeProvider).filter(Boolean)
-        : []
-    };
+    return normalizeConnectionsPayload(
+      parseMcpJson(connectionsResult, "AMOS connections"),
+      providerPayload
+    );
   }
 
   async disconnectConnection(connectionId, { signal = null } = {}) {
@@ -1710,6 +1673,225 @@ function normalizeCollaborationProfileResponse(value) {
     available: value.available === true,
     revision: profile.revision,
     profile
+  };
+}
+
+/** Surface keys the platform snapshot describes, in Desktop navigation order. */
+export const DESKTOP_SNAPSHOT_SURFACES = Object.freeze([
+  "approvals",
+  "connections",
+  "receipts",
+  "briefings",
+  "automations",
+  "tasks",
+  "projects"
+]);
+
+function normalizeBriefingsPayload(templates, definitions) {
+  return {
+    supported: true,
+    contractVersion: Number(
+      definitions?.contract_version || templates?.contract_version || 1
+    ),
+    templates: Array.isArray(templates?.templates) ? templates.templates : [],
+    briefings: Array.isArray(definitions?.briefings) ? definitions.briefings : []
+  };
+}
+
+function normalizeAutomationsPayload({ payload, grantsPayload, failuresPayload, runsPayload }) {
+  return {
+    supported: true,
+    automations: Array.isArray(payload?.automations)
+      ? payload.automations.map(normalizeAutomation).filter(Boolean)
+      : [],
+    grantsSupported: Array.isArray(grantsPayload?.standing_grants),
+    grants: Array.isArray(grantsPayload?.standing_grants)
+      ? grantsPayload.standing_grants.map(normalizeAutomationGrant).filter(Boolean)
+      : [],
+    operationsSupported: Boolean(failuresPayload && runsPayload),
+    failures: Array.isArray(failuresPayload?.items)
+      ? failuresPayload.items.map(normalizeAutomationFailure).filter(Boolean)
+      : [],
+    runs: Array.isArray(runsPayload?.runs)
+      ? runsPayload.runs.map(normalizeAutomationRun).filter(Boolean)
+      : [],
+    operationsContract: boundedJsonValue(
+      failuresPayload?.contract || runsPayload?.contract || {}
+    )
+  };
+}
+
+function normalizeConnectionsPayload(connectionPayload, providerPayload) {
+  const providers = Array.isArray(providerPayload?.providers)
+    ? providerPayload.providers.map(normalizeProvider).filter(Boolean)
+    : [
+        ...(Array.isArray(providerPayload?.curated) ? providerPayload.curated : []),
+        ...(Array.isArray(providerPayload?.tenant_defined) ? providerPayload.tenant_defined : [])
+      ].map(normalizeProvider).filter(Boolean);
+  return {
+    connections: Array.isArray(connectionPayload?.connections)
+      ? connectionPayload.connections.map(normalizeConnection).filter(Boolean)
+      : [],
+    providers,
+    catalogVersion: Number(providerPayload?.catalog_version || 0),
+    // Retained for one release so older renderer consumers do not break while
+    // list_connection_catalog rolls through deployed platform environments.
+    curated: Array.isArray(providerPayload?.curated)
+      ? providerPayload.curated.map(normalizeProvider).filter(Boolean)
+      : [],
+    tenantDefined: Array.isArray(providerPayload?.tenant_defined)
+      ? providerPayload.tenant_defined.map(normalizeProvider).filter(Boolean)
+      : []
+  };
+}
+
+function normalizeReceiptsPayload(payload) {
+  const rows = Array.isArray(payload?.receipts) ? payload.receipts : [];
+  return {
+    display: rows.map(normalizeReceipt).filter(Boolean),
+    platform: rows.map(toPlatformEvidenceItem).filter(Boolean).slice(0, 200)
+  };
+}
+
+function normalizeTasksPayload(payload) {
+  return {
+    supported: true,
+    tasks: (Array.isArray(payload?.tasks) ? payload.tasks : [])
+      .map(normalizeTaskResource)
+      .filter(Boolean),
+    contract: payload?.contract && typeof payload.contract === "object"
+      ? payload.contract
+      : null
+  };
+}
+
+function normalizeProjectsPayload(projectsPayload, inboxPayload) {
+  return {
+    supported: true,
+    projects: (Array.isArray(projectsPayload?.projects) ? projectsPayload.projects : [])
+      .map(normalizeProject)
+      .filter(Boolean),
+    inbox: (Array.isArray(inboxPayload?.items) ? inboxPayload.items : [])
+      .map(normalizeTaskRun)
+      .filter(Boolean),
+    stalledCount: boundedCount(inboxPayload?.stalled_count),
+    projectContract: boundedContract(projectsPayload?.contract),
+    runContract: inboxPayload ? boundedContract(inboxPayload?.contract) : null
+  };
+}
+
+function snapshotRead(section, verb) {
+  const data = section?.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const value = data[verb];
+  return value && typeof value === "object" ? value : null;
+}
+
+function normalizeSnapshotSurface(key, value) {
+  const surface = value && typeof value === "object" ? value : {};
+  const locked = surface.locked && typeof surface.locked === "object"
+    ? {
+        reason: String(surface.locked.reason || "").slice(0, 64),
+        detail: String(surface.locked.detail || "").slice(0, 160)
+      }
+    : null;
+  return {
+    key,
+    label: String(surface.label || key).slice(0, 80),
+    available: surface.available === true,
+    locked,
+    read: surface.read !== false,
+    status: String(surface.status || "").slice(0, 32),
+    version: typeof surface.version === "string" ? surface.version.slice(0, 128) : "",
+    unchanged: surface.unchanged === true
+  };
+}
+
+/**
+ * Project a platform `desktop_snapshot` result into the SAME normalized
+ * libraries the per-verb methods produce. A section whose primary read is
+ * missing (refused or timed out on the platform) yields `library: null` so the
+ * caller keeps its current state rather than rendering an empty surface.
+ */
+export function normalizeDesktopSnapshot(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("AMOS Desktop snapshot returned an invalid response");
+  }
+  const rawSurfaces = payload.surfaces && typeof payload.surfaces === "object" ? payload.surfaces : {};
+  const rawSections = payload.sections && typeof payload.sections === "object" ? payload.sections : {};
+  const surfaces = {};
+  for (const key of DESKTOP_SNAPSHOT_SURFACES) {
+    if (key in rawSurfaces) surfaces[key] = normalizeSnapshotSurface(key, rawSurfaces[key]);
+  }
+  const identityLimited = payload.identity?.status === "limited";
+  const identity = payload.identity && typeof payload.identity === "object" && !identityLimited
+    ? payload.identity
+    : null;
+
+  const sections = {};
+  const connections = snapshotRead(rawSections.connections, "list_connections");
+  sections.connections = {
+    library: connections
+      ? normalizeConnectionsPayload(
+          connections,
+          snapshotRead(rawSections.connections, "list_connection_catalog") || {}
+        )
+      : null
+  };
+  const receipts = snapshotRead(rawSections.receipts, "list_receipts");
+  sections.receipts = { library: receipts ? normalizeReceiptsPayload(receipts) : null };
+  const briefingDefinitions = snapshotRead(rawSections.briefings, "list_briefings");
+  sections.briefings = {
+    library: briefingDefinitions
+      ? normalizeBriefingsPayload(
+          snapshotRead(rawSections.briefings, "list_briefing_templates") || {},
+          briefingDefinitions
+        )
+      : null
+  };
+  const automations = snapshotRead(rawSections.automations, "list_automations");
+  const automationTemplates = snapshotRead(rawSections.automations, "list_automation_templates");
+  sections.automations = {
+    library: automations
+      ? normalizeAutomationsPayload({
+          payload: automations,
+          grantsPayload: snapshotRead(rawSections.automations, "list_automation_grants"),
+          failuresPayload: snapshotRead(rawSections.automations, "list_automation_failures"),
+          runsPayload: snapshotRead(rawSections.automations, "list_automation_runs")
+        })
+      : null,
+    templates: automationTemplates
+      ? normalizeAutomationTemplateCatalog(automationTemplates)
+      : emptyAutomationTemplateCatalog()
+  };
+  const tasks = snapshotRead(rawSections.tasks, "list_tasks");
+  sections.tasks = { library: tasks ? normalizeTasksPayload(tasks) : null };
+  const projects = snapshotRead(rawSections.projects, "list_projects");
+  sections.projects = {
+    library: projects
+      ? normalizeProjectsPayload(projects, snapshotRead(rawSections.projects, "list_task_inbox"))
+      : null
+  };
+
+  const since = {};
+  const rawSince = payload.resume?.since;
+  if (rawSince && typeof rawSince === "object" && !Array.isArray(rawSince)) {
+    for (const [key, version] of Object.entries(rawSince)) {
+      if (typeof version === "string" && version) since[key] = version.slice(0, 128);
+    }
+  }
+
+  return {
+    supported: true,
+    contractVersion: Number(payload.contract_version || 1),
+    snapshotVersion: typeof payload.snapshot_version === "string" ? payload.snapshot_version : "",
+    generatedAt: typeof payload.generated_at === "string" ? payload.generated_at : "",
+    client: payload.client && typeof payload.client === "object" ? payload.client : {},
+    identity,
+    identityLimited: identityLimited ? String(payload.identity?.reason || "limited") : "",
+    surfaces,
+    sections,
+    since
   };
 }
 

@@ -187,30 +187,55 @@ context.
 ## The interchange contract
 
 Desktop discovers capabilities from the platform instead of hard-coding which
-features a tenant has. A bounded capability response should identify:
+features a tenant has. The capability envelope is delivered by the platform's
+`desktop_snapshot` verb (amos-managed-platform `docs/MCP.md`, "Client
+snapshot"), which Desktop issues once per refresh in place of the older
+per-verb fan-out:
 
 ```json
 {
-  "client": {
-    "kind": "official_desktop",
-    "approval_decision_mode": "desktop"
-  },
+  "contract_version": 1,
+  "client": { "principal_type": "user", "role": "owner",
+              "approval_decision_mode_source": "GET /api/v1/approvals" },
+  "identity": { "...": "the whoami result" },
   "surfaces": {
-    "briefings": true,
-    "connections": true,
-    "receipts": true
+    "connections": { "label": "Connections", "available": true,  "locked": null,
+                     "version": "0c2e…", "unchanged": true },
+    "automations": { "label": "Automations", "available": false,
+                     "locked": { "reason": "capability_disabled", "detail": "marketing" } }
   },
-  "connections": {
-    "catalog": true,
-    "hosted_oauth": true,
-    "customer_aws_lake": true
-  }
+  "sections": {
+    "receipts": { "version": "b220…", "status": "available",
+                  "data": { "list_receipts": { "...": "the verb's normal result" } },
+                  "limited": {} }
+  },
+  "resume": { "since": { "connections": "0c2e…", "receipts": "b220…" } }
 }
 ```
 
-The platform may omit or disable capabilities based on principal type, OAuth
-client, role, tenant policy, or subscription. Desktop must fail closed and fall
-back to the managed surface when a capability is not advertised.
+- `surfaces` names each client surface (`approvals`, `connections`,
+  `receipts`, `briefings`, `automations`, `tasks`, `projects`) with
+  `available` and, when closed to this caller, a `locked` reason of
+  `missing_scope` (with the scope), `plan` (`upgrade_required`), or
+  `capability_disabled` (with the module). Desktop hides the navigation item
+  and renders the reason inside the view instead of a failed call.
+- `sections` carries the bounded list reads behind each available surface,
+  keyed by verb, so Desktop normalizes them through the same functions its
+  per-verb reads use. Every section carries a content-addressed `version`;
+  Desktop sends `resume.since` back on the next refresh and keeps its current
+  state for sections the platform marks `unchanged`.
+- The approvals decision mode (`desktop` versus `hosted`) stays on
+  `GET /api/v1/approvals`, because a bound Desktop installation is recognised
+  from the bearer token, which the MCP dispatcher never sees.
+
+The platform may omit or disable surfaces based on principal type, OAuth
+client, role, tenant policy, or subscription. Desktop fails closed: a surface
+that is not advertised renders locked, and a section whose primary read the
+platform refused keeps the last synced data marked stale. On a platform that
+does not know `desktop_snapshot`, Desktop falls back to the per-verb reads
+unchanged, so an older server or a paused rollout never breaks a refresh.
+Section versions are cleared at every company boundary (sign-out, company
+switch, leaving online mode).
 
 Client-specific presentation metadata is additive. Authorization continues to
 be determined by the user's identity, tenant role, policy, and requested

@@ -144,7 +144,9 @@ import {
   missionDecisionReviewUrl,
   DesktopRemoteStateClient
 } from "./remoteState.js";
-import { mergeRemoteProjection, mergeRemoteProjectionValue } from "./remoteProjection.js";
+import { mergeRemoteProjection, mergeRemoteProjectionValue,
+  snapshotSettledResults
+} from "./remoteProjection.js";
 import {
   createCanvasTool,
   createCanvasUpdateTool,
@@ -266,6 +268,13 @@ export class DesktopController {
     this.approvalDecisionMode = "hosted";
     this.missionDecisions = [];
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    // Platform-described client surfaces (desktop_snapshot.surfaces): which areas
+    // this caller has and why a closed one is closed. null until a snapshot-aware
+    // platform answers; the renderer then hides or locks navigation from it.
+    this.surfaces = null;
+    // Section versions from the last applied snapshot (desktop_snapshot.resume.since).
+    // Sent back so unchanged sections are omitted. Cleared with every company boundary.
+    this.snapshotSince = null;
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
     this.automationTemplates = emptyAutomationTemplateCatalog();
@@ -448,6 +457,7 @@ export class DesktopController {
       localTaskGrant: this.approvals.state(),
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
+      surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
       automationTemplates: structuredClone(
@@ -1550,6 +1560,15 @@ export class DesktopController {
     return this.state();
   }
 
+  /** The platform client the refresh loop reads through. Tests inject a fake here. */
+  refreshRemoteClient(settings, oauth, config) {
+    return new DesktopRemoteStateClient({
+      mcpUrl: settings.amosMcpUrl,
+      oauth,
+      requestTimeoutMs: config.amos.requestTimeoutMs
+    });
+  }
+
   async refreshRemote({ notify = true } = {}) {
     if (this.remoteRefreshPromise) return this.remoteRefreshPromise;
     this.remoteRefreshPromise = this.refreshRemoteInner({ notify }).finally(() => {
@@ -1563,6 +1582,7 @@ export class DesktopController {
     if (settings.operatingMode !== "online") {
       this.workingContinuity = null;
       this.onlineRelationshipProfile = null;
+      this.snapshotSince = null;
       this.automations = { supported: false, automations: [] };
       this.automationTemplates = emptyAutomationTemplateCatalog();
       this.automationSetup = null;
@@ -1597,6 +1617,8 @@ export class DesktopController {
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+      this.surfaces = null;
+      this.snapshotSince = null;
       this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
       this.automations = { supported: false, automations: [] };
       this.automationTemplates = emptyAutomationTemplateCatalog();
@@ -1616,46 +1638,94 @@ export class DesktopController {
 
     this.remoteStatus = { ...this.remoteStatus, syncing: true, error: null };
     await this.sendRemoteState();
-    const remote = new DesktopRemoteStateClient({
-      mcpUrl: settings.amosMcpUrl,
-      oauth,
-      requestTimeoutMs: config.amos.requestTimeoutMs
-    });
+    const remote = this.refreshRemoteClient(settings, oauth, config);
+    const errors = [];
+    // One versioned snapshot carries identity and every list surface. The reads
+    // the snapshot does not cover (REST approvals with the decision mode, account
+    // status, memberships, continuity, preferences, Missions) run beside it.
     const [
-      identityResult,
+      snapshotResult,
       approvalsResult,
       accountStatusResult,
-      connectionsResult,
       companiesResult,
-      receiptsResult,
       continuityResult,
       collaborationProfileResult,
-      briefingsResult,
-      automationsResult,
-      automationTemplatesResult,
-      tasksResult,
-      projectsResult,
       missionsResult,
       notificationPreferencesResult
     ] = await Promise.allSettled([
-      remote.identity(),
+      remote.desktopSnapshot({ since: this.snapshotSince }),
       remote.approvals(),
       remote.intelligenceStatus(),
-      remote.connectionsCatalog(),
       oauth.companies(),
-      remote.receiptWindow({ limit: 200 }),
       remote.hydrateContinuity({ contextKey: this.activeContextKey }),
       remote.getCollaborationProfile(),
-      remote.briefingsLibrary(),
-      remote.automationsLibrary(),
-      remote.automationTemplateCatalog(),
-      remote.tasksLibrary(),
-      remote.projectsLibrary(),
       remote.missionsLibrary(),
       remote.getNotificationPreferences()
     ]);
 
-    const errors = [];
+    const snapshot =
+      snapshotResult.status === "fulfilled" && snapshotResult.value?.supported === true
+        ? snapshotResult.value
+        : null;
+    let identityResult;
+    let connectionsResult;
+    let receiptsResult;
+    let briefingsResult;
+    let automationsResult;
+    let automationTemplatesResult;
+    let tasksResult;
+    let projectsResult;
+    if (snapshot) {
+      ({
+        identityResult,
+        connectionsResult,
+        receiptsResult,
+        briefingsResult,
+        automationsResult,
+        automationTemplatesResult,
+        tasksResult,
+        projectsResult
+      } = snapshotSettledResults(snapshot, {
+        connectionsCatalog: this.connectionsCatalog,
+        receipts: { display: this.companyReceipts, platform: this.companyReceiptRows },
+        briefings: this.briefings,
+        automations: this.automations,
+        automationTemplates: this.automationTemplates,
+        emptyAutomationTemplates: emptyAutomationTemplateCatalog(),
+        tasks: this.tasks,
+        projects: this.projects,
+        emptyProjects: emptyProjectsState()
+      }));
+      this.surfaces = snapshot.surfaces;
+      this.snapshotSince = snapshot.since;
+    } else {
+      // Older platform without desktop_snapshot (or a failed snapshot): the
+      // per-verb reads keep every live customer working exactly as before.
+      this.surfaces = null;
+      this.snapshotSince = null;
+      if (snapshotResult.status === "rejected") {
+        errors.push(snapshotResult.reason?.message || "Could not load the AMOS Desktop snapshot");
+      }
+      [
+        identityResult,
+        connectionsResult,
+        receiptsResult,
+        briefingsResult,
+        automationsResult,
+        automationTemplatesResult,
+        tasksResult,
+        projectsResult
+      ] = await Promise.allSettled([
+        remote.identity(),
+        remote.connectionsCatalog(),
+        remote.receiptWindow({ limit: 200 }),
+        remote.briefingsLibrary(),
+        remote.automationsLibrary(),
+        remote.automationTemplateCatalog(),
+        remote.tasksLibrary(),
+        remote.projectsLibrary()
+      ]);
+    }
     if (identityResult.status === "fulfilled") {
       this.identity = identityResult.value;
       if (this.privateMemoryStore) {
@@ -7763,6 +7833,8 @@ export class DesktopController {
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    this.surfaces = null;
+    this.snapshotSince = null;
     this.briefings = { supported: false, contractVersion: 0, templates: [], briefings: [] };
     this.automations = { supported: false, automations: [] };
     this.automationTemplates = emptyAutomationTemplateCatalog();
@@ -7846,6 +7918,7 @@ export class DesktopController {
         : [],
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: structuredClone(this.connectionsCatalog),
+      surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
       briefings: structuredClone(this.briefings),
       automations: structuredClone(this.automations || { supported: false, automations: [] }),
       automationTemplates: structuredClone(

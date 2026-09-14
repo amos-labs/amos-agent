@@ -6,7 +6,8 @@ import { profileCatalog } from "../src/desktop/relationshipProfile.js";
 
 import {
   mergeRemoteProjection,
-  mergeRemoteProjectionValue
+  mergeRemoteProjectionValue,
+  snapshotSettledResults
 } from "../src/desktop/remoteProjection.js";
 
 test("remote state events project every refreshed platform surface into Desktop", async () => {
@@ -68,6 +69,7 @@ test("remote state events project every refreshed platform surface into Desktop"
     pendingInputs: [],
     companyReceipts: controller.companyReceipts,
     connectionsCatalog: controller.connectionsCatalog,
+    surfaces: null,
     briefings: controller.briefings,
     automations: { supported: false, automations: [] },
     automationTemplates: {
@@ -165,4 +167,71 @@ test("a new successful projection replaces stale remote data", () => {
   );
   assert.equal(merged.stale, false);
   assert.equal(merged.briefings[0].id, "new");
+});
+
+function snapshotFixtureCurrent() {
+  return {
+    connectionsCatalog: { connections: [{ id: "kept-connection" }], providers: [] },
+    receipts: { display: [{ id: "kept-receipt" }], platform: [] },
+    briefings: { supported: true, contractVersion: 1, templates: [], briefings: [{ id: "kept-briefing" }] },
+    automations: { supported: true, automations: [{ id: "kept-automation" }] },
+    automationTemplates: { supported: true, templates: [{ key: "kept-template" }] },
+    emptyAutomationTemplates: { supported: false, templates: [] },
+    tasks: { supported: true, tasks: [{ id: "kept-task" }], contract: null },
+    projects: { supported: true, projects: [{ id: "kept-project" }], inbox: [] },
+    emptyProjects: { supported: false, projects: [], inbox: [], stalledCount: 0, projectContract: null, runContract: null }
+  };
+}
+
+test("snapshot results keep unchanged sections, empty locked surfaces, and reject refused primary reads", () => {
+  const results = snapshotSettledResults(
+    {
+      identity: { sub: "user-1", tenant_id: "tenant-1" },
+      identityLimited: "",
+      surfaces: {
+        connections: { available: true, unchanged: false, read: true },
+        receipts: { available: true, unchanged: true, read: true },
+        briefings: { available: true, unchanged: false, read: false },
+        automations: { available: false, locked: { reason: "capability_disabled", detail: "marketing" } },
+        tasks: { available: true, unchanged: false, read: true },
+        projects: { available: true, unchanged: false, read: true }
+      },
+      sections: {
+        connections: { library: { connections: [{ id: "fresh-connection" }], providers: [] } },
+        receipts: { library: null },
+        briefings: { library: null },
+        automations: { library: null, templates: { supported: false, templates: [] } },
+        tasks: { library: null },
+        projects: { library: { supported: true, projects: [{ id: "fresh-project" }], inbox: [] } }
+      }
+    },
+    snapshotFixtureCurrent()
+  );
+
+  assert.equal(results.identityResult.status, "fulfilled");
+  assert.equal(results.identityResult.value.tenant_id, "tenant-1");
+  // Changed section: the fresh library wins.
+  assert.equal(results.connectionsResult.value.connections[0].id, "fresh-connection");
+  assert.equal(results.projectsResult.value.projects[0].id, "fresh-project");
+  // Unchanged (or not read this round): the caller's current state is kept verbatim.
+  assert.equal(results.receiptsResult.value.display[0].id, "kept-receipt");
+  assert.equal(results.briefingsResult.value.briefings[0].id, "kept-briefing");
+  // Locked surface: empty value, never an error — the lock reason renders from `surfaces`.
+  assert.equal(results.automationsResult.status, "fulfilled");
+  assert.deepEqual(results.automationsResult.value, { supported: false, automations: [] });
+  assert.deepEqual(results.automationTemplatesResult.value, { supported: false, templates: [] });
+  // Available but the primary read was refused or timed out: rejected so the caller keeps stale data.
+  assert.equal(results.tasksResult.status, "rejected");
+  assert.match(results.tasksResult.reason.message, /AMOS Tasks is temporarily unavailable/);
+});
+
+test("snapshot results reject a limited identity and treat an unknown surface as empty", () => {
+  const results = snapshotSettledResults(
+    { identity: null, identityLimited: "timed_out", surfaces: {}, sections: {} },
+    snapshotFixtureCurrent()
+  );
+  assert.equal(results.identityResult.status, "rejected");
+  assert.match(results.identityResult.reason.message, /timed_out/);
+  assert.deepEqual(results.receiptsResult.value, { display: [], platform: [] });
+  assert.deepEqual(results.projectsResult.value, snapshotFixtureCurrent().emptyProjects);
 });
