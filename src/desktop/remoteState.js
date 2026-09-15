@@ -1,3 +1,4 @@
+import { normalizeSurfaceManifest } from "./manifestView.js";
 import { AmosMcpClient, extractMcpText, normalizeMcpToolResult } from "../mcp/amosMcpClient.js";
 import { fetchCompat } from "../util/fetchCompat.js";
 import {
@@ -105,6 +106,35 @@ export class DesktopRemoteStateClient {
       throw error;
     }
     return normalizeDesktopSnapshot(parseMcpJson(result, "AMOS Desktop snapshot"));
+  }
+
+  /**
+   * Platform-authored surface manifests (amos.surface_manifest.v1): which read
+   * lists a surface, its columns and formats, detail sections, the actions the
+   * caller may dispatch, and the empty state. Returns `{ supported: false }` on
+   * an older platform without the verb so hand-built views stay in charge.
+   */
+  async surfaceManifests({ signal = null } = {}) {
+    let result;
+    try {
+      result = await this.mcp.callTool("list_surface_manifests", {}, { signal });
+    } catch (error) {
+      if (isUnknownTool(error, "list_surface_manifests")) return { supported: false, manifests: [] };
+      throw error;
+    }
+    return normalizeSurfaceManifests(parseMcpJson(result, "AMOS surface manifests"));
+  }
+
+  /**
+   * Dispatch one manifest action through the governed tool path. The caller
+   * has already bound the arguments from the row; the platform gate still
+   * decides (and may park the call as a pending approval).
+   */
+  async runSurfaceAction(capability, args, { signal = null } = {}) {
+    const verb = String(capability || "").trim();
+    if (!/^[a-z0-9_]{1,120}$/.test(verb)) throw new Error("Surface action names an invalid capability");
+    const result = await this.mcp.callTool(verb, args && typeof args === "object" ? args : {}, { signal });
+    return parseMcpJson(result, `AMOS ${verb}`);
   }
 
   async companySnapshot({ signal = null } = {}) {
@@ -1813,6 +1843,47 @@ function normalizeSnapshotSurface(key, value) {
  * missing (refused or timed out on the platform) yields `library: null` so the
  * caller keeps its current state rather than rendering an empty surface.
  */
+export function normalizeSurfaceManifests(payload) {
+  const list = Array.isArray(payload?.manifests) ? payload.manifests : [];
+  const manifests = list.map(normalizeSurfaceManifest).filter(Boolean).slice(0, 24);
+  const seen = new Set();
+  return {
+    supported: true,
+    schema: String(payload?.schema || "").slice(0, 80),
+    manifests: manifests.filter((manifest) => {
+      if (seen.has(manifest.key)) return false;
+      seen.add(manifest.key);
+      return true;
+    })
+  };
+}
+
+// Bounded copy of one snapshot section's raw reads (`{ [verb]: result }`) so a
+// manifest can list rows by field path. Rows are capped and each value bounded;
+// this is presentation data, never re-sent to the platform.
+const MAX_MANIFEST_ROWS = 200;
+function boundedSectionRows(value, depth = 0) {
+  if (Array.isArray(value)) return value.slice(0, MAX_MANIFEST_ROWS).map((item) => boundedJsonValue(item));
+  if (value && typeof value === "object" && depth < 2) {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 40)
+        .map(([key, item]) => [key.slice(0, 80), boundedSectionRows(item, depth + 1)])
+    );
+  }
+  return boundedJsonValue(value);
+}
+
+function snapshotSectionRaw(section) {
+  const data = section?.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const raw = {};
+  for (const [verb, result] of Object.entries(data).slice(0, 12)) {
+    if (result && typeof result === "object") raw[verb.slice(0, 120)] = boundedSectionRows(result);
+  }
+  return raw;
+}
+
 export function normalizeDesktopSnapshot(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw new Error("AMOS Desktop snapshot returned an invalid response");
@@ -1872,6 +1943,11 @@ export function normalizeDesktopSnapshot(payload) {
       ? normalizeProjectsPayload(projects, snapshotRead(rawSections.projects, "list_task_inbox"))
       : null
   };
+
+  for (const key of DESKTOP_SNAPSHOT_SURFACES) {
+    if (!sections[key]) sections[key] = {};
+    sections[key].raw = snapshotSectionRaw(rawSections[key]);
+  }
 
   const since = {};
   const rawSince = payload.resume?.since;

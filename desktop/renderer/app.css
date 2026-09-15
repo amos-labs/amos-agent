@@ -4763,3 +4763,38 @@ html[data-platform="win32"] .sidebar-toggle {
 .surface-locked { display: grid; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-softer); }
 .surface-locked strong { display: block; color: var(--muted); font-size: 12px; }
 .surface-locked span { display: block; margin-top: 3px; color: var(--muted-2); font-size: 11px; line-height: 1.5; }
+
+/* ── Surface manifests: the generic platform-described view ─────────────── */
+.manifest-surface { display: grid; gap: 12px; max-width: 1240px; padding-bottom: 42px; }
+.manifest-header { display: flex; align-items: center; gap: 10px; }
+.manifest-header h2 { margin: 0; font-size: 18px; }
+.manifest-filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.manifest-chip { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-softer); color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.manifest-chip.active { color: var(--text); border-color: var(--accent, var(--line)); background: var(--surface); }
+.manifest-layout { display: grid; gap: 12px; align-items: start; }
+.manifest-layout.with-detail { grid-template-columns: minmax(0, 1fr) clamp(280px, 32%, 380px); }
+.manifest-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.manifest-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.manifest-table th { text-align: left; padding: 9px 12px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-2); border-bottom: 1px solid var(--line); }
+.manifest-table td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.manifest-table tbody tr:last-child td { border-bottom: 0; }
+.manifest-row { cursor: pointer; }
+.manifest-row:hover, .manifest-row:focus-visible { background: var(--surface-softer); outline: none; }
+.manifest-row.selected { background: var(--surface-softer); box-shadow: inset 3px 0 0 var(--accent, var(--green)); }
+.manifest-num { text-align: right; font-variant-numeric: tabular-nums; }
+.manifest-pill.ok { background: rgba(59,213,143,.12); color: var(--green); }
+.manifest-pill.warn { background: rgba(255,202,105,.11); color: var(--warning); }
+.manifest-pill.bad { background: rgba(255,110,110,.12); color: var(--danger, #ff6e6e); }
+.manifest-pill.neutral { background: var(--surface-softer); color: var(--muted); }
+.manifest-detail { display: grid; gap: 14px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.manifest-detail h3 { margin: 0; font-size: 15px; }
+.manifest-block { display: grid; gap: 6px; }
+.manifest-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.manifest-metrics article { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; background: var(--surface-softer); }
+.manifest-metrics strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.manifest-metrics span { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.manifest-copy { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.manifest-list { margin: 0; padding-left: 16px; font-size: 12px; color: var(--muted); }
+.manifest-muted { color: var(--muted-2); font-size: 12px; }
+.manifest-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.manifest-empty { margin: 0; }

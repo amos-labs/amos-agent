@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   connectProvider: (provider) => ipcRenderer.invoke("desktop:connect-provider", provider),
   disconnectConnection: (connectionId) =>
     ipcRenderer.invoke("desktop:disconnect-connection", connectionId),
+  runSurfaceAction: (payload) => ipcRenderer.invoke("desktop:run-surface-action", payload),
   connectSecretProvider: (provider, input) =>
     ipcRenderer.invoke("desktop:connect-secret-provider", { provider, input }),
   openApproval: (id) => ipcRenderer.invoke("desktop:open-approval", id),

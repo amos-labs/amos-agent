@@ -241,6 +241,36 @@ Client-specific presentation metadata is additive. Authorization continues to
 be determined by the user's identity, tenant role, policy, and requested
 operation—not by choosing Desktop instead of Claude or Codex.
 
+### Surface manifests
+
+A surface manifest (`amos.surface_manifest.v1`, from `list_surface_manifests`)
+is the platform's description of one client area: the read that lists its
+rows, the columns and how to format them, the detail sections (metric, table,
+markdown, sources, decision), the actions it offers with their argument
+bindings and a single `when: { field, in }` condition, and the empty state.
+Desktop draws any manifest with one generic view (`renderManifestSurface`),
+so a new area is platform configuration rather than a hand-built client change.
+
+Rules Desktop follows:
+
+- **Fallback first.** A hand-built view stays in charge until the platform
+  returns an `available` manifest for its surface. An older platform without
+  the verb, a locked surface, or a failed read leaves every view exactly as it
+  was. Automations is the first surface drawn from its manifest; its summary
+  and operations center remain hand-built until the manifest covers them.
+- **The interpreter is the contract.** Dotted field paths, the fixed format and
+  render lists, `{ field }` or scalar argument bindings, and `field, in`
+  conditions. Anything the manifest carries outside that is dropped on the
+  client, mirroring the platform validator. No expressions, no templates.
+- **Actions are governed calls.** The platform already filtered the offered
+  actions to verbs this caller may dispatch; Desktop binds the arguments from
+  the selected row and dispatches through the normal tool path, so the company
+  gate still decides and may park the call as a pending approval.
+- **Chat renders the same columns.** `desktop_snapshot` sections carry the
+  manifest's `presentation` (items, columns, status field); Claude, Codex, and
+  Desktop's own chat lay the same list out as a table, with the status pill
+  degrading to its label.
+
 ### Change stream
 
 The push half of the contract is `GET /api/v1/events` (amos-managed-platform

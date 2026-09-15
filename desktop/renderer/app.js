@@ -1,4 +1,13 @@
 import { accountContextChoices } from "../../src/desktop/accountContexts.js";
+import {
+  attentionCount,
+  bindArgs,
+  filterRows,
+  formatCell,
+  listRows,
+  resolvePath,
+  visibleActions
+} from "../../src/desktop/manifestView.js";
 import { shouldSubmitPrompt } from "../../src/desktop/input.js";
 import { parseMarkdown } from "../../src/desktop/markdown.js";
 import { runInterruptionMessage } from "../../src/desktop/runOutcome.js";
@@ -255,7 +264,7 @@ const elements = Object.fromEntries(
     "connectionUsernameInput", "connectionCredentialLabel", "connectionCredentialInput",
     "connectionCredentialHelp", "connectionDefaultFromField", "connectionDefaultFromInput",
     "connectionModalError", "connectionCancelButton", "connectionSubmitButton",
-    "automationSummary", "automationUnavailable", "automationEmpty", "automationList",
+    "automationSummary", "automationUnavailable", "automationEmpty", "automationList", "automationManifest",
     "refreshAutomationsButton", "buildAutomationButton", "automationEmptyBuildButton",
     "automationOperationsCenter", "automationOperationsContract", "automationSimulation",
     "automationFailureList", "automationRunHistory", "automationRunCount", "automationRunList",
@@ -1477,6 +1486,275 @@ async function disconnectConnectedSystem(connection, button) {
   }
 }
 
+
+// ── Surface manifests (amos.surface_manifest.v1) ─────────────────────────────
+// One generic view draws any platform-authored manifest: header with the
+// attention count, filter chips, a table from `list.columns`, a detail drawer
+// from `detail.sections`, and action buttons bound to the selected row. Every
+// string is set through textContent; the interpreter is exactly the contract.
+
+const manifestViewState = { selection: {}, filters: {} };
+
+function availableSurfaceManifest(key) {
+  const manifests = state?.surfaceManifests?.manifests;
+  if (!Array.isArray(manifests)) return null;
+  const manifest = manifests.find((item) => item && item.key === key);
+  return manifest && manifest.available !== false ? manifest : null;
+}
+
+function manifestPill(cell) {
+  const pill = document.createElement("span");
+  pill.className = `status-pill manifest-pill ${cell.tone}`;
+  pill.textContent = cell.label;
+  return pill;
+}
+
+function manifestCell(value, column, row) {
+  const cell = document.createElement("td");
+  const formatted = formatCell(value, column, row);
+  if (formatted && typeof formatted === "object") {
+    cell.append(manifestPill(formatted));
+  } else {
+    cell.textContent = formatted;
+    if (column.format === "number" || column.format === "currency" || column.format === "percent") {
+      cell.className = "manifest-num";
+    }
+  }
+  return cell;
+}
+
+function manifestTable(rows, columns, { onSelect = null, selectedIndex = -1, rowIndexes = null } = {}) {
+  const table = document.createElement("table");
+  table.className = "manifest-table";
+  const head = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (const column of columns) {
+    const th = document.createElement("th");
+    th.textContent = column.label;
+    th.scope = "col";
+    headRow.append(th);
+  }
+  head.append(headRow);
+  const body = document.createElement("tbody");
+  rows.forEach((row, position) => {
+    const tr = document.createElement("tr");
+    const index = rowIndexes ? rowIndexes[position] : position;
+    if (onSelect) {
+      tr.tabIndex = 0;
+      tr.className = index === selectedIndex ? "manifest-row selected" : "manifest-row";
+      tr.addEventListener("click", () => onSelect(index));
+      tr.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(index);
+        }
+      });
+    }
+    for (const column of columns) tr.append(manifestCell(resolvePath(row, column.field), column, row));
+    body.append(tr);
+  });
+  table.append(head, body);
+  return table;
+}
+
+function manifestDetail(manifest, row, handlers) {
+  const drawer = document.createElement("aside");
+  drawer.className = "manifest-detail";
+  const title = document.createElement("h3");
+  const titleColumn = manifest.list.columns[0];
+  title.textContent = String(resolvePath(row, titleColumn.field) ?? manifest.title);
+  drawer.append(title);
+  for (const section of manifest.detail?.sections || []) {
+    const block = document.createElement("section");
+    block.className = `manifest-block manifest-block-${section.block}`;
+    if (section.label) {
+      const label = document.createElement("span");
+      label.className = "eyebrow";
+      label.textContent = section.label;
+      block.append(label);
+    }
+    if (section.block === "metric") {
+      const grid = document.createElement("div");
+      grid.className = "manifest-metrics";
+      for (const field of section.fields) {
+        const tile = document.createElement("article");
+        const number = document.createElement("strong");
+        number.textContent = formatCell(resolvePath(row, field), { format: "number" }, row);
+        const name = document.createElement("span");
+        name.textContent = field.split(".").pop().replace(/_/g, " ");
+        tile.append(number, name);
+        grid.append(tile);
+      }
+      block.append(grid);
+    } else if (section.block === "table") {
+      const nested = resolvePath(row, section.field);
+      const nestedRows = (Array.isArray(nested) ? nested : []).filter((item) => item && typeof item === "object").slice(0, 40);
+      if (nestedRows.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "manifest-muted";
+        empty.textContent = "Nothing listed.";
+        block.append(empty);
+      } else {
+        block.append(manifestTable(nestedRows, section.columns));
+      }
+    } else if (section.block === "markdown") {
+      const copy = document.createElement("p");
+      copy.className = "manifest-copy";
+      const value = resolvePath(row, section.field);
+      copy.textContent = value === undefined || value === null || value === "" ? "—" : String(value);
+      block.append(copy);
+    } else {
+      // sources / decision: a plain list of the referenced values.
+      const value = resolvePath(row, section.field);
+      const list = document.createElement("ul");
+      list.className = "manifest-list";
+      const items = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+      for (const item of items.slice(0, 40)) {
+        const li = document.createElement("li");
+        li.textContent = typeof item === "object" ? JSON.stringify(item).slice(0, 200) : String(item);
+        list.append(li);
+      }
+      if (items.length === 0) {
+        const li = document.createElement("li");
+        li.className = "manifest-muted";
+        li.textContent = "—";
+        list.append(li);
+      }
+      block.append(list);
+    }
+    drawer.append(block);
+  }
+  const actions = document.createElement("div");
+  actions.className = "manifest-actions";
+  for (const action of visibleActions(manifest, row)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = action.consequence === "write" ? "button secondary" : "button ghost";
+    button.textContent = action.label;
+    button.addEventListener("click", async () => {
+      if (action.confirm && !window.confirm(`${action.label} — continue?`)) return;
+      button.disabled = true;
+      try {
+        await handlers.runAction?.({ manifest, action, row });
+      } finally {
+        button.disabled = false;
+      }
+    });
+    actions.append(button);
+  }
+  if (actions.childElementCount > 0) drawer.append(actions);
+  return drawer;
+}
+
+function renderManifestSurface(container, manifest, sectionData, handlers = {}) {
+  if (!container || !manifest) return;
+  container.replaceChildren();
+  const rows = listRows(sectionData, manifest);
+  const key = manifest.key;
+  const header = document.createElement("div");
+  header.className = "manifest-header";
+  const heading = document.createElement("h2");
+  heading.textContent = manifest.title;
+  header.append(heading);
+  const attention = attentionCount(rows, manifest);
+  if (attention > 0) {
+    const badge = document.createElement("span");
+    badge.className = "status-pill manifest-pill warn";
+    badge.textContent = `${attention} need${attention === 1 ? "s" : ""} attention`;
+    header.append(badge);
+  }
+  container.append(header);
+
+  const selection = manifestViewState.filters[key] || {};
+  const filtersWithValues = (manifest.list.filters || []).filter((filter) => filter.values.length > 0);
+  if (filtersWithValues.length > 0 && rows.length > 0) {
+    const chips = document.createElement("div");
+    chips.className = "manifest-filters";
+    for (const filter of filtersWithValues) {
+      const all = document.createElement("button");
+      all.type = "button";
+      all.className = `manifest-chip${selection[filter.field] === undefined ? " active" : ""}`;
+      all.textContent = `All ${filter.field.split(".").pop().replace(/_/g, " ")}`;
+      all.addEventListener("click", () => {
+        const next = { ...selection };
+        delete next[filter.field];
+        manifestViewState.filters[key] = next;
+        renderManifestSurface(container, manifest, sectionData, handlers);
+      });
+      chips.append(all);
+      for (const value of filter.values) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = `manifest-chip${String(selection[filter.field]) === String(value) ? " active" : ""}`;
+        chip.textContent = String(value);
+        chip.addEventListener("click", () => {
+          manifestViewState.filters[key] = { ...selection, [filter.field]: value };
+          renderManifestSurface(container, manifest, sectionData, handlers);
+        });
+        chips.append(chip);
+      }
+    }
+    container.append(chips);
+  }
+
+  if (rows.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "automation-empty manifest-empty";
+    const strong = document.createElement("strong");
+    strong.textContent = manifest.empty?.title || `No ${manifest.title.toLowerCase()} yet`;
+    const copy = document.createElement("p");
+    copy.textContent = manifest.empty?.body || "";
+    empty.append(strong, copy);
+    container.append(empty);
+    return;
+  }
+
+  const rowIndexes = [];
+  const visible = rows.filter((row, index) => {
+    const keep = filterRows([row], selection).length === 1;
+    if (keep) rowIndexes.push(index);
+    return keep;
+  });
+  let selected = Number.isInteger(manifestViewState.selection[key]) ? manifestViewState.selection[key] : -1;
+  if (selected >= rows.length) selected = -1;
+  const layout = document.createElement("div");
+  layout.className = selected >= 0 ? "manifest-layout with-detail" : "manifest-layout";
+  const tableWrap = document.createElement("div");
+  tableWrap.className = "manifest-table-wrap";
+  tableWrap.append(manifestTable(visible, manifest.list.columns, {
+    selectedIndex: selected,
+    rowIndexes,
+    onSelect: (index) => {
+      manifestViewState.selection[key] = manifestViewState.selection[key] === index ? -1 : index;
+      renderManifestSurface(container, manifest, sectionData, handlers);
+    }
+  }));
+  layout.append(tableWrap);
+  if (selected >= 0 && rows[selected]) {
+    layout.append(manifestDetail(manifest, rows[selected], {
+      runAction: ({ action }) => handlers.runAction?.({ manifest, action, rowIndex: selected })
+    }));
+  }
+  container.append(layout);
+}
+
+async function runManifestAction({ manifest, action, rowIndex }) {
+  try {
+    const response = await api.runSurfaceAction({
+      surfaceKey: manifest.key,
+      actionIndex: action.index,
+      rowIndex
+    });
+    if (response?.pendingApprovalId) {
+      toast(`${action.label} is waiting for governed approval`);
+    } else {
+      toast(`${action.label} ran on ${manifest.title}`);
+    }
+  } catch (error) {
+    toast(error?.message || `${action.label} failed`, true);
+  }
+}
+
 function renderAutomations() {
   if (!state) return;
   const library = state.automations || {};
@@ -1502,10 +1780,26 @@ function renderAutomations() {
   );
   const itemCount = automations.length + recipes.length;
 
+  // Platform-described surface: when the platform ships a manifest for
+  // automations, the generic manifest view draws the list (summary and the
+  // operations center stay); otherwise the hand-built list renders as before.
+  const automationsManifest = availableSurfaceManifest("automations");
+  elements.automationManifest.classList.toggle("hidden", !automationsManifest);
+  if (automationsManifest) {
+    renderManifestSurface(
+      elements.automationManifest,
+      automationsManifest,
+      state.surfaceSections?.automations || null,
+      { runAction: runManifestAction }
+    );
+  } else {
+    elements.automationManifest.replaceChildren();
+  }
+
   elements.automationSummary.classList.toggle("hidden", !supported);
   elements.automationUnavailable.classList.toggle("hidden", supported);
-  elements.automationEmpty.classList.toggle("hidden", !supported || itemCount > 0);
-  elements.automationList.classList.toggle("hidden", !supported || itemCount === 0);
+  elements.automationEmpty.classList.toggle("hidden", Boolean(automationsManifest) || !supported || itemCount > 0);
+  elements.automationList.classList.toggle("hidden", Boolean(automationsManifest) || !supported || itemCount === 0);
   const canBuild = state.settings?.operatingMode !== "offline";
   elements.buildAutomationButton.disabled = !canBuild;
   elements.automationEmptyBuildButton.disabled = !canBuild;
