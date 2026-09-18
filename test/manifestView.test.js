@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   attentionCount,
   bindArgs,
+  dynamicSurfaceNav,
   filterRows,
   formatCell,
   listRows,
@@ -119,4 +120,25 @@ test("listRows reads the items key of the list capability and attentionCount cou
   assert.deepEqual(listRows({ list_automations: { automations: "nope" } }, manifest), []);
   assert.deepEqual(filterRows(rows, { status: "paused" }).map((r) => r.name), ["B"]);
   assert.equal(filterRows(rows, {}).length, 2);
+});
+
+test("dynamicSurfaceNav gives every unclaimed available manifest a grouped sidebar item", () => {
+  const manifests = [
+    { key: "automations", title: "Automations", nav: { group: "Operate", order: 10 }, available: true },
+    { key: "sites", title: "Websites", nav: { group: "Company", order: 40 }, available: true },
+    { key: "ledgers", title: "Ledgers", nav: { group: "Company", order: 20 }, available: true },
+    { key: "webhooks", title: "Webhooks", nav: { group: "Integrations", order: 30 }, available: false },
+    { key: "fleet", title: "Fleet", nav: { group: "Operate", order: 5 }, available: true },
+    { key: "Bad Key", title: "Nope", available: true },
+    { key: "untitled", nav: {}, available: true }
+  ];
+  const groups = dynamicSurfaceNav(manifests, ["automations", "pipelines", "jobs", "webhooks", "mappings"]);
+  assert.deepEqual(groups.map((g) => g.group), ["Company", "Operate"]);
+  assert.deepEqual(groups[0].items.map((i) => i.title), ["Ledgers", "Websites", "untitled"]);
+  assert.deepEqual(groups[0].items.map((i) => i.view), ["surface:ledgers", "surface:sites", "surface:untitled"]);
+  assert.deepEqual(groups[1].items.map((i) => i.key), ["fleet"]);
+  // Claimed, locked and malformed manifests never become nav items.
+  const keys = groups.flatMap((g) => g.items.map((i) => i.key));
+  assert.ok(!keys.includes("automations") && !keys.includes("webhooks") && !keys.includes("Bad Key"));
+  assert.deepEqual(dynamicSurfaceNav(null), []);
 });

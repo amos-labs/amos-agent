@@ -1866,7 +1866,7 @@ html[data-platform="win32"] .sidebar-toggle {
 .automation-setup-actions .button { min-width: 100px; }
 .canvas-empty.compact { min-height: 320px; padding: 28px; }
 
-.work-view, .settings-view, .memory-view, .projects-view, .tasks-view, .canvas-view, .connections-view, .automations-view { padding: 42px 46px; }
+.work-view, .settings-view, .memory-view, .projects-view, .tasks-view, .canvas-view, .connections-view, .automations-view, .integrations-view { padding: 42px 46px; }
 .section-heading { max-width: 850px; margin-bottom: 34px; }
 .section-heading h1 { margin-bottom: 15px; font-size: 48px; }
 .section-heading p { color: var(--muted); line-height: 1.6; }
@@ -4731,7 +4731,7 @@ html[data-platform="win32"] .sidebar-toggle {
   .canvas-view { padding: 28px 24px; }
   .automations-view { padding: 28px 24px; }
   .projects-view { padding: 28px 24px; }
-  .tasks-view { padding: 28px 24px; }
+  .tasks-view, .integrations-view { padding: 28px 24px; }
   .automation-summary { grid-template-columns: 1fr; }
   .task-summary { grid-template-columns: 1fr; }
   .task-toolbar { align-items: stretch; flex-direction: column; }
@@ -4807,3 +4807,5 @@ html[data-platform="win32"] .sidebar-toggle {
 .integrations-manifests > .manifest-surface {
   min-width: 0;
 }
+/* Manifest-driven nav items are generated into the sidebar in place. */
+.dynamic-nav { display: contents; }
