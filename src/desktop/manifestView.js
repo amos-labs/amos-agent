@@ -320,3 +320,37 @@ export function filterRows(rows, selection = {}) {
     entries.every(([field, wanted]) => String(resolvePath(row, field) ?? "") === String(wanted))
   );
 }
+
+/** Sidebar order for platform nav groups; unknown groups follow alphabetically. */
+const NAV_GROUP_ORDER = ["Company", "Operate", "Integrations"];
+
+/**
+ * Nav entries for manifest-driven surfaces that no built-in view claims, grouped
+ * the way the platform asks (`manifest.nav.group` / `nav.order`). Unavailable
+ * manifests, malformed keys and claimed keys are skipped, so a locked module
+ * never leaves a dead nav item behind. Returns [{ group, items: [{ key, title,
+ * order }] }] in display order; each item's `view` is the renderer's view id.
+ */
+export function dynamicSurfaceNav(manifests, claimedKeys = []) {
+  const claimed = new Set(claimedKeys);
+  const byGroup = new Map();
+  for (const manifest of Array.isArray(manifests) ? manifests : []) {
+    if (!manifest || typeof manifest.key !== "string") continue;
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(manifest.key)) continue;
+    if (claimed.has(manifest.key) || manifest.available === false) continue;
+    const group = String(manifest.nav?.group || "Company").trim() || "Company";
+    const order = Number.isFinite(Number(manifest.nav?.order)) ? Number(manifest.nav.order) : 999;
+    const title = String(manifest.title || manifest.key).trim() || manifest.key;
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group).push({ key: manifest.key, title, order, view: `surface:${manifest.key}` });
+  }
+  const groups = [...byGroup.entries()].map(([group, items]) => ({
+    group,
+    items: items.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+  }));
+  const rank = (group) => {
+    const index = NAV_GROUP_ORDER.indexOf(group);
+    return index === -1 ? NAV_GROUP_ORDER.length : index;
+  };
+  return groups.sort((a, b) => rank(a.group) - rank(b.group) || a.group.localeCompare(b.group));
+}

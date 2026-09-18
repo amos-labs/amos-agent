@@ -4,6 +4,7 @@ import {
   bindArgs,
   filterRows,
   formatCell,
+  dynamicSurfaceNav,
   listRows,
   resolvePath,
   visibleActions
@@ -192,7 +193,8 @@ const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
     "memoryView", "projectsView", "missionsView", "tasksView", "canvasView", "connectionsView", "automationsView",
-    "integrationsView", "integrationsEmpty", "integrationsManifests", "moreView", "moreManifests",
+    "integrationsView", "integrationsEmpty", "integrationsManifests",
+    "surfaceView", "surfaceEyebrow", "surfaceTitle", "surfaceManifest", "dynamicNav",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
@@ -709,7 +711,7 @@ function bindEvents() {
     renderConnections();
     renderAutomations();
     renderIntegrations();
-    renderMoreSurfaces();
+    renderDynamicNav();
     renderSurfaceLocks();
     renderProjects();
     renderMissions();
@@ -843,7 +845,7 @@ function render() {
     elements.connectionsView.classList.add("hidden");
     elements.automationsView.classList.add("hidden");
     elements.integrationsView.classList.add("hidden");
-    elements.moreView.classList.add("hidden");
+    elements.surfaceView.classList.add("hidden");
     elements.workView.classList.add("hidden");
     elements.settingsView.classList.add("hidden");
   } else {
@@ -1060,7 +1062,7 @@ function render() {
   renderConnections();
   renderAutomations();
   renderIntegrations();
-  renderMoreSurfaces();
+  renderDynamicNav();
   renderSurfaceLocks();
   renderProjects();
   renderMissions();
@@ -1295,14 +1297,17 @@ function showView(view) {
     connections: elements.connectionsView,
     automations: elements.automationsView,
     integrations: elements.integrationsView,
-    more: elements.moreView,
     work: elements.workView,
     settings: elements.settingsView
   };
   const keepOnboarding = view !== "settings" && firstRunNeeded();
+  // Manifest-driven pages share one section; the view id names the surface.
+  const surfaceKey = view.startsWith("surface:") ? view.slice("surface:".length) : null;
   for (const [name, section] of Object.entries(map)) {
     section.classList.toggle("hidden", keepOnboarding || name !== view);
   }
+  elements.surfaceView.classList.toggle("hidden", keepOnboarding || !surfaceKey);
+  if (surfaceKey && !keepOnboarding) renderSurfacePage(surfaceKey);
   elements.onboardingView.classList.toggle("hidden", !keepOnboarding);
   for (const button of document.querySelectorAll(".nav-item")) {
     button.classList.toggle("active", button.dataset.view === view);
@@ -1800,21 +1805,61 @@ function renderIntegrations() {
   elements.integrationsEmpty.classList.toggle("hidden", shown > 0);
 }
 
-// Every other available manifest the platform ships that no built-in view
-// claims: a new platform surface appears here with no Desktop release. The
-// nav item only shows while there is something to draw.
-function renderMoreSurfaces() {
+// Every other available manifest the platform ships gets its own sidebar item,
+// titled and grouped the way the platform asks (manifest.nav). A new platform
+// page therefore appears here with no Desktop release; a locked or withdrawn
+// one disappears, and if it was open we fall back to the Operator.
+function renderDynamicNav() {
   const manifests = Array.isArray(state?.surfaceManifests?.manifests)
     ? state.surfaceManifests.manifests
     : [];
-  const keys = manifests
-    .filter((manifest) => manifest && typeof manifest.key === "string")
-    .map((manifest) => manifest.key)
-    .filter((key) => !(key in SURFACE_VIEWS) && !INTEGRATION_SURFACES.includes(key));
-  const shown = renderManifestPanels(elements.moreManifests, keys);
-  const navItem = document.querySelector('.nav-item[data-view="more"]');
-  if (navItem) navItem.classList.toggle("hidden", shown === 0);
-  if (shown === 0 && currentView === "more") showView("operator");
+  const claimed = [...Object.keys(SURFACE_VIEWS), ...INTEGRATION_SURFACES];
+  const groups = dynamicSurfaceNav(manifests, claimed);
+  const container = elements.dynamicNav;
+  if (!container) return;
+  container.replaceChildren();
+  const known = new Set();
+  for (const group of groups) {
+    for (const item of group.items) {
+      known.add(item.view);
+      const button = document.createElement("button");
+      button.className = "nav-item";
+      button.type = "button";
+      button.dataset.view = item.view;
+      button.dataset.group = group.group;
+      button.title = `${group.group} · ${item.title}`;
+      const icon = document.createElement("span");
+      icon.className = "nav-icon";
+      icon.textContent = "◫";
+      const label = document.createElement("span");
+      label.textContent = item.title;
+      button.append(icon, label);
+      button.classList.toggle("active", currentView === item.view);
+      button.addEventListener("click", () => {
+        if (firstRunNeeded()) {
+          explainOnboardingGate();
+          return;
+        }
+        showView(item.view);
+      });
+      container.append(button);
+    }
+  }
+  if (currentView.startsWith("surface:")) {
+    if (known.has(currentView)) renderSurfacePage(currentView.slice("surface:".length));
+    else showView("operator");
+  }
+}
+
+function renderSurfacePage(key) {
+  const manifest = availableSurfaceManifest(key);
+  if (!manifest) {
+    elements.surfaceManifest.replaceChildren();
+    return;
+  }
+  elements.surfaceEyebrow.textContent = String(manifest.nav?.group || "Company").toUpperCase();
+  elements.surfaceTitle.textContent = manifest.title || key;
+  renderManifestPanels(elements.surfaceManifest, [key]);
 }
 
 function renderAutomations() {
