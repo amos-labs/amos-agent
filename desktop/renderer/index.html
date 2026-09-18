@@ -46,6 +46,12 @@
           <button class="nav-item" data-view="automations">
             <span class="nav-icon">↻</span><span>Automations</span>
           </button>
+          <button class="nav-item" data-view="integrations">
+            <span class="nav-icon">⇄</span><span>Integrations</span>
+          </button>
+          <button class="nav-item hidden" data-view="more">
+            <span class="nav-icon">▤</span><span>More</span>
+          </button>
           <button class="nav-item" data-view="work">
             <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
           </button>
@@ -747,6 +753,35 @@
           <div id="automationList" class="automation-list"></div>
         </section>
 
+        <section id="integrationsView" class="view integrations-view hidden">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">GOVERNED DATA MOVEMENT</span>
+              <h1>Pipelines, jobs, webhooks and mappings.</h1>
+              <p>
+                Records moving between systems through governed pipelines, with jobs you can
+                watch, pause, retry and prove. Every table here is described by the AMOS
+                platform; actions re-enter policy, approvals and proof.
+              </p>
+            </div>
+          </div>
+          <div id="integrationsEmpty" class="automation-empty hidden">
+            <span>⇄</span>
+            <strong>No integration surfaces yet</strong>
+            <p>The platform lists pipelines, jobs, webhooks and mappings here once the integrations module is on for this workspace.</p>
+          </div>
+          <div id="integrationsManifests" class="integrations-manifests" aria-live="polite"></div>
+        </section>
+        <section id="moreView" class="view integrations-view hidden">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">PLATFORM SURFACES</span>
+              <h1>More from AMOS.</h1>
+              <p>Surfaces the platform describes that this version of Desktop has no dedicated page for yet. They draw from their manifests exactly like the built-in views.</p>
+            </div>
+          </div>
+          <div id="moreManifests" class="integrations-manifests" aria-live="polite"></div>
+        </section>
         <section id="workView" class="view work-view hidden">
           <div class="section-heading work-heading">
             <span class="eyebrow">GOVERNED WORK</span>

@@ -27,7 +27,11 @@ export const CHANGE_STREAM_SURFACES = Object.freeze([
   "briefings",
   "automations",
   "tasks",
-  "projects"
+  "projects",
+  "pipelines",
+  "jobs",
+  "webhooks",
+  "mappings"
 ]);
 
 const MIN_BACKOFF_MS = 1_000;

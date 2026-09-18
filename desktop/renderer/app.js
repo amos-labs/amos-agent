@@ -192,6 +192,7 @@ const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
     "memoryView", "projectsView", "missionsView", "tasksView", "canvasView", "connectionsView", "automationsView",
+    "integrationsView", "integrationsEmpty", "integrationsManifests", "moreView", "moreManifests",
     "connectionDot", "connectionLabel", "connectionDetail", "runtimeBadge", "modeBadge", "workspaceLabel",
     "localApprovalButton", "localApprovalLabel",
     "identityDetail", "identityBadge", "accountMenuButton", "accountMenu", "accountMenuClose",
@@ -707,6 +708,8 @@ function bindEvents() {
     renderCompanyCache();
     renderConnections();
     renderAutomations();
+    renderIntegrations();
+    renderMoreSurfaces();
     renderSurfaceLocks();
     renderProjects();
     renderMissions();
@@ -839,6 +842,8 @@ function render() {
     elements.memoryView.classList.add("hidden");
     elements.connectionsView.classList.add("hidden");
     elements.automationsView.classList.add("hidden");
+    elements.integrationsView.classList.add("hidden");
+    elements.moreView.classList.add("hidden");
     elements.workView.classList.add("hidden");
     elements.settingsView.classList.add("hidden");
   } else {
@@ -1054,6 +1059,8 @@ function render() {
   renderCompanyCache();
   renderConnections();
   renderAutomations();
+  renderIntegrations();
+  renderMoreSurfaces();
   renderSurfaceLocks();
   renderProjects();
   renderMissions();
@@ -1187,8 +1194,14 @@ const SURFACE_VIEWS = Object.freeze({
   briefings: "canvas",
   automations: "automations",
   tasks: "tasks",
-  projects: "projects"
+  projects: "projects",
+  pipelines: "integrations",
+  jobs: "integrations",
+  webhooks: "integrations",
+  mappings: "integrations"
 });
+// The Integrations view draws these platform manifests, in this order.
+const INTEGRATION_SURFACES = Object.freeze(["pipelines", "jobs", "webhooks", "mappings"]);
 
 function surfaceLockMessage(locked) {
   const detail = String(locked?.detail || "").trim();
@@ -1218,7 +1231,8 @@ function renderSurfaceLocks() {
     canvas: elements.canvasView,
     automations: elements.automationsView,
     tasks: elements.tasksView,
-    projects: elements.projectsView
+    projects: elements.projectsView,
+    integrations: elements.integrationsView
   };
   const lockedByView = new Map();
   const knownByView = new Map();
@@ -1280,6 +1294,8 @@ function showView(view) {
     tasks: elements.tasksView,
     connections: elements.connectionsView,
     automations: elements.automationsView,
+    integrations: elements.integrationsView,
+    more: elements.moreView,
     work: elements.workView,
     settings: elements.settingsView
   };
@@ -1753,6 +1769,52 @@ async function runManifestAction({ manifest, action, rowIndex }) {
   } catch (error) {
     toast(error?.message || `${action.label} failed`, true);
   }
+}
+
+// Integrations: pipelines, jobs, webhooks and mappings are pure platform
+// manifests (no hand-built list), one generic panel per available surface.
+// A surface the platform locks (module off, missing scope, plan) is hidden by
+// renderSurfaceLocks with the platform's own reason; here we only draw what is
+// available.
+function renderManifestPanels(container, keys) {
+  if (!container) return 0;
+  container.replaceChildren();
+  let shown = 0;
+  for (const key of keys) {
+    const manifest = availableSurfaceManifest(key);
+    if (!manifest) continue;
+    const panel = document.createElement("div");
+    panel.className = "manifest-surface";
+    panel.dataset.surface = key;
+    renderManifestSurface(panel, manifest, state.surfaceSections?.[key] || null, {
+      runAction: runManifestAction
+    });
+    container.append(panel);
+    shown += 1;
+  }
+  return shown;
+}
+
+function renderIntegrations() {
+  const shown = renderManifestPanels(elements.integrationsManifests, INTEGRATION_SURFACES);
+  elements.integrationsEmpty.classList.toggle("hidden", shown > 0);
+}
+
+// Every other available manifest the platform ships that no built-in view
+// claims: a new platform surface appears here with no Desktop release. The
+// nav item only shows while there is something to draw.
+function renderMoreSurfaces() {
+  const manifests = Array.isArray(state?.surfaceManifests?.manifests)
+    ? state.surfaceManifests.manifests
+    : [];
+  const keys = manifests
+    .filter((manifest) => manifest && typeof manifest.key === "string")
+    .map((manifest) => manifest.key)
+    .filter((key) => !(key in SURFACE_VIEWS) && !INTEGRATION_SURFACES.includes(key));
+  const shown = renderManifestPanels(elements.moreManifests, keys);
+  const navItem = document.querySelector('.nav-item[data-view="more"]');
+  if (navItem) navItem.classList.toggle("hidden", shown === 0);
+  if (shown === 0 && currentView === "more") showView("operator");
 }
 
 function renderAutomations() {
