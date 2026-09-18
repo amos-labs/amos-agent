@@ -1714,8 +1714,24 @@ export const DESKTOP_SNAPSHOT_SURFACES = Object.freeze([
   "briefings",
   "automations",
   "tasks",
-  "projects"
+  "projects",
+  "pipelines",
+  "jobs",
+  "webhooks",
+  "mappings"
 ]);
+
+/** Surface keys the Integrations view draws from platform manifests, in order. */
+export const INTEGRATION_SURFACES = Object.freeze(["pipelines", "jobs", "webhooks", "mappings"]);
+
+/** Most extra (not yet known to this client) surfaces one snapshot may add. */
+const MAX_EXTRA_SURFACES = 24;
+const SURFACE_KEY = /^[a-z][a-z0-9_]{0,63}$/;
+
+/** A surface key the platform may name that this client has no hand-built view for. */
+export function isExtraSurfaceKey(key) {
+  return typeof key === "string" && SURFACE_KEY.test(key) && !DESKTOP_SNAPSHOT_SURFACES.includes(key);
+}
 
 function normalizeBriefingsPayload(templates, definitions) {
   return {
@@ -1947,6 +1963,17 @@ export function normalizeDesktopSnapshot(payload) {
   for (const key of DESKTOP_SNAPSHOT_SURFACES) {
     if (!sections[key]) sections[key] = {};
     sections[key].raw = snapshotSectionRaw(rawSections[key]);
+  }
+  // Surfaces this client has never heard of still flow through: the platform
+  // describes them (availability, lock reason) and ships their manifest, and
+  // the generic manifest view draws them. A new platform surface therefore
+  // needs no Desktop release to appear.
+  let extra = 0;
+  for (const key of Object.keys(rawSurfaces)) {
+    if (!isExtraSurfaceKey(key) || extra >= MAX_EXTRA_SURFACES) continue;
+    extra += 1;
+    surfaces[key] = normalizeSnapshotSurface(key, rawSurfaces[key]);
+    sections[key] = { raw: snapshotSectionRaw(rawSections[key]) };
   }
 
   const since = {};

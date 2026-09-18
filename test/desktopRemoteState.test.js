@@ -2000,7 +2000,7 @@ test("Desktop snapshot reports unsupported on an older platform and rethrows oth
   await assert.rejects(failing.desktopSnapshot(), /connection refused/);
 });
 
-test("Desktop snapshot treats a limited identity as absent and ignores unknown surfaces", async () => {
+test("Desktop snapshot treats a limited identity as absent, carries well-formed unknown surfaces, and drops malformed keys", async () => {
   const client = new DesktopRemoteStateClient(
     {
       mcpUrl: "https://app.amoslabs.com/mcp",
@@ -2017,7 +2017,7 @@ test("Desktop snapshot treats a limited identity as absent and ignores unknown s
             text: JSON.stringify({
               contract_version: 1,
               identity: { status: "limited", reason: "timed_out" },
-              surfaces: { receipts: { label: "Proof", available: true, version: "r2" }, integrations: { available: true } },
+              surfaces: { receipts: { label: "Proof", available: true, version: "r2" }, integrations: { available: true }, "Not A Key": { available: true } },
               sections: { receipts: { version: "r2", status: "available", data: { list_receipts: { receipts: [] } }, limited: {} } },
               resume: { since: { receipts: "r2" } }
             })
@@ -2029,6 +2029,9 @@ test("Desktop snapshot treats a limited identity as absent and ignores unknown s
   const snapshot = await client.desktopSnapshot();
   assert.equal(snapshot.identity, null);
   assert.equal(snapshot.identityLimited, "timed_out");
-  assert.deepEqual(Object.keys(snapshot.surfaces), ["receipts"]);
+  // A surface this client has no view for still flows through (the generic
+  // manifest view draws it); a malformed key never does.
+  assert.deepEqual(Object.keys(snapshot.surfaces), ["receipts", "integrations"]);
+  assert.equal(snapshot.surfaces.integrations.available, true);
   assert.deepEqual(snapshot.sections.receipts.library, { display: [], platform: [] });
 });

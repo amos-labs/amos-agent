@@ -4798,3 +4798,12 @@ html[data-platform="win32"] .sidebar-toggle {
 .manifest-muted { color: var(--muted-2); font-size: 12px; }
 .manifest-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .manifest-empty { margin: 0; }
+
+/* Integrations + generic platform surfaces: one manifest panel per surface. */
+.integrations-manifests {
+  display: grid;
+  gap: 28px;
+}
+.integrations-manifests > .manifest-surface {
+  min-width: 0;
+}
