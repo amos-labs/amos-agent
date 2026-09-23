@@ -5,6 +5,7 @@ const MANTLE_REGIONS = Object.freeze([
   "us-east-2",
   "us-west-2",
   "ap-southeast-3",
+  "ap-southeast-4",
   "ap-south-1",
   "ap-southeast-2",
   "ap-northeast-1",
@@ -22,6 +23,9 @@ const GPT_56_SOL_REGIONS = Object.freeze(["us-east-1", "us-east-2"]);
 const GPT_6_SOL_LUNA_REGIONS = Object.freeze(["us-east-1"]);
 const GPT_6_ASTRA_REGIONS = Object.freeze(["us-west-2"]);
 const CLAUDE_5_VERIFIED_REGIONS = Object.freeze(["us-east-1"]);
+// Mantle regions from the 2026-09-22 availability note. bedrock-runtime calls
+// use us.|eu.|au.|jp.|global.anthropic.claude-opus-5-5, not this foundation id.
+const OPUS_55_MANTLE_REGIONS = Object.freeze(["us-east-1", "ap-southeast-4"]);
 
 export const BEDROCK_MANTLE_CATALOG = Object.freeze({
   schema: "amos.bedrock-mantle-catalog:1",
@@ -189,7 +193,7 @@ export const BEDROCK_MANTLE_CATALOG = Object.freeze({
       apiVersion: "2023-06-01",
       supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"],
       defaultReasoningEffort: "medium",
-      regions: CLAUDE_5_VERIFIED_REGIONS,
+      regions: OPUS_55_MANTLE_REGIONS,
       capabilities: { tools: true, vision: true, reasoning: true }
     }),
     model({

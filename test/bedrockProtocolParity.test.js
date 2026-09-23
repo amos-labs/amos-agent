@@ -87,6 +87,28 @@ test("Bedrock Claude uses Messages, x-api-key auth, and the Anthropic Mantle pat
   assert.equal(request.headers["anthropic-version"], "2023-06-01");
 });
 
+test("Claude Opus 5.5 is qualified on Mantle in Virginia and Melbourne", () => {
+  for (const region of ["us-east-1", "ap-southeast-4"]) {
+    const config = resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "bedrock",
+      AMOS_MODEL: "anthropic.claude-opus-5-5",
+      AWS_REGION: region,
+      AWS_BEARER_TOKEN_BEDROCK: "bedrock-test-key"
+    });
+    assert.equal(config.baseUrl, `https://bedrock-mantle.${region}.api.aws/anthropic/v1`);
+    assert.equal(config.protocol, "anthropic-messages");
+  }
+  assert.throws(
+    () => resolveModelConfig({
+      AMOS_MODEL_PROVIDER: "bedrock",
+      AMOS_MODEL: "anthropic.claude-opus-5",
+      AWS_REGION: "ap-southeast-4",
+      AWS_BEARER_TOKEN_BEDROCK: "bedrock-test-key"
+    }),
+    /not qualified.*ap-southeast-4/
+  );
+});
+
 test("Bedrock fails closed for unqualified models, regions, and credential origins", () => {
   assert.throws(
     () => resolveModelConfig({
