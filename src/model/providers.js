@@ -172,6 +172,16 @@ const PROVIDERS = {
         label: "GPT-6 Astra",
         supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"]
       },
+      {
+        id: "gpt-6-sol",
+        label: "GPT-6 Sol",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"]
+      },
+      {
+        id: "gpt-6-luna",
+        label: "GPT-6 Luna",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"]
+      },
       { id: "gpt-5.6-terra", label: "GPT-5.6 Terra" },
       { id: "gpt-5.6-sol", label: "GPT-5.6 Sol" },
       { id: "gpt-5.6-luna", label: "GPT-5.6 Luna" }
@@ -190,7 +200,13 @@ const PROVIDERS = {
     defaultModel: "claude-sonnet-5",
     models: [
       { id: "claude-sonnet-5", label: "Claude Sonnet 5" },
+      {
+        id: "claude-opus-5-5",
+        label: "Claude Opus 5.5",
+        supportedReasoningEfforts: ["low", "medium", "high", "xhigh", "max"]
+      },
       { id: "claude-opus-5", label: "Claude Opus 5" },
+      { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
       { id: "claude-fable-5", label: "Claude Fable 5" }
     ],
     apiKeyEnv: ["ANTHROPIC_API_KEY"],

@@ -22,7 +22,7 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   assert.ok(providers.some((provider) => provider.id === "anthropic" && provider.protocol === "anthropic-messages"));
   assert.deepEqual(
     providers.find((provider) => provider.id === "openai").models.map((model) => model.id),
-    ["gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]
+    ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]
   );
   assert.deepEqual(
     providers.find((provider) => provider.id === "openai").models
@@ -31,7 +31,7 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   );
   assert.deepEqual(
     providers.find((provider) => provider.id === "anthropic").models.map((model) => model.id),
-    ["claude-sonnet-5", "claude-opus-5", "claude-fable-5"]
+    ["claude-sonnet-5", "claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-fable-5"]
   );
   assert.deepEqual(
     providers.find((provider) => provider.id === "xai").models.map((model) => model.id),
@@ -55,13 +55,18 @@ test("provider catalog exposes managed, customer-cloud, and local deployment mod
   assert.deepEqual(
     bedrock.models.map((model) => model.id),
     [
+      "openai.gpt-6-luna",
+      "openai.gpt-6-sol",
+      "openai.gpt-6-astra",
       "openai.gpt-5.6-luna",
       "openai.gpt-5.6-terra",
       "openai.gpt-5.6-sol",
       "openai.gpt-oss-20b",
       "openai.gpt-oss-120b",
+      "anthropic.claude-fable-5-1",
       "anthropic.claude-fable-5",
       "anthropic.claude-sonnet-5",
+      "anthropic.claude-opus-5-5",
       "anthropic.claude-opus-5"
     ]
   );
