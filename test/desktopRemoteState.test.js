@@ -2035,3 +2035,126 @@ test("Desktop snapshot treats a limited identity as absent, carries well-formed 
   assert.equal(snapshot.surfaces.integrations.available, true);
   assert.deepEqual(snapshot.sections.receipts.library, { display: [], platform: [] });
 });
+
+test("Desktop keeps connection ownership and asks for shared accounts only explicitly", async () => {
+  const requests = [];
+  const me = "11111111-1111-4111-8111-111111111111";
+  const connectionId = "66666666-6666-4666-8666-666666666666";
+  const payloads = {
+    list_connections: {
+      connections: [
+        { id: connectionId, provider: "quickbooks", display_name: "QuickBooks (mine)", kind: "oauth",
+          status: "connected", ownership: "personal", owner_user_id: me, usable: true },
+        { id: "77777777-7777-4777-8777-777777777777", provider: "quickbooks", display_name: "QuickBooks (company)",
+          kind: "oauth", status: "connected", ownership: "service_account", owner_user_id: null, usable: true }
+      ]
+    },
+    list_connection_catalog: { providers: [{ provider: "quickbooks", label: "QuickBooks" }] },
+    connect_link: { provider: "quickbooks", url: "https://appcenter.intuit.com/connect?state=x", expires_in: 600 },
+    set_connection_ownership: { connection_id: connectionId, service_account: true, changed: true }
+  };
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payloads[request.params.name]) }] }
+      });
+    }
+  );
+
+  const catalog = await client.connectionsCatalog();
+  const [mine, shared] = catalog.connections;
+  assert.equal(mine.ownership, "personal");
+  assert.equal(mine.ownerUserId, me);
+  assert.equal(shared.ownership, "service_account");
+  assert.equal(shared.ownerUserId, "");
+
+  await client.connectLink("quickbooks");
+  assert.deepEqual(requests.at(-1).params.arguments, { provider: "quickbooks" }, "personal by default");
+  await client.connectLink("quickbooks", { serviceAccount: true });
+  assert.deepEqual(requests.at(-1).params.arguments, { provider: "quickbooks", service_account: true });
+
+  const changed = await client.setConnectionOwnership(connectionId, true);
+  assert.equal(changed.changed, true);
+  assert.equal(requests.at(-1).params.name, "set_connection_ownership");
+  assert.deepEqual(requests.at(-1).params.arguments, { connection_id: connectionId, service_account: true });
+  await assert.rejects(() => client.setConnectionOwnership("nope", true), /Connection id is invalid/);
+});
+
+test("Desktop reads the Mission contract revision, profile, email policy and run time, and changes ceilings by direction", async () => {
+  const requests = [];
+  const missionId = "88888888-8888-4888-8888-888888888888";
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify({ mission_id: missionId, contract_revision: 3 }) }] }
+      });
+    }
+  );
+  await client.amendMissionBudget(missionId, "lower", { max_provider_credits: 1500 });
+  assert.equal(requests.at(-1).params.name, "lower_mission_budget");
+  assert.deepEqual(requests.at(-1).params.arguments, { mission_id: missionId, budgets: { max_provider_credits: 1500 } });
+  await client.amendMissionBudget(missionId, "raise", { max_tool_calls: 400, max_wall_time_seconds: 172800 });
+  assert.equal(requests.at(-1).params.name, "raise_mission_budget");
+  await assert.rejects(() => client.amendMissionBudget(missionId, "double", { max_tool_calls: 1 }), /unknown ceiling change/);
+  await assert.rejects(() => client.amendMissionBudget(missionId, "lower", { objective: 3 }), /whole number/);
+  await assert.rejects(() => client.amendMissionBudget(missionId, "lower", { max_provider_credits: 0 }), /whole number/);
+  await assert.rejects(() => client.amendMissionBudget(missionId, "lower", {}), /at least one ceiling/);
+  assert.equal(requests.length, 2, "refusals never reach the platform");
+});
+
+test("Desktop carries the platform's contract revision, prospect profile and email policy onto a Mission", async () => {
+  const missionId = "99999999-9999-4999-8999-999999999999";
+  const mission = {
+    mission_id: missionId,
+    name: "Texas patrol officers",
+    objective: "Build a list of Texas patrol officers.",
+    status: "running",
+    usage: { wall_time_seconds: { used: 7200, max: 86400 } },
+    contract: {
+      contract_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      revision: 3,
+      status: "active",
+      looking_for: "Patrol Officers in Texas, US; minimum fit 60; unique by personal email preferred, else verified work email",
+      prospecting_spec: { person_titles: ["Patrol Officer"], email_policy: "personal_preferred" },
+      budgets: { max_provider_credits: 1500, used_provider_credits: 120, max_tool_calls: 400, used_tool_calls: 31, max_wall_time_seconds: 86400 }
+    }
+  };
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      const payload = request.params.name === "list_missions" ? { missions: [mission] } : { goals: [], templates: [] };
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { content: [{ type: "text", text: JSON.stringify(payload) }] }
+      });
+    }
+  );
+  const library = await client.missionsLibrary();
+  const loaded = library.missions.find((item) => item.id === missionId);
+  assert.equal(loaded.contract.revision, 3);
+  assert.equal(loaded.contract.emailPolicy, "personal_preferred");
+  assert.match(loaded.contract.lookingFor, /Patrol Officers/);
+  assert.equal(loaded.contract.wallTimeUsedSeconds, 7200);
+  assert.equal(loaded.contract.maxProviderCredits, 1500);
+});

@@ -337,11 +337,21 @@ test("Connections HTML contains no customer or provider-specific catalog truth",
     javascript,
     /connectedSystems = connections\.filter\([\s\S]*?connection\.status === "connected"/
   );
+  // A provider stays connectable until the person has their OWN account; a
+  // shared service account never blocks connecting a personal one.
   assert.match(
     javascript,
-    /availableProviders = providers\.filter\([\s\S]*?!connectionsByProvider\.has\(provider\.provider\)/
+    /availableProviders = providers\.filter\([\s\S]*?!mineByProvider\.has\(provider\.provider\)/
   );
-  assert.match(javascript, /api\.connectProvider\(provider\.provider\)/);
+  assert.match(javascript, /api\.connectProvider\(provider\.provider, \{ serviceAccount \}\)/);
+  // Ownership follows the platform: labeled groups, owner/admin-only sharing.
+  assert.match(javascript, /\["mine", "Your connections"/);
+  assert.match(javascript, /\["shared", "Shared service accounts"/);
+  assert.match(javascript, /api\.setConnectionOwnership\(connection\.id, shared\)/);
+  assert.match(javascript, /\["owner", "admin"\]\.includes\(String\(state\?\.identity\?\.role/);
+  assert.match(preload, /desktop:set-connection-ownership/);
+  assert.match(controller, /serviceAccount: input\.serviceAccount === true && managesSharedConnections\(this\.identity\)/);
+  assert.doesNotMatch(controller, /serviceAccount: this\.identity\?\.role === "owner"/);
   assert.match(javascript, /api\.connectSecretProvider\(connectionSetupProvider\.provider/);
   assert.match(javascript, /api\.disconnectConnection\(connection\.id\)/);
   assert.match(javascript, /remove its vaulted credential/);
@@ -1706,3 +1716,32 @@ test("platform-reported surface locks render in both refresh paths without hard-
   assert.match(renderer, /state\.surfaces && typeof state\.surfaces === "object" \? state\.surfaces : null/);
   assert.match(css, /\.surface-locked \{/);
 });
+
+test("The side menu ends with Add, which opens existing creation flows from platform templates", async () => {
+  const [javascript, html] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../desktop/renderer/index.html", import.meta.url), "utf8")
+  ]);
+  // "+" is the last item in the nav, after Decisions.
+  assert.match(html, /data-view="work">[\s\S]*?<\/button>\s*<button id="addSurfaceButton" class="nav-item nav-add"[\s\S]*?<\/button>\s*<\/nav>/);
+  assert.match(html, /id="addModal"/);
+  // Nav items without a view (Add) never route through showView.
+  assert.match(javascript, /document\.querySelectorAll\("\.nav-item\[data-view\]"\)/);
+  // Every option reuses the flow that already exists for it.
+  assert.match(javascript, /runPlatformBriefing\(\{ templateKey: template\.key, title: template\.title \}\)/);
+  assert.match(javascript, /openAutomationTask\(null, elements\.buildAutomationButton, true\)/);
+  assert.match(javascript, /state\?\.briefings\?\.templates/);
+});
+
+test("Mission cards offer owner/admin ceilings through the platform's lower/raise verbs", async () => {
+  const [javascript, controller] = await Promise.all([
+    readFile(new URL("../desktop/renderer/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../src/desktop/controller.js", import.meta.url), "utf8")
+  ]);
+  assert.match(javascript, /actionButton\("Ceilings", "secondary"\)/);
+  assert.match(javascript, /api\.setMissionCeilings\(mission\.id, ceilings\)/);
+  assert.match(controller, /amendMissionBudget\(id, "lower", lower\)/);
+  assert.match(controller, /amendMissionBudget\(id, "raise", raise\)/);
+  assert.match(javascript, /Personal email preferred · never phone/);
+});
+

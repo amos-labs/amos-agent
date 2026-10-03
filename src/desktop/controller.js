@@ -2160,8 +2160,12 @@ export class DesktopController {
     return this.state();
   }
 
-  async connectProvider(provider) {
+  async connectProvider(provider, options = {}) {
     const providerKey = String(provider || "").trim();
+    const serviceAccount = options?.serviceAccount === true;
+    if (serviceAccount && !managesSharedConnections(this.identity)) {
+      throw new Error("Only an owner or admin can connect a shared service account");
+    }
     const providers = Array.isArray(this.connectionsCatalog?.providers)
       ? this.connectionsCatalog.providers
       : [
@@ -2193,15 +2197,19 @@ export class DesktopController {
       oauth,
       requestTimeoutMs: config.amos.requestTimeoutMs
     });
-    const link = await remote.connectLink(providerKey);
+    const link = await remote.connectLink(providerKey, { serviceAccount });
     const url = new URL(link.url);
     if (url.protocol !== "https:") {
       throw new Error("AMOS blocked a non-HTTPS connection link");
     }
     await this.openBrowser(url.href);
-    this.record("connection", `Opened governed setup for ${advertised.label}`);
+    this.record(
+      "connection",
+      `Opened governed setup for ${serviceAccount ? "a shared" : "your own"} ${advertised.label} connection`
+    );
     return {
       opened: true,
+      serviceAccount,
       provider: providerKey,
       expiresIn: link.expiresIn
     };
@@ -2250,6 +2258,43 @@ export class DesktopController {
       surfaceSections: structuredClone(this.surfaceSections || {}),
       approvals: structuredClone(this.companyApprovals)
     };
+  }
+
+  /**
+   * Turn a connection into a shared service account (what automations use)
+   * or back into the caller's personal connection. Owner/admin only; only
+   * the person a personal connection belongs to can share it. The platform
+   * enforces the same rules; this only refuses the obviously impossible.
+   */
+  async setConnectionOwnership(connectionId, serviceAccount) {
+    const id = String(connectionId || "").trim();
+    const shared = serviceAccount === true;
+    const connection = (this.connectionsCatalog?.connections || []).find(
+      (item) => item.id === id
+    );
+    if (!connection) throw new Error("AMOS blocked a sharing change for an unknown connection");
+    if (!managesSharedConnections(this.identity)) {
+      throw new Error("Only an owner or admin can change whether a connection is shared");
+    }
+    if (shared && connection.ownership === "personal" && connection.ownerUserId !== identitySubject(this.identity)) {
+      throw new Error("Only the person this connection belongs to can share it");
+    }
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "changing connection sharing");
+    const result = await remote.setConnectionOwnership(id, shared);
+    try {
+      this.connectionsCatalog = await remote.connectionsCatalog();
+    } catch {
+      /* the next refresh picks it up */
+    }
+    this.record(
+      "connection",
+      shared
+        ? `${connection.displayName} is now a shared service account`
+        : `${connection.displayName} is now your personal connection`,
+      { connection_id: id, provider: connection.provider, service_account: shared }
+    );
+    return { result, connectionsCatalog: structuredClone(this.connectionsCatalog) };
   }
 
   async disconnectConnection(connectionId) {
@@ -2368,7 +2413,8 @@ export class DesktopController {
       authScheme,
       baseUrl,
       corporationId: input.contextValue,
-      serviceAccount: this.identity?.role === "owner"
+      // Personal unless an owner/admin explicitly chose a shared account.
+      serviceAccount: input.serviceAccount === true && managesSharedConnections(this.identity)
     };
     const remote = new DesktopRemoteStateClient({
       mcpUrl: settings.amosMcpUrl,
@@ -4900,6 +4946,58 @@ export class DesktopController {
       ...missions,
       approvalRequired
     };
+  }
+
+  /**
+   * Set a hosted Mission's ceilings. Each requested value is compared with
+   * the contract Desktop last read: decreases go through lower_mission_budget
+   * (applies at once), increases through raise_mission_budget (owner-gated,
+   * may park for approval). Owner/admin only, as on the platform.
+   */
+  async setMissionCeilings(id, ceilings) {
+    if (!["owner", "admin"].includes(String(this.identity?.role || ""))) {
+      throw new Error("Only an owner or admin can change a Mission's ceilings");
+    }
+    const mission = (this.missions?.missions || []).find((item) => item.id === id);
+    if (!mission) throw new Error("That Mission is no longer listed; refresh and try again");
+    const current = {
+      max_provider_credits: mission.contract?.maxProviderCredits,
+      max_tool_calls: mission.contract?.maxToolCalls,
+      max_wall_time_seconds: mission.contract?.maxWallTimeSeconds
+    };
+    const lower = {};
+    const raise = {};
+    for (const [field, value] of Object.entries(ceilings || {})) {
+      if (!(field in current)) throw new Error(`${field} cannot be changed from Desktop`);
+      const next = Number(value);
+      if (!Number.isInteger(next) || next < 1) throw new Error("Ceilings must be whole numbers of at least 1");
+      const now = Number(current[field] || 0);
+      if (now && next === now) continue;
+      if (now && next < now) lower[field] = next;
+      else raise[field] = next;
+    }
+    if (Object.keys(lower).length === 0 && Object.keys(raise).length === 0) {
+      return { missions: structuredClone(this.missions), changed: false };
+    }
+    const settings = await this.settingsStore.read();
+    const remote = await this.personalRemote(settings, "changing this Mission's ceilings");
+    const results = {};
+    if (Object.keys(lower).length > 0) {
+      results.lowered = await remote.amendMissionBudget(id, "lower", lower);
+    }
+    if (Object.keys(raise).length > 0) {
+      results.raised = await remote.amendMissionBudget(id, "raise", raise);
+    }
+    const pendingApprovalId = results.raised?.pending_id || results.raised?.pendingId ||
+      results.raised?.pending_operation?.id || null;
+    this.record(
+      "mission",
+      `Changed ceilings on ${mission.name}${pendingApprovalId ? " (raise waiting for approval)" : ""}`,
+      { mission_id: id, lowered: lower, raised: raise, pending_approval: Boolean(pendingApprovalId) }
+    );
+    if (pendingApprovalId) await this.refreshRemote({ notify: true }).catch(() => {});
+    const missions = await this.refreshMissions(remote);
+    return { missions, changed: true, pendingApprovalId, results };
   }
 
   async cancelMission(id) {
@@ -9933,4 +10031,13 @@ function mergeSnapshotSections(current, snapshot) {
     if (raw && typeof raw === "object") next[key] = raw;
   }
   return next;
+}
+
+/** Owners and admins manage shared (service-account) connections. */
+function managesSharedConnections(identity) {
+  return ["owner", "admin"].includes(String(identity?.role || ""));
+}
+
+function identitySubject(identity) {
+  return String(identity?.sub || identity?.user?.id || "");
 }

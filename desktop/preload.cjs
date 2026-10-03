@@ -36,7 +36,10 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   logout: () => ipcRenderer.invoke("desktop:logout"),
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
   switchCompany: (tenantId) => ipcRenderer.invoke("desktop:switch-company", tenantId),
-  connectProvider: (provider) => ipcRenderer.invoke("desktop:connect-provider", provider),
+  connectProvider: (provider, options = {}) =>
+    ipcRenderer.invoke("desktop:connect-provider", { provider, options }),
+  setConnectionOwnership: (connectionId, serviceAccount) =>
+    ipcRenderer.invoke("desktop:set-connection-ownership", { connectionId, serviceAccount }),
   disconnectConnection: (connectionId) =>
     ipcRenderer.invoke("desktop:disconnect-connection", connectionId),
   runSurfaceAction: (payload) => ipcRenderer.invoke("desktop:run-surface-action", payload),
@@ -141,6 +144,8 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   pauseMission: (id) => ipcRenderer.invoke("desktop:pause-mission", id),
   resumeMission: (id) => ipcRenderer.invoke("desktop:resume-mission", id),
   cancelMission: (id) => ipcRenderer.invoke("desktop:cancel-mission", id),
+  setMissionCeilings: (id, ceilings) =>
+    ipcRenderer.invoke("desktop:set-mission-ceilings", { id, ceilings }),
   setOptimizationMissionStatus: (id, status) =>
     ipcRenderer.invoke("desktop:set-optimization-mission-status", { id, status }),
   getNotificationPreferences: () => ipcRenderer.invoke("desktop:get-notification-preferences"),

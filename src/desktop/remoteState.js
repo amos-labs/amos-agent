@@ -771,6 +771,40 @@ export class DesktopRemoteStateClient {
     };
   }
 
+  /**
+   * Change a Mission's ceilings. Lowering only reduces authority and applies
+   * at once; raising widens it and follows the owner gate (it may come back
+   * parked for approval). `direction` is "lower" or "raise".
+   */
+  async amendMissionBudget(id, direction, budgets, { signal = null } = {}) {
+    if (!["lower", "raise"].includes(direction)) {
+      throw new Error("AMOS blocked an unknown ceiling change");
+    }
+    const allowed = [
+      "max_provider_credits",
+      "max_tool_calls",
+      "max_cost_microusd",
+      "max_wall_time_seconds",
+      "max_decisions"
+    ];
+    const cleaned = {};
+    for (const [field, value] of Object.entries(budgets || {})) {
+      const number = Number(value);
+      if (!allowed.includes(field) || !Number.isInteger(number) || number < 1) {
+        throw new Error(`${field} must be a whole number of at least 1`);
+      }
+      cleaned[field] = number;
+    }
+    if (Object.keys(cleaned).length === 0) throw new Error("Name at least one ceiling to change");
+    return parseMcpJson(
+      await this.mcp.callTool(`${direction}_mission_budget`, {
+        mission_id: requiredUuid(id, "Mission"),
+        budgets: cleaned
+      }, { signal }),
+      `AMOS Mission ceilings (${direction})`
+    );
+  }
+
   async cancelMission(id, reason = "", { signal = null } = {}) {
     const payload = parseMcpJson(
       await this.mcp.callTool("cancel_mission", {
@@ -976,6 +1010,18 @@ export class DesktopRemoteStateClient {
     return parseMcpJson(result, "AMOS connection disconnect");
   }
 
+  async setConnectionOwnership(connectionId, serviceAccount, { signal = null } = {}) {
+    const result = await this.mcp.callTool(
+      "set_connection_ownership",
+      {
+        connection_id: requiredUuid(connectionId, "Connection"),
+        service_account: serviceAccount === true
+      },
+      { signal }
+    );
+    return parseMcpJson(result, "AMOS connection sharing");
+  }
+
   async connectionProviderCatalog({ signal = null } = {}) {
     try {
       const result = await this.mcp.callTool("list_connection_catalog", {}, { signal });
@@ -991,16 +1037,16 @@ export class DesktopRemoteStateClient {
     }
   }
 
-  async connectLink(provider, { signal = null } = {}) {
+  async connectLink(provider, { signal = null, serviceAccount = false } = {}) {
     const providerKey = String(provider || "").trim();
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(providerKey)) {
       throw new Error("AMOS blocked an invalid connection provider");
     }
-    const result = await this.mcp.callTool(
-      "connect_link",
-      { provider: providerKey },
-      { signal }
-    );
+    // Personal by default; a shared service account is an explicit owner or
+    // admin choice the platform re-checks.
+    const args = { provider: providerKey };
+    if (serviceAccount === true) args.service_account = true;
+    const result = await this.mcp.callTool("connect_link", args, { signal });
     const payload = parseMcpJson(result, "AMOS connection link");
     const url = String(payload?.url || "");
     if (!url) throw new Error("AMOS did not return a connection link");
@@ -2374,6 +2420,21 @@ function normalizeMission(value) {
       maxProviderCredits: boundedCount(budgets.max_provider_credits),
       usedProviderCredits: boundedCount(budgets.used_provider_credits),
       maxWallTimeSeconds: boundedCount(budgets.max_wall_time_seconds),
+      wallTimeUsedSeconds: boundedCount(value.usage?.wall_time_seconds?.used),
+      maxDecisions: boundedCount(budgets.max_decisions),
+      usedDecisions: boundedCount(budgets.used_decisions),
+      // Each owner change mints a new digest-bound revision.
+      revision: boundedCount(contract.revision),
+      // The prospect profile in the platform's own words, and which email
+      // address it saves (work only unless the owner allowed personal).
+      lookingFor: String(contract.looking_for || "").slice(0, 600),
+      emailPolicy: ["work_only", "personal_allowed", "personal_preferred"].includes(
+        contract.prospecting_spec?.email_policy
+      )
+        ? contract.prospecting_spec.email_policy
+        : contract.prospecting_spec
+          ? "work_only"
+          : "",
       expiresAt: safeTimestamp(contract.expires_at || contract.expiresAt)
     },
     // "212 of 500 so far": whatever the Platform reports as done against the goal's target, with
@@ -2815,7 +2876,10 @@ function normalizeConnection(value) {
     displayName,
     kind: String(value.kind || "connection"),
     status: String(value.status || "unknown"),
-    ownership: String(value.ownership || "service_account"),
+    // "personal" (one person's own account) or "service_account" (shared:
+    // what automations use, and teammates without their own).
+    ownership: value.ownership === "personal" ? "personal" : "service_account",
+    ownerUserId: value.owner_user_id ? String(value.owner_user_id) : "",
     usable: value.usable === true,
     createdAt: value.created_at || null
   };

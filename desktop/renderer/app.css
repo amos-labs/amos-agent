@@ -4809,3 +4809,44 @@ html[data-platform="win32"] .sidebar-toggle {
 }
 /* Manifest-driven nav items are generated into the sidebar in place. */
 .dynamic-nav { display: contents; }
+
+/* Connections: yours / shared / teammates */
+.connection-group-header { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; margin: 10px 2px 2px; }
+.connection-group-header:first-child { margin-top: 0; }
+.connection-group-header strong { font-size: 12px; letter-spacing: .02em; }
+.connection-group-header small { color: var(--muted); font-size: 11px; }
+.connection-pills { display: inline-flex; gap: 6px; align-items: center; }
+.connection-owner-pill.mine { background: rgba(110,168,254,.14); color: light-dark(#1d4fa8, #8ab6ff); }
+.connection-owner-pill.shared { background: rgba(190,140,255,.14); color: light-dark(#6a2fb0, #c6a2ff); }
+.connection-owner-pill.teammate { background: rgba(160,160,170,.14); color: var(--muted); }
+.connection-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.connection-card-actions .connection-disconnect-button { margin-top: 0; }
+.connection-shared-field span { display: flex; align-items: center; gap: 8px; }
+.connection-shared-field small { color: var(--muted); }
+
+/* Mission ceilings editor and profile line */
+.mission-looking-for { color: var(--muted); font-size: 11px; }
+.mission-ceilings { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line, rgba(127,127,127,.25)); border-radius: 10px; }
+.mission-ceilings > p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 12px; }
+.mission-ceilings label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.mission-ceilings input { width: 120px; }
+.mission-ceilings small { color: var(--muted); font-size: 11px; }
+.mission-ceilings-actions { display: flex; gap: 6px; margin-left: auto; }
+
+/* "+" Add: last item in the side menu, and its modal */
+.nav-item.nav-add { margin-top: 6px; border: 1px dashed var(--line, rgba(127,127,127,.35)); color: var(--muted); }
+.nav-item.nav-add:hover { color: inherit; }
+.nav-item.nav-add .nav-icon { font-size: 16px; font-weight: 600; }
+.add-modal { width: min(860px, 94vw); max-height: 86vh; overflow-y: auto; }
+.add-modal-body { display: flex; flex-direction: column; gap: 16px; }
+.add-section-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
+.add-section-header strong { font-size: 13px; }
+.add-section-header small { color: var(--muted); font-size: 12px; flex: 1 1 260px; }
+.add-see-all { padding: 2px 8px; font-size: 12px; }
+.add-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.add-option { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line, rgba(127,127,127,.25)); background: transparent; color: inherit; cursor: pointer; }
+.add-option:hover, .add-option:focus-visible { border-color: var(--accent, #6ea8fe); }
+.add-option span { font-size: 10px; letter-spacing: .06em; color: var(--muted); }
+.add-option strong { font-size: 13px; }
+.add-option small { color: var(--muted); font-size: 11px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.add-modal-note { color: var(--muted); font-size: 12px; margin: 0; }
