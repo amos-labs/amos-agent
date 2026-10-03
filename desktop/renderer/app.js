@@ -266,6 +266,8 @@ const elements = Object.fromEntries(
     "connectionNameInput", "connectionUsernameField", "connectionUsernameLabel",
     "connectionUsernameInput", "connectionCredentialLabel", "connectionCredentialInput",
     "connectionCredentialHelp", "connectionDefaultFromField", "connectionDefaultFromInput",
+    "connectionSharedField", "connectionSharedInput",
+    "addSurfaceButton", "addModal", "addModalBody", "addModalClose",
     "connectionModalError", "connectionCancelButton", "connectionSubmitButton",
     "automationSummary", "automationUnavailable", "automationEmpty", "automationList", "automationManifest",
     "refreshAutomationsButton", "buildAutomationButton", "automationEmptyBuildButton",
@@ -343,7 +345,7 @@ async function initialize() {
 }
 
 function bindActions() {
-  for (const button of document.querySelectorAll(".nav-item")) {
+  for (const button of document.querySelectorAll(".nav-item[data-view]")) {
     button.addEventListener("click", () => {
       if (firstRunNeeded()) {
         explainOnboardingGate();
@@ -352,6 +354,17 @@ function bindActions() {
       showView(button.dataset.view);
     });
   }
+  elements.addSurfaceButton.addEventListener("click", () => {
+    if (firstRunNeeded()) {
+      explainOnboardingGate();
+      return;
+    }
+    openAddModal();
+  });
+  elements.addModalClose.addEventListener("click", closeAddModal);
+  elements.addModal.addEventListener("click", (event) => {
+    if (event.target === elements.addModal) closeAddModal();
+  });
   elements.sidebarToggle.addEventListener("click", toggleSidebar);
   bindContextResize();
   for (const button of document.querySelectorAll("[data-open-settings]")) {
@@ -575,6 +588,9 @@ function bindActions() {
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !elements.connectionModal.classList.contains("hidden")) {
       closeConnectionModal();
+    }
+    if (event.key === "Escape" && !elements.addModal.classList.contains("hidden")) {
+      closeAddModal();
     }
     if (event.key === "Escape" && !elements.accountMenu.classList.contains("hidden")) {
       closeAccountMenu();
@@ -1326,6 +1342,135 @@ function showWorkTab(tab) {
   elements.workProofPanel.classList.toggle("hidden", decisionsActive);
 }
 
+/** Owners and admins manage shared (service-account) connections. */
+function managesSharedConnections() {
+  return ["owner", "admin"].includes(String(state?.identity?.role || ""));
+}
+
+function currentUserId() {
+  return String(state?.identity?.sub || state?.identity?.user?.id || "");
+}
+
+/** How a connection relates to the signed-in person: their own, a shared
+ *  service account, or a teammate's personal account. */
+function connectionRelation(connection) {
+  if (connection.ownership !== "personal") return "shared";
+  return connection.ownerUserId && connection.ownerUserId === currentUserId() ? "mine" : "teammate";
+}
+
+const CONNECTION_GROUPS = [
+  ["mine", "Your connections", "Used when you work in AMOS. Only you can use or remove them."],
+  ["shared", "Shared service accounts", "Used by automations, and by teammates who haven't connected their own."],
+  ["teammate", "Teammates' personal connections", "Visible to owners and admins; only the person can use or remove them."]
+];
+
+function connectionGroupHeader(title, note) {
+  const header = document.createElement("div");
+  header.className = "connection-group-header";
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+  const small = document.createElement("small");
+  small.textContent = note;
+  header.append(strong, small);
+  return header;
+}
+
+function connectionActionButton(label, className, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `button ${className} connection-disconnect-button`;
+  button.textContent = label;
+  button.addEventListener("click", () => onClick(button));
+  return button;
+}
+
+function renderConnectedCard(connection, freeForegroundAccount) {
+  const relation = connectionRelation(connection);
+  const manager = managesSharedConnections();
+  const card = document.createElement("article");
+  card.className = "connection-provider-card";
+  const top = document.createElement("div");
+  const icon = document.createElement("span");
+  icon.className = "connection-provider-icon";
+  icon.textContent = providerMonogram(connection.provider);
+  const pills = document.createElement("span");
+  pills.className = "connection-pills";
+  const owner = document.createElement("span");
+  owner.className = `status-pill connection-owner-pill ${relation}`;
+  owner.textContent = relation === "mine" ? "YOURS" : relation === "shared" ? "SHARED" : "TEAMMATE";
+  const status = document.createElement("span");
+  status.className = `status-pill ${connection.status === "connected" ? "connected" : "attention"}`;
+  status.textContent = connection.status.replaceAll("_", " ").toUpperCase();
+  pills.append(owner, status);
+  top.append(icon, pills);
+  const title = document.createElement("strong");
+  title.textContent = connection.displayName;
+  const detail = document.createElement("p");
+  detail.textContent = `${humanizeProvider(connection.provider)} · ${connection.kind.replaceAll("_", " ")}`;
+  const boundary = document.createElement("small");
+  boundary.textContent = !connection.usable
+    ? "Metadata only; this identity cannot use the connection"
+    : freeForegroundAccount
+      ? "Available for safe foreground reads; writes and background work remain locked"
+      : relation === "mine"
+        ? "Your own account: AMOS acts as you when you use it"
+        : "Shared: automations run on it; anyone without their own uses it";
+  card.append(top, title, detail, boundary);
+  if (!connection.id) return card;
+
+  const actions = document.createElement("div");
+  actions.className = "connection-card-actions";
+  if (freeForegroundAccount && connection.usable) {
+    actions.append(connectionActionButton("Manage access", "secondary", () => {
+      try {
+        const url = new URL("/settings/connections", state?.settings?.amosMcpUrl || "");
+        api.openExternal(url.href).catch((error) => toast(error.message, true));
+      } catch {
+        toast("Open AMOS account settings to manage this connection.", true);
+      }
+    }));
+  } else {
+    // The platform's rules: your own personal connection is yours to share
+    // (owner/admin) or remove; a shared one is an owner/admin's to make
+    // personal or remove; a teammate's is theirs alone.
+    if (manager && relation === "mine") {
+      actions.append(connectionActionButton("Make shared", "secondary", (button) =>
+        changeConnectionSharing(connection, true, button)));
+    }
+    if (manager && relation === "shared") {
+      actions.append(connectionActionButton("Make mine", "secondary", (button) =>
+        changeConnectionSharing(connection, false, button)));
+    }
+    if (connection.usable && (relation === "mine" || (relation === "shared" && manager))) {
+      actions.append(connectionActionButton("Disconnect", "danger", (button) =>
+        disconnectConnectedSystem(connection, button)));
+    }
+  }
+  if (actions.childElementCount > 0) card.append(actions);
+  return card;
+}
+
+async function changeConnectionSharing(connection, shared, button) {
+  const confirmed = window.confirm(
+    shared
+      ? `Share ${connection.displayName} as a service account?\n\nAutomations will run on it, and teammates who haven't connected their own ${humanizeProvider(connection.provider)} will use it.`
+      : `Make ${connection.displayName} your personal connection?\n\nAutomations stop using it, and teammates without their own lose access through it.`
+  );
+  if (!confirmed) return;
+  setButtonBusy(button, true, "Saving…");
+  try {
+    const response = await api.setConnectionOwnership(connection.id, shared);
+    state.connectionsCatalog = response.connectionsCatalog || state.connectionsCatalog;
+    renderConnections();
+    toast(shared
+      ? `${connection.displayName} is now a shared service account.`
+      : `${connection.displayName} is now your personal connection.`);
+  } catch (error) {
+    toast(friendlyError(error), true);
+    if (button.isConnected) setButtonBusy(button, false, shared ? "Make shared" : "Make mine");
+  }
+}
+
 function renderConnections() {
   const catalog = state?.connectionsCatalog || {};
   const connections = Array.isArray(catalog.connections) ? catalog.connections : [];
@@ -1338,18 +1483,29 @@ function renderConnections() {
         ...(Array.isArray(catalog.curated) ? catalog.curated : []),
         ...(Array.isArray(catalog.tenantDefined) ? catalog.tenantDefined : [])
       ];
-  const connectionsByProvider = new Map(
-    connectedSystems.map((connection) => [connection.provider, connection])
+  // A provider stays connectable until YOU have your own: a shared service
+  // account doesn't stop someone connecting their personal account.
+  const mineByProvider = new Set(
+    connectedSystems
+      .filter((connection) => connectionRelation(connection) === "mine")
+      .map((connection) => connection.provider)
+  );
+  const sharedByProvider = new Set(
+    connectedSystems
+      .filter((connection) => connectionRelation(connection) === "shared")
+      .map((connection) => connection.provider)
   );
   const freeForegroundAccount = isFreeForegroundAccount();
   const availableProviders = providers.filter((provider) =>
-    (provider.provider === "custom" || !connectionsByProvider.has(provider.provider)) &&
+    (provider.provider === "custom" || !mineByProvider.has(provider.provider)) &&
     (!freeForegroundAccount || provider.setupMode === "hosted_oauth")
   );
+  const mineCount = connectedSystems.filter((c) => connectionRelation(c) === "mine").length;
+  const sharedCount = connectedSystems.filter((c) => connectionRelation(c) === "shared").length;
   elements.connectionCatalogSummary.textContent = state?.connectionMode === "user"
     ? freeForegroundAccount
       ? `${connectedSystems.length} of ${state?.accountStatus?.freeConnectionsLimit || 2} free app connections used · safe foreground reads only`
-      : `${connectedSystems.length} connected system${connectedSystems.length === 1 ? "" : "s"} · ${availableProviders.length} available connection${availableProviders.length === 1 ? "" : "s"}`
+      : `${mineCount} yours · ${sharedCount} shared · ${availableProviders.length} available to connect`
     : "Connect your AMOS company to load its credential-free connection catalog.";
 
   elements.connectedSystemList.replaceChildren();
@@ -1360,50 +1516,13 @@ function renderConnections() {
         : "The live catalog appears after company sign-in."
     ));
   } else {
-    for (const connection of connectedSystems) {
-      const card = document.createElement("article");
-      card.className = "connection-provider-card";
-      const top = document.createElement("div");
-      const icon = document.createElement("span");
-      icon.className = "connection-provider-icon";
-      icon.textContent = providerMonogram(connection.provider);
-      const status = document.createElement("span");
-      status.className = `status-pill ${connection.status === "connected" ? "connected" : "attention"}`;
-      status.textContent = connection.status.replaceAll("_", " ").toUpperCase();
-      top.append(icon, status);
-      const title = document.createElement("strong");
-      title.textContent = connection.displayName;
-      const detail = document.createElement("p");
-      detail.textContent = `${humanizeProvider(connection.provider)} · ${connection.kind.replaceAll("_", " ")} · ${connection.ownership.replaceAll("_", " ")}`;
-      const boundary = document.createElement("small");
-      boundary.textContent = connection.usable
-        ? freeForegroundAccount
-          ? "Available for safe foreground reads; writes and background work remain locked"
-          : "Available to this signed-in user through governed platform calls"
-        : "Metadata only; this identity cannot use the connection";
-      card.append(top, title, detail, boundary);
-      if (connection.usable && connection.id) {
-        const disconnect = document.createElement("button");
-        disconnect.type = "button";
-        disconnect.className = freeForegroundAccount
-          ? "button secondary connection-disconnect-button"
-          : "button danger connection-disconnect-button";
-        disconnect.textContent = freeForegroundAccount ? "Manage access" : "Disconnect";
-        disconnect.addEventListener("click", () => {
-          if (!freeForegroundAccount) {
-            disconnectConnectedSystem(connection, disconnect);
-            return;
-          }
-          try {
-            const url = new URL("/settings/connections", state?.settings?.amosMcpUrl || "");
-            api.openExternal(url.href).catch((error) => toast(error.message, true));
-          } catch {
-            toast("Open AMOS account settings to manage this connection.", true);
-          }
-        });
-        card.append(disconnect);
+    for (const [relation, title, note] of CONNECTION_GROUPS) {
+      const group = connectedSystems.filter((connection) => connectionRelation(connection) === relation);
+      if (group.length === 0) continue;
+      elements.connectedSystemList.append(connectionGroupHeader(title, note));
+      for (const connection of group) {
+        elements.connectedSystemList.append(renderConnectedCard(connection, freeForegroundAccount));
       }
-      elements.connectedSystemList.append(card);
     }
   }
 
@@ -1412,7 +1531,7 @@ function renderConnections() {
     elements.availableProviderList.append(connectionCatalogEmpty(
       providers.length === 0
         ? "No provider definitions were advertised by this AMOS server."
-        : "Every advertised provider is already represented under Connected."
+        : "You've connected your own account for every advertised provider."
     ));
   } else {
     for (const provider of availableProviders) {
@@ -1439,6 +1558,7 @@ function renderConnections() {
       );
       const boundary = document.createElement("small");
       const context = [
+        sharedByProvider.has(provider.provider) ? "a shared account is connected; connect your own to work as yourself" : "",
         provider.group,
         provider.connectionKind.replaceAll("_", " "),
         provider.upstreamStatus ? `upstream ${provider.upstreamStatus}` : "",
@@ -1448,38 +1568,37 @@ function renderConnections() {
       ].filter(Boolean);
       boundary.textContent = context.join(" · ") || `Provider key: ${provider.provider}`;
       card.append(top, title, detail, boundary);
+      const actions = document.createElement("div");
+      actions.className = "connection-card-actions";
       if (
         provider.setupMode === "hosted_oauth" &&
         provider.availability === "available"
       ) {
-        const connect = document.createElement("button");
-        connect.type = "button";
-        connect.className = "button secondary connection-connect-button";
-        connect.textContent = "Connect";
-        connect.addEventListener("click", async () => {
-          connect.disabled = true;
+        const hosted = (label, serviceAccount) => connectionActionButton(label, "secondary", async (button) => {
+          button.disabled = true;
           try {
-            await api.connectProvider(provider.provider);
-            toast(`Opened secure setup for ${provider.label}`);
+            await api.connectProvider(provider.provider, { serviceAccount });
+            toast(serviceAccount
+              ? `Opened secure setup for a shared ${provider.label} service account`
+              : `Opened secure setup for your ${provider.label}`);
           } catch (error) {
             toast(error.message, true);
           } finally {
-            connect.disabled = false;
+            button.disabled = false;
           }
         });
-        card.append(connect);
+        actions.append(hosted("Connect mine", false));
+        if (managesSharedConnections() && !freeForegroundAccount) {
+          actions.append(hosted("Connect shared", true));
+        }
       } else if (
         ["hosted_secret", "governed_upstream_mcp", "advanced"].includes(provider.setupMode) &&
         provider.availability === "available" &&
         provider.credentialForm
       ) {
-        const connect = document.createElement("button");
-        connect.type = "button";
-        connect.className = "button secondary connection-connect-button";
-        connect.textContent = "Connect";
-        connect.addEventListener("click", () => openConnectionModal(provider));
-        card.append(connect);
+        actions.append(connectionActionButton("Connect", "secondary", () => openConnectionModal(provider)));
       }
+      if (actions.childElementCount > 0) card.append(actions);
       elements.availableProviderList.append(card);
     }
   }
@@ -4651,6 +4770,12 @@ function missionCard(mission) {
   const objective = document.createElement("p");
   objective.className = "task-card-objective";
   objective.textContent = mission.objective;
+  if (mission.contract?.lookingFor) {
+    const lookingFor = document.createElement("small");
+    lookingFor.className = "mission-looking-for";
+    lookingFor.textContent = `Looking for ${mission.contract.lookingFor}`;
+    objective.append(document.createElement("br"), lookingFor);
+  }
   const progress = document.createElement("p");
   progress.className = "mission-progress";
   progress.textContent = missionSummaryLine(mission);
@@ -4734,6 +4859,15 @@ function missionCard(mission) {
       const answer = actionButton("Answer", "primary");
       answer.addEventListener("click", () => focusMission(mission.id));
       actions.append(answer);
+    }
+    if (
+      ["authorized", "running", "waiting_decision", "paused"].includes(mission.status) &&
+      ["owner", "admin"].includes(String(state?.identity?.role || "")) &&
+      (mission.contract?.maxProviderCredits || mission.contract?.maxToolCalls || mission.contract?.maxWallTimeSeconds)
+    ) {
+      const ceilings = actionButton("Ceilings", "secondary");
+      ceilings.addEventListener("click", () => toggleMissionCeilings(mission, card));
+      actions.append(ceilings);
     }
     if (["authorized", "running", "waiting_decision", "paused"].includes(mission.status)) {
       const cancel = actionButton("Cancel", "ghost");
@@ -4872,7 +5006,14 @@ function missionLimitChips(mission) {
     chips.push(`${formatUsdMicros(limits.usedCostMicrousd)} of ${formatUsdMicros(limits.maxCostMicrousd)} spent`);
   }
   if (limits.maxToolCalls) chips.push(`${limits.usedToolCalls || 0} of ${limits.maxToolCalls} actions`);
-  if (limits.maxWallTimeSeconds) chips.push(`Stops after ${missionDuration(limits.maxWallTimeSeconds)}`);
+  if (limits.maxWallTimeSeconds) {
+    chips.push(limits.wallTimeUsedSeconds
+      ? `${approxDuration(limits.wallTimeUsedSeconds)} of ${missionDuration(limits.maxWallTimeSeconds)} run time`
+      : `Stops after ${missionDuration(limits.maxWallTimeSeconds)}`);
+  }
+  if (limits.emailPolicy === "personal_preferred") chips.push("Personal email preferred · never phone");
+  if (limits.emailPolicy === "personal_allowed") chips.push("Personal email allowed · never phone");
+  if (limits.revision > 1) chips.push(`Limits v${limits.revision}`);
   if (limits.expiresAt) chips.push(`Expires ${relativeTime(limits.expiresAt)}`);
   const questions = openMissionDecisions(mission).length;
   if (questions > 0) chips.push(`${questions} open question${questions === 1 ? "" : "s"}`);
@@ -5573,6 +5714,97 @@ async function controlOptimizationMission(mission, status, button) {
   }
 }
 
+/**
+ * The ceilings editor: credits, actions and run time on the current Run
+ * Contract. Lowering applies at once; raising widens authority and follows
+ * the owner gate on the platform (it may wait for approval). Nothing can go
+ * below what is already used.
+ */
+function toggleMissionCeilings(mission, card) {
+  const existing = card.querySelector(".mission-ceilings");
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  const limits = mission.contract || {};
+  const form = document.createElement("form");
+  form.className = "mission-ceilings";
+  const intro = document.createElement("p");
+  intro.textContent = "Lowering a limit applies now. Raising one widens what this Mission may do, so it follows the owner approval rules. Each change is kept as a new version of the limits, and open questions carry over.";
+  form.append(intro);
+  const fields = [];
+  const field = (key, label, value, used, unitNote, toPlatform) => {
+    if (!value) return;
+    const wrapper = document.createElement("label");
+    const span = document.createElement("span");
+    span.textContent = label;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = String(Math.max(1, Math.ceil(used || 0)));
+    input.step = "1";
+    input.value = String(value);
+    input.required = true;
+    const small = document.createElement("small");
+    small.textContent = `${unitNote}${used ? ` · ${used} used so far` : ""}`;
+    wrapper.append(span, input, small);
+    form.append(wrapper);
+    fields.push({ key, input, current: value, toPlatform });
+  };
+  field("max_provider_credits", "Credits", limits.maxProviderCredits, limits.usedProviderCredits, "Provider credits (e.g. Apollo)", (v) => v);
+  field("max_tool_calls", "Actions", limits.maxToolCalls, limits.usedToolCalls, "Governed actions", (v) => v);
+  field(
+    "max_wall_time_seconds",
+    "Run time (hours)",
+    limits.maxWallTimeSeconds ? Math.max(1, Math.round(limits.maxWallTimeSeconds / 3600)) : 0,
+    limits.wallTimeUsedSeconds ? Math.ceil(limits.wallTimeUsedSeconds / 3600) : 0,
+    "Hours since the Mission started",
+    (v) => v * 3600
+  );
+  const error = document.createElement("p");
+  error.className = "form-error hidden";
+  const buttons = document.createElement("div");
+  buttons.className = "mission-ceilings-actions";
+  const save = actionButton("Save ceilings", "primary");
+  save.type = "submit";
+  const cancel = actionButton("Close", "ghost");
+  cancel.addEventListener("click", () => form.remove());
+  buttons.append(cancel, save);
+  form.append(error, buttons);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    error.classList.add("hidden");
+    const ceilings = {};
+    for (const item of fields) {
+      const value = Number(item.input.value);
+      if (!Number.isInteger(value) || value < 1) {
+        error.textContent = "Ceilings must be whole numbers of at least 1.";
+        error.classList.remove("hidden");
+        return;
+      }
+      if (value !== Number(item.current)) ceilings[item.key] = item.toPlatform(value);
+    }
+    if (Object.keys(ceilings).length === 0) {
+      form.remove();
+      return;
+    }
+    setButtonBusy(save, true, "Saving…");
+    try {
+      const outcome = await api.setMissionCeilings(mission.id, ceilings);
+      if (outcome?.missions?.missions) state.missions = outcome.missions;
+      renderMissions();
+      toast(outcome?.pendingApprovalId
+        ? "Lowered ceilings applied. The raise is waiting for owner approval in Decisions."
+        : "Limits updated.");
+    } catch (failure) {
+      error.textContent = friendlyError(failure);
+      error.classList.remove("hidden");
+      setButtonBusy(save, false, "Save ceilings");
+    }
+  });
+  card.append(form);
+  form.querySelector("input")?.focus();
+}
+
 async function controlHostedMission(mission, action, button) {
   const original = button.textContent;
   setButtonBusy(button, true, action === "resume" ? "Opening…" : "Saving…");
@@ -6040,7 +6272,7 @@ function shortTaskId(value) {
   return text.length > 10 ? `${text.slice(0, 8)}…` : text;
 }
 
-function openConnectionModal(provider) {
+function openConnectionModal(provider, options = {}) {
   const form = provider?.credentialForm;
   if (!provider || !form) {
     toast("AMOS did not advertise a secure setup form for this provider.", true);
@@ -6075,6 +6307,9 @@ function openConnectionModal(provider) {
     form.help || "AMOS Platform encrypts this value immediately.";
   elements.connectionDefaultFromField.classList.toggle("hidden", !form.defaultFrom);
   elements.connectionDefaultFromInput.value = "";
+  // Personal by default; only owners and admins may create a shared account.
+  elements.connectionSharedField.classList.toggle("hidden", !managesSharedConnections());
+  elements.connectionSharedInput.checked = Boolean(options.serviceAccount) && managesSharedConnections();
   refreshConnectionModalFields();
   elements.connectionModalError.textContent = "";
   elements.connectionModalError.classList.add("hidden");
@@ -6123,7 +6358,8 @@ async function submitSecretConnection(event) {
       providerTag: elements.connectionProviderTagInput.value,
       baseUrl: elements.connectionBaseUrlInput.value,
       authScheme: elements.connectionAuthSchemeInput.value,
-      contextValue: elements.connectionContextInput.value
+      contextValue: elements.connectionContextInput.value,
+      serviceAccount: managesSharedConnections() && elements.connectionSharedInput.checked
     });
     const label = connectionSetupProvider.label;
     closeConnectionModal();
@@ -6409,6 +6645,172 @@ function stageBriefingPrompt(prompt) {
   showView("operator");
   elements.promptInput.value = prompt;
   elements.promptInput.focus();
+}
+
+// ── Add (the "+" at the end of the side menu) ────────────────────────────────
+// One place to start anything new: a Briefing canvas, a Mission, an
+// automation, a project, or a connection. Every option opens the flow that
+// already exists for it; templates come from the platform's own catalogs.
+
+function addOption({ eyebrow, title, detail, onSelect }) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "add-option";
+  const kicker = document.createElement("span");
+  kicker.textContent = eyebrow;
+  const name = document.createElement("strong");
+  name.textContent = title;
+  const copy = document.createElement("small");
+  copy.textContent = detail || "";
+  card.append(kicker, name, copy);
+  card.addEventListener("click", () => {
+    closeAddModal();
+    onSelect();
+  });
+  return card;
+}
+
+function addSection(title, note, options, seeAll = null) {
+  const section = document.createElement("section");
+  section.className = "add-section";
+  const header = document.createElement("div");
+  header.className = "add-section-header";
+  const heading = document.createElement("strong");
+  heading.textContent = title;
+  const small = document.createElement("small");
+  small.textContent = note;
+  header.append(heading, small);
+  if (seeAll) {
+    const link = document.createElement("button");
+    link.type = "button";
+    link.className = "button ghost add-see-all";
+    link.textContent = seeAll.label;
+    link.addEventListener("click", () => {
+      closeAddModal();
+      showView(seeAll.view);
+    });
+    header.append(link);
+  }
+  const grid = document.createElement("div");
+  grid.className = "add-grid";
+  grid.append(...options);
+  section.append(header, grid);
+  return section;
+}
+
+function openAddModal() {
+  const body = elements.addModalBody;
+  body.replaceChildren();
+  const signedIn = state?.connectionMode === "user";
+
+  const canvasTemplates = Array.isArray(state?.briefings?.templates) ? state.briefings.templates : [];
+  body.append(addSection(
+    "Canvas",
+    "A live Briefing: your company's numbers and context on one page that refreshes when opened.",
+    [
+      addOption({
+        eyebrow: "BLANK CANVAS",
+        title: "Start from scratch",
+        detail: "Describe what you want to see",
+        onSelect: () => {
+          showView("canvas");
+          startNewBriefingFromScratch();
+        }
+      }),
+      ...canvasTemplates.slice(0, 5).map((template) => addOption({
+        eyebrow: "CANVAS TEMPLATE",
+        title: template.title,
+        detail: template.description || template.objective || "",
+        onSelect: () => runPlatformBriefing({ templateKey: template.key, title: template.title })
+      }))
+    ],
+    canvasTemplates.length > 5 ? { label: "All Briefings", view: "canvas" } : null
+  ));
+
+  const missionTemplates = Array.isArray(state?.missions?.templates) && state.missions.templates.length > 0
+    ? state.missions.templates
+    : LEGACY_MISSION_TEMPLATES;
+  body.append(addSection(
+    "Mission",
+    "A goal AMOS works toward on its own, inside limits you approve.",
+    [
+      addOption({
+        eyebrow: "NEW MISSION",
+        title: "Describe your own goal",
+        detail: "One sentence is enough",
+        onSelect: () => {
+          showView("missions");
+          openMissionModal();
+        }
+      }),
+      ...missionTemplates.slice(0, 5).map((template) => addOption({
+        eyebrow: "MISSION TEMPLATE",
+        title: template.label,
+        detail: template.detail || "",
+        onSelect: () => {
+          showView("missions");
+          openMissionModal();
+          missionDraft.missionKind = template.kind === "optimization" ? "optimization" : "finite";
+          elements.missionObjectiveInput.value = template.objective;
+          elements.missionObjectiveInput.focus();
+        }
+      }))
+    ],
+    missionTemplates.length > 5 ? { label: "All Missions", view: "missions" } : null
+  ));
+
+  const automationTemplates = (state?.automationTemplates?.templates || []).filter((template) => template.installable);
+  body.append(addSection(
+    "Automation",
+    automationTemplates.length > 0
+      ? `Guided setup with ${automationTemplates.length} ready-made template${automationTemplates.length === 1 ? "" : "s"}, or design your own.`
+      : "Guided setup: trigger, steps, approvals, and how you'll measure it.",
+    [addOption({
+      eyebrow: "AUTOMATION",
+      title: "Build an automation",
+      detail: automationTemplates.slice(0, 3).map((template) => template.title).join(" · ") || "Start guided setup",
+      onSelect: () => {
+        showView("automations");
+        openAutomationTask(null, elements.buildAutomationButton, true);
+      }
+    })]
+  ));
+
+  body.append(addSection(
+    "Workspace",
+    "Organize work and connect the systems AMOS uses.",
+    [
+      addOption({
+        eyebrow: "PROJECT",
+        title: "New project",
+        detail: "Shared instructions and a cost cap for related conversations",
+        onSelect: () => {
+          showView("projects");
+          openProjectModal();
+        }
+      }),
+      addOption({
+        eyebrow: "CONNECTION",
+        title: "Connect a system",
+        detail: managesSharedConnections()
+          ? "Your own account, or a shared one for automations"
+          : "Connect your own account",
+        onSelect: () => showView("connections")
+      })
+    ]
+  ));
+  if (!signedIn) {
+    const note = document.createElement("p");
+    note.className = "add-modal-note";
+    note.textContent = "Connect your AMOS company to see its templates.";
+    body.append(note);
+  }
+  elements.addModal.classList.remove("hidden");
+  body.querySelector("button")?.focus();
+}
+
+function closeAddModal() {
+  elements.addModal.classList.add("hidden");
 }
 
 function startNewBriefingFromScratch() {
@@ -9407,6 +9809,14 @@ function missionOperationSummary(entry) {
   const operation = humanizeTool(String(entry?.operation || entry?.verb || "approved operation"));
   const constraints = missionConstraintSummary(entry?.constraints);
   return constraints ? `${operation} (${constraints})` : operation;
+}
+
+/** "about 3 hr", "45 min": a rounded reading of time already used. */
+function approxDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return "0 min";
+  if (value >= 5400) return `${Math.round(value / 3600)} hr`;
+  return `${Math.max(1, Math.round(value / 60))} min`;
 }
 
 function missionDuration(seconds) {

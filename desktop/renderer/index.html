@@ -53,6 +53,9 @@
           <button class="nav-item" data-view="work">
             <span class="nav-icon">◇</span><span>Decisions</span><span id="decisionBadge" class="nav-badge hidden">0</span>
           </button>
+          <button id="addSurfaceButton" class="nav-item nav-add" type="button" aria-haspopup="dialog" title="Add a canvas, Mission, automation, project, or connection">
+            <span class="nav-icon">+</span><span>Add</span>
+          </button>
         </nav>
 
         <div class="sidebar-bottom">
@@ -1240,6 +1243,10 @@
             <span>Default From number</span>
             <input id="connectionDefaultFromInput" maxlength="64" autocomplete="off" spellcheck="false" placeholder="+15551234567" />
           </label>
+          <label id="connectionSharedField" class="connection-field connection-shared-field hidden">
+            <span><input id="connectionSharedInput" type="checkbox" /> Shared service account</span>
+            <small>Used by automations and by teammates who haven't connected their own. Leave unchecked to connect it as yours only.</small>
+          </label>
           <div class="connection-modal-boundary">
             The value is sent directly to AMOS Platform over your authenticated connection,
             encrypted there, and never added to chat or saved by Desktop.
@@ -1295,6 +1302,20 @@
             <button id="briefingScheduleSubmit" class="button primary" type="submit">Save schedule</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="addModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="addModalTitle">
+      <div class="connection-modal add-modal">
+        <div class="connection-modal-heading">
+          <div>
+            <span class="eyebrow">ADD TO YOUR WORKSPACE</span>
+            <h2 id="addModalTitle">What would you like to add?</h2>
+            <p>Start from one of your company's templates or from scratch. Everything you add runs through AMOS with the same approvals as always.</p>
+          </div>
+          <button id="addModalClose" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+        <div id="addModalBody" class="add-modal-body"></div>
       </div>
     </div>
 

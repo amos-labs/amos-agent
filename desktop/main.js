@@ -411,8 +411,13 @@ function registerIpc() {
   ipcMain.handle("desktop:switch-company", (_event, tenantId) =>
     controller.switchCompany(tenantId)
   );
-  ipcMain.handle("desktop:connect-provider", (_event, provider) =>
-    controller.connectProvider(provider)
+  ipcMain.handle("desktop:connect-provider", (_event, payload) =>
+    typeof payload === "string"
+      ? controller.connectProvider(payload)
+      : controller.connectProvider(payload?.provider, payload?.options)
+  );
+  ipcMain.handle("desktop:set-connection-ownership", (_event, payload) =>
+    controller.setConnectionOwnership(payload?.connectionId, payload?.serviceAccount)
   );
   ipcMain.handle("desktop:disconnect-connection", (_event, connectionId) =>
     controller.disconnectConnection(connectionId)
@@ -609,6 +614,8 @@ function registerIpc() {
   ipcMain.handle("desktop:pause-mission", (_event, id) => controller.pauseMission(id));
   ipcMain.handle("desktop:resume-mission", (_event, id) => controller.resumeMission(id));
   ipcMain.handle("desktop:cancel-mission", (_event, id) => controller.cancelMission(id));
+  ipcMain.handle("desktop:set-mission-ceilings", (_event, payload) =>
+    controller.setMissionCeilings(payload?.id, payload?.ceilings));
   ipcMain.handle("desktop:set-optimization-mission-status", (_event, input) =>
     controller.setOptimizationMissionStatus(input?.id, input?.status)
   );
