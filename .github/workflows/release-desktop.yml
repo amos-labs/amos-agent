@@ -12,6 +12,9 @@ jobs:
   macos:
     name: Sign and notarize macOS
     environment: MAC_CSC_LINK
+    permissions:
+      contents: write
+      id-token: write
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -49,10 +52,25 @@ jobs:
       - name: Install desktop canvas native bindings
         run: npm run canvas:prepare
 
+      - name: Authorize router artifact download (OIDC, read-only)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::637423327454:role/amos-desktop-release-router-read
+          aws-region: us-east-1
+
+      - name: Presign the router artifact for this build
+        shell: bash
+        run: |
+          # Short-lived link minted per release from the pinned manifest, so no
+          # stored URL can expire between releases.
+          key=$(node -e 'const m=require("./src/model/intelligence-router-artifact-v1.json"); process.stdout.write(`desktop/router/${m.model.replace(":","-")}/${m.gguf_sha256}/${m.gguf}`)')
+          url=$(aws s3 presign "s3://amos-build-sources-637423327454/$key" --expires-in 3600)
+          echo "::add-mask::$url"
+          echo "AMOS_ROUTER_GGUF_URL=$url" >> "$GITHUB_ENV"
+
       - name: Build signed installers
         run: npm run desktop:release
         env:
-          AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
@@ -138,6 +156,9 @@ jobs:
     needs: windows-signing-config
     if: needs.windows-signing-config.outputs.configured == 'true'
     environment: WINDOWS_SIGNING
+    permissions:
+      contents: write
+      id-token: write
     runs-on: windows-2025
     timeout-minutes: 45
     steps:
@@ -187,10 +208,25 @@ jobs:
       - name: Install desktop canvas native bindings
         run: npm run canvas:prepare
 
+      - name: Authorize router artifact download (OIDC, read-only)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::637423327454:role/amos-desktop-release-router-read
+          aws-region: us-east-1
+
+      - name: Presign the router artifact for this build
+        shell: bash
+        run: |
+          # Short-lived link minted per release from the pinned manifest, so no
+          # stored URL can expire between releases.
+          key=$(node -e 'const m=require("./src/model/intelligence-router-artifact-v1.json"); process.stdout.write(`desktop/router/${m.model.replace(":","-")}/${m.gguf_sha256}/${m.gguf}`)')
+          url=$(aws s3 presign "s3://amos-build-sources-637423327454/$key" --expires-in 3600)
+          echo "::add-mask::$url"
+          echo "AMOS_ROUTER_GGUF_URL=$url" >> "$GITHUB_ENV"
+
       - name: Build signed installer
         run: npm run desktop:release:win
         env:
-          AMOS_ROUTER_GGUF_URL: ${{ secrets.AMOS_ROUTER_GGUF_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
