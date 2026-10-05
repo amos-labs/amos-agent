@@ -303,9 +303,16 @@ the fail-closed production release configuration.
 Pushing a tag matching `package.json`, such as `v0.12.0`, starts
 `.github/workflows/release-desktop.yml`.
 
-The protected release environment must also define
-`AMOS_ROUTER_GGUF_URL` as an HTTPS URL for the version pinned by
-`src/model/intelligence-router-artifact-v1.json`. The release builder streams
+The router model is fetched without any stored link. Each release job assumes
+the read-only AWS role `amos-desktop-release-router-read` through GitHub OIDC
+(trusted only for this repository's `MAC_CSC_LINK` and `WINDOWS_SIGNING`
+environments, and allowed only `s3:GetObject` on
+`amos-build-sources-637423327454/desktop/router/*`). It then presigns a one-hour
+`AMOS_ROUTER_GGUF_URL` for the object
+`desktop/router/<model with ':' → '-'>/<gguf_sha256>/<gguf>` named by
+`src/model/intelligence-router-artifact-v1.json`. Uploading a new router means
+placing it at that key and updating the manifest; no secret needs rotating.
+The release builder streams
 that artifact with a 20-minute bound, rejects any byte beyond the signed size,
 and verifies the exact SHA-256 before packaging. Local release development may
 instead set `AMOS_ROUTER_GGUF_SOURCE` to the qualified GGUF path.
