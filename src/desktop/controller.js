@@ -2389,7 +2389,11 @@ export class DesktopController {
 
     const form = advertised.credentialForm;
     const submissionTool = form.submissionTool || "create_connection";
-    if (!["create_connection", "connect_nuvola_learning"].includes(submissionTool)) {
+    if (
+      !["create_connection", "connect_nuvola_learning", "connect_srs_roofhub"].includes(
+        submissionTool
+      )
+    ) {
       throw new Error("AMOS blocked an unsupported connection setup ceremony");
     }
     const connectionProvider = form.customProvider
@@ -2424,7 +2428,12 @@ export class DesktopController {
     try {
       const result = submissionTool === "connect_nuvola_learning"
         ? await remote.connectNuvolaLearning(request)
-        : await remote.createSecretConnection(request);
+        : submissionTool === "connect_srs_roofhub"
+          ? await remote.connectSrsRoofhub({
+            accountNumber: request.corporationId,
+            integrationKey: request.credential
+          })
+          : await remote.createSecretConnection(request);
       this.record("connection", `Connected ${advertised.label} through AMOS Platform`);
       await this.refreshRemote({ notify: false });
       return result;
