@@ -1366,6 +1366,54 @@ test("Desktop uses the typed Platform ceremony for a Nuvola corporation key", as
   assert.equal(JSON.stringify(result).includes("corporation-bound-key"), false);
 });
 
+test("Desktop uses the typed Platform ceremony for an SRS RoofHub key", async () => {
+  const requests = [];
+  const client = new DesktopRemoteStateClient(
+    {
+      mcpUrl: "https://app.amoslabs.com/mcp",
+      oauth: { async getAccessToken() { return "catalog-user-token"; } }
+    },
+    async (_url, options) => {
+      const request = JSON.parse(options.body);
+      requests.push(request);
+      return response(200, {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              connected: true,
+              connection_id: "77777777-7777-7777-7777-777777777777",
+              account_number: "123456",
+              customer_name: "8 Square Roofing"
+            })
+          }]
+        }
+      });
+    }
+  );
+
+  const result = await client.connectSrsRoofhub({
+    accountNumber: " 123456 ",
+    integrationKey: "AB12C"
+  });
+
+  assert.equal(result.connected, true);
+  assert.equal(result.displayName, "8 Square Roofing");
+  assert.equal(requests[0].params.name, "connect_srs_roofhub");
+  assert.deepEqual(requests[0].params.arguments, {
+    account_number: "123456",
+    integration_key: "AB12C"
+  });
+  assert.equal(JSON.stringify(result).includes("AB12C"), false);
+  await assert.rejects(
+    client.connectSrsRoofhub({ accountNumber: "12-34", integrationKey: "AB12C" }),
+    /letters or digits/
+  );
+  assert.equal(requests.length, 1);
+});
+
 test("Desktop treats a non-approver role as a bounded unavailable inbox", async () => {
   const client = new DesktopRemoteStateClient(
     {

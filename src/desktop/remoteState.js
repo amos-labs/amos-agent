@@ -1165,6 +1165,32 @@ export class DesktopRemoteStateClient {
     };
   }
 
+  async connectSrsRoofhub(input, { signal = null } = {}) {
+    const accountNumber = String(input?.accountNumber || "").trim();
+    const integrationKey = String(input?.integrationKey || "").trim();
+    if (!/^[A-Za-z0-9]{1,20}$/.test(accountNumber)) {
+      throw new Error("SRS account number must be 1 to 20 letters or digits");
+    }
+    if (!/^[A-Za-z0-9]{1,64}$/.test(integrationKey)) {
+      throw new Error("RoofHub integration key must be 1 to 64 letters or digits");
+    }
+    const result = await this.mcp.callTool(
+      "connect_srs_roofhub",
+      { account_number: accountNumber, integration_key: integrationKey },
+      { signal }
+    );
+    const payload = parseMcpJson(result, "AMOS SRS connection setup");
+    if (payload?.connected !== true) {
+      throw new Error("AMOS did not confirm that the SRS connection was saved");
+    }
+    return {
+      connected: true,
+      provider: "srs_roofhub",
+      displayName: String(payload.customer_name || "SRS Distribution"),
+      connectionId: String(payload.connection_id || "")
+    };
+  }
+
   async approvals({ signal = null } = {}) {
     let token = await this.oauth.getAccessToken();
     let response = await this.fetchApprovals(token, { signal });
