@@ -1001,6 +1001,12 @@ export class DesktopRemoteStateClient {
     );
   }
 
+  /** The plan this company signed up from (its website journey), or none. */
+  async journeyPlan({ signal = null } = {}) {
+    const result = await this.mcp.callTool("get_journey_plan", {}, { signal });
+    return normalizeJourneyPlan(parseMcpJson(result, "AMOS journey plan"));
+  }
+
   async disconnectConnection(connectionId, { signal = null } = {}) {
     const result = await this.mcp.callTool(
       "delete_connection",
@@ -1623,6 +1629,67 @@ export class DesktopRemoteStateClient {
       unlink();
     }
   }
+}
+
+function boundedText(value, max) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
+}
+
+/**
+ * The company's journey plan as Desktop renders it: Connect (apps), Analyze
+ * (estimated hours and where work slips) and Automate (workflows with the
+ * reason for this company and the approval step). Anything malformed is
+ * dropped; a company without a plan gets `{ hasPlan: false }`.
+ */
+export function normalizeJourneyPlan(value) {
+  if (!value || typeof value !== "object" || value.has_plan !== true) {
+    return { hasPlan: false };
+  }
+  const steps = value.steps && typeof value.steps === "object" ? value.steps : {};
+  const list = (items, max) => (Array.isArray(items) ? items.slice(0, max) : []);
+  const apps = list(steps.connect?.apps, 8)
+    .map((app) => ({
+      name: boundedText(app?.name, 40),
+      categoryLabel: boundedText(app?.category_label, 30),
+      seenOnSite: app?.seen_on_site === true
+    }))
+    .filter((app) => app.name);
+  const hours = list(steps.analyze?.hours, 5)
+    .map((item) => ({
+      area: boundedText(item?.area, 40),
+      hoursPerWeek: Number.isFinite(item?.hours_per_week)
+        ? Math.min(Math.max(item.hours_per_week, 0), 60)
+        : 0
+    }))
+    .filter((item) => item.area && item.hoursPerWeek > 0);
+  const leaks = list(steps.analyze?.leaks, 3)
+    .map((item) => ({ between: boundedText(item?.between, 60), what: boundedText(item?.what, 160) }))
+    .filter((item) => item.between && item.what);
+  const workflows = list(steps.automate?.workflows, 4)
+    .map((item) => ({
+      id: boundedText(item?.id, 40),
+      title: boundedText(item?.title, 80),
+      does: boundedText(item?.does, 200),
+      why: boundedText(item?.why, 200),
+      apps: list(item?.apps, 4).map((app) => boundedText(app, 30)).filter(Boolean),
+      approval: boundedText(item?.approval, 120)
+    }))
+    .filter((item) => item.id && item.title);
+  if (workflows.length === 0) return { hasPlan: false };
+  return {
+    hasPlan: true,
+    companyName: boundedText(value.company_name, 80),
+    domain: boundedText(value.domain, 120),
+    headline: boundedText(value.headline, 160),
+    summary: boundedText(value.summary, 500),
+    connect: apps,
+    analyze: {
+      hours,
+      leaks,
+      note: boundedText(steps.analyze?.estimate_note, 120)
+    },
+    automate: workflows
+  };
 }
 
 export function parseMcpJson(result, label = "AMOS") {

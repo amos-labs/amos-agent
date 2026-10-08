@@ -192,6 +192,8 @@ const HIDDEN_MISSION_DECISIONS_KEY = "amos.desktop.hidden-mission-decisions.v1";
 const elements = Object.fromEntries(
   [
     "loading", "app", "onboardingView", "operatorView", "workView", "settingsView",
+    "journeyPlanPanel", "journeyPlanTitle", "journeyPlanHeadline", "journeyPlanConnect",
+    "journeyPlanAnalyze", "journeyPlanAutomate",
     "memoryView", "projectsView", "missionsView", "tasksView", "canvasView", "connectionsView", "automationsView",
     "integrationsView", "integrationsEmpty", "integrationsManifests",
     "surfaceView", "surfaceEyebrow", "surfaceTitle", "surfaceManifest", "dynamicNav",
@@ -851,6 +853,7 @@ function render() {
   applyAppearance(state.settings.appearance || "system");
   const needsOnboarding = firstRunNeeded(state);
   elements.onboardingView.classList.toggle("hidden", !needsOnboarding);
+  renderJourneyPlanPanel(state.journeyPlan);
   if (needsOnboarding) {
     elements.operatorView.classList.add("hidden");
     elements.projectsView.classList.add("hidden");
@@ -8791,6 +8794,33 @@ function shouldPushConnectSystems() {
   return Boolean(state) &&
     state.connectionMode !== "demo" &&
     connectedCompanySystems().length === 0;
+}
+
+/**
+ * The plan from the website journey this company signed up through, shown on
+ * the first-run screen as the same Connect / Analyze / Automate steps the
+ * visitor saw. Text only (textContent), nothing from the plan is ever HTML.
+ */
+function renderJourneyPlanPanel(plan) {
+  const visible = plan?.hasPlan === true;
+  elements.journeyPlanPanel.classList.toggle("hidden", !visible);
+  if (!visible) return;
+  elements.journeyPlanTitle.textContent = plan.companyName
+    ? `Your plan for ${plan.companyName}`
+    : "Your plan";
+  elements.journeyPlanHeadline.textContent = plan.headline || "";
+  const apps = plan.connect.map((app) => app.name).slice(0, 5);
+  elements.journeyPlanConnect.textContent = apps.length > 0
+    ? `${apps.join(", ")}.`
+    : "The apps your business already runs on.";
+  const leak = plan.analyze.leaks[0];
+  elements.journeyPlanAnalyze.textContent = leak
+    ? `${leak.between}: ${leak.what}`
+    : "Where time goes and where work slips between your apps.";
+  elements.journeyPlanAutomate.textContent = plan.automate
+    .map((workflow) => workflow.title)
+    .slice(0, 4)
+    .join(" · ");
 }
 
 function renderConnectSystemsPush({ hasConversation = false } = {}) {

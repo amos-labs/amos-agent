@@ -270,6 +270,9 @@ export class DesktopController {
     this.approvalDecisionMode = "hosted";
     this.missionDecisions = [];
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    // The website journey this company signed up from (read once per company).
+    this.journeyPlan = null;
+    this.journeyPlanTenant = null;
     // Platform-described client surfaces (desktop_snapshot.surfaces): which areas
     // this caller has and why a closed one is closed. null until a snapshot-aware
     // platform answers; the renderer then hides or locks navigation from it.
@@ -473,6 +476,7 @@ export class DesktopController {
       localTaskGrant: this.approvals.state(),
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
+      journeyPlan: this.journeyPlan ? structuredClone(this.journeyPlan) : null,
       surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
       surfaceManifests: structuredClone(this.surfaceManifests || { supported: false, manifests: [] }),
       surfaceSections: structuredClone(this.surfaceSections || {}),
@@ -1839,6 +1843,9 @@ export class DesktopController {
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    // The website journey this company signed up from (read once per company).
+    this.journeyPlan = null;
+    this.journeyPlanTenant = null;
       this.surfaces = null;
       this.snapshotSince = null;
       this.surfaceManifests = { supported: false, manifests: [] };
@@ -2002,6 +2009,19 @@ export class DesktopController {
       await this.deliverCompletedApprovalOutcomes();
     } else {
       errors.push(approvalsResult.reason?.message || "Could not load AMOS approvals");
+    }
+
+    // The company's journey plan (the website journey it signed up from) is
+    // read once per company: it does not change, and an older platform without
+    // get_journey_plan simply has none.
+    const planTenant = this.identity?.tenant_id || null;
+    if (planTenant && this.journeyPlanTenant !== planTenant) {
+      try {
+        this.journeyPlan = await remote.journeyPlan();
+      } catch {
+        this.journeyPlan = { hasPlan: false };
+      }
+      this.journeyPlanTenant = planTenant;
     }
 
     if (accountStatusResult.status === "fulfilled") {
@@ -8228,6 +8248,9 @@ export class DesktopController {
     this.approvalsAvailable = true;
     this.approvalDecisionMode = "hosted";
     this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
+    // The website journey this company signed up from (read once per company).
+    this.journeyPlan = null;
+    this.journeyPlanTenant = null;
     this.surfaces = null;
     this.snapshotSince = null;
     this.surfaceManifests = { supported: false, manifests: [] };
