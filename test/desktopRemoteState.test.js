@@ -5,7 +5,8 @@ import {
   approvalReviewUrl,
   DesktopRemoteStateClient as BaseDesktopRemoteStateClient,
   missionDecisionReviewUrl,
-  parseMcpJson
+  parseMcpJson,
+  normalizeJourneyPlan
 } from "../src/desktop/remoteState.js";
 import {
   COMPANY_CACHE_AUDIENCE,
@@ -2205,4 +2206,30 @@ test("Desktop carries the platform's contract revision, prospect profile and ema
   assert.match(loaded.contract.lookingFor, /Patrol Officers/);
   assert.equal(loaded.contract.wallTimeUsedSeconds, 7200);
   assert.equal(loaded.contract.maxProviderCredits, 1500);
+});
+
+test("journey plans are normalized, bounded and dropped when malformed", () => {
+  assert.deepEqual(normalizeJourneyPlan(null), { hasPlan: false });
+  assert.deepEqual(normalizeJourneyPlan({ has_plan: false }), { hasPlan: false });
+  assert.deepEqual(
+    normalizeJourneyPlan({ has_plan: true, steps: { automate: { workflows: [] } } }),
+    { hasPlan: false },
+    "a plan with nothing to automate is no plan"
+  );
+  const plan = normalizeJourneyPlan({
+    has_plan: true,
+    company_name: "Summit   Roofing",
+    headline: "Answer every storm lead.",
+    steps: {
+      connect: { apps: [{ name: "Calendly", category_label: "Online booking", seen_on_site: true }, { name: "" }] },
+      analyze: { hours: [{ area: "Scheduling", hours_per_week: 99 }, { area: "x", hours_per_week: "lots" }], leaks: [{ between: "A to B", what: "Slips." }] },
+      automate: { workflows: [{ id: "overdue-invoices", title: "Chase overdue invoices", why: "w".repeat(500), apps: ["Accounting"], approval: "You approve." }, { title: "no id" }] }
+    }
+  });
+  assert.equal(plan.hasPlan, true);
+  assert.equal(plan.companyName, "Summit Roofing");
+  assert.deepEqual(plan.connect, [{ name: "Calendly", categoryLabel: "Online booking", seenOnSite: true }]);
+  assert.deepEqual(plan.analyze.hours, [{ area: "Scheduling", hoursPerWeek: 60 }]);
+  assert.equal(plan.automate.length, 1);
+  assert.equal(plan.automate[0].why.length, 200);
 });

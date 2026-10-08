@@ -125,3 +125,51 @@ test("an empty company starts with five outcome-led business jobs", () => {
   assert.ok(actions.every((action) => action.type === "run"));
   assert.ok(actions.every((action) => action.description.length > 0));
 });
+
+const SAMPLE_PLAN = {
+  hasPlan: true,
+  companyName: "Summit Roofing",
+  connect: [{ name: "Calendly", categoryLabel: "Online booking", seenOnSite: true }, { name: "QuickBooks", categoryLabel: "Accounting", seenOnSite: false }],
+  analyze: { hours: [], leaks: [{ between: "Inspection to estimate", what: "Estimates go out late." }], note: "" },
+  automate: [{ id: "overdue-invoices", title: "Chase overdue invoices", does: "Flags unpaid invoices.", why: "Insurance payments arrive late.", apps: ["Accounting"], approval: "You approve every reminder." }]
+};
+
+function planState(overrides = {}) {
+  return {
+    connectionMode: "user",
+    mode: { personal: false, offline: false },
+    approvals: [],
+    taskCheckpoints: [],
+    connectionsCatalog: { connections: [] },
+    automations: { automations: [], failures: [] },
+    journeyPlan: SAMPLE_PLAN,
+    ...overrides
+  };
+}
+
+test("a company from a website journey starts by connecting the apps its plan found", () => {
+  const actions = selectJourneyStarterActions(planState());
+  assert.equal(actions[0].id, "plan-connect");
+  assert.equal(actions[0].label, "Connect Calendly and QuickBooks");
+  assert.equal(actions[0].type, "connect_platform");
+  const analyze = actions.find((a) => a.id === "plan-analyze");
+  assert.ok(analyze.prompt.includes("Inspection to estimate: Estimates go out late."));
+  assert.ok(analyze.prompt.includes("Do not invent numbers"));
+  assert.ok(actions.length <= 5);
+});
+
+test("once an app is connected the plan's first workflow is the next step", () => {
+  const actions = selectJourneyStarterActions(
+    planState({ connectionsCatalog: { connections: [{ status: "connected", usable: true }] } })
+  );
+  assert.equal(actions[0].id, "plan-automate-overdue-invoices");
+  assert.equal(actions[0].label, "Set up: Chase overdue invoices");
+  assert.ok(actions[0].prompt.includes("Keep this approval step: You approve every reminder."));
+  assert.ok(actions[0].prompt.includes("Show me the automation before switching it on."));
+  assert.ok(!actions.some((a) => a.id === "plan-connect"));
+});
+
+test("without a plan the starter actions are unchanged", () => {
+  const actions = selectJourneyStarterActions(planState({ journeyPlan: { hasPlan: false } }));
+  assert.ok(!actions.some((a) => a.id.startsWith("plan-")));
+});

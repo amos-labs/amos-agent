@@ -4850,3 +4850,36 @@ html[data-platform="win32"] .sidebar-toggle {
 .add-option strong { font-size: 13px; }
 .add-option small { color: var(--muted); font-size: 11px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .add-modal-note { color: var(--muted); font-size: 12px; margin: 0; }
+
+/* First run: the plan from the website journey (Connect / Analyze / Automate). */
+.journey-plan {
+  border: 1px solid var(--accent, #e07b16);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  background: color-mix(in srgb, var(--accent, #e07b16) 6%, transparent);
+}
+.journey-plan h2 {
+  margin: 8px 0 4px;
+}
+.journey-plan-headline {
+  margin: 0 0 12px;
+}
+.journey-plan-steps {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+}
+.journey-plan-step-name {
+  font-weight: 700;
+  margin-right: 8px;
+}
+.journey-plan-step-body {
+  opacity: 0.85;
+}
+.journey-plan-note {
+  margin: 12px 0 0;
+  font-size: 0.9em;
+  opacity: 0.75;
+}

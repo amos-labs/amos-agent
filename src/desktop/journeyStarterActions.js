@@ -62,6 +62,39 @@ function companyStarterActions(state) {
     });
   }
 
+  // A company that signed up from its website journey keeps that plan's three
+  // steps in front of it until they are done: connect the apps AMOS found,
+  // then set up the first workflow from the plan; analysis stays one tap away.
+  const plan = state.journeyPlan?.hasPlan === true ? state.journeyPlan : null;
+  if (plan) {
+    if (connectedSystems.length === 0) {
+      actions.push({
+        id: "plan-connect",
+        label: planConnectLabel(plan),
+        description: "Step 1 of your plan: connect the apps your business runs on.",
+        type: "connect_platform"
+      });
+    } else if (automationCount === 0 && plan.automate.length > 0) {
+      const first = plan.automate[0];
+      actions.push(
+        runAction(
+          `plan-automate-${first.id}`,
+          `Set up: ${first.title}`,
+          planAutomationPrompt(plan, first),
+          first.why || first.does
+        )
+      );
+    }
+    actions.push(
+      runAction(
+        "plan-analyze",
+        "Find where work slips",
+        planAnalyzePrompt(plan),
+        "Step 2 of your plan, from your connected apps."
+      )
+    );
+  }
+
   if (connectedSystems.length > 0) {
     if (automationNeedsAttention) {
       actions.push({
@@ -254,4 +287,36 @@ function array(value) {
 
 function plural(count, singular) {
   return count === 1 ? singular : `${singular}s`;
+}
+
+function planConnectLabel(plan) {
+  const names = plan.connect.map((app) => app.name).filter(Boolean).slice(0, 2);
+  return names.length > 0 ? `Connect ${names.join(" and ")}` : "Connect your apps";
+}
+
+function planAutomationPrompt(plan, workflow) {
+  const company = plan.companyName || "this company";
+  return [
+    `Set up the "${workflow.title}" automation for ${company}.`,
+    workflow.does,
+    workflow.why ? `Why it fits: ${workflow.why}` : "",
+    workflow.approval ? `Keep this approval step: ${workflow.approval}` : "",
+    "Use only systems that are actually connected; if one is missing, tell me which to connect first.",
+    "Show me the automation before switching it on."
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function planAnalyzePrompt(plan) {
+  const company = plan.companyName || "this company";
+  const leaks = plan.analyze.leaks.map((leak) => `${leak.between}: ${leak.what}`).join("; ");
+  return [
+    `Analyze where work and money slip for ${company}, using the connected systems as evidence.`,
+    leaks ? `Start from these suspected handoffs from our website plan: ${leaks}.` : "",
+    "Confirm or rule out each one with real data, say what you could not check, and recommend the first fix.",
+    "Do not invent numbers or claim a system is connected unless it is."
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
