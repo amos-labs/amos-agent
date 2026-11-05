@@ -55,7 +55,7 @@ AMOS managed platform
 
 ## What works today
 
-- Native macOS applications for Apple Silicon and Intel, plus Windows 10/11 x64
+- Native macOS 13+ applications for Apple Silicon and Intel, plus Windows 10/11 x64
 - Browser-based AMOS OAuth 2.1 + PKCE sign-in
 - Signed-in company, role, and effective-scope identity
 - AMOS engine discovery through a compact MCP tool surface
@@ -265,7 +265,7 @@ local authority. Desktop does not send usage events until you choose Allow.
 
 ## Build from source
 
-Node.js 22 or newer is required. Node.js 24 LTS is recommended.
+Node.js 22.12 or newer is required. Node.js 24 LTS is recommended.
 
 ```bash
 git clone https://github.com/amos-labs/amos-agent.git

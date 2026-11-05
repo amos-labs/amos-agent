@@ -35,7 +35,7 @@ changing a trust boundary.
 
 Requirements:
 
-- Node.js 22 or newer;
+- Node.js 22.12 or newer (the patched Electron installer requires it);
 - macOS for the current native application and packaging flow; and
 - an AMOS account for end-to-end MCP testing.
 
