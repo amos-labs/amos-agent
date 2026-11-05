@@ -21,6 +21,10 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      # Electron ships inside Desktop even though npm classifies it as a dev
+      # dependency. Audit the whole graph, not just --omit=dev.
+      - run: npm audit --audit-level=moderate
+        if: matrix.node == 24
       - run: npm test
       - run: npm run check
 

@@ -15,6 +15,9 @@ Download the current signed installer:
 - [Intel Mac](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-macOS-x64.dmg)
 - [Windows 10/11 x64](https://github.com/amos-labs/amos-agent/releases/latest/download/AMOS-Desktop-Windows-x64-Setup.exe)
 
+The current Desktop runtime requires **macOS 13 Ventura or later**, or Windows
+10/11 x64. macOS 12 is no longer supported by the patched Electron runtime.
+
 On macOS, open the DMG and drag **AMOS Desktop** into **Applications**. Official
 macOS releases are signed with the AMOS Labs Developer ID and notarized by
 Apple. Windows releases are Authenticode-signed under the verified Richard
