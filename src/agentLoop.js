@@ -898,7 +898,9 @@ export class AgentLoop {
         const readOnlyToolPlan = outcomes.length > 0 && outcomes.every((outcome) =>
           this.registry.executionPolicy(outcome.name).readOnly
         );
-        const planFingerprint = toolPlanFingerprint(outcomes);
+        const planFingerprint = readOnlyToolPlan
+          ? readEvidenceFingerprint(outcomes)
+          : toolPlanFingerprint(outcomes);
         repeatedToolPlanCycles =
           planFingerprint === previousToolPlanFingerprint ? repeatedToolPlanCycles + 1 : 1;
         previousToolPlanFingerprint = planFingerprint;
@@ -2656,6 +2658,25 @@ function toolPlanFingerprint(outcomes) {
     args: stableLoopValue(loopPlanArguments(name, args ?? rawArgs))
   })));
   return createHash("sha256").update(encoded).digest("hex");
+}
+
+function readEvidenceFingerprint(outcomes) {
+  // Identical read arguments can observe real progress (a job advancing, a
+  // changed opportunity, more completed items). Only transport bookkeeping is
+  // ignored. Business IDs, statuses, counts and record contents remain evidence.
+  const metadata = new Set(["updatedAt", "updated_at", "generatedAt", "generated_at",
+    "fetchedAt", "fetched_at", "observedAt", "observed_at", "receiptId", "receipt_id",
+    "requestId", "request_id", "desktop_result_ref"]);
+  const values = outcomes.map(({ name, args, rawArgs, result }) => {
+    const evidence = result && typeof result === "object" && !Array.isArray(result)
+      ? Object.fromEntries(Object.entries(result).filter(([key]) => !metadata.has(key)).map(([key, value]) => {
+          if (key !== "diagnostics" || !value || typeof value !== "object" || Array.isArray(value)) return [key, value];
+          return [key, Object.fromEntries(Object.entries(value).filter(([field]) => !["trace_id", "request_id"].includes(field)))];
+        }))
+      : result;
+    return { name, args: stableLoopValue(loopPlanArguments(name, args ?? rawArgs)), evidence: stableLoopValue(evidence) };
+  });
+  return createHash("sha256").update(JSON.stringify(values)).digest("hex");
 }
 
 function loopPlanArguments(name, value) {

@@ -146,6 +146,8 @@ import {
   DesktopRemoteStateClient
 } from "./remoteState.js";
 import { ChangeStreamClient } from "./changeStream.js";
+import { focusedWorkspace, workspaceSnapshotInclude, workflowOperatorPrompt } from "./workflowWorkspace.js";
+import { WorkflowWorkspaceSession } from "./workflowWorkspaceSession.js";
 import { mergeRemoteProjection, mergeRemoteProjectionValue,
   snapshotSettledResults
 } from "./remoteProjection.js";
@@ -170,7 +172,8 @@ import {
   DEMO_SYSTEM_PROMPT,
   OFFLINE_SYSTEM_PROMPT,
   PERSONAL_SYSTEM_PROMPT,
-  SYSTEM_PROMPT
+  SYSTEM_PROMPT,
+  WORKFLOW_OPERATOR_SYSTEM_PROMPT
 } from "../prompts.js";
 import {
   LOCAL_APPROVAL_KINDS,
@@ -273,6 +276,7 @@ export class DesktopController {
     // The website journey this company signed up from (read once per company).
     this.journeyPlan = null;
     this.journeyPlanTenant = null;
+    this.workflowWorkspaceSession = new WorkflowWorkspaceSession({ onChange: () => { if (this.runtime) this.resetRuntime(); } });
     // Platform-described client surfaces (desktop_snapshot.surfaces): which areas
     // this caller has and why a closed one is closed. null until a snapshot-aware
     // platform answers; the renderer then hides or locks navigation from it.
@@ -477,6 +481,7 @@ export class DesktopController {
       companyReceipts: structuredClone(this.companyReceipts),
       connectionsCatalog: this.connectionsCatalog,
       journeyPlan: this.journeyPlan ? structuredClone(this.journeyPlan) : null,
+      workflowWorkspace: this.workflowWorkspace ? structuredClone(this.workflowWorkspace) : null,
       surfaces: this.surfaces ? structuredClone(this.surfaces) : null,
       surfaceManifests: structuredClone(this.surfaceManifests || { supported: false, manifests: [] }),
       surfaceSections: structuredClone(this.surfaceSections || {}),
@@ -1683,6 +1688,8 @@ export class DesktopController {
     if (!shouldUseDesktopOAuth(config, credentials)) return this.state();
     const remote = this.refreshRemoteClient(settings, oauth, config);
     const errors = [];
+    try { await this.workflowWorkspaceSession.refresh(remote, this.identity); }
+    catch (error) { errors.push(error.message || "Could not refresh workflow workspace"); }
 
     const snapshotSurfaces = wanted.filter((surface) => surface !== "approvals");
     if (snapshotSurfaces.length > 0) {
@@ -1843,9 +1850,10 @@ export class DesktopController {
       this.approvalsAvailable = true;
       this.approvalDecisionMode = "hosted";
       this.connectionsCatalog = { connections: [], curated: [], tenantDefined: [] };
-    // The website journey this company signed up from (read once per company).
-    this.journeyPlan = null;
-    this.journeyPlanTenant = null;
+      // The website journey this company signed up from (read once per company).
+      this.journeyPlan = null;
+      this.journeyPlanTenant = null;
+      this.workflowWorkspace = null;
       this.surfaces = null;
       this.snapshotSince = null;
       this.surfaceManifests = { supported: false, manifests: [] };
@@ -1874,6 +1882,8 @@ export class DesktopController {
     // One versioned snapshot carries identity and every list surface. The reads
     // the snapshot does not cover (REST approvals with the decision mode, account
     // status, memberships, continuity, preferences, Missions) run beside it.
+    try { await this.workflowWorkspaceSession.refresh(remote, this.identity); }
+    catch (error) { errors.push(error.message || "Could not refresh workflow workspace"); }
     const [
       snapshotResult,
       approvalsResult,
@@ -1885,7 +1895,8 @@ export class DesktopController {
       missionsResult,
       notificationPreferencesResult
     ] = await Promise.allSettled([
-      remote.desktopSnapshot({ since: this.snapshotSince }),
+      remote.desktopSnapshot({ since: this.snapshotSince,
+        ...(workspaceSnapshotInclude(this.workflowWorkspace) ? {include:workspaceSnapshotInclude(this.workflowWorkspace)} : {}) }),
       remote.approvals(),
       remote.intelligenceStatus(),
       oauth.companies(),
@@ -2015,6 +2026,7 @@ export class DesktopController {
     // read once per company: it does not change, and an older platform without
     // get_journey_plan simply has none.
     const planTenant = this.identity?.tenant_id || null;
+    if (this.workflowWorkspace?.tenantId !== planTenant) this.workflowWorkspace = null;
     if (planTenant && this.journeyPlanTenant !== planTenant) {
       try {
         this.journeyPlan = await remote.journeyPlan();
@@ -2316,6 +2328,17 @@ export class DesktopController {
     );
     return { result, connectionsCatalog: structuredClone(this.connectionsCatalog) };
   }
+
+  async setWorkflowWorkspace(input = {}) {
+    return this.workflowWorkspaceSession.save(input, {
+      getIdentity: () => this.identity,
+      getRemote: async () => this.personalRemote(await this.settingsStore.read(), "changing company workflows"),
+      refresh: () => this.refreshRemote({notify:false})
+    });
+  }
+
+  get workflowWorkspace() { return this.workflowWorkspaceSession.current; }
+  set workflowWorkspace(value) { this.workflowWorkspaceSession.update(value); }
 
   async disconnectConnection(connectionId) {
     const id = String(connectionId || "").trim();
@@ -6533,6 +6556,7 @@ export class DesktopController {
         includeLocal: !contextOnly,
         includeAmos: !isOffline && !isPersonal,
         includeWeb: !isOffline,
+        workflowFocused: !isOffline && !isPersonal && focusedWorkspace(this.workflowWorkspace, this.identity?.tenant_id),
         artifactPresenter: (input) => this.presentDocumentArtifact(input),
         spreadsheetPresenter: (input) => this.presentSpreadsheetArtifact(input),
         presentationPresenter: (input) => this.presentPresentationArtifact(input),
@@ -6544,10 +6568,12 @@ export class DesktopController {
             ? PERSONAL_SYSTEM_PROMPT
             : credentials?.demo
               ? DEMO_SYSTEM_PROMPT
-              : SYSTEM_PROMPT, settings, config, {
+              : focusedWorkspace(this.workflowWorkspace, this.identity?.tenant_id)
+                ? WORKFLOW_OPERATOR_SYSTEM_PROMPT
+                : SYSTEM_PROMPT, settings, config, {
                 project: activeProjectForRuntime(this.projects, taskRecord),
                 autonomousGoal: taskRecord?.kind === "goal_pursuit"
-              })}${hostedMissionCreationPrompt(
+              })}${workflowOperatorPrompt(this.workflowWorkspace, this.identity?.tenant_id)}${hostedMissionCreationPrompt(
                 this.activeTask?.missionCreation === true ||
                   this.runManager.current()?.missionCreation === true ||
                   isMissionBuilderTask(taskRecord),
@@ -8251,6 +8277,7 @@ export class DesktopController {
     // The website journey this company signed up from (read once per company).
     this.journeyPlan = null;
     this.journeyPlanTenant = null;
+    this.workflowWorkspace = null;
     this.surfaces = null;
     this.snapshotSince = null;
     this.surfaceManifests = { supported: false, manifests: [] };
@@ -8327,6 +8354,8 @@ export class DesktopController {
       ? await this.tasksState(taskSettings)
       : structuredClone(this.tasks || { supported: false, tasks: [] });
     const remoteState = {
+      workflowWorkspace: this.workflowWorkspace ? structuredClone(this.workflowWorkspace) : null,
+      journeyPlan: this.journeyPlan ? structuredClone(this.journeyPlan) : null,
       identity: this.identity,
       accountStatus: this.accountStatus,
       approvals: this.companyApprovals,

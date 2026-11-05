@@ -360,6 +360,7 @@ as the AMOS platform grows.
 
 - [Desktop product and release guide](docs/DESKTOP.md)
 - [Architecture and system boundaries](docs/ARCHITECTURE.md)
+- [Focused workflow workspace and runtime modes](docs/WORKFLOW_WORKSPACE.md)
 - [Authentication](docs/AUTHENTICATION.md)
 - [Intelligence and infrastructure profiles](docs/INTELLIGENCE_PROVIDERS.md)
 - [Safety model](docs/SAFETY.md)

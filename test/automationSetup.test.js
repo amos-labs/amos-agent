@@ -176,8 +176,9 @@ test("install arguments accept only live connections, active operations, and adv
   );
 });
 
-test("bounded standing authority is normalized and remains an explicit template parameter", () => {
+test("bounded standing authority is normalized and remains an explicit template parameter", (t) => {
   const now = new Date("2026-08-11T12:00:00.000Z");
+  t.mock.timers.enable({apis:["Date"], now});
   const grant = normalizeStandingGrantRequest({
     window: "hour",
     max_runs_per_window: 500,
