@@ -1,4 +1,6 @@
 import { accountContextChoices } from "../../src/desktop/accountContexts.js";
+import { focusedWorkspace, workspaceAllowsView } from "../../src/desktop/workflowWorkspace.js";
+import { createWorkflowWorkspaceView } from "./workflowWorkspaceView.js";
 import {
   attentionCount,
   bindArgs,
@@ -128,6 +130,10 @@ const LEGACY_MISSION_TEMPLATES = Object.freeze([
   }
 ]);
 let state = null;
+const workflowWorkspaceView = createWorkflowWorkspaceView({
+  document, getState: () => state, api, showView, getCurrentView: () => currentView,
+  availableSurfaceManifest, refresh: async () => { state = await api.state(); render(); }, toast
+});
 let currentView = "operator";
 let currentWorkTab = "open";
 let selectedProvider = "amos-hosted";
@@ -347,6 +353,7 @@ async function initialize() {
 }
 
 function bindActions() {
+  document.getElementById("workflowWorkspaceButton").addEventListener("click", workflowWorkspaceView.open);
   for (const button of document.querySelectorAll(".nav-item[data-view]")) {
     button.addEventListener("click", () => {
       if (firstRunNeeded()) {
@@ -731,6 +738,7 @@ function bindEvents() {
     renderIntegrations();
     renderDynamicNav();
     renderSurfaceLocks();
+    workflowWorkspaceView.render();
     renderProjects();
     renderMissions();
     renderTasks();
@@ -941,6 +949,17 @@ function render() {
       "Ask about the company, attach a document, paste a screenshot, or describe work to move forward…";
   }
   elements.operatorTitle.textContent = "What should move forward?";
+  if (!state.mode?.personal && !state.mode?.offline && focusedWorkspace(state.workflowWorkspace, state.identity?.tenant_id)) {
+    const workspace = state.workflowWorkspace;
+    const titles = workspace.packageKeys.map(key => workspace.catalog.find(pkg => pkg.key === key)?.title).filter(Boolean);
+    elements.operatorEyebrow.textContent = "YOUR AMOS OPERATOR";
+    elements.operatorTitle.textContent = titles.length === 1 ? titles[0] : "Your workflows";
+    elements.readyTitle.textContent = workspace.requiresReview ? "Your workflows need a configuration review." : "Your operator is ready.";
+    elements.readyDescription.textContent = workspace.requiresReview
+      ? "The available workflow capabilities changed. Open Add workflows to review the current configuration."
+      : "Ask questions, work through an opportunity, or coordinate your workflow specialists. Approved cloud work continues while Desktop is closed.";
+    elements.promptInput.placeholder = titles.length === 1 ? `Ask about ${titles[0]}, review current work, or describe the next outcome…` : "Ask about your workflows, review current work, or describe the next outcome…";
+  }
   elements.workspaceLabel.textContent = state.settings.workspace || "Choose a folder";
   elements.workspaceLabel.title = state.settings.workspace || "";
   const localAutoApprove = state.settings.localApprovalMode === "workspace" &&
@@ -1083,6 +1102,7 @@ function render() {
   renderIntegrations();
   renderDynamicNav();
   renderSurfaceLocks();
+  workflowWorkspaceView.render();
   renderProjects();
   renderMissions();
   renderTasks();
@@ -1304,6 +1324,10 @@ function showView(view) {
   if (view === "decisions" || view === "activity") {
     showWorkTab(view === "activity" ? "history" : "open");
     view = "work";
+  }
+  if (!workspaceAllowsView(state?.workflowWorkspace, state?.identity?.tenant_id, view)) {
+    toast("Add the relevant workflow to open this page.");
+    view = "operator";
   }
   currentView = view;
   const map = {
@@ -8877,6 +8901,10 @@ function renderStarterActions() {
 
 async function executeStarterAction(action, button) {
   if (running) return;
+  if (action.type === "workflow_settings") {
+    workflowWorkspaceView.open();
+    return;
+  }
   if (action.type === "view") {
     showView(action.view);
     return;

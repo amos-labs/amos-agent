@@ -408,6 +408,7 @@ function registerIpc() {
   );
   ipcMain.handle("desktop:logout", () => controller.logout());
   ipcMain.handle("desktop:refresh-remote", () => controller.refreshRemote());
+  ipcMain.handle("desktop:set-workflow-workspace", (_event, input) => controller.setWorkflowWorkspace(input));
   ipcMain.handle("desktop:switch-company", (_event, tenantId) =>
     controller.switchCompany(tenantId)
   );

@@ -1,4 +1,5 @@
 import { normalizeSurfaceManifest } from "./manifestView.js";
+import { normalizeWorkflowWorkspace } from "./workflowWorkspace.js";
 import { AmosMcpClient, extractMcpText, normalizeMcpToolResult } from "../mcp/amosMcpClient.js";
 import { fetchCompat } from "../util/fetchCompat.js";
 import {
@@ -1005,6 +1006,31 @@ export class DesktopRemoteStateClient {
   async journeyPlan({ signal = null } = {}) {
     const result = await this.mcp.callTool("get_journey_plan", {}, { signal });
     return normalizeJourneyPlan(parseMcpJson(result, "AMOS journey plan"));
+  }
+
+  async workflowWorkspace(tenantId, { signal = null } = {}) {
+    try {
+      const context = parseMcpJson(await this.mcp.callTool("get_operator_context", {}, {signal}), "AMOS operator context");
+      if (context?.schema === "amos.operator_context.v1") {
+        return normalizeWorkflowWorkspace({...context.workspace,specialists:context.specialists}, tenantId);
+      }
+      throw new Error("AMOS returned an unsupported operator context");
+    } catch (error) {
+      if (!isUnknownTool(error, "get_operator_context")) throw error;
+    }
+    try {
+      const result = await this.mcp.callTool("get_workflow_workspace", {}, { signal });
+      return normalizeWorkflowWorkspace(parseMcpJson(result, "AMOS workflow workspace"), tenantId);
+    } catch (error) {
+      if (isUnknownTool(error, "get_workflow_workspace")) return normalizeWorkflowWorkspace(null);
+      throw error;
+    }
+  }
+
+  async setWorkflowWorkspace({ mode, packageKeys, expectedRevision, catalogSha256, expectedTenantId }, { signal = null } = {}) {
+    return parseMcpJson(await this.mcp.callTool("set_workflow_workspace", {
+      mode, package_keys: packageKeys, expected_revision: expectedRevision, catalog_sha256: catalogSha256, expected_tenant_id: expectedTenantId
+    }, { signal }), "AMOS workspace update");
   }
 
   async disconnectConnection(connectionId, { signal = null } = {}) {

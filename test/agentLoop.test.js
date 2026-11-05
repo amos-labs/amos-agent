@@ -2871,6 +2871,25 @@ test("a repeating tool loop ends with a useful synthesis instead of a turn-limit
   ));
 });
 
+test("identical status requests continue while authoritative job state advances", async () => {
+  const registry = new ToolRegistry();
+  let calls = 0;
+  let reads = 0;
+  const states = ["queued", "running", "completed"];
+  registry.register({ name: "get_job", readOnly: true, handler: async () => ({ ok: true, status: states[reads++] }) });
+  const loop = new AgentLoop({ config: { agent: {} }, registry, approvals: {}, amosClient: {},
+    modelClient: { async chat({ tools }) {
+      calls += 1;
+      assert.ok(calls <= 4, "the job must finish without a discovery or recovery loop");
+      assert.ok(tools.length, "new business evidence must not force a tool-free stop");
+      if (calls === 4) return { message: { role: "assistant", content: "The job completed." } };
+      return { message: { role: "assistant", content: "", tool_calls: [{ id: `read-${calls}`, function: { name: "get_job", arguments: '{"job_id":"job-1"}' } }] } };
+    } }
+  });
+  assert.equal(await loop.run("Check the advancing job and report its result."), "The job completed.");
+  assert.equal(reads, 3);
+});
+
 test("an identical read-only status request synthesizes despite changing receipt metadata", async () => {
   const registry = new ToolRegistry();
   let modelCalls = 0;

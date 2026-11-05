@@ -4,6 +4,7 @@ import { isAmosDesktopRoutingConfig } from "./model/intelligenceRouter.js";
 import { HybridRoutingClient } from "./model/hybridRouting.js";
 import { AmosMcpClient } from "./mcp/amosMcpClient.js";
 import { createAmosTools } from "./tools/amos.js";
+import { createWorkflowAmosTools, workflowSupportTool } from "./tools/workflowAmos.js";
 import { createBashTool } from "./tools/bash.js";
 import { createCodingTools } from "./tools/coding.js";
 import { createFileTools } from "./tools/files.js";
@@ -23,14 +24,17 @@ export function createRegistry({
   artifactPresenter = null,
   spreadsheetPresenter = null,
   presentationPresenter = null,
-  toolSurface = {}
+  toolSurface = {},
+  workflowFocused = false
 } = {}) {
   const registry = new ToolRegistry(toolSurface);
   if (includeLocal) {
-    registry.register(createBashTool());
-    registry.register(createWorkspaceFocusTool());
-    for (const tool of createCodingTools()) registry.register(tool);
-    for (const tool of createFileTools()) registry.register(tool);
+    if (!workflowFocused) {
+      registry.register(createBashTool());
+      registry.register(createWorkspaceFocusTool());
+      for (const tool of createCodingTools()) registry.register(tool);
+    }
+    for (const tool of createFileTools()) if (!workflowFocused || workflowSupportTool(tool)) registry.register(tool);
     for (const tool of createArtifactTools({ present: artifactPresenter })) registry.register(tool);
     for (const tool of createSpreadsheetTools({ present: spreadsheetPresenter })) registry.register(tool);
     for (const tool of createPresentationTools({ present: presentationPresenter })) registry.register(tool);
@@ -39,9 +43,9 @@ export function createRegistry({
     for (const tool of createWebTools()) registry.register(tool);
   }
   if (includeAmos) {
-    for (const tool of createAmosTools()) registry.register(tool);
+    for (const tool of workflowFocused ? createWorkflowAmosTools() : createAmosTools()) registry.register(tool);
   }
-  for (const tool of extraTools) registry.register(tool);
+  for (const tool of extraTools) if (!workflowFocused || workflowSupportTool(tool)) registry.register(tool);
   registry.register(createToolkitActivationTool(registry.availableToolkits()));
   return registry;
 }
@@ -56,6 +60,7 @@ export function createRuntime({
   includeLocal = true,
   includeAmos = true,
   includeWeb = true,
+  workflowFocused = false,
   artifactPresenter = null,
   spreadsheetPresenter = null,
   presentationPresenter = null,
@@ -69,6 +74,7 @@ export function createRuntime({
     includeLocal,
     includeAmos,
     includeWeb,
+    workflowFocused,
     artifactPresenter,
     spreadsheetPresenter,
     presentationPresenter,

@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld("amosDesktop", {
   switchAccount: (accountId) => ipcRenderer.invoke("desktop:switch-account", accountId),
   logout: () => ipcRenderer.invoke("desktop:logout"),
   refreshRemote: () => ipcRenderer.invoke("desktop:refresh-remote"),
+  setWorkflowWorkspace: (input) => ipcRenderer.invoke("desktop:set-workflow-workspace", input),
   switchCompany: (tenantId) => ipcRenderer.invoke("desktop:switch-company", tenantId),
   connectProvider: (provider, options = {}) =>
     ipcRenderer.invoke("desktop:connect-provider", { provider, options }),

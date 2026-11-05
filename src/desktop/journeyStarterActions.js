@@ -1,3 +1,5 @@
+import { focusedWorkspace, workflowSetupActions } from "./workflowWorkspace.js";
+
 const MAX_STARTER_ACTIONS = 5;
 
 export const AMOS_SAVINGS_AUDIT_PROMPT = [
@@ -60,6 +62,13 @@ function companyStarterActions(state) {
       type: "view",
       view: "decisions"
     });
+  }
+
+  if (focusedWorkspace(state.workflowWorkspace, state.identity?.tenant_id)) {
+    if (!state.workflowWorkspace.packageKeys.length || state.workflowWorkspace.requiresReview) {
+      return uniqueActions([...actions, {id:"choose-workflows",type:"workflow_settings",label:state.workflowWorkspace.requiresReview ? "Review your workflows" : "Choose your first workflow"}]).slice(0,MAX_STARTER_ACTIONS);
+    }
+    return uniqueActions([...actions, ...workflowSetupActions(state.workflowWorkspace)]).slice(0, MAX_STARTER_ACTIONS);
   }
 
   // A company that signed up from its website journey keeps that plan's three

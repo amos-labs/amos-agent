@@ -25,7 +25,7 @@ for (const scenario of [
       name: "work_on_artifact", readOnly: scenario.readOnly === true,
       handler: async () => {
         executions += 1;
-        return scenario.failed ? { ok: false, error: "Source is unavailable" } : { ok: true, revision: executions };
+        return scenario.failed ? { ok: false, error: "Source is unavailable" } : { ok: true, revision: scenario.readOnly ? 1 : executions };
       }
     });
     const loop = createLoop({
