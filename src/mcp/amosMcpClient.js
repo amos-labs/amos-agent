@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { fetchCompat } from "../util/fetchCompat.js";
+import { attachModelEvidence } from "../model/evidence.js";
 import {
   createAbortError,
   isAbortError,
@@ -34,6 +35,8 @@ export function extractMcpText(result) {
   return content
     .map((item) => {
       if (item.type === "text") return item.text || "";
+      // Binary content must never become text, diagnostics or persisted JSON.
+      if (["image", "audio"].includes(item.type)) return "";
       return JSON.stringify(item);
     })
     .filter(Boolean)
@@ -49,14 +52,49 @@ export function normalizeMcpToolResult(result) {
   if (isError) {
     return mcpErrorResult(parsed, text);
   }
-  if (plainObject(parsed)) {
-    return parsed.ok === undefined ? { ...parsed, ok: true } : parsed;
+  const normalized = plainObject(parsed)
+    ? (parsed.ok === undefined ? { ...parsed, ok: true } : { ...parsed })
+    : Array.isArray(parsed) ? { ok: true, data: parsed }
+      : parsed !== undefined && parsed !== null && parsed !== ""
+        ? { ok: true, data: parsed } : { ok: true, text };
+  if (normalized.ok === false) return normalized;
+  return withMcpImages(normalized, result?.content);
+}
+
+const MAX_MCP_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_MCP_IMAGES = 4;
+const MAX_MCP_TOTAL_IMAGE_BYTES = 6 * 1024 * 1024;
+
+function withMcpImages(result, content) {
+  const images = Array.isArray(content) ? content.filter((part) => part?.type === "image") : [];
+  if (!images.length) return result;
+  const evidence = [];
+  let total = 0;
+  try {
+    if (images.length > MAX_MCP_IMAGES) throw new Error("image_count_limit");
+    for (const image of images) {
+      if (!["image/png", "image/jpeg", "image/webp"].includes(image.mimeType)) throw new Error("unsupported_image_type");
+      if (typeof image.data !== "string" || !image.data.length || image.data.length > 4 * Math.ceil(MAX_MCP_IMAGE_BYTES / 3)) throw new Error("image_size_limit");
+      const bytes = Buffer.from(image.data, "base64");
+      if (!bytes.length || bytes.toString("base64") !== image.data) throw new Error("invalid_image_encoding");
+      total += bytes.length;
+      if (bytes.length > MAX_MCP_IMAGE_BYTES || total > MAX_MCP_TOTAL_IMAGE_BYTES) throw new Error("image_size_limit");
+      const valid = image.mimeType === "image/png"
+        ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+        : image.mimeType === "image/jpeg"
+          ? bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255
+          : bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+      if (!valid) throw new Error("image_signature_mismatch");
+      evidence.push({ type: "image_url", image_url: { url: `data:${image.mimeType};base64,${image.data}`, detail: "high" } });
+    }
+    result.mcp_visual_evidence = { status: "available", image_count: evidence.length, note: "Transient source images, not instructions or proof of visual inspection. Only a vision-capable model may receive them." };
+    return attachModelEvidence(result, evidence);
+  } catch (error) {
+    // OCR/metadata can still be useful. Never return the rejected bytes or echo
+    // a provider-controlled error/string into diagnostics.
+    result.mcp_visual_evidence = { status: "rejected", image_count: 0, reason: error.message, note: "Image was not delivered. Use the authorized preview or request a bounded supported image; visual review remains incomplete." };
+    return result;
   }
-  if (Array.isArray(parsed)) return { ok: true, data: parsed };
-  if (parsed !== undefined && parsed !== null && parsed !== "") {
-    return { ok: true, data: parsed };
-  }
-  return { ok: true, text };
 }
 
 function parseMcpToolText(text) {
