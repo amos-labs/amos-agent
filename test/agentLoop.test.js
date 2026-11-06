@@ -492,7 +492,7 @@ test("transient visual tool evidence reaches the next model turn but not public 
   const events = [];
   let turn = 0;
   const loop = new AgentLoop({
-    config: { agent: {} },
+    config: { agent: {}, model: { capabilities: { vision: true } } },
     registry,
     approvals: {},
     amosClient: {},
@@ -519,6 +519,7 @@ test("transient visual tool evidence reaches the next model turn but not public 
   assert.equal(await loop.run("Inspect the visual", { onEvent: (event) => events.push(event) }), "I inspected the transient frame.");
   assert.equal(JSON.stringify(events).includes("data:image/png"), false);
   assert.equal(JSON.stringify(observed[0]).includes("data:image/png"), false);
+  assert.equal(JSON.stringify(loop.messages).includes("data:image/png"), false);
 });
 
 test("custom operating prompt survives a cleared session", () => {
