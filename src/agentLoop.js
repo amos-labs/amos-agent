@@ -240,7 +240,12 @@ export class AgentLoop {
   applyHandoff(handoff = this.pendingHandoff, onEvent = () => {}) {
     if (!handoff) return false;
     this.pendingHandoff = null;
-    if (handoff.modelClient || handoff.config) this.localPromptTokensPerSecond = null;
+    if (handoff.modelClient || handoff.config) {
+      this.localPromptTokensPerSecond = null;
+      this.messages = this.messages.map((message) => message.amosEphemeralEvidence
+        ? { role: "user", content: "[Transient source images released when intelligence changed. Re-read the source for a new visual review.]" }
+        : message);
+    }
     if (handoff.modelClient) this.modelClient = handoff.modelClient;
     if (handoff.config) this.config = handoff.config;
     const content = String(handoff.message || "").trim();
@@ -896,7 +901,11 @@ export class AgentLoop {
 
         const handoffAppliedAfterTools = this.applyHandoff(this.pendingHandoff, onEvent);
 
-        if (modelEvidence.length > 0) this.appendEphemeralModelEvidence(modelEvidence);
+        if (modelEvidence.length > 0) {
+          if (handoffAppliedAfterTools) {
+            this.messages.push({role:"user",content:"[Source pixels captured before an intelligence handoff were not forwarded. Re-read the source using vision-capable intelligence or use human review; do not claim visual inspection.]"});
+          } else this.appendEphemeralModelEvidence(modelEvidence);
+        }
 
         if (outcomes.some((outcome) =>
           !outcome.failed && ["desktop_report_coding_stage", "desktop_handoff_role"].includes(outcome.name)

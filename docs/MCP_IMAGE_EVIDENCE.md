@@ -21,7 +21,7 @@ Document pages do not gain browser frame/coordinate authority.
 Images never enter public tool JSON, renderer events, result-store callbacks or
 receipts. They enter the provider's native image field through the existing
 Chat Completions, Responses or Anthropic adapters and are removed from the active
-transcript when the task completes, fails or is cancelled. A new task/provider
+transcript when the task completes, fails, is cancelled or changes intelligence. A new task/provider
 must request fresh evidence. This does not persist company images offline or
 bypass platform document/collection access.
 

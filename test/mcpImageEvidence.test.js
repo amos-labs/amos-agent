@@ -101,6 +101,22 @@ test("provider failure releases source pixels rather than carrying them into a r
   assert.ok(!JSON.stringify(loop.messages).includes(PNG));
 });
 
+test("intelligence handoff does not forward pixels captured for the previous model",async()=>{
+  const registry=new ToolRegistry();let loop;
+  const replacement={chat:async({messages})=>{
+    assert.ok(!JSON.stringify(messages).includes(PNG));
+    assert.ok(JSON.stringify(messages).includes("were not forwarded"));
+    return {message:{role:"assistant",content:"The new intelligence needs a fresh source read or human visual review."}};
+  }};
+  registry.register({name:"read_source_page",handler:async()=>{
+    loop.queueHandoff({modelClient:replacement,config:{agent:{},model:{capabilities:{vision:false}}}});
+    return normalizeMcpToolResult(envelope());
+  }});
+  loop=new AgentLoop({config:{agent:{},model:{capabilities:{vision:true}}},registry,amosClient:{},approvals:{},modelClient:{chat:async()=>({message:{role:"assistant",content:"",tool_calls:[{id:"p1",function:{name:"read_source_page",arguments:"{}"}}]}})}});
+  await loop.run("Inspect the source page.");
+  assert.ok(!JSON.stringify(loop.messages).includes(PNG));
+});
+
 for(const protocol of ["chat","responses","anthropic"]) test(`MCP source images reach the real ${protocol} request adapter, not its tool-output text`,async()=>{
   const bodies=[];
   const modelConfig={baseUrl:"https://fixture.invalid/v1",model:"synthetic-vision",apiKey:"synthetic-key",requestTimeoutMs:1000,capabilities:{tools:true,vision:true,reasoning:false}};
